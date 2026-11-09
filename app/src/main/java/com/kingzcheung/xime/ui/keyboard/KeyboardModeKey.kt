@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -33,7 +34,8 @@ internal fun KeyboardModeKey(
     ctrlTargets: ShiftSlideTargets? = null,
     onCtrlShortcut: ((Char) -> Unit)? = null,
 ) {
-    val target = modeSlotTarget(page, slot, LocalTextModeLabel.current)
+    val target = modeSlotTarget(page, slot, LocalTextModeLabel.current,
+        LocalKeyboardInputPreferences.current.symbolKeyCycle)
     androidx.compose.runtime.CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
     if (ctrlTargets != null && onCtrlShortcut != null && target.action == "symbol") CtrlSymbolKeyButton(
         text = target.label,
@@ -55,7 +57,10 @@ internal fun KeyboardModeKey(
         onPress = { onKeyPressDown?.invoke("mode_change") },
         backgroundColor = backgroundColor,
         textColor = textColor,
-        modifier = modifier.testTag("mode-slot-$slot").semantics { if (target.action == "abc") contentDescription = "返回键盘" },
+        modifier = modifier.testTag("mode-slot-$slot").semantics {
+            if (target.action == "abc") contentDescription = "返回键盘"
+            onClick { onKeyPress(target.action); true }
+        },
         shadowEnabled = shadowEnabled,
         shadowElevation = shadowElevation,
         shadowShapeRadius = shadowShapeRadius,
