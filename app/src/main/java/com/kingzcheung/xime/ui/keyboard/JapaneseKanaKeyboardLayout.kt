@@ -59,6 +59,7 @@ fun JapaneseKanaKeyboardLayout(
     isFloatingMode: Boolean = false,
     numberMode: Boolean = false,
 ) {
+    val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
     KeyboardKeySpacingScope(modifier, columns = 5f, verticalInset = bottomPaddingDp.dp, gridBottomMargin = 0.dp,
         policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
         growthSpacing = keySpacingX?.value to keySpacingY?.value) { bodyModifier ->
@@ -102,10 +103,13 @@ fun JapaneseKanaKeyboardLayout(
                             onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
                             shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
                     } else {
-                        KeyButton(if (numberMode) "あいう" else "123", { onKeyPress(if (numberMode) "abc" else "mode_change_number") }, specialKeyBackgroundColor, specialKeyTextColor,
-                            Modifier.weight(1f).testTag("kana-number"), onPress = { onKeyPressDown?.invoke("number") }, fontSize = 16.sp, shadowEnabled = shadowEnabled)
-                        KeyButton("!@#", { onKeyPress("symbol") }, specialKeyBackgroundColor, specialKeyTextColor,
-                            Modifier.weight(1f).testTag("kana-symbol"), fontSize = 16.sp, onPress = { onKeyPressDown?.invoke("symbol") }, shadowEnabled = shadowEnabled)
+                        // Keep the language key beside the number key when it moves to the left.
+                        for (numeric in if (languageOnLeft) listOf(false, true) else listOf(true, false)) {
+                            if (numeric) KeyButton(if (numberMode) "あいう" else "123", { onKeyPress(if (numberMode) "abc" else "mode_change_number") }, specialKeyBackgroundColor, specialKeyTextColor,
+                                Modifier.weight(1f).testTag("kana-number"), onPress = { onKeyPressDown?.invoke("number") }, fontSize = 16.sp, shadowEnabled = shadowEnabled)
+                            else KeyButton("!@#", { onKeyPress("symbol") }, specialKeyBackgroundColor, specialKeyTextColor,
+                                Modifier.weight(1f).testTag("kana-symbol"), fontSize = 16.sp, onPress = { onKeyPressDown?.invoke("symbol") }, shadowEnabled = shadowEnabled)
+                        }
                     }
                 }
             }
@@ -127,6 +131,13 @@ fun JapaneseKanaKeyboardLayout(
                     }
                 }
                 Row(Modifier.weight(1f).fillMaxWidth()) {
+                    @Composable fun LanguageKey() {
+                        LanguageKeyButton(icon = rememberVectorPainter(Icons.Default.Language), onClick = { onKeyPress("ime_switch") },
+                            backgroundColor = specialKeyBackgroundColor, iconColor = specialKeyTextColor,
+                            modifier = Modifier.weight(1f).testTag("kana-language"),
+                            onPress = { onKeyPressDown?.invoke("ime_switch") }, shadowEnabled = shadowEnabled)
+                    }
+                    if (languageOnLeft) LanguageKey()
                     if (numberMode) KeyButton(".", { onKeyPress(".") }, keyBackgroundColor, keyTextColor,
                         Modifier.weight(1f).testTag("kana-decimal"), onPress = { onKeyPressDown?.invoke(".") },
                         shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
@@ -142,10 +153,7 @@ fun JapaneseKanaKeyboardLayout(
                     else KanaFlickButton(japaneseKanaKeys[9], onKanaAction, keyBackgroundColor, keyTextColor,
                         Modifier.weight(1f).testTag("kana-key:wa"), onPress = { onKeyPressDown?.invoke("wa") },
                         shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
-                    LanguageKeyButton(icon = rememberVectorPainter(Icons.Default.Language), onClick = { onKeyPress("ime_switch") },
-                        backgroundColor = specialKeyBackgroundColor, iconColor = specialKeyTextColor,
-                        modifier = Modifier.weight(1f).testTag("kana-language"),
-                        onPress = { onKeyPressDown?.invoke("ime_switch") }, shadowEnabled = shadowEnabled)
+                    if (!languageOnLeft) LanguageKey()
                 }
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
