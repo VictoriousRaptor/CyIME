@@ -2,14 +2,18 @@ name: Build and Release APK
 
 on:
   push:
+    branches:
+      - 'codex/aosp-release-*'
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: github.repository == 'Cyletix/CyIME' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
@@ -168,3 +172,100 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  aosp-release:
+    if: github.event.repository.fork
+    name: AOSP-signed ARM64 Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    concurrency:
+      group: aosp-release-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+    steps:
+      - name: Check out source and native submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install project native toolchain
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+
+      - name: Cache native dependencies and dictionaries
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/src/main/jni/boost
+            app/src/main/jni/onnxruntime
+            app/src/main/jniLibs
+            app/build/generated
+            app/build/speech-runtime
+            .gradle/chinese-data
+            .gradle/stroke-data
+            .gradle/cangjie-data
+            .gradle/japanese-data
+          key: aosp-native-${{ runner.os }}-${{ hashFiles('app/build-logic/*.gradle.kts', 'app/src/main/jni/cmake/Boost.cmake') }}
+
+      - name: Use official Gradle distribution endpoint
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('gradle/wrapper/gradle-wrapper.properties')
+          text = path.read_text()
+          text = text.replace('mirrors.cloud.tencent.com/gradle/', 'services.gradle.org/distributions/')
+          path.write_text(text)
+          PY
+          chmod +x gradlew
+
+      - name: Compile ARM64 release from source
+        run: |
+          ./gradlew :app:assembleRelease -I scripts/phone-release-abi.gradle \
+            -PbundleModels=false --no-daemon --max-workers=2 --console=plain
+
+      - name: Run keyboard regression tests
+        run: |
+          ./gradlew :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
+            --tests com.kingzcheung.xime.keyboard.KeyboardModeNavigationTest \
+            --tests com.kingzcheung.xime.settings.SettingsRoundTripTest \
+            --tests com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferencesTest \
+            --tests com.kingzcheung.xime.ui.keyboard.T9CtrlKeyTest \
+            --tests com.kingzcheung.xime.ui.render.SymbolKeyCycleRenderTest \
+            --no-daemon --max-workers=2 --console=plain
+
+      - name: Sign and verify release with AOSP testkey
+        run: python3 scripts/sign-aosp-release.py
+
+      - name: Upload signed release
+        uses: actions/upload-artifact@v7
+        with:
+          name: CyIME-AOSP-release-arm64-v8a-${{ github.run_number }}
+          path: build/aosp-release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload regression reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aosp-release-tests-${{ github.run_number }}
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
