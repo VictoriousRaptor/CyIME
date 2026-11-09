@@ -61,7 +61,7 @@ internal fun numberKeyboardSpacingSection(profile: InputProfile, ascii: Boolean)
     else -> "number"
 }
 
-/** Numeric keypad; slot one opens symbols, slot two returns to the original text mode. */
+/** Numeric keypad; navigation shares the text and symbol pages' mode-key preference. */
 @Composable
 fun NumberKeyboardLayout(
     onKeyPress: (String) -> Unit,
@@ -194,6 +194,7 @@ private fun NumberRows(
     enterKeyText: String = "确定",
 ) {
     val modeWeight = 0.8f
+    val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(LocalKeyboardInputPreferences.current.symbolKeyCycle)
     val symFontSize = if (compactMode) 14.sp else 18.sp
     val keyFontSize = if (compactMode) 16.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     val ctrlFontSize = if (compactMode) 12.sp else androidx.compose.ui.unit.TextUnit.Unspecified
@@ -249,14 +250,14 @@ private fun NumberRows(
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            for (slot in 1..2) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
+            for (slot in 1..modeCount) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
                 onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor, modifier = Modifier.weight(modeWeight),
                 onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
             KeyButton(text = "0", onClick = { onKeyPress("0") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(3.4f - 2 * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
+                modifier = Modifier.weight(3.4f - modeCount * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：

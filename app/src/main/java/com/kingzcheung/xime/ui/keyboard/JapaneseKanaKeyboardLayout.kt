@@ -108,17 +108,28 @@ fun JapaneseKanaKeyboardLayout(
                     onPress = { onKeyPressDown?.invoke("japanese_left") }, shadowEnabled = shadowEnabled)
                 // Mode names are UI labels, not literals affected by full-/half-width input.
                 CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
-                    KeyButton(if (numberMode) "あいう" else "123", { onKeyPress(if (numberMode) "abc" else "mode_change_number") }, specialKeyBackgroundColor, specialKeyTextColor,
-                        Modifier.weight(1f).testTag("kana-number"), onPress = { onKeyPressDown?.invoke("number") }, fontSize = 16.sp, shadowEnabled = shadowEnabled)
-                    if (onCtrlShortcut != null) CtrlSymbolKeyButton(text = "!@#", targets = ctrlTargets,
-                        holdMillis = LocalKeyboardInputPreferences.current.symbolKeyHoldMs,
-                        onOpenSymbols = { onKeyPress("symbol") }, onShortcut = onCtrlShortcut,
-                        onPressDown = { onKeyPressDown?.invoke("symbol") },
-                        backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                        modifier = Modifier.weight(1f).testTag("kana-symbol"),
-                        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
-                    else KeyButton("!@#", { onKeyPress("symbol") }, specialKeyBackgroundColor, specialKeyTextColor,
-                        Modifier.weight(1f).testTag("kana-symbol"), fontSize = 16.sp, onPress = { onKeyPressDown?.invoke("symbol") }, shadowEnabled = shadowEnabled)
+                    if (LocalKeyboardInputPreferences.current.symbolKeyCycle) {
+                        KeyboardModeKey(slot = 1,
+                            page = if (numberMode) com.kingzcheung.xime.keyboard.KeyboardInputPage.NUMBERS
+                                else com.kingzcheung.xime.keyboard.KeyboardInputPage.TEXT,
+                            onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
+                            textColor = specialKeyTextColor, modifier = Modifier.weight(2f),
+                            onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
+                            shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                            ctrlTargets = ctrlTargets, onCtrlShortcut = onCtrlShortcut)
+                    } else {
+                        KeyButton(if (numberMode) "あいう" else "123", { onKeyPress(if (numberMode) "abc" else "mode_change_number") }, specialKeyBackgroundColor, specialKeyTextColor,
+                            Modifier.weight(1f).testTag("kana-number"), onPress = { onKeyPressDown?.invoke("number") }, fontSize = 16.sp, shadowEnabled = shadowEnabled)
+                        if (onCtrlShortcut != null) CtrlSymbolKeyButton(text = "!@#", targets = ctrlTargets,
+                            holdMillis = LocalKeyboardInputPreferences.current.symbolKeyHoldMs,
+                            onOpenSymbols = { onKeyPress("symbol") }, onShortcut = onCtrlShortcut,
+                            onPressDown = { onKeyPressDown?.invoke("symbol") },
+                            backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
+                            modifier = Modifier.weight(1f).testTag("kana-symbol"),
+                            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+                        else KeyButton("!@#", { onKeyPress("symbol") }, specialKeyBackgroundColor, specialKeyTextColor,
+                            Modifier.weight(1f).testTag("kana-symbol"), fontSize = 16.sp, onPress = { onKeyPressDown?.invoke("symbol") }, shadowEnabled = shadowEnabled)
+                    }
                 }
             }
             Column(Modifier.weight(3f).fillMaxHeight()) {

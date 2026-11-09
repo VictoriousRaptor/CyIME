@@ -205,6 +205,7 @@ fun SymbolKeyboardLayout(
 
         // 和标准 26 键共用底栏权重；分类只占余下空间，不挤压两侧入口。
         val bottom = QwertyBottomRowWeights.Standard
+        val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(LocalKeyboardInputPreferences.current.symbolKeyCycle)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -212,7 +213,7 @@ fun SymbolKeyboardLayout(
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            for (slot in 1..2) {
+            for (slot in 1..modeCount) {
                 KeyboardModeKey(
                     slot = slot, page = KeyboardInputPage.SYMBOLS,
                     onKeyPress = { action -> if (action == "abc") onBack() else onNumber() },
@@ -227,7 +228,7 @@ fun SymbolKeyboardLayout(
             }
             BoxWithConstraints(
                 modifier = Modifier
-                    .weight(bottom.total - 2 * bottom.mode - bottom.enter)
+                    .weight(bottom.total - modeCount * bottom.mode - bottom.enter)
                     .fillMaxHeight()
                     .testTag("symbol-category-strip"),
                 contentAlignment = Alignment.CenterStart,

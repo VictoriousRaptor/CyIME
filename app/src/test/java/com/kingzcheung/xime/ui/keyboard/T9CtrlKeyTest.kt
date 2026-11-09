@@ -54,11 +54,11 @@ class T9CtrlKeyTest {
     private val shortcutLabels = listOf("关闭", "刷新", "重做", "全选", "保存", "剪切", "撤销", "复制", "粘贴")
     private val shortcutCommands = listOf("ctrl:w", "ctrl:r", "ctrl:y", "ctrl:a", "ctrl:s", "ctrl:x", "ctrl:z", "ctrl:c", "ctrl:v")
 
-    private fun show() {
+    private fun show(cycle: Boolean = false) {
         AppFonts.initialize(rule.activity.application)
         val callbacks = KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {})
         rule.setContent {
-            CompositionLocalProvider(LocalKeyboardInputPreferences provides KeyboardInputPreferences(symbolKeyHoldSeconds = 1f)) {
+            CompositionLocalProvider(LocalKeyboardInputPreferences provides KeyboardInputPreferences(symbolKeyHoldSeconds = 1f, symbolKeyCycle = cycle)) {
                 MaterialTheme {
                     Box(Modifier.requiredSize(360.dp, 260.dp)) {
                         T9KeyboardLayout({ keys += it }, callbacks, KeyboardUiState(currentSchemaId = "t9_pinyin"),
@@ -147,6 +147,21 @@ class T9CtrlKeyTest {
         }
         assertEquals(listOf(CtrlShortcuts.ENTER_COMMAND, CtrlShortcuts.ENTER_COMMAND), commands)
         assertEquals("不打回车也不开符号", emptyList<String>(), keys)
+    }
+
+    @Test fun singleCycleKeyStillSupportsCtrlAndTapToSymbols() {
+        show(cycle = true)
+        val symbol = bounds("mode-slot-1").center
+        val enter = bounds("t9-enter-key").center
+        rule.onRoot().performTouchInput { down(0, symbol) }
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { down(1, enter); up(1) }
+        rule.onRoot().performTouchInput { up(0) }
+        rule.waitForIdle()
+        assertEquals(listOf(CtrlShortcuts.ENTER_COMMAND), commands)
+        assertEquals(emptyList<String>(), keys)
+        rule.onNodeWithTag("mode-slot-1", true).performTouchInput { click(center) }
+        assertEquals(listOf("symbol"), keys)
     }
 
     /** 按住 !@#，另一根手指点回车：Ctrl+回车，不发普通回车，松开 !@# 也不开符号。 */

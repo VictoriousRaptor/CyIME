@@ -224,6 +224,8 @@ data class KeyboardInputPreferences(
     val languageKeyImePicker: Boolean = false,
     /** 按住符号键当 Ctrl；不拖动且在这个时限内松手才打开符号面板，超过时限松手什么都不做；默认 1 秒（2026-10-24 用户要求）。 */
     val symbolKeyHoldSeconds: Float = 1f,
+    /** 单个模式键依次打开符号、数字、原输入法键盘；默认关，保留两个独立入口。 */
+    val symbolKeyCycle: Boolean = false,
     /** 九键从「下一项」拖出超过键盘区宽或高的这个百分比才算拖动选词，没拖这么远仍是键自己的左右滑；默认 50（用户 10-31 要求可调）。 */
     val candidateDragPercent: Float = 50f,
     /** 手写公式上屏时两边的标记，默认 $…$。 */
@@ -322,6 +324,7 @@ data class KeyboardInputPreferences(
         const val VOICE_SWIPE_CANCEL_KEY = "voice_swipe_cancel"
         const val HANDWRITING_RECOGNIZE_EARLY_KEY = "handwriting_recognize_while_writing"
         const val LANGUAGE_KEY_IME_PICKER_KEY = "language_key_ime_picker"
+        const val SYMBOL_KEY_CYCLE_KEY = "symbol_key_cycle"
 
         /** 正在显示的键盘监听这些键，改了就重新读取；[save] 写入的每个键都必须在内，否则设置页的改动要等输入法重启才生效。 */
         /** 角标不透明度；新键，读不到就是 1（原样）。 */
@@ -340,7 +343,7 @@ data class KeyboardInputPreferences(
                 DOUBLE_PINYIN_KEY_HINTS_KEY, DOUBLE_PINYIN_KEY_HINTS_WITH_CORNERS_KEY, DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY,
                 SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED, SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
                 *SideSymbolTarget.entries.map { it.prefKey }.toTypedArray(),
-                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY,
+                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY,
                 "handwriting_pause_seconds", "handwriting_pause_seconds_v2", "handwriting_formula_delimiter") + FrostedGlassPreferences.keys
         }
 
@@ -407,6 +410,7 @@ data class KeyboardInputPreferences(
                 voiceSwipeCancel = prefs.getBoolean(VOICE_SWIPE_CANCEL_KEY, false),
                 languageMenuHoldSeconds = normalizeLanguageMenuHoldSeconds(languageHold),
                 languageKeyImePicker = prefs.getBoolean(LANGUAGE_KEY_IME_PICKER_KEY, false),
+                symbolKeyCycle = prefs.getBoolean(SYMBOL_KEY_CYCLE_KEY, false),
                 symbolKeyHoldSeconds = normalizeSymbolKeyHoldSeconds(prefs.getFloat("symbol_key_hold_seconds", 1f)),
                 candidateDragPercent = normalizeCandidateDragPercent(prefs.getFloat("t9_candidate_drag_percent", 50f)),
                 neighborCorrection = prefs.getBoolean("neighbor_correction", true),
@@ -477,6 +481,7 @@ data class KeyboardInputPreferences(
             .putFloat("language_key_hold_seconds_v2", normalizeLanguageMenuHoldSeconds(languageMenuHoldSeconds))
             .putFloat("language_key_hold_seconds", normalizeLanguageMenuHoldSeconds(languageMenuHoldSeconds))
             .putBoolean(LANGUAGE_KEY_IME_PICKER_KEY, languageKeyImePicker)
+            .putBoolean(SYMBOL_KEY_CYCLE_KEY, symbolKeyCycle)
             .putFloat("symbol_key_hold_seconds", normalizeSymbolKeyHoldSeconds(symbolKeyHoldSeconds))
             .putFloat("t9_candidate_drag_percent", normalizeCandidateDragPercent(candidateDragPercent))
             .putBoolean("neighbor_correction", neighborCorrection)

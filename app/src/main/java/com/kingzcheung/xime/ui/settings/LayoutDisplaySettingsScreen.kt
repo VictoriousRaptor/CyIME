@@ -145,6 +145,13 @@ private fun LayoutDisplayPage(
                             .putExtra("edit_symbols", true)) },
                         showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    val input = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                    SettingsToggleItem(Icons.TwoTone.EmojiSymbols, "符号键循环切换",
+                        "合并符号和数字键，点按依次切换符号、数字和原输入法键盘。",
+                        checked = input.symbolKeyCycle, onCheckedChange = {
+                            input.copy(symbolKeyCycle = it).save(context)
+                        })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     var punctuationCandidate by remember {
                         mutableStateOf(SettingsPreferences.isPunctuationCommitsCandidateEnabled(context))
                     }

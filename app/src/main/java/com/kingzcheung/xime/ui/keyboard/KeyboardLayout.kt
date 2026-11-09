@@ -1026,6 +1026,7 @@ fun KeyboardLayout(
                     val bottom = letterKeyboardBottomRow(keyRows, fourteenKey || zhuyin)
                     // 空格左侧逗号、右侧句号；只开逗号时沿用原配置的逗号键。
                     val bottomPrefs = LocalKeyboardInputPreferences.current
+                    val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(bottomPrefs.symbolKeyCycle)
                     val commaOnLeft = bottomPrefs.qwertyCommaKey
                     val periodOnRight = bottomPrefs.qwertyPeriodKey
                     val punctuationFull = LocalKeyboardPunctuation.current?.full ?: !isAsciiMode
@@ -1033,7 +1034,7 @@ fun KeyboardLayout(
                         punctuationFull, english = isAsciiMode,
                         japanese = LocalKeyboardPunctuation.current?.japanese == true)
                     val punctuationCount = (if (commaOnLeft) 1 else 0) + (if (periodOnRight) 1 else 0)
-                    val bottomSpaceWeight = bottom.space + bottom.punctuation * (1 - punctuationCount)
+                    val bottomSpaceWeight = bottom.space + bottom.punctuation * (1 - punctuationCount) + bottom.mode * (2 - modeCount)
                     // 键面写什么就上屏什么：只有与当前宽度一致的全角标点走普通按键；
                     // 半角模式下滑的全角标点、中文状态的半角标点都原样上屏，避免被宽度设置转回去。
                     val commitPunctuation: (String) -> Unit = { text ->
@@ -1079,14 +1080,14 @@ fun KeyboardLayout(
                         if (isVoiceMode && !isVoiceSticky) {
                             DummyKeyButton(
                                 backgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
-                                modifier = Modifier.weight(bottom.mode * 2)
+                                modifier = Modifier.weight(bottom.mode * modeCount)
                             )
                             if (commaOnLeft) DummyKeyButton(
                                 backgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
                                 modifier = Modifier.weight(bottom.punctuation)
                             )
                         } else {
-                            for (slot in 1..2) {
+                            for (slot in 1..modeCount) {
                                 KeyboardModeKey(
                                     slot = slot, onKeyPress = onKeyPress,
                                     backgroundColor = specialKeyBackgroundColor,
@@ -1219,7 +1220,7 @@ fun KeyboardLayout(
 
                         // 分体时空格在中线处分成左右两块，两块都是完整的空格键。
                         val spaceParts = if (splitKeyboard) SplitKeyboardGeometry.spaceSplit(bottom, bottomSpaceWeight,
-                            bottom.mode * 2f + if (commaOnLeft) bottom.punctuation else 0f).toList()
+                            bottom.mode * modeCount + if (commaOnLeft) bottom.punctuation else 0f).toList()
                             else listOf(bottomSpaceWeight)
                         spaceParts.forEachIndexed { part, spaceWeight ->
                             if (part > 0) SplitGapSpacer(3, splitGapDp)
