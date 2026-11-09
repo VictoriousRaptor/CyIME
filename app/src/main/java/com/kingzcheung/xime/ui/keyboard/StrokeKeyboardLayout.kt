@@ -536,12 +536,24 @@ private fun StrokeKeyboardContent(
             Row(
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
+                val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
+                @Composable fun LanguageKey() {
+                    LanguageKeyButton(
+                        icon = rememberVectorPainter(Icons.Default.Language),
+                        onClick = { onKeyPress("ime_switch") },
+                        backgroundColor = specialKeyBackgroundColor, iconColor = specialKeyTextColor,
+                        modifier = Modifier.weight(0.8f),
+                        onPress = { onKeyPressDown?.invoke("ime_switch") },
+                        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                    )
+                }
                 if (!LocalKeyboardInputPreferences.current.symbolKeyCycle) KeyboardModeKey(
                     slot = 2, onKeyPress = onKeyPress,
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
                     modifier = Modifier.weight(0.8f), onKeyPressDown = onKeyPressDown,
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                 )
+                if (languageOnLeft) LanguageKey()
                 StrokeSpaceButton(
                     onKeyPress = onKeyPress,
                     onKeyPressDown = onKeyPressDown,
@@ -552,15 +564,7 @@ private fun StrokeKeyboardContent(
                     shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
                 )
-                // 与九键底排同位：原来这里是半角「.」（上游遗留），语言键原在第 3 行占着 9 的位置。
-                LanguageKeyButton(
-                    icon = rememberVectorPainter(Icons.Default.Language),
-                    onClick = { onKeyPress("ime_switch") },
-                    backgroundColor = specialKeyBackgroundColor, iconColor = specialKeyTextColor,
-                    modifier = Modifier.weight(0.8f),
-                    onPress = { onKeyPressDown?.invoke("ime_switch") },
-                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
-                )
+                if (!languageOnLeft) LanguageKey()
             }
         }
 

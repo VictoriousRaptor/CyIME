@@ -62,14 +62,14 @@ class SymbolKeyCycleRenderTest {
     }
 
     private fun mount(schema: String = "rime_ice", english: Boolean = false, cycle: Boolean = true,
-        handwriting: Boolean = false, width: Int = 400, split: Boolean = false, floating: Boolean = false,
+        handwriting: Boolean = false, width: Int = 400, split: Boolean = false, floating: Boolean = false, languageOnLeft: Boolean = false, languageMenu: Boolean = false,
         onGestureAction: ((GestureAction, String) -> Unit)? = null) {
         val app = rule.activity.application
-        KeyboardInputPreferences.read(app).copy(symbolKeyCycle = cycle).save(app)
+        KeyboardInputPreferences.read(app).copy(symbolKeyCycle = cycle, languageKeyOnLeft = languageOnLeft).save(app)
         SettingsPreferences.setSplitKeyboardEnabled(app, split)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
         val callbacks = KeyboardCallbacks(onKeyPress = { key, _ -> pressed += key }, onCandidateSelect = {},
-            onGestureAction = onGestureAction)
+            onSwitchSchema = if (languageMenu) ({ _: String -> }) else null, onGestureAction = onGestureAction)
         vm = spy(KeyboardViewModel(app))
         val t9 = mock<T9InputController> {
             on { leftPanelState } doReturn T9InputController.LeftPanelState.IDLE
@@ -81,6 +81,7 @@ class SymbolKeyCycleRenderTest {
             XimeTheme(darkTheme = false, themeId = "soft_blue") {
                 Box(Modifier.size(width.dp, 330.dp)) {
                     KeyboardView(vm, KeyboardUiState(currentSchemaId = schema, isAsciiMode = english,
+                        schemas = if (languageMenu) listOf(com.kingzcheung.xime.settings.SchemaInfo(schema, "拼音", "", "", "")) else emptyList(),
                         keyboardHeightDp = 330, isFloatingMode = floating, floatingScreenHeightDp = 850),
                         callbacks, modifier = Modifier.fillMaxSize(), inputSessionManagedByHost = true)
                 }
@@ -206,6 +207,104 @@ class SymbolKeyCycleRenderTest {
         save("setting-enabled")
         row.performClick()
         assertFalse(KeyboardInputPreferences.read(rule.activity).symbolKeyCycle)
+    }
+
+    private fun assertLanguageBesideModeKey(modeTag: String? = null) {
+        val lastModeTag = modeTag ?: if (KeyboardInputPreferences.read(rule.activity).symbolKeyCycle) "mode-slot-1" else "mode-slot-2"
+        val mode = rule.onNodeWithTag(lastModeTag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val language = rule.onNodeWithTag("language-key-control").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Language key must be to the right of the last mode key", language.left >= mode.right - 1f)
+        assertTrue("No other key may sit between mode and language", language.left - mode.right < 16f)
+        assertEquals("Language and mode keys must share the bottom edge", mode.bottom, language.bottom, 2f)
+    }
+
+    private fun verifyLeftLanguage(name: String, modeTag: String? = null) {
+        assertLanguageBesideModeKey(modeTag)
+        save("language-left-$name")
+        rule.onNodeWithTag("language-key-control").performTouchInput { click(center) }
+        assertEquals(listOf("ime_switch"), pressed)
+    }
+
+    @Test fun languageMovesImmediatelyAfterSeparateNumberKey() {
+        mount(cycle = false, languageOnLeft = true)
+        assertLanguageBesideModeKey()
+        val language = rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot
+        val number = rule.onNodeWithTag("mode-slot-2").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(number.right <= language.left + 1f)
+        verifyLeftLanguage("two-mode-keys")
+    }
+
+    @Test fun relocatedLanguagePreservesLongPressMenu() {
+        mount(languageOnLeft = true, languageMenu = true)
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithTag("language-key-control").performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(400)
+        rule.onNodeWithTag("language-menu").assertIsDisplayed()
+        rule.onNodeWithTag("language-key-control").performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        assertTrue(pressed.isEmpty())
+        save("language-left-menu")
+    }
+
+    @Test fun languagePositionChangesImmediatelyAndRestoresOriginalBounds() {
+        mount(cycle = false)
+        val original = rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot
+        repeat(2) {
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = true).save(rule.activity) }
+            assertLanguageBesideModeKey()
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = false).save(rule.activity) }
+            assertEquals(original, rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot)
+        }
+        save("language-default-restored")
+    }
+
+    @Test fun leftLanguageWorksWithModeCycle() {
+        mount(languageOnLeft = true)
+        assertLanguageBesideModeKey()
+        verifyCycle("中文", "left-language")
+        verifyLeftLanguage("qwerty")
+    }
+    @Test fun leftLanguageWorksInEnglish() { mount(english = true, languageOnLeft = true); verifyLeftLanguage("english") }
+    @Test fun leftLanguageWorksWith14Keys() { mount("pinyin_14jian", languageOnLeft = true); verifyLeftLanguage("fourteen") }
+    @Test fun leftLanguageWorksWithNineKeys() { mount("t9_pinyin", cycle = false, languageOnLeft = true); verifyLeftLanguage("t9") }
+    @Test fun leftLanguageWorksWithStroke() { mount("stroke", cycle = false, languageOnLeft = true); verifyLeftLanguage("stroke") }
+    @Test fun leftLanguageWorksWithKana() { mount("japanese_kana", cycle = false, languageOnLeft = true); verifyLeftLanguage("kana", "kana-number") }
+    @Test fun leftLanguageWorksWithHandwriting() { mount(handwriting = true, cycle = false, languageOnLeft = true); verifyLeftLanguage("handwriting", "handwriting-key:number") }
+    @Test fun leftLanguageWorksWithMergedHandwritingModeKey() { mount(handwriting = true, languageOnLeft = true); verifyLeftLanguage("handwriting-merged") }
+    @Test fun leftLanguageWorksWithMergedKanaModeKey() { mount("japanese_kana", languageOnLeft = true); verifyLeftLanguage("kana-merged") }
+    @Test fun leftLanguageWorksWhenFloating() { mount(floating = true, languageOnLeft = true); verifyLeftLanguage("floating") }
+    @Test @Config(qualifiers = "sw1000dp-w1000dp-h850dp-mdpi")
+    fun leftLanguagePreservesSplitGapAcrossBothModeStyles() {
+        mount(width = 1000, split = true)
+        for (cycle in listOf(true, false)) {
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(symbolKeyCycle = cycle, languageKeyOnLeft = false).save(rule.activity) }
+            val original = rule.onNodeWithTag("split-keyboard-gap:3").fetchSemanticsNode().boundsInRoot
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = true).save(rule.activity) }
+            val moved = rule.onNodeWithTag("split-keyboard-gap:3").fetchSemanticsNode().boundsInRoot
+            assertEquals("Moving language must preserve the split gap", original.left, moved.left, 1f)
+            assertEquals(original.right, moved.right, 1f)
+            assertLanguageBesideModeKey()
+            save("language-left-split-cycle-$cycle")
+        }
+        verifyLeftLanguage("split")
+    }
+    @Test @Config(qualifiers = "sw360dp-w360dp-h800dp-mdpi")
+    fun leftLanguageFitsCompactPhone() { mount(width = 360, languageOnLeft = true); verifyLeftLanguage("compact") }
+
+    @Test fun languagePositionSettingIsSearchableAndPersists() {
+        val title = "语言键放左侧"
+        SettingsSearchFocus.open(SettingsSearchIndex.single { it.title == title })
+        rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") {
+            LayoutDisplaySettingsContent(onBack = {})
+        } }
+        val row = rule.onNodeWithTag("settings-search-anchor:$title")
+        rule.waitUntil(4_000) { row.isDisplayed() }
+        assertFalse(KeyboardInputPreferences.read(rule.activity).languageKeyOnLeft)
+        row.performClick()
+        assertTrue(KeyboardInputPreferences.read(rule.activity).languageKeyOnLeft)
+        save("language-left-setting")
+        row.performClick()
+        assertFalse(KeyboardInputPreferences.read(rule.activity).languageKeyOnLeft)
     }
 
     private fun save(name: String) {

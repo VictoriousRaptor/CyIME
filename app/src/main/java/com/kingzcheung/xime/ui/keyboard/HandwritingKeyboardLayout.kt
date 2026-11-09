@@ -436,9 +436,13 @@ fun HandwritingKeyboardLayout(
                 // The expand control occupies QWERTY's punctuation slot, so every
                 // bottom-row boundary stays in place when switching input modes.
                 val cycle = LocalKeyboardInputPreferences.current.symbolKeyCycle
-                val keys = listOfNotNull("symbol" to bottom.mode, ("number" to bottom.mode).takeUnless { cycle },
+                val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
+                val keys = listOfNotNull("symbol" to bottom.mode,
+                    ("number" to bottom.mode).takeUnless { cycle },
+                    ("ime_switch" to bottom.language).takeIf { languageOnLeft },
                     (if (expanded) "collapse" else "expand") to bottom.punctuation,
-                    "space" to (bottom.space + if (cycle) bottom.mode else 0f), "ime_switch" to bottom.language, "enter" to bottom.enter)
+                    "space" to (bottom.space + if (cycle) bottom.mode else 0f),
+                    ("ime_switch" to bottom.language).takeUnless { languageOnLeft }, "enter" to bottom.enter)
                 keys.forEach { (action, weight) ->
                     val special = action != "space"
                     if (cycle && action == "symbol") KeyboardModeKey(slot = 1, onKeyPress = { press(it) },

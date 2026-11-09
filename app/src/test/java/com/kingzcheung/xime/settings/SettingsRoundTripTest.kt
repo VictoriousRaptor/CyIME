@@ -89,7 +89,7 @@ class SettingsRoundTripTest {
             t9FlickLetters = true, letterLongPressMenu = true, cursorStepDp = 14f, cursorSwipeLines = 1.75f, keyTextScale = 1.3f, handwritingPauseSeconds = 0.8f,
             formulaDelimiter = FormulaDelimiter.entries.last { it != FormulaDelimiter.DOLLAR }, fixedSymbols = "，\n。",
             qwertyStagger = QwertyStaggerMode.PHYSICAL, qwertyStaggerCustom = 0.25f,
-            qwertyCommaKey = false, qwertyPeriodKey = false, symbolKeyCycle = true,
+            qwertyCommaKey = false, qwertyPeriodKey = false, symbolKeyCycle = true, languageKeyOnLeft = true,
         )
         changed.save(context)
         val read = KeyboardInputPreferences.read(context)

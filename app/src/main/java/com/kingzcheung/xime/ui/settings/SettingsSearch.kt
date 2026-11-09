@@ -179,6 +179,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("布局管理", layouts, SEARCH_TARGET_CUSTOM_LAYOUT, "自定义布局 自定义按键布局 切换栏 隐藏布局 布局排序 新建布局 复制 编辑按键排列", anchor = null),
         SettingsSearchEntry("横竖屏分开记布局", layouts, layoutIndex, "横屏 竖屏 转屏 旋转 方向 横屏26键 竖屏九键 不同布局 分别 各自 记住布局"),
         SettingsSearchEntry("按键符号", layouts, layoutIndex, "角标 符号编辑 字母键符号 上下角标 下滑符号 14键符号 自定义布局符号 侧栏 笔画 短语 常用符号栏 手写符号 数字行 数字侧栏 数字键盘 滑动动作 zxcv 撤销 剪切 复制 粘贴 全选 段首 段尾"),
+        SettingsSearchEntry("语言键放左侧", layouts, layoutIndex, "中英切换键 语言切换 地球键 左边 左侧 数字键右边 123 合并按钮 符号键 位置"),
         SettingsSearchEntry("符号键循环切换", layouts, layoutIndex, "Gboard 符号键 数字键 循环切换 合并 单键 ?123 输入法键盘"),
         SettingsSearchEntry("标点上屏首选", layouts, layoutIndex, "标点 逗号 句号 问号 首选 第一个候选 上屏 候选上屏 打逗号 选词 搜狗"),
         SettingsSearchEntry("输入成对符号", layouts, layoutIndex, "成对 配对 括号 引号 书名号 自动补全 闭合 光标中间"),
