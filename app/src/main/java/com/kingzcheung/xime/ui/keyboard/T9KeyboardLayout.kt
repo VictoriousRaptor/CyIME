@@ -701,7 +701,7 @@ private fun T9KeyboardContent(
                 )
             }
             Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                KeyboardModeKey(
+                if (!LocalKeyboardInputPreferences.current.symbolKeyCycle) KeyboardModeKey(
                     slot = 2, onKeyPress = onKeyPress,
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
                     modifier = Modifier.weight(0.8f), onKeyPressDown = onKeyPressDown,
@@ -714,7 +714,7 @@ private fun T9KeyboardContent(
                     onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
                     onVoiceModeChange = callbacks.onVoiceModeChange,
                     backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                    modifier = Modifier.weight(1.8f),
+                    modifier = Modifier.weight(if (LocalKeyboardInputPreferences.current.symbolKeyCycle) 2.6f else 1.8f),
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                 )
                 LanguageKeyButton(

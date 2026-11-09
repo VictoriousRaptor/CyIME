@@ -17,6 +17,18 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 class KeyboardInputPreferencesTest {
+    @Test fun `symbol key cycle defaults off and persists without changing gestures or other settings`() {
+        val before = KeyboardInputPreferences.read(context)
+        assertEquals(false, before.symbolKeyCycle)
+        assertTrue(KeyboardInputPreferences.SYMBOL_KEY_CYCLE_KEY in KeyboardInputPreferences.watchedKeys)
+        for (enabled in listOf(true, false)) {
+            before.copy(symbolKeyCycle = enabled).save(context)
+            val after = KeyboardInputPreferences.read(context)
+            assertEquals(enabled, after.symbolKeyCycle)
+            assertEquals(before, after.copy(symbolKeyCycle = false))
+        }
+    }
+
     @Test fun `kana hints persist independently of symbol direction and cursor gestures`() {
         val before = KeyboardInputPreferences.read(context)
         assertEquals(false, before.kanaDirectionHints)
