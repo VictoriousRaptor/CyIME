@@ -20,10 +20,11 @@ cd "$WORK/CyAzooKey"
 SDK=$HOME/.swiftpm/swift-sdks/swift-6.2-RELEASE-android-24-0.1.artifactbundle/swift-6.2-release-android-24-sdk/android-27d-sysroot/usr/lib
 for pair in aarch64-unknown-linux-android28:aarch64:arm64-v8a armv7-unknown-linux-androideabi28:armv7:armeabi-v7a x86_64-unknown-linux-android28:x86_64:x86_64; do
   triple=${pair%%:*}; rest=${pair#*:}; arch=${rest%%:*}; abi=${rest#*:}
+  case " ${ABIS:-arm64-v8a armeabi-v7a x86_64} " in *" $abi "*) ;; *) continue ;; esac
   # SwiftPM does not apply --static-swift-stdlib to the library link, so the Swift runtime's own
   # dependencies are named here: liblog, and libc++ linked in statically (the app's libc++_shared may be
   # another NDK version). Without them Android's dlopen fails on the unresolved std::__ndk1 symbols.
-  swift build -c release --scratch-path "$WORK/build-$abi" --swift-sdk $triple --static-swift-stdlib \
+  swift build -c release --jobs "${JOBS:-2}" --scratch-path "$WORK/build-$abi" --swift-sdk $triple --static-swift-stdlib \
     -Xlinker -L$SDK/swift_static-$arch/android -Xlinker --gc-sections -Xlinker -s \
     -Xlinker -llog -Xlinker -l:libc++_static.a -Xlinker -l:libc++abi.a -Xlinker --exclude-libs -Xlinker ALL
   mkdir -p "$WORK/out/$abi"

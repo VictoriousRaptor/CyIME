@@ -177,7 +177,7 @@ jobs:
     if: github.event.repository.fork
     name: AOSP-signed ARM64 Release
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
     concurrency:
@@ -206,6 +206,32 @@ jobs:
       - name: Install project native toolchain
         run: |
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+
+      - name: Set up pinned Swift compiler
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.2.0'
+
+      - name: Install pinned Swift Android SDK
+        run: |
+          swift sdk install \
+            https://github.com/finagolfin/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-24-0.1.artifactbundle.tar.gz \
+            --checksum c26ebfd4e32c0ca1beabcc45729b62042da57ee76d7d043f63f2235da90dc491
+
+      - name: Build missing native dependencies from pinned sources
+        env:
+          ABIS: arm64-v8a
+          JOBS: '2'
+        run: |
+          sh -n tools/azookey/build-android.sh
+          sh -n tools/azookey/build-dictionary.sh
+          sh -n tools/offline_translate/build-android.sh
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          export ANDROID_NDK="$ANDROID_HOME/ndk/29.0.14206865"
+          WORK="$GITHUB_WORKSPACE/.codex-artifacts/ci-native/azookey" sh tools/azookey/build-android.sh
+          WORK="$GITHUB_WORKSPACE/.codex-artifacts/ci-native/azookey" sh tools/azookey/build-dictionary.sh
+          WORK="$GITHUB_WORKSPACE/.codex-artifacts/ci-native/translate" sh tools/offline_translate/build-android.sh
+          python3 scripts/ci-native-properties.py
 
       - name: Cache native dependencies and dictionaries
         uses: actions/cache@v6

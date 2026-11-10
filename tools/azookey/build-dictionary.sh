@@ -17,7 +17,7 @@ if [ ! -d "$WORK/akkc-lite" ]; then
   (cd "$WORK/akkc-lite" && patch -p1 < "$HERE/azookey-lite.patch")
 fi
 # SuppTool (added by azookey-lite.patch) dumps louds/ to TSV and builds louds/ back from TSV.
-swift build -c release --package-path "$WORK/akkc-lite" --product SuppTool --scratch-path "$WORK/build-host"
+swift build -c release --jobs "${JOBS:-2}" --package-path "$WORK/akkc-lite" --product SuppTool --scratch-path "$WORK/build-host"
 TOOL="$WORK/build-host/release/SuppTool"
 # The converter's submodule is the dictionary commit tasks-japanese.gradle.kts pins.
 STORAGE="$WORK/akkc-lite/Sources/KanaKanjiConverterModuleWithDefaultDictionary/azooKey_dictionary_storage"

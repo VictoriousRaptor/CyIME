@@ -14,7 +14,11 @@ import java.security.MessageDigest
 val offlineTranslateLibraryHashes = mapOf<String, String>(
     "arm64-v8a" to "fbc9172835c1d860f146685d1e77b79e11cc2e4f2aa6c027a9e8023c88a23f55",
     "x86_64" to "78f1b569ce0d59628a4482059dc4b8cb1714ae86bbb50ecf9833110ec3286ae4",
-)
+).filterKeys { abi ->
+    providers.gradleProperty("cyime.nativeAbis").orNull?.split(',')?.contains(abi) ?: true
+}.mapValues { (abi, hash) ->
+    providers.gradleProperty("cyime.translateLibrarySha256.$abi").orNull ?: hash
+}
 val offlineTranslateLibraryRoot = layout.buildDirectory.dir("generated/translate-jniLibs")
 fun offlineTranslateSha256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")

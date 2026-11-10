@@ -8,6 +8,7 @@
 # Output: $WORK/out/<abi>/libcytranslate.so. Put the printed SHA-256 into
 # app/build-logic/tasks-offline-translate.gradle.kts and upload the files as
 # libcytranslate-<first 8 hex>-<abi>.so (GitHub Release `models`, ModelScope Cyletix/cyime-model).
+# ABIS can select a subset (for example arm64-v8a); JOBS bounds compiler concurrency.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${WORK:-$HERE/work}
@@ -21,7 +22,7 @@ if [ ! -d "$WORK/slimt" ]; then
 fi
 git -C "$WORK/slimt" checkout -q $COMMIT
 git -C "$WORK/slimt" submodule update --init --recursive
-for abi in arm64-v8a x86_64; do
+for abi in ${ABIS:-arm64-v8a x86_64}; do
   cmake -S "$HERE" -B "$WORK/build-$abi" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
