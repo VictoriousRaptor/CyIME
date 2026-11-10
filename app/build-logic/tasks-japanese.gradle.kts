@@ -14,7 +14,10 @@ val azooKeyDictionaryContentHash = "72336c1a22b96fc7e06ae710e84dd3b9223799fe7fea
 // louds/ files with the Mozc nouns azooKey lacks (names such as 暁山, places, organisations; ~400k words),
 // built by tools/azookey/build-dictionary.sh. They replace every upstream louds/ file except charID.chid.
 // Found like the libraries below (local copy by SHA-256 first, else downloaded).
-val azooKeyLoudsZipHash = "ebbb69a26d958a6d3498d1422f6c1315530a08ee730877cfdc33d0248c20e510"
+// CI can build the same dictionary from its pinned sources; ZIP bytes may differ by zlib version.
+// The merged dictionary content hash below remains mandatory for locally built archives too.
+val azooKeyLoudsZipHash = providers.gradleProperty("cyime.azookeyLoudsZipSha256").orNull
+    ?: "ebbb69a26d958a6d3498d1422f6c1315530a08ee730877cfdc33d0248c20e510"
 // Content hash (same scheme) of the merged dictionary: dictionary.version, checked again on the phone.
 val azooKeyMergedDictionaryHash = "7776faa0dc60bea48b2e24824d6e45924bed3a85a0b8263d7d4859d39f9a9745"
 // Own asset root holding only azookey/: the old generated/japanese-assets root kept the jaroomaji
@@ -135,7 +138,12 @@ val azooKeyLibraryHashes = mapOf(
     "arm64-v8a" to "16907c1acf748d8b0b731106fcc65c07d70f72eb04d6a5430718b39604b53b50",
     "armeabi-v7a" to "01f5b76a443b22993de965aa3c4d0eeca67afb1b087451ca9b7bc585cd318f19",
     "x86_64" to "6589da4104294f49b430b1a65000b6e6a064841298bad6ef9303ebc3518287dc",
-)
+).filterKeys { abi ->
+    providers.gradleProperty("cyime.nativeAbis").orNull?.split(',')?.contains(abi) ?: true
+}.mapValues { (abi, hash) ->
+    // Explicit checksums from this CI run's source builds; downloaded releases keep the defaults.
+    providers.gradleProperty("cyime.azookeyLibrarySha256.$abi").orNull ?: hash
+}
 val azooKeyLibraryRoot = layout.buildDirectory.dir("generated/azookey-jniLibs")
 val prepareAzooKeyLibraries by tasks.registering {
     group = "build setup"

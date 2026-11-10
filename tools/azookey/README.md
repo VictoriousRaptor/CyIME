@@ -22,6 +22,10 @@
 sh tools/azookey/build-android.sh   # 输出 work/out/<abi>/libCyAzooKey.so 和 SHA-256
 ```
 
+可用 `ABIS=arm64-v8a JOBS=2` 只编译 ARM64 并限制并发。fork 的 Release 工作流会先从这些固定源码构建库和补充词典，
+再由 `scripts/ci-native-properties.py` 检查源码提交、ELF 架构及输出哈希，生成本次构建的 Gradle 校验参数。
+词典 ZIP 因压缩器版本产生的字节差异允许单独记录；合并后词典的内容哈希仍须与仓库固定值一致。
+
 更新库后把 SHA-256 写进 `tasks-japanese.gradle.kts` 的 `azooKeyLibraryHashes`，文件按 `libCyAzooKey-<哈希前 8 位>-<abi>.so`
 上传到 GitHub `models` 发布和魔搭 `Cyletix/cyime-model`；构建时只认哈希一致的文件。
 也可以把同名库直接放进 `app/build/generated/azookey-jniLibs/<abi>/libCyAzooKey.so`，哈希一致就不再下载。

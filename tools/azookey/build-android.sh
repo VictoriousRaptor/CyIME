@@ -5,6 +5,9 @@
 # Output: $WORK/out/<abi>/libCyAzooKey.so. Put the printed SHA-256 into app/build-logic/tasks-japanese.gradle.kts
 # and upload the files as libCyAzooKey-<first 8 hex>-<abi>.so.
 set -e
+# Swift 6.2's driver otherwise prefers the runner's NDK over the installed Swift SDK,
+# which loses its SwiftAndroid module. The SDK already contains its own sysroot.
+unset ANDROID_NDK_ROOT
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${WORK:-$HERE/work}
 COMMIT=25a6346bf76931c1cf2214015b808875ea82f4bf
@@ -17,14 +20,22 @@ if [ ! -d "$WORK/akkc-lite" ]; then
 fi
 rm -rf "$WORK/CyAzooKey" && cp -r "$HERE/CyAzooKey" "$WORK/CyAzooKey"
 cd "$WORK/CyAzooKey"
-SDK=$HOME/.swiftpm/swift-sdks/swift-6.2-RELEASE-android-24-0.1.artifactbundle/swift-6.2-release-android-24-sdk/android-27d-sysroot/usr/lib
+# SwiftPM uses ~/.config/swiftpm on Linux; ~/.swiftpm is not always a compatibility symlink.
+SDK=
+for sdks in "${XDG_CONFIG_HOME:-$HOME/.config}/swiftpm/swift-sdks" "$HOME/.swiftpm/swift-sdks" "$HOME/Library/org.swift.swiftpm/swift-sdks"; do
+  candidate=$sdks/swift-6.2-RELEASE-android-24-0.1.artifactbundle/swift-6.2-release-android-24-sdk/android-27d-sysroot/usr/lib
+  if [ -d "$candidate" ]; then SDK=$candidate; break; fi
+done
+: "${SDK:?install the Swift 6.2 Android SDK with swift sdk install}"
 for pair in aarch64-unknown-linux-android28:aarch64:arm64-v8a armv7-unknown-linux-androideabi28:armv7:armeabi-v7a x86_64-unknown-linux-android28:x86_64:x86_64; do
   triple=${pair%%:*}; rest=${pair#*:}; arch=${rest%%:*}; abi=${rest#*:}
+  case " ${ABIS:-arm64-v8a armeabi-v7a x86_64} " in *" $abi "*) ;; *) continue ;; esac
+  [ -f "$SDK/swift_static-$arch/android/lib_FoundationCShims.a" ] || { echo "missing Swift static libraries in $SDK for $abi" >&2; exit 1; }
   # SwiftPM does not apply --static-swift-stdlib to the library link, so the Swift runtime's own
   # dependencies are named here: liblog, and libc++ linked in statically (the app's libc++_shared may be
   # another NDK version). Without them Android's dlopen fails on the unresolved std::__ndk1 symbols.
-  swift build -c release --scratch-path "$WORK/build-$abi" --swift-sdk $triple --static-swift-stdlib \
-    -Xlinker -L$SDK/swift_static-$arch/android -Xlinker --gc-sections -Xlinker -s \
+  swift build -c release --jobs "${JOBS:-2}" --scratch-path "$WORK/build-$abi" --swift-sdk $triple --static-swift-stdlib \
+    -Xlinker "-L$SDK/swift_static-$arch/android" -Xlinker --gc-sections -Xlinker -s \
     -Xlinker -llog -Xlinker -l:libc++_static.a -Xlinker -l:libc++abi.a -Xlinker --exclude-libs -Xlinker ALL
   mkdir -p "$WORK/out/$abi"
   cp "$WORK/build-$abi/$triple/release/libCyAzooKey.so" "$WORK/out/$abi/"
