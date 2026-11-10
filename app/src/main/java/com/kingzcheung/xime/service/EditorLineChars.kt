@@ -8,14 +8,16 @@ import com.kingzcheung.xime.platform.AndroidPlatform
  * 向输入框要一次排版，用于移光标“从中间滑到边缘走一行”：只要宽度、字号和光标，不常驻监听。
  * 返回输入框是否接受了请求；不接受时移光标退回按距离计算。
  */
-internal fun requestLineLayout(connection: InputConnection): Boolean = runCatching {
+internal fun requestLineLayout(connection: InputConnection, monitor: Boolean = false): Boolean = runCatching {
+    val mode = InputConnection.CURSOR_UPDATE_IMMEDIATE or if (monitor) InputConnection.CURSOR_UPDATE_MONITOR else 0
+    val characterBounds = if (monitor) InputConnection.CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS else 0
     when {
-        AndroidPlatform.cursorAnchorLines -> connection.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE,
+        AndroidPlatform.cursorAnchorLines -> connection.requestCursorUpdates(mode,
             InputConnection.CURSOR_UPDATE_FILTER_EDITOR_BOUNDS or InputConnection.CURSOR_UPDATE_FILTER_TEXT_APPEARANCE or
-                InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER or InputConnection.CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS)
-        AndroidPlatform.cursorAnchorFilter -> connection.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE,
-            InputConnection.CURSOR_UPDATE_FILTER_EDITOR_BOUNDS or InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER)
-        else -> connection.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE)
+                InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER or InputConnection.CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS or characterBounds)
+        AndroidPlatform.cursorAnchorFilter -> connection.requestCursorUpdates(mode,
+            InputConnection.CURSOR_UPDATE_FILTER_EDITOR_BOUNDS or InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER or characterBounds)
+        else -> connection.requestCursorUpdates(mode)
     }
 }.getOrDefault(false)
 

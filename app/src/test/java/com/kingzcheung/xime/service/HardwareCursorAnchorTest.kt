@@ -58,6 +58,14 @@ class HardwareCursorAnchorTest {
         verify(info, never()).getCharacterBounds(0)
     }
 
+    @Test fun `magnifier follows active start of a reverse selection instead of the sorted end marker`() {
+        val info = editor(end = 105, start = 100)
+        marker(info, 500f, 300f, 324f)
+        character(info, 100, 400f, 200f, 420f, 224f)
+        assertEquals(HardwareCursorAnchor(400f, 200f, 400f, 224f), resolveHardwareCursorAnchor(info, 100))
+        assertEquals(HardwareCursorAnchor(500f, 300f, 500f, 324f), resolveHardwareCursorAnchor(info))
+    }
+
     @Test fun `character fallback uses absolute selection offset and leading edge`() {
         val info = editor(end = 105)
         character(info, 0, 1f, 2f, 3f, 4f)

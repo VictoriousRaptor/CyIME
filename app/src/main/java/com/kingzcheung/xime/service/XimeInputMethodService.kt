@@ -3287,12 +3287,42 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     private var hardwareCursorImmediateOnly = false
     private var cursorLinePending = false
+    private var cursorMagnifierActive = false
+    private var cursorMagnifierMonitoring = false
+    private var cursorMagnifierAnchor: HardwareCursorAnchor? = null
+    private var cursorMagnifierRequestedAt = 0L
+
+    internal fun trackCursorMagnifier(session: Long, active: Boolean) {
+        if (uiState.value.inputSessionId != session) return
+        cursorMagnifierActive = active
+        cursorMagnifierAnchor = null
+        cursorMagnifierMonitoring = false
+        if (active && !uiState.value.inputTarget.isInternal) {
+            currentInputConnection?.let { cursorMagnifierMonitoring = requestCursorMagnifierUpdates(it) }
+        } else if (!active) requestHardwareCursorUpdates()
+    }
+
+    internal fun readCursorMagnifierAnchor(): HardwareCursorAnchor? {
+        if (!cursorMagnifierActive) return null
+        val target = uiState.value.inputTarget
+        if (target.isInternal) {
+            val editor = target.editText() ?: return null
+            return internalCursorMagnifierAnchor(editor, schemaController.cursorSelectionActiveEnd(editor) ?: editor.selectionEnd)
+        }
+        // Some hosts accept only one-shot requests. Refresh those without blocking gesture dispatch.
+        val now = android.os.SystemClock.uptimeMillis()
+        if (!cursorMagnifierMonitoring && now - cursorMagnifierRequestedAt >= 80) {
+            cursorMagnifierRequestedAt = now
+            runCatching { currentInputConnection?.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE) }
+        }
+        return cursorMagnifierAnchor
+    }
     // 移光标开始时要一次输入框排版；实体键盘模式已常驻监听，等下一次更新即可。输入法内部输入框不向宿主要。
     private val cursorLineRequester: () -> Unit = {
         val connection = currentInputConnection
         if (connection != null && !uiState.value.inputTarget.isInternal) {
             cursorLinePending = true
-            if (!hasHardwareKeyboard && !requestLineLayout(connection)) cursorLinePending = false
+            if (!hasHardwareKeyboard && !requestLineLayout(connection, monitor = cursorMagnifierActive)) cursorLinePending = false
         }
     }
     private fun switchHardwareLanguage(mode: com.kingzcheung.xime.settings.LanguageSwitchMode? = null) {
@@ -3714,6 +3744,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // A hardware keyboard can switch editors without starting the soft input view.
         // Never keep the previous editor's position while waiting for this connection.
         uiState.value = uiState.value.copy(cursorAnchor = null, editorBounds = null)
+        cursorMagnifierActive = false
+        cursorMagnifierAnchor = null
         updateHardwareKeyboardConnection()
         applyCompactMode()
         requestHardwareCursorUpdates()
@@ -3903,6 +3935,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private fun requestHardwareCursorUpdates() {
         hardwareCursorImmediateOnly = false
         val connection = currentInputConnection ?: return
+        if (cursorMagnifierActive) {
+            if (!uiState.value.inputTarget.isInternal) cursorMagnifierMonitoring = requestCursorMagnifierUpdates(connection)
+            return
+        }
         if (!hasHardwareKeyboard) {
             try { connection.requestCursorUpdates(0) } catch (_: Exception) { }
             return
@@ -4038,12 +4074,16 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 keyRouter.resetHardwareCandidateSelection()
             }
         }
-        if (hasHardwareKeyboard && hardwareCursorImmediateOnly) {
+        if (hasHardwareKeyboard && hardwareCursorImmediateOnly && !cursorMagnifierActive) {
             try { currentInputConnection?.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE) } catch (_: Exception) { }
         }
     }
 
     override fun onUpdateCursorAnchorInfo(info: CursorAnchorInfo) {
+        if (cursorMagnifierActive && !uiState.value.inputTarget.isInternal) {
+            val active = currentInputConnection?.let { schemaController.cursorSelectionActiveEnd(it) }
+            cursorMagnifierAnchor = runCatching { resolveHardwareCursorAnchor(info, active) }.getOrNull()
+        }
         if (cursorLinePending) {
             cursorLinePending = false
             val ic = currentInputConnection
@@ -4069,7 +4109,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     /** 固定键盘比窗口窄时才用得上；系统不支持输入框范围（Android 13 以下）或输入框不回就照旧避让。 */
     private fun requestSoftEditorBounds() {
         if (hasHardwareKeyboard || !AndroidPlatform.cursorAnchorFilter || uiState.value.isFloatingMode) return
-        currentInputConnection?.let { requestLineLayout(it) }
+        currentInputConnection?.let { requestLineLayout(it, monitor = cursorMagnifierActive) }
     }
 
     private fun noteSoftEditorBounds(info: CursorAnchorInfo) {
@@ -4346,6 +4386,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         microphoneRestoreCompact = false
         hardwareCursorImmediateOnly = false
         clearHardwareSurfaceBounds()
+        cursorMagnifierActive = false
+        cursorMagnifierAnchor = null
         try { currentInputConnection?.requestCursorUpdates(0) } catch (_: Exception) { }
         uiState.value = uiState.value.copy(cursorAnchor = null, editorBounds = null)
         if (!lockCompositionSuspended) discardInlinePinyinBeforeFrameworkFinish()
@@ -4368,6 +4410,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        trackCursorMagnifier(uiState.value.inputSessionId, false)
         gameShowExplicit = false
         suspendCompositionForScreenOff()
         KeyboardPanelLaunch.previewVisible = false

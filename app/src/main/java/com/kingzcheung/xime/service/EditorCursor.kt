@@ -66,6 +66,9 @@ internal class EditorCursor(private val clock: () -> Long = { System.nanoTime() 
 
     fun resetSelection() { anchor = null; active = null; pendingAnchor = null }
 
+    /** The host may sort selection endpoints; the magnifier follows the end being moved. */
+    fun selectionActiveEnd(ic: InputConnection): Int? = active.takeIf { connection === ic && anchor != null }
+
     /** 取消选择保留活动端的位置，反向选择不能误折叠到较大的端点。 */
     fun endSelection(ic: InputConnection) {
         bind(ic)
