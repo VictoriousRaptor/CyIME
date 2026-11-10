@@ -335,6 +335,11 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
 
     internal fun resetEditorSelection() = editorCursor.resetSelection()
 
+    internal fun cursorSelectionActiveEnd(connection: InputConnection): Int? = editorCursor.selectionActiveEnd(connection)
+
+    internal fun cursorSelectionActiveEnd(editor: android.widget.EditText): Int? =
+        internalConnection?.takeIf { it.first === editor }?.second?.let(editorCursor::selectionActiveEnd)
+
     internal fun handleJapaneseKanaAction(action: JapaneseKanaAction) {
         if (service.editorInputPolicy.locksNativeInput) return
         val original = service.currentInputConnection ?: return

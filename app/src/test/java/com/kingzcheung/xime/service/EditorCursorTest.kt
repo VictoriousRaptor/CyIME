@@ -9,6 +9,17 @@ import org.mockito.Mockito.mockConstruction
 import org.mockito.kotlin.*
 
 class EditorCursorTest {
+    @Test fun `preview active end follows reverse selection and never leaks to another connection`() {
+        val ic = editor(6, text = "hello world", normalized = true)
+        val cursor = EditorCursor()
+        cursor.beginSelection(ic)
+        cursor.moveWithFeedback(ic, -2, selecting = true) {}
+        assertEquals(4, cursor.selectionActiveEnd(ic))
+        assertEquals(null, cursor.selectionActiveEnd(mock()))
+        cursor.resetSelection()
+        assertEquals(null, cursor.selectionActiveEnd(ic))
+    }
+
     @Test fun `physical arrows clamp at all editor boundaries and never dispatch focus events`() {
         val ic = editor(0, text = "a😀b\nnext")
         val cursor = EditorCursor()

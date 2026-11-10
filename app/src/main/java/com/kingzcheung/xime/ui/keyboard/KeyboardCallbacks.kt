@@ -100,6 +100,9 @@ data class KeyboardCallbacks(
     val onPageUp: (() -> Unit)? = null,
     val onCursorMove: ((Int) -> Unit)? = null,
     val onCursorMoveVertical: ((Int) -> Unit)? = null,
+    val readCursorMagnifierText: (suspend () -> CursorMagnifierText?)? = null,
+    val readCursorMagnifierAnchor: (() -> com.kingzcheung.xime.service.HardwareCursorAnchor?)? = null,
+    val onCursorMagnifierTracking: ((Long, Boolean) -> Unit)? = null,
     val onGestureAction: ((GestureAction, String) -> Unit)? = null,
     val onUpdateToolbarButtons: ((List<String>) -> Unit)? = null,
     /** 工具栏与菜单同时更新：排列编辑器跨区拖动后一次保存。 */

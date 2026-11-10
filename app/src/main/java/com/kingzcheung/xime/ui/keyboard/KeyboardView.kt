@@ -356,7 +356,7 @@ fun KeyboardView(
     // 全屏手写时表情、编辑(方向)等面板回到平时键盘的大小（11-05），不再铺满整个屏幕。
     val handwritingOverlaySlot = handwritingPanelSlot(state.handwritingExpanded, state.handwritingNormalHeightDp,
         state.handwritingControlsWidthDp, state.handwritingControlsOffsetX, state.keyboardWidthDp, state.keyboardHeightDp)
-    var cursorControlActive by remember { mutableStateOf(false) }
+    var cursorControlActive by remember(state.inputSessionId) { mutableStateOf(false) }
     val floatingBottomClearance = remember(state.isFloatingMode) { mutableFloatStateOf(0f) }
     // 上拉变悬浮后接着跟手：换模式时这一层不变，由它接着读手指。
     val undockFollow = remember { KeyboardUndockFollow() }
@@ -583,6 +583,9 @@ fun KeyboardView(
         }
         var preeditRequest by remember(state.inputSessionId, state.currentSchemaId) { mutableIntStateOf(0) }
         var preeditFrame by remember { mutableStateOf<com.kingzcheung.xime.rime.PinyinEditSession?>(null) }
+        var preeditMagnifierAnchor by remember(state.inputSessionId) {
+            mutableStateOf<com.kingzcheung.xime.service.HardwareCursorAnchor?>(null)
+        }
         var preeditOpening by remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) { mutableStateOf(false) }
         val pendingPreeditMoves = remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) { mutableListOf<String>() }
         fun editPreedit(key: String? = null, caret: Int? = null, text: String? = null) {
@@ -996,7 +999,8 @@ fun KeyboardView(
                     onClose = { closePreeditEditor() },
                     onCaret = { editPreedit(caret = it) },
                     onReplace = { editPreedit(text = it) },
-                    preedit = candidateState.value.preeditText, inline = inputPreferences.inlinePreeditPreview)
+                    preedit = candidateState.value.preeditText, inline = inputPreferences.inlinePreeditPreview,
+                    onCaretBounds = { preeditMagnifierAnchor = it })
             })
             if (!inputPreferences.inlinePreeditPreview) drawPreeditEditor?.invoke()
 
@@ -1885,6 +1889,17 @@ fun KeyboardView(
         }
 
         if (cursorControlActive) CursorControlOverlay(keyboardBgColor, keyTextColor, Modifier.matchParentSize())
+        if (cursorControlActive && !com.kingzcheung.xime.settings.IncognitoState.passwordField) {
+            val preedit = preeditFrame?.takeIf { preeditEditSession != null && it.isActive() }
+            CursorMagnifier(state.inputSessionId, callbacks.readCursorMagnifierText.takeUnless {
+                preeditOpening || preeditEditSession != null
+            },
+                keyBgColor, keyTextColor, accentColor,
+                composition = preedit?.let { CursorMagnifierText.from(it.text, it.caret) },
+                readAnchor = if (preedit != null && inputPreferences.showCodeInCandidateBar)
+                    ({ preeditMagnifierAnchor }) else callbacks.readCursorMagnifierAnchor,
+                onTrackingChange = callbacks.onCursorMagnifierTracking)
+        }
 
         state.voiceNotice?.let { notice ->
             Box(Modifier.matchParentSize().then(Modifier.zIndex(21f)), contentAlignment = Alignment.TopCenter) {
