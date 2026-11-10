@@ -5,6 +5,9 @@
 # Output: $WORK/out/<abi>/libCyAzooKey.so. Put the printed SHA-256 into app/build-logic/tasks-japanese.gradle.kts
 # and upload the files as libCyAzooKey-<first 8 hex>-<abi>.so.
 set -e
+# Swift 6.2's driver otherwise prefers the runner's NDK over the installed Swift SDK,
+# which loses its SwiftAndroid module. The SDK already contains its own sysroot.
+unset ANDROID_NDK_ROOT
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${WORK:-$HERE/work}
 COMMIT=25a6346bf76931c1cf2214015b808875ea82f4bf
