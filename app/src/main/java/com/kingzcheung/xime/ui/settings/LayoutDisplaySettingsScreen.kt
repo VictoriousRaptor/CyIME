@@ -21,6 +21,7 @@ import androidx.compose.material.icons.twotone.AspectRatio
 import androidx.compose.material.icons.twotone.DataObject
 import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.EmojiSymbols
+import androidx.compose.material.icons.twotone.Language
 import androidx.compose.material.icons.twotone.DashboardCustomize
 import androidx.compose.material.icons.twotone.ScreenRotation
 import androidx.compose.material.icons.Icons
@@ -146,13 +147,13 @@ private fun LayoutDisplayPage(
                         showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     val input = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
-                    SettingsToggleItem(Icons.TwoTone.EmojiSymbols, "语言键放左侧",
-                        "将中英切换的语言键移到 123 数字键右侧；合并模式下放在合并按钮右侧。",
+                    SettingsToggleItem(Icons.TwoTone.Language, "语言键放左侧",
+                        "将语言键移到 123 数字键右侧；合并模式下放在合并按钮右侧。",
                         checked = input.languageKeyOnLeft, onCheckedChange = {
                             input.copy(languageKeyOnLeft = it).save(context)
                         })
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    SettingsToggleItem(Icons.TwoTone.EmojiSymbols, "符号键循环切换",
+                    SettingsToggleItem(SymbolsAndNumbersIcon, "符号键循环切换",
                         "合并符号和数字键，点按依次切换符号、数字和原输入法键盘。",
                         checked = input.symbolKeyCycle, onCheckedChange = {
                             input.copy(symbolKeyCycle = it).save(context)
