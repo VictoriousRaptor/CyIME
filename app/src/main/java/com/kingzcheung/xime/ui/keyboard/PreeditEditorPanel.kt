@@ -23,6 +23,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
@@ -47,6 +50,7 @@ internal fun PreeditEditorBar(
     onReplace: (String) -> Unit,
     preedit: String = session.text,
     inline: Boolean = false,
+    onCaretBounds: ((com.kingzcheung.xime.service.HardwareCursorAnchor?) -> Unit)? = null,
 ) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = onClose)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -55,6 +59,23 @@ internal fun PreeditEditorBar(
     val display = remember(session.text, session.isT9, session.protectedText, preedit) { PinyinEditDisplay(session.text, preedit.removePrefix(session.protectedText).trim(), session.isT9, includeAutomaticBoundaries = false) }
     val code = display.text.ifEmpty { " " }
     val displayCaret = display.displayOffset(session.caret)
+    val view = LocalView.current
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    fun reportCaret() {
+        val c = coordinates?.takeIf { it.isAttached }
+        val result = layout?.takeIf { it.layoutInput.text.text == code }
+        val anchor = if (c == null || result == null) null else {
+            val rect = result.getCursorRect(displayCaret.coerceIn(0, code.length))
+            val top = c.localToRoot(Offset(rect.left, rect.top))
+            val bottom = c.localToRoot(Offset(rect.left, rect.bottom))
+            val origin = IntArray(2).also(view::getLocationOnScreen)
+            com.kingzcheung.xime.service.HardwareCursorAnchor(minOf(top.x, bottom.x) + origin[0], minOf(top.y, bottom.y) + origin[1],
+                maxOf(top.x, bottom.x) + origin[0], maxOf(top.y, bottom.y) + origin[1])
+        }
+        onCaretBounds?.invoke(anchor)
+    }
+    SideEffect { reportCaret() }
+    DisposableEffect(Unit) { onDispose { onCaretBounds?.invoke(null) } }
     LaunchedEffect(session.caret, code, layout) {
         layout?.takeIf { it.layoutInput.text.text == code }?.getCursorRect(displayCaret.coerceIn(0, code.length))?.let {
             if (it.left < scroll.value) scroll.scrollTo(it.left.toInt().coerceAtLeast(0))
@@ -78,6 +99,7 @@ internal fun PreeditEditorBar(
                     Text(code, color = textColor.copy(alpha = 0.9f), fontSize = PreeditStyle.FontSize, maxLines = 1, softWrap = false,
                         onTextLayout = { layout = it }, modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)
                             .testTag("preedit-editor-code")
+                            .onGloballyPositioned { coordinates = it; reportCaret() }
                             .semantics {
                                 editableText = AnnotatedString(session.text)
                                 textSelectionRange = TextRange(session.caret)

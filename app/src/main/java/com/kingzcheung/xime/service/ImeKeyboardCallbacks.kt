@@ -395,6 +395,27 @@ internal fun rememberImeKeyboardCallbacks(
                     service.feedbackManager.cursorStepFeedback(view)
                 }
             },
+            readCursorMagnifierText = read@{
+                val owner = service.uiState.value
+                if (com.kingzcheung.xime.settings.IncognitoState.passwordField) return@read null
+                if (owner.inputTarget.isInternal) {
+                    val editor = owner.inputTarget.editText() ?: return@read null
+                    if (editor.transformationMethod is android.text.method.PasswordTransformationMethod) return@read null
+                    val caret = service.schemaController.cursorSelectionActiveEnd(editor) ?: editor.selectionEnd
+                    return@read com.kingzcheung.xime.ui.keyboard.CursorMagnifierText.from(editor.text, caret)
+                }
+                val connection = service.currentInputConnection ?: return@read null
+                val activeEnd = service.schemaController.cursorSelectionActiveEnd(connection)
+                // Bypass the tracking wrapper: a preview must neither learn text nor block pointer dispatch.
+                val raw = (connection as? TrackedInputConnection)?.base ?: connection
+                val preview = withContext(Dispatchers.IO) { readCursorMagnifierText(raw, activeEnd) }
+                if (service.currentInputConnection !== connection ||
+                    service.uiState.value.inputSessionId != owner.inputSessionId ||
+                    service.uiState.value.inputTarget != owner.inputTarget ||
+                    com.kingzcheung.xime.settings.IncognitoState.passwordField) null else preview
+            },
+            readCursorMagnifierAnchor = { service.readCursorMagnifierAnchor() },
+            onCursorMagnifierTracking = { session, active -> service.trackCursorMagnifier(session, active) },
             onCursorMoveVertical = { steps ->
                 val edge = if (steps < 0) "start" else "end"
                 if (!service.schemaController.moveJapaneseReadingCaret(if (steps < 0) -Int.MAX_VALUE / 2 else Int.MAX_VALUE / 2) &&

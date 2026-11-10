@@ -8,7 +8,7 @@ import com.kingzcheung.xime.platform.AndroidPlatform
 data class HardwareCursorAnchor(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
 /** CursorAnchorInfo character indices are absolute editor offsets, not composing-text offsets. */
-internal fun resolveHardwareCursorAnchor(info: CursorAnchorInfo): HardwareCursorAnchor? {
+internal fun resolveHardwareCursorAnchor(info: CursorAnchorInfo, activeEnd: Int? = null): HardwareCursorAnchor? {
     fun hiddenOnly(flags: Int): Boolean =
         flags and CursorAnchorInfo.FLAG_HAS_INVISIBLE_REGION != 0 &&
             flags and CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION == 0
@@ -34,17 +34,19 @@ internal fun resolveHardwareCursorAnchor(info: CursorAnchorInfo): HardwareCursor
 
     // Some editors omit visibility flags (0), while still supplying usable geometry.
     // An explicitly clipped caret must not be replaced by an unrelated visible character.
-    if (hiddenOnly(info.insertionMarkerFlags)) return null
+    val active = activeEnd?.takeIf { it == info.selectionStart || it == info.selectionEnd }
+    val useMarker = active == null || active == info.selectionEnd
+    if (useMarker && hiddenOnly(info.insertionMarkerFlags)) return null
     val markerX = info.insertionMarkerHorizontal
     val markerTop = info.insertionMarkerTop
     val markerBottom = info.insertionMarkerBottom
-    if (markerX.isInfinite() || markerTop.isInfinite() || markerBottom.isInfinite()) return null
-    if (markerX.isFinite() && markerTop.isFinite() && markerBottom.isFinite() && markerBottom != markerTop) {
+    if (useMarker && (markerX.isInfinite() || markerTop.isInfinite() || markerBottom.isInfinite())) return null
+    if (useMarker && markerX.isFinite() && markerTop.isFinite() && markerBottom.isFinite() && markerBottom != markerTop) {
         return toScreen(markerX, markerTop, markerBottom)
     }
 
     // Prefer the active end of a selection. Use start only when end was not supplied.
-    val caret = info.selectionEnd.takeIf { it >= 0 } ?: info.selectionStart.takeIf { it >= 0 }
+    val caret = active ?: info.selectionEnd.takeIf { it >= 0 } ?: info.selectionStart.takeIf { it >= 0 }
         ?: return null
     info.getCharacterBounds(caret)?.let { bounds ->
         return characterCaret(bounds, info.getCharacterBoundsFlags(caret), trailing = false)
