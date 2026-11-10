@@ -2,11 +2,30 @@ package com.kingzcheung.xime.ui.settings
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+
+/** 上排数字 12、下排符号 #+，用于符号与数字共用的模式键设置。 */
+internal val SymbolsAndNumbersIcon: ImageVector = ImageVector.Builder("SymbolsAndNumbers", 24.dp, 24.dp, 24f, 24f).apply {
+    path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+        // 12
+        moveTo(5f, 5f); lineTo(7f, 3f); lineTo(7f, 10f)
+        moveTo(14f, 4f); curveTo(14f, 2f, 20f, 2f, 20f, 5f)
+        curveTo(20f, 7f, 14f, 8f, 14f, 10f); lineTo(20f, 10f)
+        // #+
+        moveTo(6f, 14f); lineTo(4f, 21f)
+        moveTo(10f, 14f); lineTo(8f, 21f)
+        moveTo(3.5f, 16f); lineTo(11f, 16f)
+        moveTo(3f, 19f); lineTo(10.5f, 19f)
+        moveTo(14f, 17.5f); lineTo(21f, 17.5f)
+        moveTo(17.5f, 14f); lineTo(17.5f, 21f)
+    }
+}.build()
 
 /**
  * 分体键盘：左右两半键盘，中间留缝。照 Material TwoTone 的画法（2 单位粗的外框、30% 浓度的底、实心键帽），
