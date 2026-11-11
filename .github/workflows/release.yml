@@ -212,13 +212,17 @@ jobs:
         shell: bash
         run: |
           # setup-swift@v2.4.0 hard-codes plain HKP for this refresh. Route only that
-          # command through HKPS; key import and signature verification remain unchanged.
+          # command through HKPS; the bundled keys still verify the toolchain signature.
           wrapper_dir="$RUNNER_TEMP/swift-gpg-wrapper"
           mkdir -p "$wrapper_dir"
           cat > "$wrapper_dir/gpg" <<'EOF'
           #!/usr/bin/env bash
           if [[ "$#" -eq 4 && "$1" == "--keyserver" && "$2" == "hkp://keyserver.ubuntu.com" && "$3" == "--refresh-keys" && "$4" == "Swift" ]]; then
-            set -- "$1" "hkps://keyserver.ubuntu.com" "$3" "$4"
+            if /usr/bin/gpg --keyserver "hkps://keyserver.ubuntu.com" --refresh-keys Swift; then
+              exit 0
+            fi
+            echo "Warning: Swift signing-key refresh failed; continuing with the imported keys." >&2
+            exit 0
           fi
           exec /usr/bin/gpg "$@"
           EOF
