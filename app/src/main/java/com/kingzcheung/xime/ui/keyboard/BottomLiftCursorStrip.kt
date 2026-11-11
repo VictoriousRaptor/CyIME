@@ -22,7 +22,8 @@ import kotlin.math.abs
  * 每一格走的是和空格同一条移光标路径（拖动中只读一次输入框，排着的格子合并执行）。
  */
 @Composable
-internal fun BottomLiftSpacer(heightDp: Int, cursorEnabled: Boolean, onCursorMove: ((Int) -> Unit)?) {
+internal fun BottomLiftSpacer(heightDp: Int, cursorEnabled: Boolean, onCursorMove: ((Int) -> Unit)?,
+    onCursorModeChange: (Boolean) -> Unit = {}) {
     if (heightDp <= 0) return
     val base = Modifier.fillMaxWidth().height(heightDp.dp)
     if (!cursorEnabled || onCursorMove == null) {
@@ -31,6 +32,7 @@ internal fun BottomLiftSpacer(heightDp: Int, cursorEnabled: Boolean, onCursorMov
     }
     val prefs = LocalKeyboardInputPreferences.current
     val currentMove by rememberUpdatedState(onCursorMove)
+    val currentModeChange by rememberUpdatedState(onCursorModeChange)
     val cursorUnitPx = rememberCursorUnitPx()
     val rootView = LocalView.current.rootView
     Spacer(base.testTag("bottom-lift-cursor").pointerInput(prefs.cursorStepDp, prefs.cursorSwipeLines, cursorUnitPx) {
@@ -60,6 +62,7 @@ internal fun BottomLiftSpacer(heightDp: Int, cursorEnabled: Boolean, onCursorMov
                         if (abs(dy) > slop && abs(dy) > abs(dx)) break
                         if (abs(dx) <= slop) continue
                         active = true
+                        currentModeChange(true)
                         lastX = change.position.x
                         SpaceCursorShift.begin()
                         CursorLineMetrics.request()
@@ -75,7 +78,10 @@ internal fun BottomLiftSpacer(heightDp: Int, cursorEnabled: Boolean, onCursorMov
                     }
                 }
             } finally {
-                if (active) SpaceCursorShift.end()
+                if (active) {
+                    SpaceCursorShift.end()
+                    currentModeChange(false)
+                }
             }
         }
     })

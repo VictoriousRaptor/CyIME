@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -2840,6 +2841,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 settingsExample.sampleLayout(kbState.inputProfile, kbState.currentSchemaId)
                             } else null
                             KeyboardView(
+                                inputViewVisible = cursorMagnifierVisible,
+                                inputViewEpoch = cursorMagnifierVisibilityEpoch,
                                 previewLetterLayout = sampleLayout != null,
                                 onPreviewArrangePositioned = if (!settingsPreviewEditor) null else { r -> settingsArrangeBounds = r },
                                 hardwareKeyboardConnected = hasHardwareKeyboard,
@@ -3287,19 +3290,53 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     private var hardwareCursorImmediateOnly = false
     private var cursorLinePending = false
+    internal var cursorMagnifierVisible by mutableStateOf(false)
+        private set
+    internal var cursorMagnifierVisibilityEpoch by mutableLongStateOf(0L)
+        private set
     private var cursorMagnifierActive = false
     private var cursorMagnifierMonitoring = false
     private var cursorMagnifierAnchor: HardwareCursorAnchor? = null
     private var cursorMagnifierRequestedAt = 0L
+    private var cursorMagnifierAnchorInfo: CursorAnchorInfo? = null
+    private var cursorMagnifierLine: IntRange? = null
+    private var cursorMagnifierLineCaret = -1
+
+    internal fun updateCursorMagnifierVisibility(visible: Boolean) {
+        if (!visible && cursorMagnifierVisible) cursorMagnifierVisibilityEpoch++
+        cursorMagnifierVisible = visible
+        if (!visible) trackCursorMagnifier(uiState.value.inputSessionId, false)
+    }
 
     internal fun trackCursorMagnifier(session: Long, active: Boolean) {
         if (uiState.value.inputSessionId != session) return
+        if (active && !cursorMagnifierVisible) return
+        if (cursorMagnifierActive == active) return
         cursorMagnifierActive = active
         cursorMagnifierAnchor = null
+        cursorMagnifierAnchorInfo = null
+        cursorMagnifierLine = null
+        cursorMagnifierLineCaret = -1
         cursorMagnifierMonitoring = false
         if (active && !uiState.value.inputTarget.isInternal) {
             currentInputConnection?.let { cursorMagnifierMonitoring = requestCursorMagnifierUpdates(it) }
         } else if (!active) requestHardwareCursorUpdates()
+    }
+
+    internal suspend fun readCursorMagnifierVisualLine(connection: InputConnection, caret: Int): IntRange? {
+        if (!cursorMagnifierVisible || !cursorMagnifierActive) return null
+        val session = uiState.value.inputSessionId
+        val epoch = cursorMagnifierVisibilityEpoch
+        val info = cursorMagnifierAnchorInfo ?: return null
+        if (caret != info.selectionStart && caret != info.selectionEnd) return null
+        if (cursorMagnifierLineCaret == caret) return cursorMagnifierLine
+        val anchor = runCatching { resolveHardwareCursorAnchor(info, caret) }.getOrNull() ?: return null
+        val line = readCursorMagnifierLine(connection, caret, anchor, info)
+        if (!cursorMagnifierVisible || !cursorMagnifierActive || uiState.value.inputSessionId != session ||
+            cursorMagnifierVisibilityEpoch != epoch || cursorMagnifierAnchorInfo !== info) return null
+        cursorMagnifierLineCaret = caret
+        cursorMagnifierLine = line
+        return line
     }
 
     internal fun readCursorMagnifierAnchor(): HardwareCursorAnchor? {
@@ -3746,6 +3783,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         uiState.value = uiState.value.copy(cursorAnchor = null, editorBounds = null)
         cursorMagnifierActive = false
         cursorMagnifierAnchor = null
+        cursorMagnifierAnchorInfo = null
+        cursorMagnifierLine = null
+        cursorMagnifierLineCaret = -1
         updateHardwareKeyboardConnection()
         applyCompactMode()
         requestHardwareCursorUpdates()
@@ -3882,6 +3922,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        updateCursorMagnifierVisibility(true)
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
         // 动态背景开着才查应用类别（每个包名只查一次，见 HardwareGamePackages）。
         backgroundMotionGame.value = com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(this).enabled &&
@@ -4083,6 +4124,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (cursorMagnifierActive && !uiState.value.inputTarget.isInternal) {
             val active = currentInputConnection?.let { schemaController.cursorSelectionActiveEnd(it) }
             cursorMagnifierAnchor = runCatching { resolveHardwareCursorAnchor(info, active) }.getOrNull()
+            cursorMagnifierAnchorInfo = info
+            cursorMagnifierLine = null
+            cursorMagnifierLineCaret = -1
         }
         if (cursorLinePending) {
             cursorLinePending = false
@@ -4356,6 +4400,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         EnterKeyAction.label(editorInfo.imeOptions, appSend = SettingsPreferences.isEnterSendsEnabled(this))
 
     override fun onFinishInput() {
+        updateCursorMagnifierVisibility(false)
         gameShowExplicit = false
         suspendCompositionForScreenOff()
         endGlidePreview()
@@ -4410,7 +4455,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
-        trackCursorMagnifier(uiState.value.inputSessionId, false)
+        updateCursorMagnifierVisibility(false)
         gameShowExplicit = false
         suspendCompositionForScreenOff()
         KeyboardPanelLaunch.previewVisible = false
@@ -4445,6 +4490,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     override fun onWindowHidden() {
+        updateCursorMagnifierVisibility(false)
         super.onWindowHidden()
         gameShowExplicit = false
         com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = false
@@ -4487,6 +4533,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override fun onWindowShown() {
         super.onWindowShown()
+        updateCursorMagnifierVisibility(true)
         // 键盘重新弹出：上次收起时没收到的 Shift 抬起不再算按住（否则候选一直中英对调，空格上屏英文）。
         com.kingzcheung.xime.gloss.CandidateGlossary.physicalShiftHeld.value = false
         // 键盘一出来 CPU 测速就停（设置页里测到一半也停），不和打字抢 CPU。
@@ -4992,6 +5039,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     override fun onDestroy() {
+        updateCursorMagnifierVisibility(false)
         if (EnterProbe.service?.get() === this) EnterProbe.service = null
         KeyboardPanelLaunch.previewVisible = false
         com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = false

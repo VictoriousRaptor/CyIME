@@ -73,11 +73,15 @@ class CursorMagnifierSettingsTest {
         }
         toggle.performClick().assertIsOn()
         slider.assertIsEnabled()
+        slider.performSemanticsAction(SemanticsActions.SetProgress) { it(10f) }
+        rule.runOnIdle { assertEquals(10f, KeyboardInputPreferences.read(app).cursorMagnifierWidthDp, 0f) }
         for (w in listOf(320, 400)) for (isDark in listOf(false, true)) {
             rule.runOnIdle { width.value = w; dark.value = isDark }
             slider.performScrollTo().assertIsDisplayed()
             toggle.assertIsDisplayed().assertIsOn()
-            rule.onNodeWithText("放大镜宽度：360 dp").assertIsDisplayed()
+            rule.onNodeWithText("放大镜宽度：10 dp").assertIsDisplayed()
+            rule.onNodeWithText("长按空格、滑动底部留白或键盘面板移光标时，放大当前行文字。", substring = false,
+                useUnmergedTree = true).assertIsDisplayed()
             val out = System.getenv("CYIME_RENDER_OUT") ?: continue
             File(out).mkdirs()
             val root = rule.activity.window.decorView

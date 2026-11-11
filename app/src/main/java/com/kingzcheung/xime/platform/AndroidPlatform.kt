@@ -28,6 +28,7 @@ enum class PlatformFeature(val minSdk: Int, val label: String) {
     SURROUNDING_TEXT(Build.VERSION_CODES.S, "一次读光标前后文字和选区"),
     CURSOR_ANCHOR_FILTER(Build.VERSION_CODES.TIRAMISU, "按需订阅光标信息，读编辑框边界"),
     CURSOR_ANCHOR_LINES(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "读可见行边界和文字字号"),
+    TEXT_BOUNDS_INFO(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "按光标位置读实际视觉行的文字范围"),
     VIEW_GLOBAL_MATRIX(Build.VERSION_CODES.Q, "输入法内部编辑器的屏幕变换矩阵"),
 
     // —— 外观 ——
@@ -138,6 +139,8 @@ object AndroidPlatform {
     val cursorAnchorFilter: Boolean = has(PlatformFeature.CURSOR_ANCHOR_FILTER)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     val cursorAnchorLines: Boolean = has(PlatformFeature.CURSOR_ANCHOR_LINES)
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    val textBoundsInfo: Boolean = has(PlatformFeature.TEXT_BOUNDS_INFO)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     val viewGlobalMatrix: Boolean = has(PlatformFeature.VIEW_GLOBAL_MATRIX)
 

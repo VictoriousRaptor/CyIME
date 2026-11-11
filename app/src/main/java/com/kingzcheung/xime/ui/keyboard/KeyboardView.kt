@@ -154,6 +154,10 @@ fun KeyboardView(
     fixedBottomInsetDp: Int = 0,
     fixedHeightRange: IntRange? = null,
     inputSessionManagedByHost: Boolean = false,
+    /** Hidden IME views keep their composition, but must release transient magnifier resources. */
+    inputViewVisible: Boolean = true,
+    /** Records hidden intervals even when hide/show callbacks arrive before the next frame. */
+    inputViewEpoch: Long = 0L,
     /** Index in the displayed candidate source, including the expanded page's optional filter. */
     hardwareCandidateHighlight: Int? = null,
     /** Number shortcuts are useful only while a physical keyboard is connected. */
@@ -363,7 +367,13 @@ fun KeyboardView(
     // 全屏手写时表情、编辑(方向)等面板回到平时键盘的大小（11-05），不再铺满整个屏幕。
     val handwritingOverlaySlot = handwritingPanelSlot(state.handwritingExpanded, state.handwritingNormalHeightDp,
         state.handwritingControlsWidthDp, state.handwritingControlsOffsetX, state.keyboardWidthDp, state.keyboardHeightDp)
-    var cursorControlActive by remember(state.inputSessionId) { mutableStateOf(false) }
+    var cursorControlActive by remember(state.inputSessionId, inputViewVisible, inputViewEpoch) { mutableStateOf(false) }
+    val cursorMagnifierEnabled = inputViewVisible && inputPreferences.cursorMagnifierEnabled &&
+        !com.kingzcheung.xime.settings.IncognitoState.passwordField
+    val bottomLiftCursorActive = if (cursorMagnifierEnabled) remember(state.inputSessionId, inputViewEpoch) { mutableStateOf(false) } else null
+    val panelCursorActive = if (cursorMagnifierEnabled) remember(state.inputSessionId, inputViewEpoch) { mutableStateOf(false) } else null
+    val showCursorMagnifier = cursorMagnifierEnabled &&
+        (cursorControlActive || bottomLiftCursorActive?.value == true || panelCursorActive?.value == true)
     val floatingBottomClearance = remember(state.isFloatingMode) { mutableFloatStateOf(0f) }
     // 上拉变悬浮后接着跟手：换模式时这一层不变，由它接着读手指。
     val undockFollow = remember { KeyboardUndockFollow() }
@@ -590,9 +600,9 @@ fun KeyboardView(
         }
         var preeditRequest by remember(state.inputSessionId, state.currentSchemaId) { mutableIntStateOf(0) }
         var preeditFrame by remember { mutableStateOf<com.kingzcheung.xime.rime.PinyinEditSession?>(null) }
-        var preeditMagnifierAnchor by remember(state.inputSessionId) {
+        val preeditMagnifierAnchor = if (showCursorMagnifier) remember(state.inputSessionId, inputViewEpoch) {
             mutableStateOf<com.kingzcheung.xime.service.HardwareCursorAnchor?>(null)
-        }
+        } else null
         var preeditOpening by remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) { mutableStateOf(false) }
         val pendingPreeditMoves = remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) { mutableListOf<String>() }
         fun editPreedit(key: String? = null, caret: Int? = null, text: String? = null) {
@@ -1008,7 +1018,7 @@ fun KeyboardView(
                     onCaret = { editPreedit(caret = it) },
                     onReplace = { editPreedit(text = it) },
                     preedit = candidateState.value.preeditText, inline = inputPreferences.inlinePreeditPreview,
-                    onCaretBounds = { preeditMagnifierAnchor = it })
+                    onCaretBounds = preeditMagnifierAnchor?.let { anchor -> { anchor.value = it } })
             })
             if (!inputPreferences.inlinePreeditPreview) drawPreeditEditor?.invoke()
 
@@ -1588,7 +1598,9 @@ fun KeyboardView(
                 when (mainType) {
                     MainType.FULL -> {
                         val suppressCursorMove = remember { mutableStateOf(false) }
-                        val cursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, suppressCursorMove)
+                        val cursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, suppressCursorMove) {
+                            panelCursorActive?.value = it
+                        }
 
                         val fullScreenOnKeyPress: (String) -> Unit = { key ->
                             when (key) {
@@ -1708,7 +1720,9 @@ fun KeyboardView(
                                 modifier = Modifier.weight(1f).then(cursorMod),
                                 t9Controller = t9Controller,
                             )
-                            BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                            BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove) {
+                                bottomLiftCursorActive?.value = it
+                            }
                         }
                     }
 
@@ -1779,7 +1793,9 @@ fun KeyboardView(
                             specialKeyTextColor = specialKeyTextColor,
                             modifier = Modifier.weight(1f),
                         )
-                        BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                        BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove) {
+                            bottomLiftCursorActive?.value = it
+                        }
                     }
 
                     MainType.STROKE -> {
@@ -1815,7 +1831,9 @@ fun KeyboardView(
                     state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.KANA_KEYPAD
                 val numberSpacing = kbKey.spacingFor(numberKeyboardSpacingSection(state.inputProfile, state.isAsciiMode))
                 val panelSuppressCursorMove = remember { mutableStateOf(false) }
-                val panelCursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, panelSuppressCursorMove)
+                val panelCursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, panelSuppressCursorMove) {
+                    panelCursorActive?.value = it
+                }
                 CompositionLocalProvider(LocalSuppressCursorMove provides panelSuppressCursorMove) {
                 when (panelType) {
                     PanelType.NUMBER -> NumberKeyboardLayout(
@@ -1892,7 +1910,9 @@ fun KeyboardView(
 
                 }
                 }
-                BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove) {
+                    bottomLiftCursorActive?.value = it
+                }
             }
             } // Full candidate panel reveals over the complete keyboard body.
             KeyboardPanelReveal(
@@ -1938,16 +1958,16 @@ fun KeyboardView(
         }
 
         if (cursorControlActive) CursorControlOverlay(keyboardBgColor, keyTextColor, Modifier.matchParentSize())
-        if (cursorControlActive && inputPreferences.cursorMagnifierEnabled &&
-            !com.kingzcheung.xime.settings.IncognitoState.passwordField) {
-            val preedit = preeditFrame?.takeIf { preeditEditSession != null && it.isActive() }
+        if (showCursorMagnifier) {
+            val usePreeditBar = inputPreferences.showCodeInCandidateBar && preeditEditSession != null
+            val preedit = preeditFrame?.takeIf { usePreeditBar && it.isActive() }
             CursorMagnifier(state.inputSessionId, callbacks.readCursorMagnifierText.takeUnless {
-                preeditOpening || preeditEditSession != null
+                preeditOpening || usePreeditBar
             },
                 keyBgColor, keyTextColor, accentColor,
                 composition = preedit?.let { CursorMagnifierText.from(it.text, it.caret) },
                 readAnchor = if (preedit != null && inputPreferences.showCodeInCandidateBar)
-                    ({ preeditMagnifierAnchor }) else callbacks.readCursorMagnifierAnchor,
+                    ({ preeditMagnifierAnchor?.value }) else callbacks.readCursorMagnifierAnchor,
                 onTrackingChange = callbacks.onCursorMagnifierTracking,
                 widthDp = inputPreferences.cursorMagnifierWidthDp)
         }
@@ -2606,8 +2626,9 @@ private fun ClipboardSearchResults(
  */
 @Composable
 private fun keyboardSwipeCursor(onCursorMove: ((Int) -> Unit)?, inputPreferences: KeyboardInputPreferences,
-    suppressCursorMove: androidx.compose.runtime.MutableState<Boolean>): Modifier {
+    suppressCursorMove: androidx.compose.runtime.MutableState<Boolean>, onCursorModeChange: (Boolean) -> Unit): Modifier {
     val currentOnCursorMove = rememberUpdatedState(onCursorMove)
+    val currentModeChange by rememberUpdatedState(onCursorModeChange)
     val cursorUnitPx = rememberCursorUnitPx()
     val cursorRootView = LocalView.current.rootView
     if (onCursorMove == null || inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD) return Modifier
@@ -2621,38 +2642,43 @@ private fun keyboardSwipeCursor(onCursorMove: ((Int) -> Unit)?, inputPreferences
             val cursorSteps = CursorStepAccumulator(fallbackStepPx)
             var lastX = down.position.x
 
-            do {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                val dx = change.position.x - down.position.x
-                val dy = change.position.y - down.position.y
+            try {
+                do {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    val dx = change.position.x - down.position.x
+                    val dy = change.position.y - down.position.y
 
-                if (!change.pressed) {
-                    if (isCursorGesture) {
-                        event.changes.forEach { it.consume() }
-                        SpaceAfterCursorGuard.mark(change.uptimeMillis)
+                    if (!change.pressed) {
+                        if (isCursorGesture) {
+                            event.changes.forEach { it.consume() }
+                            SpaceAfterCursorGuard.mark(change.uptimeMillis)
+                        }
+                        break
                     }
-                    break
-                }
-                if (suppressCursorMove.value || change.isConsumed) break
-                if (abs(dx) > abs(dy) * 4f) {
+                    if (suppressCursorMove.value || change.isConsumed) break
+                    if (abs(dx) > abs(dy) * 4f) {
 
-                    if (!isCursorGesture && abs(dx) > activationThresholdPx) {
-                        isCursorGesture = true
-                        lastX = change.position.x
-                        CursorLineMetrics.request()
-                    }
+                        if (!isCursorGesture && abs(dx) > activationThresholdPx) {
+                            isCursorGesture = true
+                            currentModeChange(true)
+                            lastX = change.position.x
+                            CursorLineMetrics.request()
+                        }
 
-                    if (isCursorGesture) {
-                        event.changes.forEach { it.consume() }
-                        cursorSteps.stepPx = lineCursorStepPx(cursorRootView.width / 2f,
-                            inputPreferences.cursorSwipeLines, CursorLineMetrics.charsPerLine, fallbackStepPx, cursorUnitPx)
-                        val steps = cursorSteps.move(change.position.x - lastX)
-                        lastX = change.position.x
-                        if (steps != 0) currentOnCursorMove.value?.invoke(steps)
+                        if (isCursorGesture) {
+                            event.changes.forEach { it.consume() }
+                            cursorSteps.stepPx = lineCursorStepPx(cursorRootView.width / 2f,
+                                inputPreferences.cursorSwipeLines, CursorLineMetrics.charsPerLine, fallbackStepPx, cursorUnitPx)
+                            val steps = cursorSteps.move(change.position.x - lastX)
+                            lastX = change.position.x
+                            if (steps != 0) currentOnCursorMove.value?.invoke(steps)
+                        }
                     }
-                }
-            } while (true)
+                } while (true)
+            } finally {
+                if (isCursorGesture) currentModeChange(false)
+            }
         }
     }
 }
