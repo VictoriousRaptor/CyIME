@@ -200,7 +200,9 @@ class SymbolKeyCycleRenderTest {
             LayoutDisplaySettingsContent(onBack = {})
         } }
         val row = rule.onNodeWithTag("settings-search-anchor:$title")
-        rule.waitUntil(4_000) { row.isDisplayed() }
+        rule.waitUntil(4_000) { SettingsSearchFocus.request == null && row.isDisplayed() }
+        row.performScrollTo()
+        rule.waitForIdle()
         assertFalse(KeyboardInputPreferences.read(rule.activity).symbolKeyCycle)
         row.performClick()
         assertTrue(KeyboardInputPreferences.read(rule.activity).symbolKeyCycle)
@@ -298,7 +300,9 @@ class SymbolKeyCycleRenderTest {
             LayoutDisplaySettingsContent(onBack = {})
         } }
         val row = rule.onNodeWithTag("settings-search-anchor:$title")
-        rule.waitUntil(4_000) { row.isDisplayed() }
+        rule.waitUntil(4_000) { SettingsSearchFocus.request == null && row.isDisplayed() }
+        row.performScrollTo()
+        rule.waitForIdle()
         assertFalse(KeyboardInputPreferences.read(rule.activity).languageKeyOnLeft)
         row.performClick()
         assertTrue(KeyboardInputPreferences.read(rule.activity).languageKeyOnLeft)
