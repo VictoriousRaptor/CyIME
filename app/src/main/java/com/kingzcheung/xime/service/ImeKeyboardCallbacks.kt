@@ -430,7 +430,9 @@ internal fun rememberImeKeyboardCallbacks(
                 val edge = if (steps < 0) "start" else "end"
                 if (!service.schemaController.moveJapaneseReadingCaret(if (steps < 0) -Int.MAX_VALUE / 2 else Int.MAX_VALUE / 2) &&
                     service.keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:$edge") != true)
-                    service.schemaController.moveEditorCursorVertical(steps, spaceCursorSelecting(service))
+                    service.schemaController.moveEditorCursorVertical(steps, spaceCursorSelecting(service)) {
+                        service.feedbackManager.cursorStepFeedback(view)
+                    }
             },
             onGestureAction = { action, value ->
                 action.execute(service, value)
