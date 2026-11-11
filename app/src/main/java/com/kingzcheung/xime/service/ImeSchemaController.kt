@@ -465,17 +465,18 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
      * 空格上下滑、实体键盘上下键之外的“上/下”：与编辑面板的上下键同一规则，多行框按宿主排版的视觉行，
      * 单行框只在文本内移动（审计 F11：以前自动折行的长段落一下跳到段首/段尾）。
      */
-    internal fun moveEditorCursorVertical(steps: Int, selecting: Boolean = false) =
+    internal fun moveEditorCursorVertical(steps: Int, selecting: Boolean = false, onStep: () -> Unit = {}) =
         editCursor(preeditKey = { "preedit_cursor:${if (steps < 0) "start" else "end"}" }) { connection ->
             if (service.isTerminalEditor()) {
                 // 终端里上下键就是翻命令历史，原样发出去。
-                TerminalEditor.sendKeys(connection, if (steps < 0) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN, abs(steps))
+                TerminalEditor.sendKeys(connection, if (steps < 0) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN, abs(steps), onStep)
                 return@editCursor
             }
             val multiLine = editorIsMultiLine()
             val lines = internalEditorLines()
             repeat(abs(steps).coerceAtMost(1000)) {
                 if (!editorCursor.moveLine(connection, steps.sign, selecting, multiLine, lines)) return@editCursor
+                onStep()
             }
         }
 
