@@ -1889,7 +1889,8 @@ fun KeyboardView(
         }
 
         if (cursorControlActive) CursorControlOverlay(keyboardBgColor, keyTextColor, Modifier.matchParentSize())
-        if (cursorControlActive && !com.kingzcheung.xime.settings.IncognitoState.passwordField) {
+        if (cursorControlActive && inputPreferences.cursorMagnifierEnabled &&
+            !com.kingzcheung.xime.settings.IncognitoState.passwordField) {
             val preedit = preeditFrame?.takeIf { preeditEditSession != null && it.isActive() }
             CursorMagnifier(state.inputSessionId, callbacks.readCursorMagnifierText.takeUnless {
                 preeditOpening || preeditEditSession != null
@@ -1898,7 +1899,8 @@ fun KeyboardView(
                 composition = preedit?.let { CursorMagnifierText.from(it.text, it.caret) },
                 readAnchor = if (preedit != null && inputPreferences.showCodeInCandidateBar)
                     ({ preeditMagnifierAnchor }) else callbacks.readCursorMagnifierAnchor,
-                onTrackingChange = callbacks.onCursorMagnifierTracking)
+                onTrackingChange = callbacks.onCursorMagnifierTracking,
+                widthDp = inputPreferences.cursorMagnifierWidthDp)
         }
 
         state.voiceNotice?.let { notice ->

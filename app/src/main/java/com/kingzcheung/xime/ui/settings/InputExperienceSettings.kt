@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.ui.keyboard.SpaceHoldAction
 import com.kingzcheung.xime.ui.keyboard.FormulaDelimiter
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import com.kingzcheung.xime.ui.keyboard.normalizeCursorMagnifierWidth
 import com.kingzcheung.xime.ui.keyboard.CursorGestureMode
 import com.kingzcheung.xime.ui.keyboard.cursorDistanceMillimeters
 import com.kingzcheung.xime.ui.keyboard.normalizeCursorSwipeLines
@@ -347,6 +350,26 @@ internal fun InputExperienceSettings(
                 }
                 Switch(checked = settings.bottomLiftCursor, modifier = Modifier.testTag("bottom-lift-cursor-switch"),
                     onCheckedChange = { settings = settings.copy(bottomLiftCursor = it); settings.save(context) })
+            }
+            Row(Modifier.settingsSearchAnchor("光标放大镜", bleed = 16.dp, bleedVertical = 6.dp)
+                .fillMaxWidth()
+                .toggleable(value = settings.cursorMagnifierEnabled, role = Role.Switch, onValueChange = {
+                    settings = settings.copy(cursorMagnifierEnabled = it); settings.save(context)
+                }), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("光标放大镜", style = MaterialTheme.typography.titleSmall)
+                    Text("长按空格移光标时，放大两侧文字。", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = settings.cursorMagnifierEnabled, colors = settingsSwitchColors(), onCheckedChange = null)
+            }
+            Column(Modifier.settingsSearchAnchor("放大镜宽度", bleed = 16.dp, bleedVertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("放大镜宽度：${settings.cursorMagnifierWidthDp.toInt()} dp", style = MaterialTheme.typography.titleSmall)
+                Slider(value = settings.cursorMagnifierWidthDp, modifier = Modifier.testTag("cursor-magnifier-width-slider"),
+                    enabled = settings.cursorMagnifierEnabled,
+                    onValueChange = { settings = settings.copy(cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(it)) },
+                    onValueChangeFinished = { settings.save(context) }, valueRange = 160f..480f, steps = 31)
+                Text("以屏幕可用宽度为上限。", style = MaterialTheme.typography.bodySmall)
             }
             if (settings.cursorGesture != CursorGestureMode.NONE || settings.bottomLiftCursor) {
                 // 只在总开关打开时显示：「按键效果」里关了振动或按键音，这里的开关不起作用。
