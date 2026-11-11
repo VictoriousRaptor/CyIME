@@ -33,12 +33,12 @@ class KeyboardInputPreferencesTest {
     }
 
     @Test fun `magnifier widths persist every slider step and reject invalid widths`() {
-        for (width in 160..480 step 10) {
+        for (width in 10..480 step 10) {
             KeyboardInputPreferences(cursorMagnifierWidthDp = width.toFloat()).save(context)
             assertEquals(width.toFloat(), KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
         }
         for ((stored, expected) in listOf(Float.NaN to 280f, Float.POSITIVE_INFINITY to 280f,
-            Float.NEGATIVE_INFINITY to 280f, -1f to 160f, 1000f to 480f, 285f to 290f)) {
+            Float.NEGATIVE_INFINITY to 280f, -1f to 10f, 1000f to 480f, 15f to 20f, 285f to 290f)) {
             values[KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY] = stored
             assertEquals(expected, KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
             KeyboardInputPreferences(cursorMagnifierWidthDp = stored).save(context)

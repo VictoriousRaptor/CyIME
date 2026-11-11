@@ -389,23 +389,33 @@ internal fun rememberImeKeyboardCallbacks(
                 }
             },
             readCursorMagnifierText = read@{
+                if (!service.cursorMagnifierVisible) return@read null
+                val visibilityEpoch = service.cursorMagnifierVisibilityEpoch
                 val owner = service.uiState.value
                 if (com.kingzcheung.xime.settings.IncognitoState.passwordField) return@read null
                 if (owner.inputTarget.isInternal) {
                     val editor = owner.inputTarget.editText() ?: return@read null
                     if (editor.transformationMethod is android.text.method.PasswordTransformationMethod) return@read null
                     val caret = service.schemaController.cursorSelectionActiveEnd(editor) ?: editor.selectionEnd
-                    return@read com.kingzcheung.xime.ui.keyboard.CursorMagnifierText.from(editor.text, caret)
+                    return@read internalCursorMagnifierText(editor, caret)
                 }
                 val connection = service.currentInputConnection ?: return@read null
-                val activeEnd = service.schemaController.cursorSelectionActiveEnd(connection)
+                val selection = service.schemaController.cursorSelectionRange(connection) ?: return@read null
+                val activeEnd = service.schemaController.cursorSelectionActiveEnd(connection) ?: selection.last
+                fun current() = service.cursorMagnifierVisible && service.currentInputConnection === connection &&
+                    service.cursorMagnifierVisibilityEpoch == visibilityEpoch &&
+                    service.uiState.value.inputSessionId == owner.inputSessionId &&
+                    service.uiState.value.inputTarget == owner.inputTarget &&
+                    service.schemaController.cursorSelectionRange(connection) == selection &&
+                    (service.schemaController.cursorSelectionActiveEnd(connection) ?: selection.last) == activeEnd &&
+                    !com.kingzcheung.xime.settings.IncognitoState.passwordField
                 // Bypass the tracking wrapper: a preview must neither learn text nor block pointer dispatch.
                 val raw = (connection as? TrackedInputConnection)?.base ?: connection
-                val preview = withContext(Dispatchers.IO) { readCursorMagnifierText(raw, activeEnd) }
-                if (service.currentInputConnection !== connection ||
-                    service.uiState.value.inputSessionId != owner.inputSessionId ||
-                    service.uiState.value.inputTarget != owner.inputTarget ||
-                    com.kingzcheung.xime.settings.IncognitoState.passwordField) null else preview
+                val line = service.readCursorMagnifierVisualLine(raw, activeEnd) ?: return@read null
+                if (!current()) return@read null
+                val preview = service.schemaController.cachedCursorMagnifierText(connection, activeEnd, line)
+                    ?: withContext(Dispatchers.IO) { readCursorMagnifierText(raw, activeEnd, line, selection) }
+                if (current()) preview else null
             },
             readCursorMagnifierAnchor = { service.readCursorMagnifierAnchor() },
             onCursorMagnifierTracking = { session, active -> service.trackCursorMagnifier(session, active) },

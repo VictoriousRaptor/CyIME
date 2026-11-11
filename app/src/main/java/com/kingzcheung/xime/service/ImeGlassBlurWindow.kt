@@ -47,6 +47,8 @@ internal class ImeGlassBlurWindow(
      * stayed at the old y, over the app above the keyboard (user 11-03). Null keeps bounds as given.
      */
     private val anchorOrigin: () -> IntOffset? = { null },
+    /** Reports an actually shown blur window, including availability loss or creation failure. */
+    private val onActiveChanged: (Boolean) -> Unit = {},
     private val parentDecor: () -> View?,
 ) {
     private var enabled = false
@@ -73,6 +75,7 @@ internal class ImeGlassBlurWindow(
     private var registeringAvailability = false
     private var availabilityRegistrationFailed = false
     private var blurAvailable = false
+    private var active = false
 
     private val parentAttachListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) = refresh()
@@ -164,6 +167,7 @@ internal class ImeGlassBlurWindow(
                 current.show()
                 FileLogger.i(TAG, "Keyboard blur child shown: role=$role, parentBounds=${bounds.toShortString()}, radius=$blurRadiusPx")
             }
+            setActive(true)
         } catch (error: RuntimeException) {
             failedToken = token
             removeWindow()
@@ -343,6 +347,13 @@ internal class ImeGlassBlurWindow(
             }
         }
         appliedSamsungBlur = false
+        setActive(false)
+    }
+
+    private fun setActive(value: Boolean) {
+        if (active == value) return
+        active = value
+        onActiveChanged(value)
     }
 
     private companion object {

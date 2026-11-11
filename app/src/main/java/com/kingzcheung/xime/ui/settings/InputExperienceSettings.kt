@@ -358,7 +358,7 @@ internal fun InputExperienceSettings(
                 }), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text("光标放大镜", style = MaterialTheme.typography.titleSmall)
-                    Text("长按空格移光标时，放大两侧文字。", style = MaterialTheme.typography.bodySmall)
+                    Text("长按空格、滑动底部留白或键盘面板移光标时，放大当前行文字。", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(checked = settings.cursorMagnifierEnabled, colors = settingsSwitchColors(), onCheckedChange = null)
             }
@@ -368,7 +368,7 @@ internal fun InputExperienceSettings(
                 Slider(value = settings.cursorMagnifierWidthDp, modifier = Modifier.testTag("cursor-magnifier-width-slider"),
                     enabled = settings.cursorMagnifierEnabled,
                     onValueChange = { settings = settings.copy(cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(it)) },
-                    onValueChangeFinished = { settings.save(context) }, valueRange = 160f..480f, steps = 31)
+                    onValueChangeFinished = { settings.save(context) }, valueRange = 10f..480f, steps = 46)
                 Text("以屏幕可用宽度为上限。", style = MaterialTheme.typography.bodySmall)
             }
             if (settings.cursorGesture != CursorGestureMode.NONE || settings.bottomLiftCursor) {

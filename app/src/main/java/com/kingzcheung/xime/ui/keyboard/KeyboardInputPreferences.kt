@@ -20,9 +20,9 @@ internal fun normalizeHandwritingPause(value: Float): Float =
 internal fun normalizeCursorHoldSeconds(value: Float): Float =
     ((value.takeIf { it.isFinite() } ?: 0.2f).coerceIn(0.1f, 1f) * 10).roundToInt() / 10f
 
-/** 放大镜宽度：160–480 dp，每档 10 dp，默认沿用 280 dp。 */
+/** 放大镜宽度：10–480 dp，每档 10 dp，默认沿用 280 dp。 */
 internal fun normalizeCursorMagnifierWidth(value: Float): Float =
-    ((value.takeIf { it.isFinite() } ?: 280f).coerceIn(160f, 480f) / 10).roundToInt() * 10f
+    ((value.takeIf { it.isFinite() } ?: 280f).coerceIn(10f, 480f) / 10).roundToInt() * 10f
 
 /** 移光标时从中间滑到边缘走几行：0.5–3 行，每档 0.25 行，默认 1 行。 */
 internal fun normalizeCursorSwipeLines(value: Float): Float =
@@ -177,6 +177,8 @@ data class KeyboardInputPreferences(
     val greekLetters: Boolean = false,
     val cylmLongAlternative: Boolean = false,
     val frostedGlass: FrostedGlassConfig = FrostedGlassConfig(),
+    /** Saved/preview panel values before the keyboard's two-layer keycap contrast correction. */
+    val frostedGlassRequested: FrostedGlassConfig = frostedGlass,
     val symbolInputMode: SymbolInputMode = SymbolInputMode.SWIPE_UP,
     /** 「长按输入」角标的触发时长，见 [normalizeSymbolLongPressSeconds]；只在角标为长按输入（含被 26 键滑行锁成长按）时起作用。 */
     val symbolLongPressSeconds: Float = 0.3f,
@@ -368,12 +370,13 @@ data class KeyboardInputPreferences(
             val numberRow = SettingsPreferences.isNumberRowEnabled(context)
             // 开关一变，26 键第一排的角标跟着换（见 QwertySwipeSymbols.numberRowUp）；键盘随后按新设置重画。
             com.kingzcheung.xime.settings.KeysConfigHelper.numberRowCorners = numberRow
+            val glass = FrostedGlassPreferences.read(context, isDark)
             return KeyboardInputPreferences(
                 keyGlowEnabled = KeyEffectPreferences.glowEnabled(prefs),
                 keyAnimationEnabled = KeyEffectPreferences.animationEnabled(prefs),
                 // 过透时自动加深到在白底和黑底上都看得清键面文字。
-                frostedGlass = FrostedGlassPreferences.read(context, isDark)
-                    .legibleForTheme(SettingsPreferences.getKeyboardTheme(context), isDark),
+                frostedGlass = glass.legibleForTheme(SettingsPreferences.getKeyboardTheme(context), isDark),
+                frostedGlassRequested = glass,
                 showPressBubble = SettingsPreferences.shouldShowPressBubble(context),
                 showPreeditPreview = SettingsPreferences.showPreeditPreview(context),
                 inputTextLocation = SettingsPreferences.getInputTextLocation(context),
@@ -623,7 +626,7 @@ fun rememberKeyboardInputPreferences(isDark: Boolean? = null): KeyboardInputPref
     val preview = LocalFrostedGlassPreview.current
     return if (preview != null) {
         val dark = isDark ?: FrostedGlassPreferences.isDark(context)
-        settings.copy(frostedGlass = preview.forAppearance(dark)
+        settings.copy(frostedGlassRequested = preview.forAppearance(dark), frostedGlass = preview.forAppearance(dark)
             .legibleForTheme(SettingsPreferences.getKeyboardTheme(context), dark))
     } else settings
 }

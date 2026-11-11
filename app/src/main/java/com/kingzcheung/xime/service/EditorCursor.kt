@@ -69,6 +69,23 @@ internal class EditorCursor(private val clock: () -> Long = { System.nanoTime() 
     /** The host may sort selection endpoints; the magnifier follows the end being moved. */
     fun selectionActiveEnd(ic: InputConnection): Int? = active.takeIf { connection === ic && anchor != null }
 
+    fun selectionRange(ic: InputConnection): IntRange? {
+        if (connection !== ic) return null
+        val start = reportedStart ?: return null
+        val end = reportedEnd ?: return null
+        return minOf(start, end)..maxOf(start, end)
+    }
+
+    /** Reuse the cursor gesture's existing snapshot; never fetch or retain another document. */
+    fun magnifierText(ic: InputConnection, caret: Int, line: IntRange): com.kingzcheung.xime.ui.keyboard.CursorMagnifierText? {
+        if (connection !== ic) return null
+        val cached = dragText?.takeIf { clock() - dragTextAt <= DRAG_TEXT_TTL_MS } ?: return null
+        val text = cached.text ?: return null
+        val offset = cached.startOffset
+        return com.kingzcheung.xime.ui.keyboard.CursorMagnifierText.from(text, caret - offset,
+            (line.first - offset).coerceAtLeast(0), (line.last + 1 - offset).coerceAtMost(text.length))
+    }
+
     /** 取消选择保留活动端的位置，反向选择不能误折叠到较大的端点。 */
     fun endSelection(ic: InputConnection) {
         bind(ic)
