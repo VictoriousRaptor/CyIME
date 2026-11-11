@@ -3,6 +3,15 @@ package com.kingzcheung.xime.service
 import android.graphics.Rect
 import android.view.inputmethod.InputConnection
 import android.widget.EditText
+import com.kingzcheung.xime.ui.keyboard.CursorMagnifierText
+
+/** Use the editor's own layout, including soft wraps, rather than rebuilding its typography. */
+internal fun internalCursorMagnifierText(editor: EditText, caret: Int): CursorMagnifierText? {
+    val layout = editor.layout ?: return null
+    if (caret !in 0..editor.text.length || caret !in 0..layout.text.length) return null
+    val line = layout.getLineForOffset(caret)
+    return CursorMagnifierText.from(editor.text, caret, layout.getLineStart(line), layout.getLineEnd(line))
+}
 
 /** Reuse the line-layout filters, retaining monitoring while the magnifier is held. */
 internal fun requestCursorMagnifierUpdates(connection: InputConnection): Boolean =
