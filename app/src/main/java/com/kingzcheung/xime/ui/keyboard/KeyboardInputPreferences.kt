@@ -20,9 +20,9 @@ internal fun normalizeHandwritingPause(value: Float): Float =
 internal fun normalizeCursorHoldSeconds(value: Float): Float =
     ((value.takeIf { it.isFinite() } ?: 0.2f).coerceIn(0.1f, 1f) * 10).roundToInt() / 10f
 
-/** 放大镜宽度：10–480 dp，每档 10 dp，默认沿用 280 dp。 */
+/** 放大镜宽度：50–200 dp，每档 10 dp，默认 70 dp。 */
 internal fun normalizeCursorMagnifierWidth(value: Float): Float =
-    ((value.takeIf { it.isFinite() } ?: 280f).coerceIn(10f, 480f) / 10).roundToInt() * 10f
+    ((value.takeIf { it.isFinite() } ?: 70f).coerceIn(50f, 200f) / 10).roundToInt() * 10f
 
 /** 移光标时从中间滑到边缘走几行：0.5–3 行，每档 0.25 行，默认 1 行。 */
 internal fun normalizeCursorSwipeLines(value: Float): Float =
@@ -200,7 +200,7 @@ data class KeyboardInputPreferences(
     val clearSwipePercent: Float = 100f,
     val cursorHoldSeconds: Float = 0.2f,
     val cursorMagnifierEnabled: Boolean = true,
-    val cursorMagnifierWidthDp: Float = 280f,
+    val cursorMagnifierWidthDp: Float = 70f,
     /** 移动光标时每走一字轻震一下；原来一直有，默认开保持手感（2026-10-22 起可关）。 */
     val cursorStepHaptic: Boolean = true,
     /** 移动光标时每走一字播放按键音；新加，默认关。 */
@@ -414,7 +414,7 @@ data class KeyboardInputPreferences(
                 cursorSwipeLines = normalizeCursorSwipeLines(prefs.getFloat("cursor_swipe_lines", 1f)),
                 cursorHoldSeconds = normalizeCursorHoldSeconds(prefs.getFloat("cursor_hold_seconds", 0.2f)),
                 cursorMagnifierEnabled = prefs.getBoolean(CURSOR_MAGNIFIER_ENABLED_KEY, true),
-                cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(prefs.getFloat(CURSOR_MAGNIFIER_WIDTH_KEY, 280f)),
+                cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(prefs.getFloat(CURSOR_MAGNIFIER_WIDTH_KEY, 70f)),
                 cursorStepHaptic = prefs.getBoolean("cursor_step_haptic", true),
                 cursorStepSound = prefs.getBoolean("cursor_step_sound", false),
                 bottomLiftCursor = prefs.getBoolean(BOTTOM_LIFT_CURSOR_KEY, false),

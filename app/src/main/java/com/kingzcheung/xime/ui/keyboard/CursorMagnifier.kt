@@ -102,7 +102,7 @@ internal fun CursorMagnifier(
     composition: CursorMagnifierText? = null,
     readAnchor: (() -> HardwareCursorAnchor?)? = null,
     onTrackingChange: ((Long, Boolean) -> Unit)? = null,
-    widthDp: Float = 280f,
+    widthDp: Float = 70f,
 ) {
     val currentReadAnchor by rememberUpdatedState(readAnchor)
     val currentTrackingChange by rememberUpdatedState(onTrackingChange)

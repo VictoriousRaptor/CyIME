@@ -370,8 +370,8 @@ internal fun InputExperienceSettings(
                 Slider(value = settings.cursorMagnifierWidthDp, modifier = Modifier.testTag("cursor-magnifier-width-slider"),
                     enabled = settings.cursorMagnifierEnabled,
                     onValueChange = { settings = settings.copy(cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(it)) },
-                    onValueChangeFinished = { settings.save(context) }, valueRange = 10f..480f, steps = 46)
-                Text("以屏幕可用宽度为上限。", style = MaterialTheme.typography.bodySmall)
+                    onValueChangeFinished = { settings.save(context) }, valueRange = 50f..200f, steps = 14)
+                Text("宽度 50–200 dp，每档 10 dp，默认 70 dp，以屏幕可用宽度为上限。", style = MaterialTheme.typography.bodySmall)
             }
             if (settings.cursorGesture != CursorGestureMode.NONE || settings.bottomLiftCursor) {
                 // 只在总开关打开时显示：「按键效果」里关了振动或按键音，这里的开关不起作用。

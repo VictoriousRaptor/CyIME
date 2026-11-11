@@ -67,7 +67,7 @@ class CursorMagnifierRenderTest {
     @After fun reset() { IncognitoState.passwordField = false; SpaceAfterCursorGuard.resetForTest() }
 
     private fun mount(schema: String = "rime_ice", floating: Boolean = false,
-        enabled: Boolean = true, width: Float = 280f,
+        enabled: Boolean = true, width: Float = 70f,
         gesture: CursorGestureMode = CursorGestureMode.SPACE, bottomLift: Boolean = false,
         preedit: com.kingzcheung.xime.rime.PinyinEditSession? = null,
         wrapEditor: Boolean = false, editorWidth: Int = 300,
@@ -315,19 +315,19 @@ class CursorMagnifierRenderTest {
         rule.onNodeWithTag("space-key").performTouchInput { up() }
     }
 
-    @Test fun persistedWidthAndSwitchApplyLiveAndWidthIsLimitedByScreenInsteadOfFloatingKeyboard() {
-        mount(floating = true, width = 10f)
+    @Test fun persistedWidthAndSwitchApplyLiveWithinBoundsOnFloatingKeyboard() {
+        mount(floating = true, width = 50f)
         hold()
         popupLocation()
-        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(10.dp)
-        shot("width-10")
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(50.dp)
+        shot("width-50")
         rule.runOnIdle {
             KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierWidthDp = 480f).save(rule.activity)
         }
         rule.mainClock.advanceTimeBy(160)
         popupLocation()
-        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(384.dp)
-        shot("width-480-screen-limited")
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(200.dp)
+        shot("width-200")
         rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierEnabled = false).save(rule.activity) }
         rule.mainClock.advanceTimeBy(160)
         rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
@@ -336,12 +336,12 @@ class CursorMagnifierRenderTest {
         rule.runOnIdle {
             assertEquals(stopped, reads)
             assertEquals(listOf(true, false), tracking)
-            assertEquals(480f, KeyboardInputPreferences.read(rule.activity).cursorMagnifierWidthDp, 0f)
+            assertEquals(200f, KeyboardInputPreferences.read(rule.activity).cursorMagnifierWidthDp, 0f)
             KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierEnabled = true).save(rule.activity)
         }
         rule.mainClock.advanceTimeBy(160)
         popupLocation()
-        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(384.dp)
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(200.dp)
         rule.onNodeWithTag("space-key").performTouchInput { up() }
         rule.mainClock.advanceTimeBy(32)
         rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
