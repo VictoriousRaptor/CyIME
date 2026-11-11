@@ -191,6 +191,37 @@ object PerformanceProfile {
         if (Extra.PRESS_BUBBLE in turnsOff.getValue(tier)) editor.putBoolean(SettingsPreferences.KEY_SHOW_PRESS_BUBBLE, false)
     }
 
+    private const val KEY_PRESS_BUBBLE_FIT = "press_bubble_tier_fit_v1"
+
+    /**
+     * 升级上来的老用户：按键浮标 11-09 起默认开，低配档只在新装时关（[writeFirstRunAuto]），升级的低配机还开着，
+     * 加上 1.15.75 的气泡动画打字发卡（11-11 用户反馈「升级后慢动作，重装就好」）。没碰过这个开关的，
+     * 这档要关它就关上一次；自己开过或关过的不动。只做一次。
+     */
+    internal fun fitPressBubbleOnUpgrade(prefs: android.content.SharedPreferences) {
+        if (prefs.getBoolean(KEY_PRESS_BUBBLE_FIT, false)) return
+        val editor = prefs.edit().putBoolean(KEY_PRESS_BUBBLE_FIT, true)
+        val tier = storedTier(prefs)
+        if (tier != null && !prefs.contains(SettingsPreferences.KEY_SHOW_PRESS_BUBBLE) && Extra.PRESS_BUBBLE in turnsOff.getValue(tier)) {
+            editor.putBoolean(SettingsPreferences.KEY_SHOW_PRESS_BUBBLE, false)
+        }
+        editor.apply()
+    }
+
+    /**
+     * 老安装不重新测硬件（[com.kingzcheung.xime.model.DeviceDefaults] 的约定）：用记下的自动档，没有就用首次安装时记下的
+     * 内存、核数、主频按同一套分档线算；都没记过返回 null，不动。
+     */
+    private fun storedTier(prefs: android.content.SharedPreferences): PerformanceTier? {
+        prefs.getString(KEY_AUTO_TIER, null)?.let { name -> PerformanceTier.entries.firstOrNull { it.name == name } }?.let { return it }
+        val memory = prefs.getLong("device_initial_memory_bytes", -1L).takeIf { it > 0 } ?: return null
+        val hardware = com.kingzcheung.xime.runtime.adaptation.DeviceCapabilities(0, prefs.getInt("device_initial_sdk", 0),
+            prefs.getString("device_initial_abis", "").orEmpty().split(",").filter { it.isNotBlank() },
+            prefs.getString("device_initial_low_ram", null)?.toBooleanStrictOrNull(), memory,
+            prefs.getInt("device_initial_cores", -1).takeIf { it > 0 }, prefs.getLong("device_initial_max_cpu_khz", -1L).takeIf { it > 0 })
+        return com.kingzcheung.xime.runtime.adaptation.PerformanceTiers.classify(hardware)
+    }
+
     /** 只关不开：和各自设置页写同样的值（[PerformanceCosts.set]）。新装时除按键浮标外这几项本来就关着（按键浮标见 [writeFirstRunAuto]）。 */
     private fun turnOff(context: Context, extras: Set<Extra>) {
         val current = read(context)

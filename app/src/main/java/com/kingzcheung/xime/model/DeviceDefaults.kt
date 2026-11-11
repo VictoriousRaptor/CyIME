@@ -20,7 +20,10 @@ object DeviceDefaults {
     /** Must run before other first-run preference writers. One atomic defaults snapshot. */
     @Synchronized internal fun initialize(context: Context, probe: () -> DeviceCapabilities) {
         val prefs = SettingsPreferences.getPrefsPublic(context)
-        if (prefs.contains(VERSION)) return
+        if (prefs.contains(VERSION)) {
+            com.kingzcheung.xime.settings.PerformanceProfile.fitPressBubbleOnUpgrade(prefs)
+            return
+        }
         val fresh = prefs.all.isEmpty() && listOf("asr_model", "default_models", "bundled_models").all {
             context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()
         }
