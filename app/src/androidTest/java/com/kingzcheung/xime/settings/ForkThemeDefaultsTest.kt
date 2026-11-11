@@ -21,7 +21,7 @@ class ForkThemeDefaultsTest {
         SettingsPreferences.applyForkThemeDefaults(context)
         assertEquals("pure_black", SettingsPreferences.getKeyboardTheme(context))
         assertEquals(1, SettingsPreferences.getDarkMode(context))
-        assertFalse(SettingsPreferences.shouldShowPressBubble(context))
+        assertTrue(SettingsPreferences.shouldShowPressBubble(context))
         assertFalse(com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(context).keyGlowEnabled)
         assertFalse(SettingsPreferences.isVerboseLoggingEnabled(context))
         assertTrue(KeyboardThemes.getThemeById("dynamic").isDynamic)

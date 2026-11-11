@@ -52,6 +52,10 @@ internal fun KaomojiKeyboard(onSelect: (String) -> Unit, modifier: Modifier = Mo
             tabs.layoutInfo.visibleItemsInfo.none { it.index == pager.currentPage })
             tabs.animateScrollToItem(pager.currentPage)
     }
+    // 在「最近」页上点时不立刻重排，离开这一页再刷新（和表情面板一样）。
+    LaunchedEffect(pager.settledPage) {
+        if (pager.settledPage != 0) recent = RecentUsageStore.get(context, RecentUsageStore.KEY_RECENT_KAOMOJI)
+    }
     Column(modifier.fillMaxSize()) {
         ExpressionPanelBar(textColor, { picked.clear(); onSelect("delete") }, leadingTabs,
             onDeleteFace = onDeleteFace?.let { delete -> {
@@ -97,7 +101,8 @@ internal fun KaomojiKeyboard(onSelect: (String) -> Unit, modifier: Modifier = Mo
             }) { face ->
                 Box(Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(KeyShapes.current.radius(8.dp)))
                     .background(textColor.copy(alpha = .08f)).testTag("kaomoji:$face").clickable {
-                        recent = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_KAOMOJI, face)
+                        val updated = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_KAOMOJI, face)
+                        if (pager.settledPage != 0) recent = updated
                         if (picked.size >= 32) picked.removeFirst()
                         picked.addLast(face)
                         onSelect(face)

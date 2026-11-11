@@ -7,7 +7,7 @@ import org.junit.Test
 class QwertyEnglishSymbolsTest {
     /** 中文上角标全角 → 英文同位置的半角；没有半角的照旧。 */
     private val halfWidth = mapOf("～" to "~", "—" to "-", "、" to "\\", "【" to "[", "】" to "]", "！" to "!",
-        "（" to "(", "）" to ")", "：" to ":", "；" to ";", "《" to "<", "》" to ">", "？" to "?")
+        "（" to "(", "）" to ")", "：" to ":", "；" to ";", "《" to "<", "》" to ">", "？" to "?", "｀" to "`", "｜" to "|")
 
     @Test fun `english top corners are the half-width form of the chinese ones on the same key`() {
         for (key in QwertySwipeSymbols.keys.map(Char::toString)) {

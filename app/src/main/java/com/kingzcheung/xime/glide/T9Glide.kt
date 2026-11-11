@@ -24,9 +24,16 @@ object T9Glide {
         for (char in letters) append(DIGIT[char] ?: return null)
     }
 
-    /** 词表里每个词的九键编码，按常用程度排列；同一数字串只留第一次。九键双拼按 [doublePinyin] 逐音节换码再换数字。 */
+    /**
+     * 词表里每个词的九键编码，按常用程度排列；同一数字串只留第一次。九键双拼按 [doublePinyin] 逐音节换码再换数字。
+     * 单音节词往后挪（排名乘 [SINGLE_SYLLABLE_RANK_FACTOR]）：九键上同一个键连按划不出来，你好 64426 和 年 6426、
+     * 我们 96636 和 文 936 划出来是同一条线，原来按词频总是出单字。九键滑行是用来划整词的，单字点按更快。
+     * 真人轨迹（11-10，38 人 161 条）首选从 70 条升到 140 条；常用单字合成轨迹从 267/293 降到 257/293。
+     */
     internal fun codes(entries: List<List<String>>, doublePinyin: DoublePinyinScheme? = null): List<String> =
-        entries.mapNotNull { syllables ->
+        entries.withIndex().sortedBy { (rank, syllables) ->
+            if (syllables.size == 1) rank * SINGLE_SYLLABLE_RANK_FACTOR else rank.toDouble()
+        }.map { it.value }.mapNotNull { syllables ->
             val letters = if (doublePinyin == null) syllables.joinToString("")
                 else syllables.map { doublePinyin.code(it) }.takeIf { null !in it }?.joinToString("") ?: return@mapNotNull null
             digits(letters)
@@ -85,6 +92,8 @@ object T9Glide {
     }
 
     const val TURN_DEGREES = 50.0
+    /** 单音节词在九键滑行词表里的排名倍数，见 [codes]。 */
+    const val SINGLE_SYLLABLE_RANK_FACTOR = 4.0
     /** 起止点最远离首末键中心 0.75 个键（键宽、高平均）：键内任何位置起手都算，上下相邻的键不算。 */
     const val MAX_ENDPOINT = 0.75f
 }

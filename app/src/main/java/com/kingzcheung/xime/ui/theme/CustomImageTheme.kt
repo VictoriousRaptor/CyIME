@@ -196,6 +196,29 @@ object CustomImageTheme {
         themesDir(context).listFiles()?.filter { it.name.startsWith(SLIDE_PREFIX) }?.forEach { it.delete() }
     }
 
+    /** 去掉一张轮播图片，文件一起删；其余的顺序不变。在 IO 线程调用。 */
+    fun removeSlide(context: Context, src: String) {
+        val prefs = com.kingzcheung.xime.settings.BackgroundMotionPreferences
+        prefs.setSlides(context, prefs.read(context).slides.filter { it != src })
+        File(themesDir(context), src.removePrefix("themes/")).takeIf { it.name.startsWith(SLIDE_PREFIX) }?.delete()
+    }
+
+    /**
+     * 设置页的小图：主图或轮播图（themes/…）按 [maxPx] 降采样读入，不整张解码。
+     * 文件没了或读不出时 null。在 IO 线程调用。
+     */
+    fun thumbnail(context: Context, src: String, maxPx: Int): Bitmap? {
+        val file = File(themesDir(context), src.removePrefix("themes/"))
+        if (!file.name.startsWith(FILE_PREFIX) || !file.isFile) return null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx.coerceAtLeast(1)) sample *= 2
+        return android.graphics.BitmapFactory.decodeFile(file.path,
+            android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+    }
+
     /** 调整页取消：删掉刚导入、没启用的图片；已在用的那张不动。 */
     fun discard(context: Context, src: String) {
         if (src == SettingsPreferences.getPrefsPublic(context).getString(KEY_SRC, null)) return

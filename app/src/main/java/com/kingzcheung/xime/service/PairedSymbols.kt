@@ -54,9 +54,30 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
             if (after == overtype && getSelectedText(0).isNullOrEmpty()) deleteSurroundingText(0, overtype.length)
         }
         if (!commitText(text.dropLast(back), 1)) return false
-        return back == 0 || commitText(text.takeLast(back), 0)
+        if (back != 0 && !commitText(text.takeLast(back), 0)) return false
     } finally {
         endBatchEdit()
+    }
+    if (back != 0) putCaretBackIfIgnored(text, back)
+    return true
+}
+
+/**
+ * 有的编辑框（如 NotallyX 等记事本，#280）不认 newCursorPosition 0，光标落在结尾符号后面。
+ * 这时光标前面正好是刚上屏的整段：按实际位置把光标往回挪 [back] 个字，读不到位置就发左方向键。
+ */
+private fun InputConnection.putCaretBackIfIgnored(text: String, back: Int) {
+    val before = runCatching { getTextBeforeCursor(text.length, 0)?.toString() }.getOrNull()
+    if (before != text) return
+    val extracted = runCatching { getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull()
+    if (extracted != null && extracted.selectionStart == extracted.selectionEnd && extracted.selectionStart >= back) {
+        val caret = extracted.startOffset + extracted.selectionStart - back
+        setSelection(caret, caret)
+        return
+    }
+    repeat(back) {
+        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
+        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
     }
 }
 

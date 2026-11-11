@@ -51,7 +51,7 @@ class DoublePinyinSentenceTest {
         val options = File("src/main/jni/cyime_rime/t9_script_options.cc").readText()
         assertTrue(options.contains("config->GetInt(\"t9/rescore_keys_per_syllable\", &keys_per_syllable);"))
         // 两份 librime 补丁必须相同（Gradle 先打 patches/ 那份，CMake 再打 jni/cmake 那份）。
-        val call = "t9_ngram_sentence_start_, t9_rescore_keys_per_syllable_, poet_,"
+        val call = "t9_ngram_sentence_start_, t9_rescore_keys_per_syllable_, t9_rescore_rime_weight_, poet_,"
         for (path in listOf("src/main/jni/cmake/RimeDictionary.patch", "../patches/cyime-librime.patch"))
             assertEquals(path, 2, File(path).readText().split(call).size)
     }

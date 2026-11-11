@@ -68,6 +68,18 @@ internal fun keyCodeToKey(keyCode: Int, isShifted: Boolean): String? {
     }
 }
 
+/**
+ * 实体键盘这个符号是否原样（半角）上屏、不进 Rime：小键盘的数字和运算符号总是原样；Shift 打的符号
+ * （" ( ) : ? ! 等）在中文标点下交给 Rime 出全角，和不按 Shift 的 ' ; , 一样（GitHub #290），
+ * 英文、半角模式照旧原样。
+ */
+internal fun hardwareSymbolIsLiteral(key: String, shifted: Boolean, numpad: Boolean, chinesePunctuation: Boolean): Boolean {
+    if (key.length != 1) return false
+    if (numpad) return true
+    if (!shifted || key[0].isLetter()) return false
+    return !(chinesePunctuation && isLiteralPunctuation(key))
+}
+
 internal fun isHardwareArrow(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
     keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 

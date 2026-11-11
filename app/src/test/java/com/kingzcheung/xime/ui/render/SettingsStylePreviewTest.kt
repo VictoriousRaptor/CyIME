@@ -164,7 +164,7 @@ class SettingsStylePreviewTest {
             XimeTheme(darkTheme = true, themeId = "pure_black") {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        if (letters) LayoutInputSettingsContent(LayoutInputCategory.Qwerty) {}
+                        if (letters) LayoutInputSettingsContent(LayoutInputCategory.Qwerty, onBack = {})
                         else if (effects) KeyEffectSettingsContent {} else KeyboardPanelSettingsContent(KeyboardPanelLaunch.Panel.RESIZE) {}
                     }
                     // 电脑上的系统不安装 IME。用生产键面绘制窗口，显示信号由测试代替 Android 分发。

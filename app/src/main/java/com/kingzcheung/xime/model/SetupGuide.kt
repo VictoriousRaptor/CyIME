@@ -41,7 +41,11 @@ object SetupGuide {
 
     /** 首次设置向导之后是否已经出现过（看过、设置过或点了“以后再说”）。 */
     fun isShown(context: Context): Boolean = SettingsPreferences.getPrefsPublic(context).getBoolean(KEY_SHOWN, false)
-    fun markShown(context: Context) { SettingsPreferences.getPrefsPublic(context).edit().putBoolean(KEY_SHOWN, true).apply() }
+    fun markShown(context: Context) {
+        SettingsPreferences.getPrefsPublic(context).edit().putBoolean(KEY_SHOWN, true).apply()
+        // 新装的用户看过这一页才开始下首次默认模型（按推荐设置时没选的已在 apply 里标成不下）。
+        DefaultModelInstaller.start(context.applicationContext)
+    }
 
     /** 在 IO 线程调用：会查模型文件。 */
     fun readFacts(context: Context): SetupFacts {

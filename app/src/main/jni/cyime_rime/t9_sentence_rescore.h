@@ -18,9 +18,11 @@ class Sentence;
 // corrected words, followed by Rime's best when that one is a correction. `sentence_graph` is the
 // word graph the n-best came from; without it no second n-best is made. `keys_per_syllable`
 // (t9/rescore_keys_per_syllable) counts syllables by keys for double pinyin, whose keys say nothing
-// about vowels; 0 counts the vowel groups of pinyin letters.
+// about vowels; 0 counts the vowel groups of pinyin letters. `rime_weight` (t9/rescore_rime_weight) adds that
+// share of Rime's own sentence weight to the word model's score, so the model overrules Rime's order only by a
+// clear margin (youfaxyigewenti: Rime ranks 又发现一个问题 first, the model alone took 有发现一个问题).
 void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool ngram_sentence_start,
-                        size_t keys_per_syllable, Poet* poet,
+                        size_t keys_per_syllable, double rime_weight, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences);

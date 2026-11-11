@@ -22,6 +22,10 @@ class T9NgramModel {
   // One mapping per path for the process lifetime; nullptr when the file is absent
   // or invalid (the decoder then keeps its previous scoring).
   static std::shared_ptr<const T9NgramModel> Open(const std::string& path);
+  // Drops this process's page mappings of every opened model (madvise DONTNEED). The mapping and
+  // the data stay valid: the next read faults the page back in from the page cache or storage.
+  // For the keyboard to call when the current schema does not use a model (26 keys after 9 keys).
+  static void ReleaseResidentPages();
   ~T9NgramModel();
 
   int32_t Id(const char* text, size_t size) const;

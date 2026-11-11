@@ -20,6 +20,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,26 @@ class CandidateBarFeedbackTest {
     private val association = CandidateBarState.AssociationOnly(listOf("题", "卷", "服", "版", "了", "一下"), hasMore = true)
     private val composing = CandidateBarState.ChineseCandidates(listOf("一下", "题", "卷", "服", "版", "了"),
         inputText = "yixia", hasMore = true)
+
+    @Test fun glidePreviewFollowsTheSelectedCodeLocation() {
+        val candidateLocation = androidx.compose.runtime.mutableStateOf(true)
+        val preview = androidx.compose.runtime.mutableStateOf("ni hao")
+        rule.setContent {
+            CompositionLocalProvider(LocalKeyboardInputPreferences provides KeyboardInputPreferences(
+                inlinePreeditPreview = true,
+                inputTextLocation = if (candidateLocation.value) SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR
+                    else SettingsPreferences.INPUT_TEXT_INPUT_BOX)) {
+                CandidateBar(state = CandidateBarState.Idle, glidePreviewText = preview.value,
+                    visuals = CandidateBarVisuals(Color.White, Color.Black, Color.Gray),
+                    callbacks = CandidateBarCallbacks(onCandidateSelect = {}))
+            }
+        }
+        rule.onNodeWithText("ni hao").assertIsDisplayed()
+        rule.runOnIdle { candidateLocation.value = false }
+        rule.onNodeWithText("ni hao").assertDoesNotExist()
+        rule.runOnIdle { candidateLocation.value = true; preview.value = "" }
+        rule.onNodeWithText("ni hao").assertDoesNotExist()
+    }
 
     @Before fun reset() {
         KeyboardThemes.initFromConfig(context)

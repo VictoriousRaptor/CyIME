@@ -165,11 +165,11 @@ class KeyboardInputPreferencesTest {
         assertEquals(true, chinese.glideTyping)
         // 只开中文滑行时同样锁住键盘滑动移光标。
         val onlyChinese = KeyboardInputPreferences(chineseGlideTyping = true)
-        assertEquals("已被「中文滑行输入」锁定", InputGestureLocks.lockFor(onlyChinese,
+        assertEquals("已被「中文滑行」锁定", InputGestureLocks.lockFor(onlyChinese,
             InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD)?.message)
         // 用户 11-08：开着滑行时字母键的滑动都给滑行，角标锁在「长按输入」，并说明是中文滑行锁的。
         assertEquals(CornerInputChoice.LONG_PRESS, CornerInputChoice.of(CornerInputChoice.SWIPE.applyTo(onlyChinese)))
-        assertEquals("已被「中文滑行输入」锁定", InputGestureLocks.glideCornerLock(onlyChinese)?.message)
+        assertEquals("已被「中文滑行」锁定", InputGestureLocks.glideCornerLock(onlyChinese)?.message)
     }
 
     @Test fun `comma and period keys are both on by default and the old saved period default does not turn it off`() {
@@ -320,6 +320,10 @@ class KeyboardInputPreferencesTest {
             values[it.getArgument(0)] = it.getArgument<Float>(1)
             editor
         }
+        whenever(editor.remove(any())).thenAnswer {
+            values.remove(it.getArgument<String>(0))
+            editor
+        }
     }
 
     @Test
@@ -339,11 +343,12 @@ class KeyboardInputPreferencesTest {
 
     @Test fun `visual effects are opt in and explicit choices are respected`() {
         assertEquals(false, KeyboardInputPreferences.read(context).keyGlowEnabled)
-        assertEquals(false, KeyboardInputPreferences.read(context).showPressBubble)
-        values["key_glow_enabled"] = true
-        values[SettingsPreferences.KEY_SHOW_PRESS_BUBBLE] = true
-        assertEquals(true, KeyboardInputPreferences.read(context).keyGlowEnabled)
+        // 按键浮标默认开（用户 11-09），关掉的照样关。
         assertEquals(true, KeyboardInputPreferences.read(context).showPressBubble)
+        values["key_glow_enabled"] = true
+        values[SettingsPreferences.KEY_SHOW_PRESS_BUBBLE] = false
+        assertEquals(true, KeyboardInputPreferences.read(context).keyGlowEnabled)
+        assertEquals(false, KeyboardInputPreferences.read(context).showPressBubble)
     }
 
     @Test fun `frosted glass is opt in and survives unrelated input preference saves`() {
@@ -382,7 +387,8 @@ class KeyboardInputPreferencesTest {
 
     @Test
     fun `saved input preferences can be read without restarting the app`() {
-        val changed = KeyboardInputPreferences(spaceHold = SpaceHoldAction.REPEAT, cursorStepDp = 6f, keyTextScale = 1.4f, fixedSymbols = "…\n→")
+        val changed = KeyboardInputPreferences(spaceHold = SpaceHoldAction.REPEAT, cursorStepDp = 6f, keyTextScale = 1.4f, fixedSymbols = "…\n→",
+            showPressBubble = true) // 按键浮标是单独的设置，默认开
         changed.save(context)
         assertEquals(changed, KeyboardInputPreferences.read(context))
         changed.copy(spaceHold = SpaceHoldAction.CURSOR, cursorStepDp = 24f).save(context)
@@ -430,7 +436,7 @@ class KeyboardInputPreferencesTest {
     @Test fun `symbol input keeps swipe default and persists an explicit hold choice`() {
         assertEquals(SymbolInputMode.SWIPE_UP, KeyboardInputPreferences.read(context).symbolInputMode)
         val hold = KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS,
-            spaceHold = SpaceHoldAction.VOICE_TOGGLE, cursorGesture = CursorGestureMode.KEYBOARD)
+            spaceHold = SpaceHoldAction.VOICE_TOGGLE, cursorGesture = CursorGestureMode.KEYBOARD, showPressBubble = true)
         hold.save(context)
         assertEquals(hold, KeyboardInputPreferences.read(context))
         hold.copy(symbolInputMode = SymbolInputMode.SWIPE_UP).save(context)

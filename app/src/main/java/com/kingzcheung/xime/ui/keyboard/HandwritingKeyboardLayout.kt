@@ -306,13 +306,16 @@ fun HandwritingKeyboardLayout(
     }
 
     // Keep QWERTY's content edges and bottom inset, with five handwriting rows.
+    // 全屏时这段底部留白放进底下那块按键的底色里（见下），不在画板下面另留一条透明的。
     BoxWithConstraints(bodyModifier.fillMaxSize().testTag("handwriting-panel")
-        .padding(bottom = KeyboardGridBottomMargin + bottomPaddingDp.dp)) {
+        .padding(bottom = if (expanded) 0.dp else KeyboardGridBottomMargin + bottomPaddingDp.dp)) {
         // Fullscreen applies to ink only. Keep the footer in the user's normal keyboard bounds.
         val controlsWidth = if (expanded && expandedControlsWidthDp > 0)
             (expandedControlsWidthDp.dp - normalControlGutter.dp * 2).coerceIn(1.dp, maxWidth.coerceAtLeast(1.dp)) else maxWidth
         val travel = ((maxWidth - controlsWidth) / 2).value.coerceAtLeast(0f)
         val controlsOffset = if (expanded) expandedControlsOffsetX.toFloat().coerceIn(-travel, travel).dp else 0.dp
+        // The footer material below sits inside nested layout scopes, where maxWidth needs an explicit receiver.
+        val panelWidth = maxWidth
         val bottom = QwertyBottomRowWeights.Standard
         val functionKeyWidth = controlsWidth * (bottom.enter / bottom.total)
         val footerHeight = if (expanded) normalControlHeight.dp.coerceAtMost(maxHeight / 3) else maxHeight / 5
@@ -393,15 +396,24 @@ fun HandwritingKeyboardLayout(
                 if (!expanded) reportGlassRegion?.invoke(null)
                 onDispose { reportGlassRegion?.invoke(null) }
             }
+            // 全屏时底下这块（候选栏 + 两排键）的底色和平时键盘一样：铺满平时键盘的整宽（含两侧留边），
+            // 往下铺过底部留白接到导航栏那条；按键位置不变（11-09 用户截图：两侧和底下各漏一条，透出后面的应用）。
+            val materialWidth = if (expanded) (controlsWidth + normalControlGutter.dp * 2).coerceAtMost(panelWidth) else controlsWidth
+            val materialTravel = ((panelWidth - materialWidth) / 2).value.coerceAtLeast(0f)
+            val materialOffset = if (expanded) expandedControlsOffsetX.toFloat().coerceIn(-materialTravel, materialTravel).dp else 0.dp
             Box(Modifier.fillMaxWidth()) {
-            Column(Modifier.align(Alignment.TopCenter).absoluteOffset(x = controlsOffset).width(controlsWidth)
+            Box(Modifier.align(Alignment.TopCenter).absoluteOffset(x = materialOffset).width(materialWidth)
                 // Fullscreen ink stays transparent; only the saved footer bounds receive the keyboard material.
                 .then(if (expanded) Modifier.keyboardPanelBackground(panelBackgroundColor)
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInWindow()
                         reportGlassRegion?.invoke(android.graphics.Rect(kotlin.math.round(pos.x).toInt(), kotlin.math.round(pos.y).toInt(),
                             kotlin.math.round(pos.x + coords.size.width).toInt(), kotlin.math.round(pos.y + coords.size.height).toInt()))
-                    } else Modifier)
+                    }
+                    // Tag before the padding: the tag measures the whole material, bottom inset included.
+                    .testTag("handwriting-controls-material")
+                    .padding(bottom = KeyboardGridBottomMargin + bottomPaddingDp.dp) else Modifier)) {
+            Column(Modifier.align(Alignment.TopCenter).absoluteOffset(x = controlsOffset - materialOffset).width(controlsWidth)
                 .testTag("handwriting-controls")) {
             CompositionLocalProvider(LocalKeyboardKeyVisualMetrics provides
                 if (expanded) normalControlMetrics ?: currentVisualMetrics else currentVisualMetrics,
@@ -444,6 +456,7 @@ fun HandwritingKeyboardLayout(
             }
             }
             } // constrained controls
+            } // footer material
             }
         }
     }

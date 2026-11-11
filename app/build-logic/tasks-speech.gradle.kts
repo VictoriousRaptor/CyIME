@@ -3,8 +3,12 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import java.util.zip.ZipEntry
 
-// Match ASRInput's runtime. Static ORT avoids replacing the IME/handwriting runtime.
-val speechAar = layout.buildDirectory.file("speech-runtime/sherpa-onnx-1.13.8.aar")
+// sherpa-onnx 1.13.8, the build that links ONNX Runtime as a shared library. Its own copy of the runtime
+// is dropped: the JNI library uses the onnxruntime 1.28 already in the APK (Rime, prediction, handwriting),
+// which serves the same C API version 28 it was built against. The static-runtime build carried a second
+// runtime inside libsherpa-onnx-jni.so (arm64 24 MB, about 9 MB in the APK; shared build 4.8 MB).
+// x86 already worked this way before.
+val speechAar = layout.buildDirectory.file("speech-runtime/sherpa-onnx-1.13.8-shared-ort.aar")
 val speechAssets = layout.buildDirectory.dir("generated/speech-assets")
 val prepareSpeechRuntime = tasks.register("prepareSpeechRuntime") {
     outputs.file(speechAar)
@@ -21,16 +25,18 @@ val prepareSpeechRuntime = tasks.register("prepareSpeechRuntime") {
             conn.getInputStream().use { input -> file.outputStream().use { input.copyTo(it) } }
             check(digest() == sha) { "Speech dependency checksum mismatch: ${file.name}" }
         }
-        val source = layout.buildDirectory.file("speech-runtime/original.aar").get().asFile
-        fetch("https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-static-link-onnxruntime-1.13.8.aar",
-            source, "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471")
+        val source = layout.buildDirectory.file("speech-runtime/original-shared-ort.aar").get().asFile
+        fetch("https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar",
+            source, "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96")
         ZipInputStream(source.inputStream()).use { input ->
             ZipOutputStream(speechAar.get().asFile.outputStream()).use { output ->
                 var entry = input.nextEntry
                 while (entry != null) {
-                    // Upstream's x86 build alone still ships shared ORT. Use the existing,
-                    // backward-compatible 1.28 runtime for this ABI; do not package two copies.
-                    if (entry.name != "jni/x86/libonnxruntime.so") {
+                    // Keep only the JNI library: the runtime comes from the APK (see above), and the
+                    // C/C++ API libraries are for native callers the app does not have.
+                    val dropped = entry.name.startsWith("jni/") && entry.name.substringAfterLast('/') in
+                        setOf("libonnxruntime.so", "libsherpa-onnx-c-api.so", "libsherpa-onnx-cxx-api.so")
+                    if (!dropped) {
                         output.putNextEntry(ZipEntry(entry.name).apply { time = 0 })
                         input.copyTo(output); output.closeEntry()
                     }

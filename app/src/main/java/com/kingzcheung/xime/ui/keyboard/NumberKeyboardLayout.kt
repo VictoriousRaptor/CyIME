@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -100,6 +104,7 @@ fun NumberKeyboardLayout(
                 keySpacingY = keySpacingY,
                 isFloatingMode = isFloatingMode,
                 numberMode = true,
+                enterKeyText = enterKeyText,
             )
         }
         return
@@ -193,21 +198,16 @@ private fun NumberRows(
     val symFontSize = if (compactMode) 14.sp else 18.sp
     val keyFontSize = if (compactMode) 16.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     val ctrlFontSize = if (compactMode) 12.sp else androidx.compose.ui.unit.TextUnit.Unspecified
-    val symbols = listOf("+", "-", "*", "/")
+    // 左栏符号可在「按键符号 → 数字侧栏」改（用户 11-09）；没改过仍是 + - * /。四格一屏，多出的上下滑，末尾一格「编辑」。
+    val symbols = SideSymbolTarget.NUMBER.resolve(LocalKeyboardInputPreferences.current.symbolsFor(SideSymbolTarget.NUMBER))
     Column(Modifier.fillMaxSize()) {
         // Numeric navigation uses the operator-column width, independent of the text row.
         Row(Modifier.fillMaxWidth().weight(3f)) {
-            Column(Modifier.weight(0.8f).fillMaxHeight().testTag("number-operators")
-                .padding(scaledKeyVisualPadding())) {
-                symbols.forEach { symbol ->
-                    NumberSymbolKey(text = symbol, onClick = { onKeyPress(symbol) },
-                        backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                        modifier = Modifier.weight(1f), onPress = { onKeyPressDown?.invoke(symbol) },
-                        isFirst = symbol == "+", isLast = symbol == "/", fontSize = symFontSize,
-                        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
-                        shadowShapeRadius = shadowShapeRadius)
-                }
-            }
+            NumberSymbolRail(symbols = symbols, onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                backgroundColor = keyBackgroundColor, textColor = keyTextColor, fontSize = symFontSize,
+                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                modifier = Modifier.weight(0.8f).fillMaxHeight().testTag("number-operators")
+                    .padding(scaledKeyVisualPadding()))
             Column(Modifier.weight(3.4f).fillMaxHeight()) {
                 listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) {
@@ -260,9 +260,15 @@ private fun NumberRows(
                 modifier = Modifier.weight(3.4f - modeCount * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
-            KeyButton(text = ".", onClick = { onKeyPress(".") },
+            // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：
+            // 开着时上滑或长按输入，不随「反转上下滑方向」变成下滑（键在屏幕底边，往下滑不出去）。
+            val bottomSwipeUp = LocalKeyboardInputPreferences.current.bottomPunctuationSwipeUp
+            SwipeableKeyButton(text = ".", onClick = { onKeyPress(".") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(0.8f), onPress = { onKeyPressDown?.invoke(".") },
+                modifier = Modifier.weight(0.8f).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
+                swipeText = NUMBER_DOT_ALTERNATE, symbolInputText = NUMBER_DOT_ALTERNATE,
+                onSwipe = { onKeyPress(NUMBER_DOT_ALTERNATE) }, onSwipeStateChange = onSwipeStateChange,
+                followSymbolSwipeDirection = !bottomSwipeUp, keepSymbolSwipeOnLongPress = bottomSwipeUp,
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             ActionKeyButton(text = enterKeyText, onClick = { onKeyPress("enter") },
@@ -274,6 +280,63 @@ private fun NumberRows(
     }
 }
 
+/** 数字键盘点键的上角标：IP 地址后接端口用。 */
+internal const val NUMBER_DOT_ALTERNATE = ":"
+
+/**
+ * 数字键盘左栏：整列一个键帽（圆角、阴影画在外框上，和九键左栏一样），一屏四格，
+ * 多出的上下滑（右缘滚动条滑动时出现），末尾一格「编辑」打开「按键符号 → 数字侧栏」。
+ */
+@Composable
+private fun NumberSymbolRail(
+    symbols: List<String>,
+    onKeyPress: (String) -> Unit,
+    onKeyPressDown: ((String) -> Unit)?,
+    backgroundColor: Color,
+    textColor: Color,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    shadowEnabled: Boolean,
+    shadowElevation: Dp,
+    shadowShapeRadius: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
+    val shapes = KeyShapes.current
+    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, shapes, density, backgroundColor, frostedGlass.enabled) {
+        if (shadowEnabled && !frostedGlass.enabled) {
+            val offsetPx = with(density) { shadowElevation.toPx() }
+            val cornerPx = with(density) { shapes.radius(shadowShapeRadius).toPx() }
+            val color = crispShadowColor(backgroundColor)
+            Modifier.drawBehind {
+                drawRoundRect(color = color, topLeft = Offset(0f, offsetPx), size = size, cornerRadius = CornerRadius(cornerPx))
+            }
+        } else Modifier
+    }
+    BoxWithConstraints(modifier
+        .then(shadowModifier)
+        .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
+        .background(frostedKeyColor(backgroundColor, textColor, frostedGlass))) {
+        val rowHeight = maxHeight / 4
+        val railState = rememberLazyListState()
+        LazyColumn(state = railState, modifier = Modifier.fillMaxSize().testTag("number-symbol-rail")
+            .railScrollIndicator(railState, textColor.copy(alpha = 0.35f))) {
+            itemsIndexed(symbols) { index, symbol ->
+                NumberSymbolKey(text = symbol, onClick = { onKeyPress(symbol) },
+                    onPress = { onKeyPressDown?.invoke(symbol) }, backgroundColor = backgroundColor,
+                    textColor = textColor, fontSize = fontSize,
+                    modifier = Modifier.fillMaxWidth().height(rowHeight).testTag("number-symbol:$index"))
+            }
+            item(key = "edit") {
+                SideRailEditItem(SideSymbolTarget.NUMBER, textColor, backgroundColor,
+                    iconSize = (fontSize.value * 1.1f).dp, onPress = { onKeyPressDown?.invoke("edit") },
+                    modifier = Modifier.fillMaxWidth().height(rowHeight).testTag("number-symbols-edit"))
+            }
+        }
+    }
+}
+
+/** 左栏里的一格：底色由整列画，这里只画按下态和字。 */
 @Composable
 private fun NumberSymbolKey(
     text: String,
@@ -282,50 +345,17 @@ private fun NumberSymbolKey(
     textColor: Color,
     modifier: Modifier = Modifier,
     onPress: (() -> Unit)? = null,
-    isFirst: Boolean = false,
-    isLast: Boolean = false,
     fontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
-    shadowEnabled: Boolean = true,
-    shadowElevation: Dp = 1.dp,
-    shadowShapeRadius: Dp = 8.dp,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
-    val cornerRadius = LocalKeyCornerRadius.current
-    val shape = RoundedCornerShape(
-        topStart = if (isFirst) cornerRadius else 0.dp,
-        topEnd = if (isFirst) cornerRadius else 0.dp,
-        bottomStart = if (isLast) cornerRadius else 0.dp,
-        bottomEnd = if (isLast) cornerRadius else 0.dp
-    )
     val density = LocalDensity.current
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
-    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, KeyShapes.current, density, backgroundColor, frostedGlass.enabled) {
-        if (shadowEnabled && !frostedGlass.enabled) {
-            val offsetPx = with(density) { shadowElevation.toPx() }
-            val cornerPx = with(density) { KeyShapes.current.radius(shadowShapeRadius).toPx() }
-            val color = crispShadowColor(backgroundColor)
-            Modifier.drawBehind {
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(0f, offsetPx),
-                    size = size,
-                    cornerRadius = CornerRadius(cornerPx)
-                )
-            }
-        } else Modifier
-    }
     BoxWithConstraints(
         modifier = modifier
-            .fillMaxWidth()
-            .then(shadowModifier)
-            .clip(shape)
-            .background(frostedKeyColor(
-                backgroundColor, textColor, frostedGlass,
-                legacyStateColor = if (isPressed) backgroundColor.copy(alpha = 0.7f) else backgroundColor,
-                pressed = isPressed,
-            ))
+            .background(if (isPressed) frostedKeyColor(backgroundColor, textColor, frostedGlass,
+                legacyStateColor = backgroundColor.copy(alpha = 0.7f), pressed = true) else Color.Transparent)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     isPressed = true
@@ -342,6 +372,7 @@ private fun NumberSymbolKey(
             fontSize = fittedSize.sp,
             lineHeight = (fittedSize * 1.2f).sp,
             fontWeight = FontWeight.Normal,
+            maxLines = 1,
             modifier = Modifier.padding(vertical = 2.dp),
             fontFamily = AppFonts.keyFontFamily
         )

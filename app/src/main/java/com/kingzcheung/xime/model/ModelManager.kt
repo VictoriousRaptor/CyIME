@@ -267,7 +267,11 @@ object ModelManager {
                 }
                 ModelDownloader.downloadModel(context, model, { state ->
                     _downloadStates.update { it + (model.id to state) }
-                    if (state is ModelDownloadState.Complete) notifyInstalledModelsChanged()
+                    if (state is ModelDownloadState.Complete) {
+                        // 日语词库下好马上解开、引擎设为只读，不等下次 Rime 准备。
+                        com.kingzcheung.xime.settings.JapanesePack.afterInstall(context, model.id)
+                        notifyInstalledModelsChanged()
+                    }
                     onProgress(state)
                 }, version, install = { staging, destination ->
                     guard.install(generation, staging, destination,

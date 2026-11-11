@@ -1,7 +1,8 @@
 # Rime schema
 # 注音（大千式），台湾朋友提的需求，默认不启用（设置 → 已安装的方案里打开）。
 # 词库沿用雾凇，拼写运算把拼音音节改写成注音、再落到大千键位（同 rime-bopomofo 的 zhuyin.yaml）；
-# 雾凇没有声调，声调键只用来分隔音节，可以不打。候选默认经 cyime_s2tw 转成台湾正体，
+# 雾凇没有声调，声调键只用来分隔音节，可以不打。候选先经 cyime_s2tw 转成台湾正体（声调表按正体查），
+# 简繁跟 CyIME 的「繁体输出」走：关时 ImeSessionController 打开 zhuyin_simplified 再转回简体。
 # 台湾特有词和台湾读音（垃圾 ㄌㄜˋㄙㄜˋ）在 cyime_tw 里，见 tools/zhuyin/build_cyime_tw.py。
 # 键盘见 xime.yaml 的 keyboard.zhuyin：键帽是注音符号，ImeKeyRouter 按 ZhuyinKeys 换成这里的大千键码。
 schema:
@@ -9,7 +10,7 @@ schema:
   name: 注音
   version: "1.1"
   description: |
-    注音符號輸入，大千式鍵盤排列，預設輸出臺灣正體，可選簡體。
+    注音符號輸入，大千式鍵盤排列；簡繁跟隨「繁体输出」設定。
     空格鍵輸入第一聲；聲調可以省略。
 
 switches:

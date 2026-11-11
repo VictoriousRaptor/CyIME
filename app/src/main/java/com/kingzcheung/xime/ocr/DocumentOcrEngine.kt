@@ -3,7 +3,6 @@ package com.kingzcheung.xime.ocr
 import android.content.Context
 import android.graphics.Bitmap
 import java.io.File
-import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.Mat
 import org.opencv.core.Core
@@ -23,7 +22,9 @@ internal object DocumentOcrEngine {
         /** 映射在安装包上的模型跟会话同生命周期引用着，不让映射先被回收。 */
         private val source: OcrModelFiles.Source
         init {
-            check(OpenCVLoader.initLocal()) { "Cannot load OCR image processing" }
+            // 轻量版的 OpenCV 和模型一样是下载的：没下载时跟没模型一样，让键盘去提示下载。
+            if (!OcrEngine.available(context)) throw OcrModelMissingException()
+            check(OcrEngine.load(context)) { "Cannot load OCR image processing" }
             Core.setNumThreads(1)
             // 轻量版的模型是下载的；带模型的安装包直接映射 assets 里不压缩的模型（见 OcrModelFiles）。
             source = OcrModelFiles.prepare(context) ?: throw OcrModelMissingException()

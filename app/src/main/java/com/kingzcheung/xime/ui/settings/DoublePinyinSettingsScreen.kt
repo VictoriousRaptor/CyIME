@@ -36,6 +36,31 @@ import kotlinx.coroutines.withContext
 /** 韵母按键上的写法：v 写作 ü（lü、lüe），与常见双拼键位图、键盘上的双拼键位提示一致。 */
 private fun finalLabel(final: String) = com.kingzcheung.xime.ui.keyboard.doublePinyinFinalLabel(final)
 
+/** 两个设置入口共用同一项偏好，并响应另一处或备份恢复带来的更改。 */
+@Composable
+internal fun DoublePinyinRawPreeditToggle() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember(context) { mutableStateOf(!SpellingPatches.doublePinyinRawPreedit(context)) }
+    DisposableEffect(context) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == SpellingPatches.DOUBLE_PINYIN_RAW_PREEDIT_KEY) {
+                enabled = !SpellingPatches.doublePinyinRawPreedit(context)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    SettingsToggleItem(Icons.TwoTone.Keyboard, "双拼编码显示全拼",
+        "开启后显示全拼（如 shuang pin），关闭时显示双拼键（如 ul pb）。改完要几秒重新部署",
+        checked = enabled, onCheckedChange = { on ->
+            SpellingPatches.setDoublePinyinRawPreedit(context, !on)
+            enabled = on
+            scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
+        })
+}
+
 /** 双拼方案：内置的小鹤、首道、自然码等可复制修改；自定义方案改键位后保存。符号与中文26键（14 键版本与中文14键）相同，字母排列随所选字母布局。 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -103,15 +128,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                 scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
                             }, costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.DOUBLE_PINYIN_ABBREVIATION)
                         DoublePinyinAbbreviationLegend(abbreviation)
-                        // 编码显示打的键，不换回全拼（别人提的需求，用户 11-04 转述）：默认关，26 键和九键双拼共用；26 键改完要重新部署。
-                        var rawPreedit by remember { mutableStateOf(SpellingPatches.doublePinyinRawPreedit(context)) }
-                        SettingsToggleItem(Icons.TwoTone.Keyboard, "编码显示双拼键",
-                            "打字时编码显示按下的双拼键(如 ul pb)，不换成全拼。改完要几秒重新部署",
-                            checked = rawPreedit, onCheckedChange = { on ->
-                                SpellingPatches.setDoublePinyinRawPreedit(context, on)
-                                rawPreedit = on
-                                scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
-                            })
+                        DoublePinyinRawPreeditToggle()
                     }
                 }
                 Button(onClick = { edit(copyOf(DoublePinyinScheme.FLYPY)) }, enabled = !busy,

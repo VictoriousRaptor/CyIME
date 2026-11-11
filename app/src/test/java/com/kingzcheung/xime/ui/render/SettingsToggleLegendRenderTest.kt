@@ -51,22 +51,25 @@ class SettingsToggleLegendRenderTest {
 
     @Test
     @Config(qualifiers = "zh-rCN-w360dp-h800dp-mdpi")
-    fun zhuyinScriptChoiceIsIndependentOfOtherChineseSchemes() {
+    fun oneTraditionalSwitchCoversZhuyin() {
         val context = rule.activity
         com.kingzcheung.xime.ui.theme.KeyboardThemes.initFromConfig(context)
         fun prefs() = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(context)
+        val raw = com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context)
+        raw.edit().putBoolean(com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.LEGACY_ZHUYIN_SIMPLIFIED_KEY, true).commit()
         rule.setContent {
             XimeTheme(darkTheme = true) {
                 com.kingzcheung.xime.ui.settings.ChineseInputSettingsContent(onBack = {})
             }
         }
-        assertEquals(false, prefs().zhuyinSimplified)
+        // 注音不再单独一行，「繁体输出」说明里写上注音。
+        assertEquals(0, rule.onAllNodesWithText("注音输出简体").fetchSemanticsNodes().size)
+        assertEquals(false, prefs().traditionalOutput)
         rule.onNodeWithText("繁体输出").performClick()
-        assertEquals(false, prefs().zhuyinSimplified)
-        rule.onNodeWithText("注音输出简体").performClick()
         rule.runOnIdle {
-            assertEquals(true, prefs().zhuyinSimplified)
             assertEquals(true, prefs().traditionalOutput)
+            // 旧键保存时清掉。
+            assertEquals(false, raw.contains(com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.LEGACY_ZHUYIN_SIMPLIFIED_KEY))
             System.getenv("CYIME_RENDER_OUT")?.let { path ->
                 val view = context.window.decorView
                 val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
@@ -75,11 +78,8 @@ class SettingsToggleLegendRenderTest {
                 bitmap.recycle()
             }
         }
-        rule.onNodeWithText("注音输出简体").performClick()
-        rule.runOnIdle {
-            assertEquals(false, prefs().zhuyinSimplified)
-            assertEquals(true, prefs().traditionalOutput)
-        }
+        rule.onNodeWithText("繁体输出").performClick()
+        rule.runOnIdle { assertEquals(false, prefs().traditionalOutput) }
     }
 
     @Test

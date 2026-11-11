@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import com.kingzcheung.xime.settings.BackgroundConfig
 import com.kingzcheung.xime.settings.FrostedGlassConfig
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
@@ -18,13 +19,22 @@ internal fun Modifier.keyboardPanelBackground(
     fallback: Color,
     glass: FrostedGlassConfig = LocalKeyboardInputPreferences.current.frostedGlass,
 ): Modifier {
-    if (glass.enabled && inheritsKeyboardBackground()) return this
     val themeBackground = KeyboardThemes.getRenderingScheme(SettingsPreferences.getKeyboardTheme(LocalContext.current)).keyboardBackground
+    if (inheritsKeyboardBackground() && panelSeesKeyboardBackground(glass.enabled, themeBackground)) return this
     // 渐变/图片主题不能用一块主题底色代替（iOS 渐变的底色是纯黑）；纯色主题仍按调用方给的底色。
     val layered = themeBackground?.type == "gradient" || themeBackground?.type == "image"
     return if (glass.enabled || layered) keyboardBackground(themeBackground, fallback.luminance() < 0.5f, fallback, glass)
     else background(fallback)
 }
+
+/**
+ * 面板（菜单、表情、剪贴板…）不另画背景，直接透出键盘本身那一整张：玻璃，或图片、渐变主题。
+ * 图片、渐变是整块键盘一张图，面板另画一张会从面板顶重新摆放，和上面工具栏那一段接不上（用户 11-09：
+ * 不开玻璃时工具栏和菜单是两张断开的背景）。纯色主题照旧画一块底色。
+ * 面板下面的按键由 [excludeRevealedKeyboardPanels] 挖掉，两处用同一个判断。
+ */
+internal fun panelSeesKeyboardBackground(glassEnabled: Boolean, background: BackgroundConfig?): Boolean =
+    glassEnabled || background?.type == "gradient" || background?.type == "image"
 
 /**
  * Overlays drawn on top of the keys (cursor control, rejected commit). A panel hides the keys under it, but an

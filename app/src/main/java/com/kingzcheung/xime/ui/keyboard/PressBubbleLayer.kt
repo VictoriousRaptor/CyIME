@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.animate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -22,6 +24,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.core.graphics.withSave
+import com.kingzcheung.xime.ui.theme.CyMotion
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -39,15 +44,37 @@ internal fun PressBubbleLayer(controller: SwipeBubbleController, background: Col
         root.overlay.add(layer)
         onDispose { root.overlay.remove(layer) }
     }
+    // 带着系统动画时长缩放的协程环境：松手淡出跟着系统「移除动画」走。
+    val scope = rememberCoroutineScope()
     DisposableEffect(controller, layer, rotation, density, referenceHeight, keyboardWidth, background, text, accent, typeface) {
+        var fadeJob: Job? = null
+        var generation = 0
         val draw: (SwipeState, Rect) -> Unit = { state, bounds ->
             val data = if (state.isPlainPress()) measureSwipeBubble(state, bounds, background, text,
                 accent, bounds.width, keyboardWidth, density, referenceHeight, keyLabelTypeface = typeface) else null
-            layer.show(data, rotation)
+            fadeJob?.cancel()
+            fadeJob = null
+            val current = ++generation
+            if (data == null && controller.clearedAfterRelease && layer.isShowing) {
+                // 松手停留结束后淡出（[CyMotion.EXIT_FAST]），不是一下没了；淡出中按下别的键直接换成新气泡。
+                fadeJob = scope.launch {
+                    try {
+                        animate(1f, 0f, animationSpec = CyMotion.exit(CyMotion.EXIT_FAST)) { value, _ -> layer.fade(value) }
+                    } finally {
+                        // 被新按键打断时新气泡已经画上，不能把它清掉。
+                        if (current == generation) layer.show(null, rotation)
+                    }
+                }
+            } else {
+                layer.show(data, rotation)
+            }
         }
         controller.onPreviewChanged = draw
         draw(controller.state, controller.keyBounds)
-        onDispose { controller.onPreviewChanged = null }
+        onDispose {
+            fadeJob?.cancel()
+            controller.onPreviewChanged = null
+        }
     }
     Spacer(Modifier.onGloballyPositioned { coordinates ->
         layer.anchorTo(coordinates.parentLayoutCoordinates ?: coordinates)
@@ -65,6 +92,9 @@ private class PressBubbleDrawable(private val host: View) : Drawable() {
     private var rotation = 0f
     private var preview: BubbleDrawData? = null
     private var drawing: BubbleDrawData? = null
+    private var fadeAlpha = 1f
+
+    val isShowing get() = preview != null
 
     fun anchorTo(coordinates: LayoutCoordinates) {
         anchor = coordinates
@@ -84,10 +114,18 @@ private class PressBubbleDrawable(private val host: View) : Drawable() {
     }
 
     fun show(data: BubbleDrawData?, angle: Float) {
-        if (preview == data && rotation == angle) return
+        if (preview == data && rotation == angle && fadeAlpha == 1f) return
         preview = data
         rotation = angle
+        fadeAlpha = 1f
         place()
+    }
+
+    /** 松手后的淡出：只改这一块的透明度重画，不动位置。 */
+    fun fade(alpha: Float) {
+        if (preview == null) return
+        fadeAlpha = alpha.coerceIn(0f, 1f)
+        invalidateSelf()
     }
 
     private fun place() {
@@ -118,7 +156,7 @@ private class PressBubbleDrawable(private val host: View) : Drawable() {
         val data = drawing ?: return
         canvas.withSave {
             canvas.concat(transform)
-            paintSwipeBubble(canvas, data)
+            paintSwipeBubble(canvas, if (fadeAlpha < 1f) data.copy(alpha = fadeAlpha) else data)
         }
     }
 

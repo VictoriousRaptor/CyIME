@@ -26,6 +26,7 @@ class GlideTracker(
     private val visited = LinkedHashSet<Char>()
     private val pointsX = ArrayList<Float>()
     private val pointsY = ArrayList<Float>()
+    private val pointsT = ArrayList<Long>()
 
     val startsOnLetter: Boolean = keyAt(x, y) != null
     var claimed = false
@@ -34,10 +35,12 @@ class GlideTracker(
     var abandoned = !startsOnLetter
         private set
 
-    init { add(x, y) }
+    init { add(x, y, downTime) }
 
     fun xs(): FloatArray = pointsX.toFloatArray()
     fun ys(): FloatArray = pointsY.toFloatArray()
+    /** 每个轨迹点的时刻（「贡献滑行轨迹」用，识别不看时间）。 */
+    fun ts(): LongArray = pointsT.toLongArray()
 
     /** 加入一个轨迹点；返回本次是否刚刚确认为滑行。 */
     fun move(x: Float, y: Float, time: Long, eventTime: Long = time): Boolean {
@@ -47,7 +50,7 @@ class GlideTracker(
             // 批量历史采样到达时，长按可能已经触发；不能用较早的采样时间反过来抢走它。
             if (eventTime - downTime > holdMs && !claimed) { abandoned = true; return false }
         }
-        add(x, y)
+        add(x, y, time)
         if (claimed) return false
         val spanX = (maxX - minX) / keyWidth
         val spanY = (maxY - minY) / keyHeight
@@ -57,8 +60,8 @@ class GlideTracker(
 
     fun abandon() { if (!claimed) abandoned = true }
 
-    private fun add(x: Float, y: Float) {
-        pointsX += x; pointsY += y
+    private fun add(x: Float, y: Float, time: Long) {
+        pointsX += x; pointsY += y; pointsT += time
         minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
         keyAt(x, y)?.let { visited += it }
     }

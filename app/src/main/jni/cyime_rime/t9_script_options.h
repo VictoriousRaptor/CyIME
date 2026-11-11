@@ -77,6 +77,9 @@ struct T9ScriptOptions {
   std::shared_ptr<const std::vector<std::pair<int32_t, int32_t>>> t9_ngram_typo_bigrams_;  // T9NgramModel::Pairs
   // 14-key: see T9PreferMergedTailWord (t9_sentence_rescore.h); 0 keeps the typed letters' sentence first.
   double t9_merged_tail_word_margin_ = 0;
+  // t9/rescore_rime_weight: how much Rime's own sentence weight counts next to the word model when the
+  // 26-key rescoring picks a sentence (0: the word model alone, as before).
+  double t9_rescore_rime_weight_ = 0;
   bool t9_ngram_merge_segmentations_ = false;
   string t9_left_context_;
   string t9_neighbors_;

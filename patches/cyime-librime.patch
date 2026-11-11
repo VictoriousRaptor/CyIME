@@ -2392,7 +2392,7 @@ index 99e45117..a0ccb38f 100644
 +  if (t9_sentence_rescore_ && (sentences_.size() > 1 || lone_correction)) {
 +    // cyime_rime/t9_sentence_rescore.cc
 +    const an<PhraseSyllabifier> phrase_syllabifier = syllabifier_;
-+    T9RescoreSentences(T9Query(phrase_syllabifier), t9_ngram_.get(), t9_ngram_sentence_start_, t9_rescore_keys_per_syllable_, poet_,
++    T9RescoreSentences(T9Query(phrase_syllabifier), t9_ngram_.get(), t9_ngram_sentence_start_, t9_rescore_keys_per_syllable_, t9_rescore_rime_weight_, poet_,
 +                       t9_sentence_graph_, max_sentences_, sentence_cutoff_threshold_, exact_sentence_, rime_best,
 +                       &sentences_);
 +  }
@@ -3057,3 +3057,10 @@ index 49a19479..a788c70d 100644
  };
  
  }  // namespace rime
+diff --git a/src/rime/service.h b/src/rime/service.h
+--- a/src/rime/service.h
++++ b/src/rime/service.h
+@@ -44,2 +44,3 @@ class Session {
+   Schema* schema() const;
++  Engine* engine() const { return engine_.get(); }
+   time_t last_active_time() const { return last_active_time_; }

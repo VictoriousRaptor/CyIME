@@ -74,13 +74,9 @@ private fun ChineseOutputSection() {
             HorizontalDivider()
         }
         SettingsToggleItem(Icons.TwoTone.Translate, "繁体输出",
-            "拼音、双拼和仓颉的候选与上屏使用繁体字。繁体模式下关闭中文联想。",
+            "拼音、双拼、仓颉和注音的候选与上屏使用繁体字。",
             checked = input.traditionalOutput, onCheckedChange = { input.copy(traditionalOutput = it).save(context) },
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TRADITIONAL)
-        HorizontalDivider()
-        SettingsToggleItem(Icons.TwoTone.Translate, "注音输出简体",
-            "用注音打 ㄍㄨㄛˊ，开启时显示「国」，关闭时显示「國」。",
-            checked = input.zhuyinSimplified, onCheckedChange = { input.copy(zhuyinSimplified = it).save(context) })
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.FontDownload, "生僻字",
             "全拼、双拼(26 键和 14 键)和九键打一个完整拼音(chan、gui；双拼打满两个键)时，在常用字后面补上约 1.8 万个生僻字(瀺、槻)。",
@@ -126,13 +122,13 @@ private fun EnglishInputSection() {
             checked = input.addressFieldsEnglish, onCheckedChange = { input.copy(addressFieldsEnglish = it).save(context) })
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.SpaceBar, "选词后自动加空格",
-            "英文(含西班牙语)点候选栏的词后自动补一个空格，接着打下一个词不用再按空格。紧接着按空格不会多出一个；" +
+            "英文(含西班牙语、英文单词方案)选词后自动补一个空格，接着打下一个词不用再按空格。紧接着按空格不会多出一个；" +
                 "打 , . ? ! : ; 时标点挪到空格前面；退格删掉这个空格。",
             checked = input.englishAutoSpace, onCheckedChange = { input.copy(englishAutoSpace = it).save(context) })
         AutoSpaceLegend("english-auto-space-legend", "点 world", "hello world", "|", input.englishAutoSpace)
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.SpaceBar, "标点后自动加空格",
-            "英文(含西班牙语)键盘在字母后面打 , . ? ! : ; 时自动跟一个空格(Hello, world)。紧接着按空格不会多出一个，" +
+            "英文(含西班牙语、英文单词方案)键盘在字母后面打 , . ? ! : ; 时自动跟一个空格(Hello, world)。紧接着按空格不会多出一个，" +
                 "连打 ... ?! 空格留在最后；3.14、1,000、10:30 和网址、邮箱、密码框不加；退格删掉这个空格。",
             checked = input.englishPunctuationSpace, onCheckedChange = { input.copy(englishPunctuationSpace = it).save(context) })
         AutoSpaceLegend("english-punctuation-space-legend", "打 ,", "Hello,", "|", input.englishPunctuationSpace)

@@ -75,7 +75,8 @@ class PluginMarketTest {
             PluginManager.getAllInstallPlugins().any { it.id == plugin.id } && SettingsPreferences.isPluginEnabled(app, plugin.id)
         }
         val info = PluginManager.getAllInstallPlugins().single { it.id == plugin.id }
-        assertEquals(TrustLevel.THIRD_PARTY, info.trustLevel)
+        // 自家市场装的是官方插件（11-09「怎么是第三方」）。
+        assertEquals(TrustLevel.TRUSTED, info.trustLevel)
         // 市场第一次装工具类插件直接启用（11-02 AI 插件找得到）；授权的网址仍要用户自己点。
         assertTrue(SettingsPreferences.isPluginEnabled(app, plugin.id))
         assertTrue(SettingsPreferences.getPluginAuthorizedHosts(app, plugin.id).isEmpty())

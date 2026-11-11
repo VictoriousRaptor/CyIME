@@ -47,10 +47,18 @@ class LanguageMenuColorsTest {
         assertTrue(dark.surface.alpha < 1f)
     }
 
-    @Test fun `menu keeps the theme surface instead of falling back to a white material surface`() {
+    @Test fun `menu keeps the theme surface instead of falling back to the material surface`() {
         val p = palettes[3]
-        val colors = languageMenuColors(p, Color.White, Color.Black, Color.Blue, FrostedGlassConfig(false), false)
-        assertTrue(colors.surface != Color.White)
+        val material = Color(0xFF6750A4)
+        val colors = languageMenuColors(p, material, Color.Black, Color.Blue, FrostedGlassConfig(false), false)
+        assertTrue(colors.surface != material)
         assertTrue(textContrast(colors.text, colors.surface) >= 4.5f)
+    }
+
+    @Test fun `without glass the menu is the letter key colour like the menu panel tiles`() {
+        for (p in palettes) {
+            val colors = languageMenuColors(p, Color.White, Color.Black, Color.Blue, FrostedGlassConfig(false), false)
+            assertEquals(p.key.copy(alpha = 1f), colors.surface)
+        }
     }
 }

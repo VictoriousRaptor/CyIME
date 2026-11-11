@@ -24,7 +24,7 @@ internal fun KeyboardPanelSettingsContent(panel: KeyboardPanelLaunch.Panel, onBa
         if (panel == KeyboardPanelLaunch.Panel.RESIZE) {
             val context = LocalContext.current
             SettingsToggleItem(Icons.TwoTone.Lock, "锁定悬浮键盘位置和大小",
-                "调整尺寸时点旋转按钮旁的锁也能锁定。锁定后不能移动、缩放，底部显示小锁，长按 0.5 秒解锁。",
+                "长按底部短横条 1 秒锁定，边框会走一圈进度。锁定后不能移动、缩放，底部显示小锁，长按 0.5 秒解锁。",
                 checked = rememberFloatingGeometryLocked(),
                 onCheckedChange = { SettingsPreferences.setFloatingGeometryLocked(context, it) })
         }

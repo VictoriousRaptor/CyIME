@@ -19,9 +19,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import com.kingzcheung.xime.keyboard.GestureAction
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -58,7 +60,18 @@ fun JapaneseKanaKeyboardLayout(
     hasKanaInput: Boolean = false,
     isFloatingMode: Boolean = false,
     numberMode: Boolean = false,
+    /** 回车键动作名（换行、发送、搜索等），与其他键盘同一来源；以前这里写死「回车」。 */
+    enterKeyText: String = "回车",
+    /** 有它时 !@# 按住当 Ctrl：另一根手指点回车、或从 !@# 拖到回车上松手是 Ctrl+回车（发送），同 26 键和九键。 */
+    onGestureAction: ((GestureAction, String) -> Unit)? = null,
+    accentColor: Color = Color.Unspecified,
 ) {
+    // 用户 11-09：日语十二键的回车和别的键盘不一样，什么手势都没有。照九键接上同一套 Ctrl 目标。
+    val ctrlTargets = remember { ShiftSlideTargets() }
+    val onCtrlShortcut: ((Char) -> Unit)? = onGestureAction?.let { action ->
+        { letter: Char -> action(GestureAction.COMMAND, com.kingzcheung.xime.keyboard.CtrlShortcuts.command(letter)) }
+    }
+    val dragSpace = LocalKeyDragSpace.current
     val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
     KeyboardKeySpacingScope(modifier, columns = 5f, verticalInset = bottomPaddingDp.dp, gridBottomMargin = 0.dp,
         policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
@@ -67,7 +80,9 @@ fun JapaneseKanaKeyboardLayout(
         LocalKeyCornerRadius provides keyCornerRadius,
         LocalKeyVisualPadding provides PaddingValues(horizontal = (keySpacingX ?: 2.dp), vertical = (keySpacingY ?: 2.dp)),
     ) {
-        Row(bodyModifier.fillMaxSize()
+        Box(bodyModifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize()
+            .onGloballyPositioned { ctrlTargets.keyboardBounds = dragSpace.bounds(it) }
             .background(if (LocalKeyboardInputPreferences.current.frostedGlass.enabled) Color.Transparent else keyboardBackgroundColor)
             .padding(bottom = bottomPaddingDp.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -101,12 +116,20 @@ fun JapaneseKanaKeyboardLayout(
                             onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
                             textColor = specialKeyTextColor, modifier = Modifier.weight(2f),
                             onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
-                            shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+                            shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                            ctrlTargets = ctrlTargets, onCtrlShortcut = onCtrlShortcut)
                     } else {
                         // Keep the language key beside the number key when it moves to the left.
                         for (numeric in if (languageOnLeft) listOf(false, true) else listOf(true, false)) {
                             if (numeric) KeyButton(if (numberMode) "あいう" else "123", { onKeyPress(if (numberMode) "abc" else "mode_change_number") }, specialKeyBackgroundColor, specialKeyTextColor,
                                 Modifier.weight(1f).testTag("kana-number"), onPress = { onKeyPressDown?.invoke("number") }, fontSize = 16.sp, shadowEnabled = shadowEnabled)
+                            else if (onCtrlShortcut != null) CtrlSymbolKeyButton(text = "!@#", targets = ctrlTargets,
+                                holdMillis = LocalKeyboardInputPreferences.current.symbolKeyHoldMs,
+                                onOpenSymbols = { onKeyPress("symbol") }, onShortcut = onCtrlShortcut,
+                                onPressDown = { onKeyPressDown?.invoke("symbol") },
+                                backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
+                                modifier = Modifier.weight(1f).testTag("kana-symbol"),
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
                             else KeyButton("!@#", { onKeyPress("symbol") }, specialKeyBackgroundColor, specialKeyTextColor,
                                 Modifier.weight(1f).testTag("kana-symbol"), fontSize = 16.sp, onPress = { onKeyPressDown?.invoke("symbol") }, shadowEnabled = shadowEnabled)
                         }
@@ -174,10 +197,22 @@ fun JapaneseKanaKeyboardLayout(
                 SpaceKeyButton(onClick = { onKeyPress("space") }, backgroundColor = keyBackgroundColor,
                     textColor = keyTextColor, schemaName = "日本語", modifier = Modifier.weight(1f).testTag("kana-space"), onPress = { onKeyPressDown?.invoke("space") },
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
-                ActionKeyButton(text = "回车", onClick = { onKeyPress("enter") }, backgroundColor = specialKeyBackgroundColor,
-                    textColor = specialKeyTextColor, modifier = Modifier.weight(1f).testTag("kana-enter"), onPress = { onKeyPressDown?.invoke("enter") },
+                // 回车登记成 Ctrl 目标（同九键）：位置一定下来就登记，目标换了一份时重组再登记一次。
+                val enterTargetId = remember { Any() }
+                var enterBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+                DisposableEffect(ctrlTargets) { onDispose { ctrlTargets.remove(enterTargetId) } }
+                SideEffect { if (enterBounds != androidx.compose.ui.geometry.Rect.Zero) ctrlTargets.putEnter(enterTargetId, enterBounds) }
+                ActionKeyButton(text = enterKeyText, onClick = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") },
+                    backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
+                    modifier = Modifier.weight(1f).testTag("kana-enter").onGloballyPositioned {
+                        enterBounds = dragSpace.bounds(it)
+                        ctrlTargets.putEnter(enterTargetId, enterBounds)
+                    }, onPress = { onKeyPressDown?.invoke("enter") },
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
             }
+        }
+        if (onCtrlShortcut != null) ShiftSlideLine(ctrlTargets, { ctrlTargets.keyboardBounds.topLeft },
+            accentColor, Modifier.matchParentSize())
         }
     }
     }

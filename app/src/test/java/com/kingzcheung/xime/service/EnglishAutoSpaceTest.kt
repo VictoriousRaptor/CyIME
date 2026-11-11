@@ -14,9 +14,10 @@ class EnglishAutoSpaceTest {
 
     @Test fun originalWordOnlyAddsTheSpace() {
         val state = CandidateState(pendingEnglishText = "hel", associationCandidates = listOf("hello"))
-        val committed = mutableListOf<String>()
-        assertTrue(commitAssociationSelection(state, 0, { committed += it; true }, { _, _ -> error("already typed") }, suffix = " "))
-        assertEquals(listOf(" "), committed)
+        // 11-09 起原词在输入框里时只把光标处的原词换成带空格的（不再另外上屏一个空格）。
+        var replaced: Pair<String, String>? = null
+        assertTrue(commitAssociationSelection(state, 0, { error("only the suffix is new") }, { old, new -> replaced = old to new; true }, suffix = " "))
+        assertEquals("hel" to "hel ", replaced)
         assertEquals("hel", associationWordAt(state, 0))
     }
 

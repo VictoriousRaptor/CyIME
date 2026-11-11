@@ -72,6 +72,39 @@ class LanguageSwitchPreferencesTest {
         assertEquals(es, LanguageSwitchPreferences.target(en, zh, options, listOf(zh, en, es), available))
     }
 
+    @Test fun specificPairSwitchesBetweenTwoLanguagesWithoutEnglish() {
+        val ita = InputLanguage.ITALIAN
+        val options = LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_PAIR, zh, ita)
+        val available = setOf(zh, en, ita)
+        val order = listOf(zh, en, ita)
+        assertEquals(ita, LanguageSwitchPreferences.target(zh, zh, options, order, available))
+        assertEquals(zh, LanguageSwitchPreferences.target(ita, ita, options, order, available))
+        // 在英文里按语言键：回到第一种语言。
+        assertEquals(zh, LanguageSwitchPreferences.target(en, zh, options, order, available))
+    }
+
+    @Test fun specificPairFallsBackToEnglishWhenThePartnerIsMissing() {
+        val ita = InputLanguage.ITALIAN
+        // 没选另一种、另一种没开、或和第一种相同：照「指定语言与英文切换」。
+        for (partner in listOf(null, ita, zh)) {
+            val options = LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_PAIR, zh, partner)
+            assertEquals("$partner", en, LanguageSwitchPreferences.target(zh, zh, options, listOf(zh, en), setOf(zh, en)))
+            assertEquals("$partner", zh, LanguageSwitchPreferences.target(en, zh, options, listOf(zh, en), setOf(zh, en)))
+        }
+        assertNull(LanguageSwitchPreferences.target(en, zh, LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_PAIR, zh, ita),
+            listOf(en), setOf(en)))
+    }
+
+    @Test fun pairChoiceKeepsTheOldStoredModes() {
+        val ita = InputLanguage.ITALIAN
+        // 「当前语言 ↔ 英文」就是原来的默认，存的值不变。
+        assertEquals(LanguageSwitchOptions(), LanguageSwitchPreferences.pair(null, en))
+        assertEquals(LanguageSwitchOptions(), LanguageSwitchPreferences.pair(null, ita))
+        assertEquals(LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_ENGLISH, ja), LanguageSwitchPreferences.pair(ja, en))
+        assertEquals(LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_ENGLISH, ja), LanguageSwitchPreferences.pair(ja, ja))
+        assertEquals(LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_PAIR, zh, ita), LanguageSwitchPreferences.pair(zh, ita))
+    }
+
     @Test fun switchingLanguageDoesNotOverrideSelectedSchemeOrLayout() {
         val entries = listOf("rime_ice", "t9_pinyin", "japanese", "japanese_kana").map { SchemaInfo(it, it, "", "", "") }
         val options = LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_ENGLISH, ja)

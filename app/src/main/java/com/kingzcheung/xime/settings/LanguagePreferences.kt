@@ -6,6 +6,8 @@ import kotlinx.coroutines.launch
 object LanguagePreferences {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     const val KEY = "enabled_input_languages"
+    /** 开关语言后的后台准备做完时改一次：键盘据此重读方案列表，语言键马上带上刚编译好的语言。 */
+    const val SCHEMAS_READY_KEY = "language_schemas_ready_at"
     fun enabled(context: Context): Set<InputLanguage> {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         val stored = prefs.getStringSet(KEY, null)
@@ -64,6 +66,8 @@ object LanguagePreferences {
         }
         // 补全词表是商店里的下载包：开启时就在后台下载，打字前多半已经下好。
         if (enabled) LetterLanguage.of(language)?.let { com.kingzcheung.xime.association.WordCompletion.download(context, it) }
+        // 日语是插件：在这里打开日语也装上「日语」插件（随包带着），轻量版缺的词库和引擎开始下载。
+        if (enabled && language == InputLanguage.JAPANESE) JapanesePlugin.onLanguageEnabled(context)
         // The English entry is virtual. Keep a real Rime schema as the engine fallback.
         val current = SettingsPreferences.getCurrentSchema(context)
         if (current == InputModes.ENGLISH || InputLanguage.forSchema(current) !in next) {
@@ -75,6 +79,11 @@ object LanguagePreferences {
         val schemasChanged = SchemaManager.getEnabledSchemas(context) != schemasBefore
         if (schemasChanged) SettingsPreferences.setDeploymentDone(context, false)
         SettingsPreferences.getPrefsPublic(context).edit().putStringSet(KEY, next.map { it.id }.toSet()).commit()
-        if (schemasChanged) scope.launch { com.kingzcheung.xime.rime.RimeConfigHelper.prepareAutomatically(context.applicationContext) }
+        if (schemasChanged) scope.launch {
+            com.kingzcheung.xime.rime.RimeConfigHelper.prepareAutomatically(context.applicationContext)
+            // 键盘自己的那次刷新可能早于编译完成，读到的方案列表里还没有新语言：开了意大利语、准备完了，
+            // 语言键还是只有中英，要关掉再开才出现（11-09）。准备完再通知键盘重读一次。
+            SettingsPreferences.getPrefsPublic(context).edit().putLong(SCHEMAS_READY_KEY, System.currentTimeMillis()).apply()
+        }
     }
 }

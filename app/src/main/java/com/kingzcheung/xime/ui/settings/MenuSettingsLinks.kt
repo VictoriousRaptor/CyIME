@@ -2,7 +2,6 @@ package com.kingzcheung.xime.ui.settings
 
 import com.kingzcheung.xime.keyboard.ToolbarButton
 import com.kingzcheung.xime.keyboard.ToolbarButtonItem
-import com.kingzcheung.xime.settings.InputScheme
 
 /**
  * 键盘菜单长按打开的设置项，写设置搜索索引里的标题：跳转、定位和高亮与搜索点开同一条路。
@@ -31,11 +30,8 @@ internal val MenuSettingsTitles: Map<ToolbarButton, String> = mapOf(
 )
 
 /** [item] 长按要去的设置；插件按钮去这个插件的那一页（[pluginPageRoute]）。没有对应设置时为 null。 */
-internal fun menuSettingsEntry(item: ToolbarButtonItem, scheme: InputScheme? = null): SettingsSearchEntry? = when (item) {
-    is ToolbarButtonItem.Builtin -> {
-        val title = if (item.button == ToolbarButton.TRADITIONAL && scheme == InputScheme.ZHUYIN)
-            "注音输出简体" else MenuSettingsTitles[item.button]
-        title?.let { label -> SettingsSearchIndex.firstOrNull { it.title == label } }
-    }
+internal fun menuSettingsEntry(item: ToolbarButtonItem): SettingsSearchEntry? = when (item) {
+    is ToolbarButtonItem.Builtin ->
+        MenuSettingsTitles[item.button]?.let { label -> SettingsSearchIndex.firstOrNull { it.title == label } }
     is ToolbarButtonItem.Plugin -> SettingsSearchEntry(item.label, "", pluginPageRoute(item.pluginId), anchor = null)
 }

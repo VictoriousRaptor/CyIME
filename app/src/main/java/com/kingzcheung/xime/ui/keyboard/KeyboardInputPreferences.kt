@@ -122,7 +122,8 @@ data class KeyboardInputPreferences(
     /** 空格左侧逗号键、右侧句号键。 */
     val qwertyCommaKey: Boolean = true,
     val qwertyPeriodKey: Boolean = true,
-    val bottomPunctuationSwipeUp: Boolean = false,
+    /** 空格两侧标点键、数字键盘点键的角标固定上滑/长按（11-09 起默认开：键在屏幕底边，往下滑不出去）。 */
+    val bottomPunctuationSwipeUp: Boolean = true,
     val handwritingWubiHints: Boolean = false,
     val englishSentenceCaps: Boolean = false,
     /** 逗号键分词（默认关）：空格旁的标点键左下角放 '，打拼音时它和字母键角标里的 ' 都是分词，见 [syllableSplitActive]。 */
@@ -156,9 +157,11 @@ data class KeyboardInputPreferences(
     val mixedInput: Boolean = false,
     /** 中文全拼 26 键、双拼和九键补出生僻字（瀺 chan、槻 gui），默认关；见 app/data/cyime_rare_chars.lua。 */
     val rareCharacters: Boolean = false,
-    /** 中文候选和上屏用台湾正体（台灣、計畫），默认关；Rime 选项 traditionalization，转换表见 assets/rime_chinese/opencc。 */
+    /**
+     * 中文候选和上屏用台湾正体（台灣、計畫），默认关；Rime 选项 traditionalization，转换表见 assets/rime_chinese/opencc。
+     * 注音也跟这一个开关（11-09 合并了原来单独的「注音输出简体」）：关时注音方案开 zhuyin_simplified 转简体。
+     */
     val traditionalOutput: Boolean = false,
-    val zhuyinSimplified: Boolean = false,
     /** 打出“时间、日期、星期”时紧跟着给当前时间和日期（15:35、2026-10-31），默认关（更新不改原有习惯，要用在 语言与方案 › 中文输出 打开）；Rime 滤镜 cyime_datetime（librime-t9 datetime_filter.h）。 */
     val datetimeCandidates: Boolean = false,
     /** 英文选词后自动加空格（别人请求，默认关）；见 service/EnglishAutoSpace.kt。 */
@@ -216,7 +219,7 @@ data class KeyboardInputPreferences(
     val chineseGlideTyping: Boolean = false,
     /** Delete the last syllable of an uncommitted Chinese glide as one unit. */
     val deleteChineseGlideCharacter: Boolean = false,
-    /** 滑行时在手指上方实时显示现在抬手会出的词；滑动中反复识别，多占 CPU，默认关（别的用户 11-02 提的，同 Gboard）。 */
+    /** 滑行时在输入框实时显示识别结果；滑动中反复识别，多占 CPU，默认关。 */
     val glidePreview: Boolean = false,
     /** 长按弹出字母气泡（26/14 键大小写和带音调字母、九键本键字母）；默认关，免得打断上下拖动输入角标。 */
     val letterLongPressMenu: Boolean = false,
@@ -278,7 +281,8 @@ data class KeyboardInputPreferences(
         const val RARE_CHARACTERS_KEY = "rare_characters"
         /** 繁体输出开关；同中英混输，输入法按键前读它（ImeKeyRouter）。 */
         const val TRADITIONAL_OUTPUT_KEY = "traditional_output"
-        const val ZHUYIN_SIMPLIFIED_KEY = "zhuyin_simplified"
+        /** 旧的「注音输出简体」，已并入 [TRADITIONAL_OUTPUT_KEY]；不再读，[save] 顺手删掉。 */
+        const val LEGACY_ZHUYIN_SIMPLIFIED_KEY = "zhuyin_simplified"
         /** 打字中清空整个输入框；输入法在清空时读它（ImeKeyRouter）。 */
         const val CLEAR_ALL_WHILE_COMPOSING_KEY = "clear_all_while_composing"
         /** 只清空光标前的内容；输入法在清空时读它（ImeKeyRouter）。 */
@@ -346,10 +350,10 @@ data class KeyboardInputPreferences(
                 CURSOR_MAGNIFIER_ENABLED_KEY, CURSOR_MAGNIFIER_WIDTH_KEY,
                 com.kingzcheung.xime.settings.LetterSwipeBindings.CHINESE, com.kingzcheung.xime.settings.LetterSwipeBindings.ENGLISH,
                 SettingsPreferences.KEY_SPLIT_KEYBOARD, SettingsPreferences.KEY_SPLIT_RIGHT_G, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK, SettingsPreferences.KEY_WIDE_KEYS, SettingsPreferences.KEY_EVEN_MERGED_KEYS, SettingsPreferences.KEY_NUMBER_ROW, SettingsPreferences.KEY_SPLIT_GAP_PORTRAIT, SettingsPreferences.KEY_SPLIT_GAP_LANDSCAPE, CHINESE_GLIDE_KEY, DELETE_CHINESE_GLIDE_CHARACTER_KEY, GLIDE_PREVIEW_KEY, ENGLISH_AUTO_SPACE_KEY, ENGLISH_PUNCTUATION_SPACE_KEY, EMAIL_SUFFIXES_KEY, ADDRESS_FIELDS_ENGLISH_KEY, SYMBOL_NAMES_KEY, GREEK_LETTERS_KEY, CYLM_LONG_ALTERNATIVE_KEY,
-                "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, ZHUYIN_SIMPLIFIED_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
+                "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
                 "fourteen_letter_swipe", "fourteen_letter_swipe_dp", "reverse_symbol_swipe", CLEAR_ALL_WHILE_COMPOSING_KEY, CLEAR_BEFORE_CURSOR_ONLY_KEY, SWIPE_DISTANCE_DELETE_KEY, com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.KEY, REVERSE_DELETE_SWIPE_KEY, CLEAR_SWIPE_PERCENT_KEY, JAPANESE_LONG_VOWEL_KEY, "syllable_split_key", "shift_syllable_split", "kana_direction_hints", "flick_direction_disc", "flick_direction_disc_v2",
                 "glide_typing", "glide_typing_v2", "letter_long_press_menu", "t9_flick_letters", "t9_glide_typing", "language_key_hold_seconds", "language_key_hold_seconds_v2", LANGUAGE_KEY_IME_PICKER_KEY, "symbol_key_hold_seconds", "t9_candidate_drag_percent",
-                SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, "qwerty_stagger_mode", "qwerty_stagger_custom", "qwerty_comma_key", "qwerty_period_key", "qwerty_period_key_v2", "bottom_punctuation_swipe_up_v2", com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS,
+                SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, "qwerty_stagger_mode", "qwerty_stagger_custom", "qwerty_comma_key", "qwerty_period_key", "qwerty_period_key_v2", "bottom_punctuation_swipe_up_v3", com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS,
                 DOUBLE_PINYIN_KEY_HINTS_KEY, DOUBLE_PINYIN_KEY_HINTS_WITH_CORNERS_KEY, DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY,
                 SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED, SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
                 *SideSymbolTarget.entries.map { it.prefKey }.toTypedArray(),
@@ -395,7 +399,8 @@ data class KeyboardInputPreferences(
                 qwertyStagger = QwertyStaggerMode.entries.firstOrNull { it.name == prefs.getString("qwerty_stagger_mode", null) }
                     ?: QwertyStaggerMode.AUTO,
                 qwertyStaggerCustom = prefs.getFloat("qwerty_stagger_custom", 0.5f).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f,
-                bottomPunctuationSwipeUp = prefs.getBoolean("bottom_punctuation_swipe_up_v2", false),
+                // 11-09 起默认开。旧键 v2 会被 save() 连同其他设置写成旧默认 false，分不出是不是用户自己关的，只认新键。
+                bottomPunctuationSwipeUp = prefs.getBoolean("bottom_punctuation_swipe_up_v3", true),
                 handwritingWubiHints = prefs.getBoolean(SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, false),
                 englishSentenceCaps = prefs.getBoolean(com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS, false),
                 qwertyCommaKey = prefs.getBoolean("qwerty_comma_key", true),
@@ -436,7 +441,6 @@ data class KeyboardInputPreferences(
                 mixedInput = prefs.getBoolean(MIXED_INPUT_KEY, false),
                 rareCharacters = prefs.getBoolean(RARE_CHARACTERS_KEY, false),
                 traditionalOutput = prefs.getBoolean(TRADITIONAL_OUTPUT_KEY, false),
-                zhuyinSimplified = prefs.getBoolean(ZHUYIN_SIMPLIFIED_KEY, false),
                 datetimeCandidates = prefs.getBoolean(DATETIME_CANDIDATES_KEY, false),
                 englishAutoSpace = prefs.getBoolean(ENGLISH_AUTO_SPACE_KEY, false),
                 englishPunctuationSpace = prefs.getBoolean(ENGLISH_PUNCTUATION_SPACE_KEY, false),
@@ -509,7 +513,7 @@ data class KeyboardInputPreferences(
             .putBoolean(MIXED_INPUT_KEY, mixedInput)
             .putBoolean(RARE_CHARACTERS_KEY, rareCharacters)
             .putBoolean(TRADITIONAL_OUTPUT_KEY, traditionalOutput)
-            .putBoolean(ZHUYIN_SIMPLIFIED_KEY, zhuyinSimplified)
+            .remove(LEGACY_ZHUYIN_SIMPLIFIED_KEY)
             .putBoolean(DATETIME_CANDIDATES_KEY, datetimeCandidates)
             .putBoolean(ENGLISH_AUTO_SPACE_KEY, englishAutoSpace)
             .putBoolean(ENGLISH_PUNCTUATION_SPACE_KEY, englishPunctuationSpace)
@@ -559,7 +563,7 @@ data class KeyboardInputPreferences(
             .putString("fixed_symbols", fixedSymbols)
             .putString("qwerty_stagger_mode", qwertyStagger.name)
             .putFloat("qwerty_stagger_custom", qwertyStaggerCustom.coerceIn(0f, 1f))
-            .putBoolean("bottom_punctuation_swipe_up_v2", bottomPunctuationSwipeUp)
+            .putBoolean("bottom_punctuation_swipe_up_v3", bottomPunctuationSwipeUp)
             .putBoolean(com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS, englishSentenceCaps)
             .putBoolean("qwerty_comma_key", qwertyCommaKey)
             .putBoolean("qwerty_period_key_v2", qwertyPeriodKey)

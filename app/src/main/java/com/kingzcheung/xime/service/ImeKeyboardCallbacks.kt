@@ -66,6 +66,11 @@ internal fun rememberImeKeyboardCallbacks(
             onGlideWord = service.keyRouter::commitGlideWord,
             onGlideCode = service.keyRouter::typeGlideCode,
             glidePreviewer = service.keyRouter::glidePreviewer,
+            onGlideEnglishPreview = service::showGlideEnglishPreview,
+            onGlidePreviewCode = service::showGlidePreviewCode,
+            onGlidePreviewEnd = service::endGlidePreview,
+            onGlidePreviewHold = service::holdGlidePreview,
+            onGlidePreviewFinish = service::finishGlidePreview,
             inputAdmissionTicket = {
                 (if (service.keyRouter.hasPendingCandidateCommit) null else service.inputReadiness.ticket())
                     ?: null.also { service.noteInputDropped("t9_no_ticket") }
@@ -250,7 +255,7 @@ internal fun rememberImeKeyboardCallbacks(
                 val config = service.resources.configuration
                 val s = service.uiState.value
                 if (s.isFloatingMode && SettingsPreferences.floatingGeometryLocked(service)) {
-                    android.widget.Toast.makeText(service, "长按底部短横条 1 秒解锁，即可调整尺寸", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(service, "长按底部小锁 0.5 秒解锁，即可调整尺寸", android.widget.Toast.LENGTH_SHORT).show()
                     return@resize
                 }
                 val currentSize = service.currentResolvedKeyboardSize ?: service.resolveKeyboardSize(
@@ -373,6 +378,8 @@ internal fun rememberImeKeyboardCallbacks(
             },
             candidatePinState = { text -> service.rimeEngine.candidatePinState(text) },
             onCandidatePin = { text, pinned -> service.keyRouter.pinCandidate(text, pinned) },
+            sentenceWords = { text -> service.rimeEngine.firstSentenceWords(text) },
+            onReselectSentenceWord = { words, target -> service.keyRouter.reselectSentenceWord(words, target) },
             onRequestExpandedCandidates = {
                 // Expanded candidates have global indices; leave the collapsed page's focus behind.
                 service.candidateState.value = service.candidateState.value.copy(candidateFocus = null)

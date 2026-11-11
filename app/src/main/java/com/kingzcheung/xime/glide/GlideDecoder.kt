@@ -32,7 +32,14 @@ data class GlideCandidate(val word: String, val cost: Float, val shape: Float = 
  * [maxEndpoint]：起点、终点离词的首末键中心最远多少（单位：键宽）；九键的键大、键少，收紧到不含上下相邻键，
  * 否则每次要比对的词多好几倍。
  */
-class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, private val maxEndpoint: Float = MAX_ENDPOINT) {
+class GlideDecoder(
+    private val keyboard: GlideKeyboard,
+    words: List<String>,
+    private val maxEndpoint: Float = MAX_ENDPOINT,
+    /** 中文：另按音节逐键认一遍（[SyllableGlide]），词表里没有的连划（如「印度一」）也能出整串编码。 */
+    syllables: List<String>? = null,
+) {
+    private val syllableGlide = syllables?.let { SyllableGlide(keyboard, it) }
     /** [shape] 是合并相邻重复字母后的写法，形状相同的词只比一次。 */
     private class Template(val word: String, val shape: String, val prior: Float, val xs: FloatArray, val ys: FloatArray)
 
@@ -41,6 +48,7 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
 
     private val templates: List<Template>
     /** 各词首末键中心另存成连续数组：每一笔都要扫一遍全部词，绝大多数词在这一步就筛掉，不必去碰各词的模板。 */
+    private val known: Set<String>
     private val startX: FloatArray
     private val startY: FloatArray
     private val endX: FloatArray
@@ -58,6 +66,7 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
             val (xs, ys) = resample(px, py)
             Template(word, code, ln(rank + 2.0).toFloat() / logMax, xs, ys)
         }
+        known = templates.mapTo(HashSet()) { it.word }
         startX = FloatArray(templates.size) { templates[it].xs[0] }
         startY = FloatArray(templates.size) { templates[it].ys[0] }
         endX = FloatArray(templates.size) { templates[it].xs[SAMPLES - 1] }
@@ -114,6 +123,24 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
             results += GlideCandidate(template.word, cost, geometry)
             if (kept.size < limit) kept += cost else if (cost < kept.peek()) { kept.poll(); kept += cost }
         }
+        // 按音节认出的编码不在词表里时，与词表结果用同一把尺子（形状 + 起止点）比，词频按比词表最后一名还差算。
+        // 直线路过的键加不加，形状几乎一样，按音节识别自己的名次（[SYLLABLE_RANK_COST]）分先后。
+        syllableGlide?.decode(xs, ys)?.forEachIndexed { rank, code ->
+            if (code in known || code.length > MAX_WORD) return@forEachIndexed
+            val shape = collapseRepeats(code)
+            // 末尾多按几下同一个键（naer / naerrr）划出来一模一样，只留名次靠前的那串。
+            if (results.any { collapseRepeats(it.word) == shape }) return@forEachIndexed
+            val px = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).first / unit }
+            val py = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).second / unit }
+            val (tx, ty) = resample(px, py)
+            val start = hypot(sx[0] - tx[0], sy[0] - ty[0])
+            val end = hypot(sx[last] - tx[last], sy[last] - ty[last])
+            if (start > maxEndpoint || end > maxEndpoint) return@forEachIndexed
+            val dtw = shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
+            if (dtw > MAX_SHAPE) return@forEachIndexed
+            val geometry = dtw + (start + end) / 2f * ENDPOINT_WEIGHT
+            results += GlideCandidate(code, geometry + UNLISTED_PRIOR * PRIOR_WEIGHT + rank * SYLLABLE_RANK_COST, geometry)
+        }
         return results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(limit)
     }
 
@@ -128,6 +155,9 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
         private const val BOUND_SLACK = 1e-4f
         /** 常用词与罕见词之间最多差这么多形状代价（单位：键宽）。 */
         const val PRIOR_WEIGHT = 0.2f
+        /** 词表外、按音节认出的编码的词频先验（词表内 0～1）。 */
+        const val UNLISTED_PRIOR = 1.5f
+        const val SYLLABLE_RANK_COST = 0.05f
 
         internal fun collapseRepeats(word: String): String = buildString {
             for (char in word) if (isEmpty() || last() != char) append(char)
@@ -140,9 +170,12 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
         }
 
         /** 按弧长等距取样；停顿不增加样本。单点（单字母词）重复同一点。 */
-        internal fun resample(xs: FloatArray, ys: FloatArray): Pair<FloatArray, FloatArray> {
-            val outX = FloatArray(SAMPLES)
-            val outY = FloatArray(SAMPLES)
+        internal fun resample(xs: FloatArray, ys: FloatArray): Pair<FloatArray, FloatArray> = resampleTo(xs, ys, SAMPLES)
+
+        /** 按弧长等距取 [count] 点。 */
+        internal fun resampleTo(xs: FloatArray, ys: FloatArray, count: Int): Pair<FloatArray, FloatArray> {
+            val outX = FloatArray(count)
+            val outY = FloatArray(count)
             val cumulative = FloatArray(xs.size)
             for (i in 1 until xs.size) cumulative[i] = cumulative[i - 1] + hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
             val total = cumulative.last()
@@ -151,8 +184,8 @@ class GlideDecoder(private val keyboard: GlideKeyboard, words: List<String>, pri
                 return outX to outY
             }
             var segment = 1
-            for (sample in 0 until SAMPLES) {
-                val target = total * sample / (SAMPLES - 1)
+            for (sample in 0 until count) {
+                val target = total * sample / (count - 1)
                 while (segment < xs.lastIndex && cumulative[segment] < target) segment++
                 val length = cumulative[segment] - cumulative[segment - 1]
                 val fraction = if (length <= 0f) 0f else ((target - cumulative[segment - 1]) / length).coerceIn(0f, 1f)

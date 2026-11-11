@@ -64,7 +64,15 @@ class FeedbackManagerTest {
         }
         org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_C, 0, true, false, false))
         org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_TAB, 0, false, true, false))
-        org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_DEL, 3, false, false, false))
+        org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_A, 3, false, false, false))
+        org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_SPACE, 3, false, false, false))
+        org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_ENTER, 3, false, false, false))
+    }
+
+    @Test fun `held physical delete sounds on every repeat like the soft delete key`() {
+        org.junit.Assert.assertEquals("delete", HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_DEL, 3, false, false, false))
+        org.junit.Assert.assertEquals("delete", HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_FORWARD_DEL, 1, false, false, false))
+        org.junit.Assert.assertNull(HardwareKeySound.soundFor(android.view.KeyEvent.KEYCODE_DEL, 3, true, false, false))
     }
 
     @Test fun `both keyboards default to Rain75 and an explicit screen sound stays selected`() {

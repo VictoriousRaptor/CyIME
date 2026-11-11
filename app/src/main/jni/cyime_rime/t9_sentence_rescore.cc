@@ -15,7 +15,7 @@
 namespace rime {
 
 void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool ngram_sentence_start,
-                        size_t keys_per_syllable, Poet* poet,
+                        size_t keys_per_syllable, double rime_weight, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences) {
@@ -151,7 +151,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     }
     double chosen_score = -std::numeric_limits<double>::infinity();
     for (const auto& sentence : pool) {
-      const double value = score(*sentence);
+      const double value = score(*sentence) + rime_weight * sentence->weight();
       if (value > chosen_score) { chosen_score = value; chosen = sentence; }
     }
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
@@ -161,7 +161,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       double fixed_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence)) continue;
-        const double value = score(*sentence);
+        const double value = score(*sentence) + rime_weight * sentence->weight();
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
       if (fixed) {

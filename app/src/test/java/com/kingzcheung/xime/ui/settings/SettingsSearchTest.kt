@@ -68,6 +68,19 @@ class SettingsSearchTest {
         assertTrue("没登记自动展开：${folded - TIMING_SEARCH_KEYS}", TIMING_SEARCH_KEYS.containsAll(folded))
     }
 
+    /** 滑行（英文、中文、九键和两个选项）11-09 合到「键盘布局 › 滑行输入」一页，搜「滑行输入」先出这一页，各项都在同一页。 */
+    @Test fun glideSettingsLiveOnOnePage() {
+        val found = searchSettings("滑行输入")
+        assertEquals("滑行输入", found.first().title)
+        assertEquals(LayoutInputCategory.Glide.route, found.first().target)
+        for (title in listOf("英文滑行", "中文滑行", "九键滑行", "滑行时实时显示词", "逐字删除中文滑行")) {
+            val entry = found.single { it.title == title }
+            assertEquals(title, LayoutInputCategory.Glide.route, entry.target)
+            assertEquals(title, "输入 › 键盘布局 › 滑行输入", entry.path)
+        }
+        assertTrue("九键滑行" in titles("九宫格 滑行"))
+    }
+
     /** 新设置树：每项只出现一处，路径都从首页五组之一开始。 */
     @Test fun everySettingLivesInOnePlaceUnderTheNewGroups() {
         val dup = SettingsSearchIndex.groupBy { it.title }.filterValues { it.size > 1 }.keys
@@ -100,7 +113,7 @@ class SettingsSearchTest {
     @Test fun traditionalCharactersFindSimplifiedSettings() {
         assertEquals(titles("繁体输出"), titles("繁體輸出"))
         assertTrue("繁体输出" in titles("繁體"))
-        assertTrue("注音输出简体" in titles("注音轉簡體"))
+        assertTrue("繁体输出" in titles("注音轉簡體"))
         assertEquals(titles("14键"), titles("十四鍵"))
         assertTrue(titles("十四鍵").isNotEmpty())
         assertTrue("卡片显示行数" in titles("剪貼板"))
@@ -152,7 +165,7 @@ class SettingsSearchTest {
         assertTrue("拍照识别模型" in titles("OCR"))
         assertTrue("拍照识别模型" in titles("拍照识字"))
         assertTrue("逗号键分词" in titles("隔音符"))
-        assertTrue("中文滑行输入" in titles("划词"))
+        assertTrue("中文滑行" in titles("划词"))
         assertTrue("生僻字" in titles("罕用字"))
         assertTrue("插件市场" in titles("扩展市场"))
         assertTrue("按键音色" in titles("案件音色"))
@@ -162,6 +175,15 @@ class SettingsSearchTest {
         assertTrue("数字转阿拉伯数字" in titles("中文数字"))
         assertTrue("语音纠错" in titles("纠错"))
         assertTrue("语音纠错" in titles("同音字"))
+    }
+
+    /** 11-09 反馈：按「取消候选按钮」「关闭候选按钮」找候选栏最左边的取消键，排第一。 */
+    @Test fun candidateCancelButtonFoundByOtherWordOrders() {
+        for (q in listOf("取消候选按钮", "关闭候选按钮", "候选时取消按钮", "取消候选", "关闭候选", "关闭按钮")) {
+            assertEquals(q, "候选栏取消按钮", titles(q).first())
+        }
+        assertTrue("联想关闭键用叉号" in titles("取消联想"))
+        assertTrue("键盘尺寸与位置" in titles("单手模式"))
     }
 
     /** 字幕是插件（11-05）：装着时搜到字幕插件页里的设置；没装时这些换成一条「字幕」去插件市场。 */

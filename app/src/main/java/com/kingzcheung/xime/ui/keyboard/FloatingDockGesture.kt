@@ -25,8 +25,14 @@ internal fun floatingDockEdge(
     return if ((offsetY - bottomInset).coerceAtLeast(0f) <= tolerance) FloatingDockEdge.BOTTOM else null
 }
 
-/** 已经靠近底边，剩余行程不足一次长拖时的短停顿。 */
-internal const val FLOATING_DOCK_DURATION_MILLIS = 300L
+/**
+ * 卡片顶在底边、手指再往下顶过 [FLOATING_DOCK_ARM_PUSH_DP] 后，要停这么久才变回固定，渐变框也用这么久从卡片变成固定键盘。
+ * 0.75 秒（用户 10-23：0.5 秒会误贴底，1 秒太慢）。11-03 改成 0.3 秒、还把拖到底之前的行程算进去，
+ * 一路往下拖到底就直接满了，松手瞬间变固定、看不到渐变，也容易误贴底（用户 11-10）。
+ */
+internal const val FLOATING_DOCK_DURATION_MILLIS = 750L
+/** 卡片已经到底边后，手指还得再往下顶这么多才开始准备贴底；只是把卡片挪到底边附近不会贴底。 */
+internal const val FLOATING_DOCK_ARM_PUSH_DP = 8f
 
 /**
  * Releasing docks exactly when the preview shows the docked shape: the outline has reached it and the
@@ -54,7 +60,10 @@ internal fun floatingDragAreaHeightDp(contentPaddingDp: Int, keyClearanceDp: Flo
     (footerDp + contentPaddingDp.coerceAtLeast(0) + keyClearanceDp.coerceAtLeast(0f))
         .coerceAtMost(totalHeightDp.coerceAtLeast(0f))
 
-/** 距离来自手指在屏幕上的净位移，即使卡片先碰到边也能识别继续往下拖。 */
+/**
+ * 贴底变回固定只看卡片到底边以后的那一段：拖到底之前走了多远都不算（用户 11-10：一路拖到底就瞬间变固定）。
+ * [move] 的纵向量是「手指往下、卡片却已经动不了」的那部分，卡片跟着动的不算；卡片离开底边贴边区就作废，再回来从头算。
+ */
 internal class FloatingDockGesture {
     private var x = 0f
     private var y = 0f
@@ -66,14 +75,28 @@ internal class FloatingDockGesture {
         private set
     val progress get() = if (armed) maxOf(pull, hold) else 0f
 
-    fun move(dx: Float, dy: Float, onBottom: Boolean) {
+    /** [dx] 手指横向位移，[pushDy] 卡片到底后手指继续往下顶出去的距离（dp），[onBottom] 卡片在底边贴边区。 */
+    fun move(dx: Float, pushDy: Float, onBottom: Boolean) {
+        if (!onBottom) {
+            // 离开底边：这次贴底作废，再次靠近要从新的行程开始。
+            x = 0f
+            y = 0f
+            pull = 0f
+            if (armed) {
+                armed = false
+                hold = 0f
+                epoch++
+            }
+            return
+        }
         x += dx
-        y += dy
+        y += pushDy.coerceAtLeast(0f)
         pull = modeSwitchPullProgress(y, x)
-        val next = onBottom && y - abs(x) >= 8f && dy >= 0f
+        // 准备好以后手指在底边轻微晃动、往回一点点都不作废，横着滑出去比往下顶的还多才作废。
+        val reach = y - abs(x)
+        val next = if (armed) reach >= 0f else reach >= FLOATING_DOCK_ARM_PUSH_DP
         if (armed != next) {
             if (!next) {
-                // 离开或回拉表示这次贴底作废，再次靠近要从新的方向和行程开始。
                 x = 0f
                 y = 0f
                 pull = 0f

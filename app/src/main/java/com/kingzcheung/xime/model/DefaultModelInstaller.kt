@@ -29,6 +29,7 @@ object DefaultModelInstaller {
     private fun preferences(context: Context) = context.getSharedPreferences("default_models", Context.MODE_PRIVATE)
     private const val KEY_ALLOW_METERED = "allow_metered"
     private const val KEY_GUIDE = "guide_ids"
+    private const val KEY_AWAIT_GUIDE = "await_guide"
     private val waiting = MutableStateFlow(0L)
 
     /** 首次默认模型因为当前是移动数据（按流量计费）而没有下载时的总字节数；0 表示没在等。 */
@@ -52,6 +53,21 @@ object DefaultModelInstaller {
     internal fun missingBytes(context: Context, ids: List<String>): Long = ids.mapNotNull { ModelManager.getModel(it) }
         .filterNot { ModelManager.isModelDownloaded(context, it) }
         .sumOf { model -> model.files.sumOf { it.sizeBytes } }
+
+    /**
+     * 新装的用户先看「按设备推荐配置」再下载：第一次启动时还没做完首次设置、也没见过推荐配置，就记下「等推荐配置」；
+     * 推荐配置按了「按推荐设置」、「以后再说」或「更多配置」（[SetupGuide.markShown]）之后才照常下载。
+     * 以前装好一打开就在后台下手写和语音模型（两三百 MB），用户还没选。老用户升级不受影响；老人包没有推荐配置，照旧。
+     */
+    private fun awaitingGuide(context: Context): Boolean {
+        val prefs = preferences(context)
+        if (!prefs.contains(KEY_AWAIT_GUIDE)) {
+            val fresh = !com.kingzcheung.xime.BuildConfig.ELDER && !SettingsPreferences.isSetupCompleted(context) &&
+                !SetupGuide.isShown(context) && prefs.all.keys.none { it.startsWith("handled_") || it.startsWith("pending_") }
+            prefs.edit().putBoolean(KEY_AWAIT_GUIDE, fresh).commit()
+        }
+        return prefs.getBoolean(KEY_AWAIT_GUIDE, false) && !SetupGuide.isShown(context)
+    }
 
     internal fun isHandled(context: Context, id: String): Boolean = preferences(context).getBoolean("handled_$id", false)
 
@@ -120,6 +136,8 @@ object DefaultModelInstaller {
         }
         // 已装模型有新版本时连着 Wi-Fi 自动换新（自己判断网络和间隔）。
         ModelAutoUpdater.start(app)
+        // 新装还没看推荐配置：先不下，看过后 SetupGuide.markShown 再叫一次。
+        if (awaitingGuide(app)) { waiting.value = 0L; return }
         if (!started.compareAndSet(false, true)) return
         scope.launch {
             val prefs = preferences(app)

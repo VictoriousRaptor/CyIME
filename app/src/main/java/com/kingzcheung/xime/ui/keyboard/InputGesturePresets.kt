@@ -109,21 +109,21 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
 object InputGestureLocks {
     fun of(settings: KeyboardInputPreferences): List<InputGestureLock> = buildList {
         if (settings.t9GlideTyping && settings.cursorGesture != CursorGestureMode.KEYBOARD) {
-            add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, true, "九键滑行输入"))
+            add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, true, "九键滑行"))
         } else if (settings.symbolInputMode == SymbolInputMode.LONG_PRESS) {
             add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, false, "按键角标的符号和数字：长按输入"))
         }
         // 26 键滑行开着时字母键往任何方向滑都是滑行，角标的滑动输入用不了：锁在「长按输入」，写明是哪个滑行锁的（11-08）。
         when {
-            settings.glideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "滑行输入"))
-            settings.chineseGlideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "中文滑行输入"))
+            settings.glideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "英文滑行"))
+            settings.chineseGlideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "中文滑行"))
         }
         if (settings.glideTyping) {
-            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "滑行输入"))
+            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "英文滑行"))
         } else if (settings.chineseGlideTyping) {
-            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "中文滑行输入"))
+            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "中文滑行"))
         } else if (settings.t9GlideTyping) {
-            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "九键滑行输入"))
+            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "九键滑行"))
         }
         if (settings.cursorGesture == CursorGestureMode.KEYBOARD) {
             add(InputGestureLock(InputGestureLock.Option.GLIDE_TYPING, true, "键盘面板滑动光标"))

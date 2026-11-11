@@ -35,7 +35,7 @@ class JapaneseKanjiTest {
         assertFalse(kana.keys().asSequence().any { Character.isIdeographic(it.codePointAt(0)) })
         // 预算特征用的是内置汉字模型，标签与笔画一一对应
         val meta = JSONObject(asset("japanese_kanji_och.json"))
-        assertEquals("d625e6b6fa0dc39499bc15a8ac960249fcea9e71e34334522d32524557d1136d", meta.getString("model_sha256"))
+        assertEquals("8a6095f9ccd222fa391d4e98e2795f478d3d88daaa62d4844677fac18c7acb02", meta.getString("model_sha256"))
         assertEquals(templates.keys().asSequence().toSet(), meta.getJSONArray("labels").let { a -> (0 until a.length()).map { a.getString(it) }.toSet() })
     }
 

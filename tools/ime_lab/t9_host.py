@@ -89,6 +89,13 @@ def inspect_user_dict(path):
 
 def filesystem_type(path):
     """Filesystem type of `path` from /proc/self/mounts; "unknown" where that is unavailable."""
+    if os.name == "nt":  # Windows native replay: the volume's own filesystem name (NTFS on a local disk)
+        import ctypes
+        anchor = Path(path).resolve().anchor
+        name = ctypes.create_unicode_buffer(64)
+        if ctypes.windll.kernel32.GetVolumeInformationW(anchor, None, 0, None, None, None, name, len(name)):
+            return name.value.lower()
+        return "unknown"
     try:
         mounts = Path("/proc/self/mounts").read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -102,6 +109,13 @@ def filesystem_type(path):
         if (target == point or target.startswith(point.rstrip("/") + "/")) and (best is None or len(point) >= len(best)):
             best, kind = point, fields[2]
     return kind
+
+
+# Host engine library: librime_jni.so from build_host.py (Linux), librime_jni.dll from build_host_windows.py.
+NATIVE_GLOB = "*.dll" if os.name == "nt" else "*.so"
+NATIVE_LIBRARY = "librime_jni.dll" if os.name == "nt" else "librime_jni.so"
+# Windows runs natively (no WSL, user rule 2026-11-10); --backend wsl remains only for one-off cross-checks.
+DEFAULT_WINDOWS_CACHE = Path(r"D:\CyIME-Data\cache\cyime-t9-host-win")
 
 
 def reuse_engine(source, output, cache):
@@ -121,7 +135,7 @@ def reuse_engine(source, output, cache):
     if file_digest(source / "source-files.json") != build_manifest.get("source_files_sha256"):
         raise ValueError(f"{source / 'source-files.json'} differs from its build manifest")
     library_dir = Path(build_manifest["library"]).parent
-    libraries = {p.name: file_digest(p) for p in sorted(library_dir.glob("*.so"))}
+    libraries = {p.name: file_digest(p) for p in sorted(library_dir.glob(NATIVE_GLOB))}
     if libraries != engine.get("libraries"):
         raise ValueError("The cached engine of --engine-from no longer matches its recorded libraries: " + str(library_dir))
     # The earlier run's build description names its Java tools; build_host.py keeps the javac launcher
@@ -171,7 +185,7 @@ def run_host(args):
     if user_dict is not None:
         user_dict, user_dict_info = inspect_user_dict(user_dict)
     jar = find_json_jar(args.json_jar)
-    if os.name == "nt":
+    if os.name == "nt" and getattr(args, "backend", "native") == "wsl":
         command = ["wsl.exe", "-d", args.wsl_distro, "--", "python3", linux_path(HERE / "t9_host.py"),
                    "--fixture", linux_path(args.fixture), "--output", linux_path(output),
                    "--json-jar", linux_path(jar), "--key-delay-ms", str(args.key_delay_ms)]
@@ -181,8 +195,8 @@ def run_host(args):
         if args.host_cache:
             command.extend(["--host-cache", args.host_cache])
         return subprocess.run(command).returncode
-    if platform.system() != "Linux":
-        raise ValueError("Host replay currently supports Linux, or Windows with WSL; no device fallback is allowed.")
+    if platform.system() not in ("Linux", "Windows"):
+        raise ValueError("Host replay supports Linux and Windows (native); no device fallback is allowed.")
     output.mkdir(parents=True)
     if fixture == original:
         (output / "fixture.json").write_bytes(fixture_bytes)
@@ -210,7 +224,8 @@ def run_host(args):
     save(output / "run.json", manifest)
     commands = HostCommands(output / "commands.log")
     try:
-        cache = Path(args.host_cache).expanduser() if args.host_cache else Path.home() / ".cache/cyime-t9-host"
+        cache = (Path(args.host_cache).expanduser() if args.host_cache else
+                 DEFAULT_WINDOWS_CACHE if os.name == "nt" else Path.home() / ".cache/cyime-t9-host")
         resources = output / "resources.zip"
         engine_from = getattr(args, "engine_from", None)
         if engine_from is not None:
@@ -218,7 +233,8 @@ def run_host(args):
             build, library_dir, libraries, resource_info = reuse_engine(engine_from, output, cache)
         else:
             print("Building/reusing the project T9 engine on this computer; no Android device is used.", flush=True)
-            build_command = [sys.executable, str(HERE / "host_replay/build_host.py"), "--repo", str(REPO), "--cache", str(cache)]
+            builder = "host_replay/build_host_windows.py" if os.name == "nt" else "host_replay/build_host.py"
+            build_command = [sys.executable, str(HERE / builder), "--repo", str(REPO), "--cache", str(cache)]
             with (output / "build.log").open("w", encoding="utf-8") as log:
                 built = subprocess.run(build_command, stdout=subprocess.PIPE, stderr=log, timeout=3600)
             (output / "build-result.txt").write_bytes(built.stdout)
@@ -232,13 +248,13 @@ def run_host(args):
                                                   ("library_dir", "manifest", "java", "javac")):
                 raise ValueError("Host engine build returned an invalid artifact description")
             library_dir = Path(build["library_dir"])
-            libraries = {p.name: file_digest(p) for p in sorted(library_dir.glob("*.so"))}
-            if "librime_jni.so" not in libraries:
-                raise ValueError("Host build returned no librime_jni.so")
+            libraries = {p.name: file_digest(p) for p in sorted(library_dir.glob(NATIVE_GLOB))}
+            if NATIVE_LIBRARY not in libraries:
+                raise ValueError("Host build returned no " + NATIVE_LIBRARY)
             shutil.copyfile(build["manifest"], output / "engine-build.json")
             build_manifest = json.loads((output / "engine-build.json").read_text(encoding="utf-8"))
             if (not isinstance(build_manifest, dict) or build_manifest.get("status") != "complete" or
-                    build_manifest.get("library_sha256") != libraries["librime_jni.so"]):
+                    build_manifest.get("library_sha256") != libraries[NATIVE_LIBRARY]):
                 raise ValueError("Host library differs from its completed build manifest")
             source_files = Path(build["manifest"]).parent / "source-files.json"
             if file_digest(source_files) != build_manifest.get("source_files_sha256"):
@@ -285,7 +301,7 @@ def run_host(args):
         finally:
             if live_root.exists():
                 shutil.move(str(live_root), str(root))
-        if {p.name: file_digest(p) for p in sorted(library_dir.glob("*.so"))} != libraries:
+        if {p.name: file_digest(p) for p in sorted(library_dir.glob(NATIVE_GLOB))} != libraries:
             raise ValueError("Host engine libraries changed during replay")
         shutil.copyfile(root / "user/build/t9_pinyin.schema.yaml", output / "deployed-schema.yaml")
         records, sources = summary.read_evidence([output / "replay.jsonl"])
@@ -328,6 +344,8 @@ def add_arguments(parser):
     parser.add_argument("--assertions", type=Path)
     parser.add_argument("--key-delay-ms", type=int, choices=range(0, 1001), default=35, metavar="0..1000")
     parser.add_argument("--wsl-distro", default="Ubuntu-26")
+    parser.add_argument("--backend", choices=("native", "wsl"), default="native",
+                        help="Windows: build and replay natively (default) or, for one-off cross-checks only, in WSL")
     parser.add_argument("--host-cache", help="Linux cache path for host source snapshots, dependencies and engine builds")
     parser.add_argument("--json-jar", type=Path, help="Existing org.json JAR (normally found in Gradle cache)")
     parser.add_argument("--user-dict", type=Path,

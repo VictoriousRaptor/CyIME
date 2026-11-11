@@ -24,6 +24,35 @@ sealed interface CorrectionMark {
 }
 
 object CorrectionMarks {
+    /** The engine's typed side is already keys; its corrected side is dictionary pinyin. */
+    fun doublePinyin(marks: String, scheme: com.kingzcheung.xime.settings.DoublePinyinScheme): String =
+        marks.split(' ').joinToString(" ") { syllable ->
+            val eq = syllable.indexOf('=')
+            if (eq < 0) syllable else {
+                val corrected = syllable.substring(eq + 1)
+                syllable.substring(0, eq + 1) + (scheme.code(corrected.lowercase().replace('ü', 'v')) ?: corrected)
+            }
+        }
+
+    /** Map changes in the two keys back onto their corresponding pinyin components. */
+    fun doublePinyinFull(marks: String, scheme: com.kingzcheung.xime.settings.DoublePinyinScheme): List<CorrectionMark> = buildList {
+        marks.trim().split(' ').filter { it.isNotEmpty() }.forEachIndexed { index, syllable ->
+            if (index > 0) add(CorrectionMark.Gap)
+            val eq = syllable.indexOf('=')
+            if (eq < 0) { syllable.forEach { add(CorrectionMark.Keep(it)) }; return@forEachIndexed }
+            val typed = syllable.substring(0, eq)
+            val correct = syllable.substring(eq + 1)
+            val keys = scheme.code(correct.lowercase().replace('ü', 'v'))
+            if (keys == null) { addAll(align(typed, correct)); return@forEachIndexed }
+            val initialLength = if (correct.startsWith("zh") || correct.startsWith("ch") || correct.startsWith("sh")) 2 else 1
+            correct.forEachIndexed { letterIndex, letter ->
+                val keyIndex = if (letterIndex < initialLength) 0 else 1
+                if (typed.length == 2 && typed[keyIndex] == keys[keyIndex]) add(CorrectionMark.Keep(letter))
+                else add(CorrectionMark.Missing(letter))
+            }
+        }
+    }
+
     fun parse(marks: String): List<CorrectionMark> {
         if (marks.isBlank()) return emptyList()
         val result = ArrayList<CorrectionMark>()

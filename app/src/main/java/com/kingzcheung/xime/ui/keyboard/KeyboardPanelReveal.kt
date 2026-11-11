@@ -18,9 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 
 internal class KeyboardPanelRevealState(
     val visibility: MutableTransitionState<Boolean>,
@@ -56,8 +61,14 @@ internal fun KeyboardPanelReveal(
     val state = revealState ?: rememberKeyboardPanelRevealState(visible, visibility)
     val active = state.visibility
     if (!active.isIdle || active.currentState || active.targetState) {
-        // Block the entire slot during transitions, including the not-yet-revealed area.
-        Box(modifier) {
+        // Opening blocks the entire slot, including the not-yet-revealed area. Closing gives the
+        // uncovered keys back at once: the curtain only takes touches where it is still drawn,
+        // so typing right after closing a panel is never eaten by the closing animation.
+        val closing = !active.targetState
+        Box(modifier.then(if (closing) Modifier.graphicsLayer {
+            clip = true
+            shape = PanelCurtainShape(state.progress.value)
+        } else Modifier)) {
             // A sibling shield avoids merging the candidate list into a single clickable node.
             Box(Modifier.matchParentSize().clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
@@ -75,4 +86,10 @@ internal fun KeyboardPanelReveal(
             }
         }
     }
+}
+
+/** The still-covered top part of a closing panel: its drawing and its touch area. */
+private data class PanelCurtainShape(val fraction: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        Outline.Rectangle(Rect(0f, 0f, size.width, size.height * fraction.coerceIn(0f, 1f)))
 }

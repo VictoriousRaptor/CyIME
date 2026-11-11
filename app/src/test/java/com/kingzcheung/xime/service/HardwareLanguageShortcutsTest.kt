@@ -84,4 +84,13 @@ class HardwareLanguageShortcutsTest {
         s.reset()
         assertNull(down(KEYCODE_H, repeat = 1, alt = true).tool)
     }
+
+    /** GitHub #295: on keyboard phones Alt+V/H types a digit from the Alt layer, not a tool shortcut. */
+    @Test fun altLayerCharacterIsNotAToolShortcut() {
+        for (key in listOf(KEYCODE_V, KEYCODE_H)) {
+            assertEquals(HardwareShortcutResult(), s.down(key, 0, 0, false, true, false, false, options, altTypesChar = true))
+            assertFalse(s.up(key, 100, false, options).consume)
+        }
+        assertEquals(HardwareToolShortcut.CLIPBOARD, s.down(KEYCODE_V, 0, 0, false, true, false, false, options).tool)
+    }
 }

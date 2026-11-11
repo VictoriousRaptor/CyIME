@@ -8,7 +8,9 @@
 // 3. Write a memory-mappable model (format in t9_ngram_format.h) read by the joint decoder.
 //
 // Usage: ngram_build vocab.tsv corpus.txt out.bin [--rounds 3] [--min-count 2]
-//                   [--tmp DIR] [--segment IN OUT]... [--format 3|2]
+//                   [--tmp DIR] [--segment IN OUT]... [--format 3|2] [--max-words N]
+// --max-words N (size experiments): keep only the N most frequent words in the model; the rest of the
+// dictionary scores as unseen words. 0 (default) keeps every seen word, as before.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -231,6 +233,7 @@ int main(int argc, char** argv) {
   // Relative-entropy pruning (Stolcke): keep an n-gram only if dropping it would move the
   // model by at least this much, i.e. P(n-gram) * ln(P / backed-off P) >= threshold.
   double prune2 = 0, prune3 = 0;
+  size_t max_words = 0;
   uint32_t format = cyime_t9_ngram::kVersion3;  // --format 2 writes the original layout
   std::string tmp = "/tmp";
   std::vector<std::pair<std::string, std::string>> segment_jobs;
@@ -244,6 +247,7 @@ int main(int argc, char** argv) {
     else if (a == "--prior-weight") prior_weight = std::stod(argv[++i]);
     else if (a == "--prune2") prune2 = std::stod(argv[++i]);
     else if (a == "--prune3") prune3 = std::stod(argv[++i]);
+    else if (a == "--max-words") max_words = static_cast<size_t>(std::stoull(argv[++i]));
     else if (a == "--format") format = static_cast<uint32_t>(std::stoul(argv[++i]));
     else if (a == "--tmp") tmp = argv[++i];
     else if (a == "--segment") { segment_jobs.emplace_back(argv[i + 1], argv[i + 2]); i += 2; }
@@ -414,8 +418,24 @@ int main(int argc, char** argv) {
   // Model ids: seen dictionary words (by vocab id), then </s>, then <s> (history only).
   std::vector<int64_t> model_id(S, -1);
   std::vector<uint32_t> model_vocab;
+  std::vector<char> keep(V, 0);
+  {
+    std::vector<uint32_t> seen;
+    for (uint32_t w = 0; w < V; ++w) if (unigram[w] > 0 || history[w] > 0 || prior_p[w] > 0) seen.push_back(w);
+    // Most frequent first: corpus count, then the dictionary's own count; ties by id, so builds repeat.
+    if (max_words > 0 && seen.size() > max_words) {
+      std::nth_element(seen.begin(), seen.begin() + max_words, seen.end(), [&](uint32_t a, uint32_t b) {
+        if (unigram[a] != unigram[b]) return unigram[a] > unigram[b];
+        if (prior_p[a] != prior_p[b]) return prior_p[a] > prior_p[b];
+        return a < b;
+      });
+      seen.resize(max_words);
+      std::cerr << "max_words=" << max_words << " kept the most frequent words\n";
+    }
+    for (uint32_t w : seen) keep[w] = 1;
+  }
   for (uint32_t w = 0; w < V; ++w)
-    if (unigram[w] > 0 || history[w] > 0 || prior_p[w] > 0) { model_id[w] = model_vocab.size(); model_vocab.push_back(w); }
+    if (keep[w]) { model_id[w] = model_vocab.size(); model_vocab.push_back(w); }
   const uint32_t model_eos = model_vocab.size(); model_id[EOS] = model_eos; model_vocab.push_back(EOS);
   const uint32_t model_bos = model_vocab.size(); model_id[BOS] = model_bos; model_vocab.push_back(BOS);
   const uint32_t M = model_vocab.size();

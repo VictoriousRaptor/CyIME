@@ -45,7 +45,8 @@ class ModelAutoUpdaterTest {
 
     @Test fun catalogHandwritingAndNgramUpdatesAreFound() {
         val hand = BuiltinModelCatalog.models.first { it.id == "ochwpro" }
-        assertEquals("v1.1", ModelAutoUpdater.pendingUpdate(hand, hand.versions.first { it.version == "v1.0" }, null)?.version)
+        for (old in listOf("v1.0", "v1.1"))
+            assertEquals("v1.2", ModelAutoUpdater.pendingUpdate(hand, hand.versions.first { it.version == old }, null)?.version)
         val ngram = CandidateModelCatalog.models.first { it.id == CandidateModelCatalog.NGRAM }
         val latest = ModelAutoUpdater.latestVersion(ngram)!!
         for (old in ngram.versions.drop(1)) assertEquals(latest.version, ModelAutoUpdater.pendingUpdate(ngram, old, null)?.version)

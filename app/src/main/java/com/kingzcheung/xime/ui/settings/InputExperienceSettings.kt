@@ -89,7 +89,9 @@ internal fun InputExperienceSettings(
                             modifier = Modifier.weight(1f).then(if (choice == com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE)
                                 Modifier.settingsSearchAnchor("长按弹出字母气泡") else Modifier),
                             tag = "corner-input:${choice.name}", titleMaxLines = 2, illustrationPadding = 2.dp) {
-                            CornerInputIllustration(choice, settings.reverseSymbolSwipe, hints.up, hints.down)
+                            // 被滑行锁成长按时字母键下滑用来滑词，下角标打不出来：长按卡不再画下角标、不列下滑那一行（用户 11-11）。
+                            val lowerReachable = glideLock == null || choice != com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS
+                            CornerInputIllustration(choice, settings.reverseSymbolSwipe, hints.up, hints.down && lowerReachable)
                         }
                     }
                 }
@@ -103,7 +105,7 @@ internal fun InputExperienceSettings(
                         "按住 ${symbolLongPressLabel(settings.symbolLongPressSeconds)} 秒立刻输入上方角标，不用松手；气泡显示输入的角标，松手消失。" +
                             "九键长按出数字，选字母改用拂动。西班牙语的元音和 n 长按仍出 á é ñ，它们的上角标改用滑动。"
                 } + hiddenNote, style = MaterialTheme.typography.bodySmall)
-                glideLock?.let { SettingsLockNote("${it.message}：字母键的滑动都用来滑词，角标改为长按输入") }
+                glideLock?.let { SettingsLockNote("${it.message}：字母键的滑动都用来滑词，角标改为长按输入，只出上角标，下角标不再显示") }
                 // 只在「长按输入」（含被滑行锁成长按）时有用，这时才显示（用户 11-08：关闭角标滑动后要能调长按时间）。
                 if (corner == com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS) {
                     // 搜索「长按时间」等落到上面「按键角标的符号和数字」（SettingsSearch 的关键词），不单设锚点：没选长按时这里不显示。

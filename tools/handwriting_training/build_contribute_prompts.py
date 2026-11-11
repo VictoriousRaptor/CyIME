@@ -8,6 +8,7 @@
        错误率一半看 App 首选认错的比例，一半看 1 − 模型给正确字的平均概率（形近字多、模型拿不准的字高）；
        收到过真实样本的字，再把真实样本按 App 逻辑认错的比例按份数合进去。
     3. 同一档里按 错误率 × log(字频) 从高到低，错误率一样时常用的在前。
+    4. 写出来像一个常用 20 倍以上的字（曰/日、幺/么、恁/您）的不出题：微调时不训这种字，训了会把常用字抢走。
   样本收得越多，已收的字往后排、新的易错字补上来；重新运行即按最新样本和模型更新。
 - 生僻字 20 个：手写模型字表外、靠生僻字模板认的字为主，外加几个常见于人名的字；
 - 两字词 30 个：用来测一次写几个字时的切分和组合。
@@ -39,6 +40,7 @@ CHAR_COUNT = 100
 POOL = 3000
 VARIANTS = 6
 PRIOR = 2  # 合成笔迹的错误率按几份真实样本算
+LOOKALIKE = 20  # 认错成的那个字常用这么多倍以上，就当作形近罕用字，不出题
 
 
 def frequency() -> list[tuple[str, int]]:
@@ -111,6 +113,7 @@ def rank_chars(model: pathlib.Path, samples: pathlib.Path) -> list[dict]:
     """给字频前 POOL 个字打分，返回排好序的 [{char, n, err, score}]（最该收的在前）。"""
     import contrib_ingest as ci
     rp = ci.Replay(model, ASSETS)
+    counts = dict(frequency())
     freq = [(c, n) for c, n in frequency() if c in rp.vocab][:POOL]
     real = real_samples(samples)
     shapes = medians({c for c, _ in freq})
@@ -122,10 +125,18 @@ def rank_chars(model: pathlib.Path, samples: pathlib.Path) -> list[dict]:
         rnd = random.Random(f"{c}:{i}")
         syn = [mild(shapes[c], rnd, k % 2 == 1) for k in range(VARIANTS)] if c in shapes else []
         # 一半看 App 最后首选对不对（常用度重排能救回来的字不算难），一半看模型给正确字的概率还差多少（比对错稳定）
-        syn_err = sum(0.5 * (rp.recognize(s)[:1] != [c]) + 0.5 * (1.0 - float(rp.probs(s, True)[idx[c]]))
-                      for s in syn) / len(syn) if syn else 0.5
+        tops = [(rp.recognize(s)[:1] or [""])[0] for s in syn]
+        syn_err = sum(0.5 * (t != c) + 0.5 * (1.0 - float(rp.probs(s, True)[idx[c]]))
+                      for s, t in zip(syn, tops)) / len(syn) if syn else 0.5
         got = real.get(c, [])
-        real_miss = sum(rp.recognize(s)[:1] != [c] for s in got)
+        got_tops = [(rp.recognize(s)[:1] or [""])[0] for s in got]
+        real_miss = sum(t != c for t in got_tops)
+        # 写出来本来就像一个常用得多（≥20 倍）的字（曰/日、幺/么、恁/您）：这种字训练时不用（会把常用字抢走），也就不出题
+        wrong = [t for t in tops + got_tops if t and t != c]
+        if wrong:
+            w = max(set(wrong), key=wrong.count)
+            if wrong.count(w) >= 0.3 * len(tops + got_tops) and counts.get(w, 0) >= LOOKALIKE * max(count, 1):
+                continue
         err = (real_miss + PRIOR * syn_err) / (len(got) + PRIOR)
         rows.append({"char": c, "n": len(got), "err": err, "score": err * math.log(max(count, 10)), "rank": i})
     # 没样本的在前；同一档按 错误率×log(字频)，再按字频

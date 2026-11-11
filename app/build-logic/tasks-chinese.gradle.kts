@@ -93,6 +93,7 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("measuredNeighborCorrection", 3)
     inputs.property("idleSpellingEdits", 3)
     inputs.property("candidatePolicy", 4)
+    inputs.property("learnedMixedWords", 1)
     inputs.property("particleShortcuts", 2)
     inputs.property("pinyinFinalNe", 1)
     inputs.property("pinyin26WordModel", 5)
@@ -376,6 +377,32 @@ val prepareChineseDictionaries by tasks.registering {
                 english14.putIfAbsent(fields[0] + "\t" + code14, fields[0] + "\t" + code14 + "\t1000")
             }
         }
+        // 26 keys' mixed words, learned (2026-11-09「打 bzhan 选了 B站 记不住」): upstream reads en_dicts/cn_en.txt as a
+        // read-only stabledb, so a pick was never remembered. The same words and codes (both Bzhan and bzhan) become
+        // the cyime_cn_en table with a user dictionary, compiled by its own dependency schema like cyime_t9_english;
+        // every word weighs the same, as before. cyime_candidate_policy puts a learned one first for its whole code.
+        val cnEnWords = linkedSetOf<String>()
+        File(root, "en_dicts/cn_en.txt").useLines { lines ->
+            lines.forEach { line ->
+                if (line.startsWith("#")) return@forEach
+                val fields = line.split('\t')
+                if (fields.size < 2 || fields[0].isBlank() || fields[1].length !in 2..64 ||
+                    !fields[1].all { it in 'A'..'Z' || it in 'a'..'z' }) return@forEach
+                cnEnWords.add(fields[0] + "\t" + fields[1] + "\t1000")
+            }
+        }
+        check(cnEnWords.any { it.startsWith("B站\tbzhan\t") }) { "Upstream cn_en table changed" }
+        File(root, "cyime_cn_en.dict.yaml").writeText(
+            "# Generated from bundled rime-ice en_dicts/cn_en.txt; licenses retained alongside sources.\n" +
+            "---\nname: cyime_cn_en\nversion: \"1\"\nsort: by_weight\n...\n" +
+            cnEnWords.joinToString("\n", postfix = "\n"))
+        File(root, "cyime_cn_en.schema.yaml").writeText(
+            "# Internal compilation dependency, not a user-visible input mode.\n" +
+            "schema:\n  schema_id: cyime_cn_en\n  name: 中英混合词依赖\n  version: \"1\"\n" +
+            "engine:\n  processors: [speller, selector, express_editor]\n  segmentors: [abc_segmentor]\n" +
+            "  translators: [table_translator]\n" +
+            "speller:\n  alphabet: \"zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA\"\n  algebra: []\n" +
+            "translator:\n  dictionary: cyime_cn_en\n  enable_completion: true\n  enable_sentence: false\n")
         File(root, "cyime_t9_english.dict.yaml").writeText(
             "# Generated from bundled rime-ice en_dicts; licenses retained alongside sources.\n" +
             "---\nname: cyime_t9_english\nversion: \"1\"\nsort: by_weight\n...\n" +
@@ -426,7 +453,11 @@ val prepareChineseDictionaries by tasks.registering {
         fun taiwanForms(schema: String) = schema.replace("  opencc_config: s2t.json ", "  opencc_config: cyime_s2tw.json ")
             .also { check(it.contains("  opencc_config: cyime_s2tw.json ")) { "Upstream traditionalize config changed" } }
         val vuRule = "    - derive/^([jqxy])v/\$1u/\n"
-        val baseSchema = taiwanForms(File(root, "rime_ice.schema.yaml").readText()).replace("\ntranslator:\n",
+        val cnEnStable = "\ncn_en:\n  dictionary: \"\"\n  user_dict: en_dicts/cn_en\n  db_class: stabledb\n"
+        val baseSchema = taiwanForms(File(root, "rime_ice.schema.yaml").readText())
+            .also { check(it.split(cnEnStable).size == 2) { "Upstream cn_en translator changed" } }
+            .replace(cnEnStable, "\ncn_en:\n  dictionary: cyime_cn_en\n  enable_user_dict: true\n")
+            .replace("\ntranslator:\n",
             "\ntranslator:\n  enable_correction: true\n  cyime_neighbor_correction: true\n" +
             // chen can also end a phrase as che + abbreviated ne (他在等车呢).
             "  preserve_final_ne: true\n" +
@@ -480,7 +511,9 @@ val prepareChineseDictionaries by tasks.registering {
             "  dictionary_beam: 64\n  sentence_beam: 8\n  result_budget: 12\n  display_sentences: 1\n" +
             "  spelling_penalty: 0\n  word_penalty: 8.0\n  correction_penalty: -9.2\n  whole_input_phrases: 16\n" +
             "  prefer_user_entries: true\n  ngram_model: t9_ngram\n" +
-            "  ngram_sentence_start: false\n  ngram_eos_weight: 0\n  ngram_user_weight: 0.3\n" +
+            // rescore_rime_weight: share of Rime's own sentence weight added to the word model's score (0 = model alone).
+            // 0.3: 11-10 sweep fixed 又发现一个问题; B站 and SMS together +3, homophone set +37, 26-key must-pass none lost.
+            "  ngram_sentence_start: false\n  rescore_rime_weight: 0.3\n  ngram_eos_weight: 0\n  ngram_user_weight: 0.3\n" +
             "  ngram_dictionary_prior: 0.02\n  ngram_merge_segmentations: false\n" +
             // CyLM (CyIME-Windows tools/cylm) puts its best sentence first when its files are in the Rime user
             // directory. Only the 装到我的设备 package carries them; without them the open fails once and Rime's
@@ -580,7 +613,7 @@ val prepareChineseDictionaries by tasks.registering {
                 append("    - xform/^~//\n")
             })
         }
-        val fullPinyinSchema = baseSchema.replace("  dependencies:\n", "  dependencies:\n    - $omissionId\n    - cyime_letter_swap\n") +
+        val fullPinyinSchema = baseSchema.replace("  dependencies:\n", "  dependencies:\n    - $omissionId\n    - cyime_letter_swap\n    - cyime_cn_en\n") +
             "\ncyime_omission_schema: $omissionId\ncyime_edit_schema: cyime_letter_swap\n" +
             "\ncyime_particle_shortcuts:\n  __include: cyime_particle_shortcuts:/common\n  alphabet: abcdefghijklmnopqrstuvwxyz\n  selected_tail: true\n"
         File(root, "rime_ice.schema.yaml").writeText(fullPinyinSchema)
@@ -617,7 +650,7 @@ val prepareChineseDictionaries by tasks.registering {
                 schema.replace("    - script_translator\n", "    - script_translator\n    - lua_translator@*cyime_rare_chars\n") +
                     "\ncyime_rare_double_pinyin: true\n" +
                     "\nt9:\n  sentence_rescore: true\n  rescore_keys_per_syllable: 2\n  ngram_model: t9_ngram\n" +
-                    "  ngram_sentence_start: false\n"
+                    "  ngram_sentence_start: false\n  rescore_rime_weight: 0\n"
             })
         // Built-in letter arrangements (settings/BuiltinLetterLayouts.kt): same schema, own ID and name.
         for ((id, name) in listOf("pinyin_qwjrtk" to "QWJRTK（双拇指）", "pinyin_cyletix10" to "Cyletix10（实验）",

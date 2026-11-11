@@ -102,7 +102,9 @@ class KeyboardSurfaceConsistencyTest {
             // 拼音编辑条编辑的是引擎自己的编码。
             "KeyboardView.kt" to listOf("preedit = candidateState.value.preeditText",
                 // remember 的依赖项，不是显示。
-                "cs.candidates, cs.candidateComments, cs.inputText, cs.preeditText"),
+                "cs.candidates, cs.candidateComments, cs.inputText, cs.preeditText",
+                // 滑行实时预览（#235）：独立会话的结果，编码已按它的首选算好，首选就是高亮的那个。
+                "inputText = liveGlide.inputText, preeditText = liveGlide.preeditText"),
             // CandidateBarState 里的 preeditText 已经是 shownPreedit 的结果。
             "CandidateBar.kt" to listOf("it.preeditText.ifEmpty { it.inputText }"),
         )

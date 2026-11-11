@@ -18,7 +18,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import com.kingzcheung.xime.ui.common.menuSwipeBack
 import com.kingzcheung.xime.ui.common.wheelPages
 
 /**
@@ -56,8 +55,6 @@ private fun Modifier.swallowDeadHorizontalDrag(rightDead: () -> Boolean, leftDea
 internal fun <T> KeyboardPanelGrid(
     items: List<T>, isLandscape: Boolean, textColor: Color, pagerTag: String,
     modifier: Modifier = Modifier, compactCards: Boolean = false, preferSinglePage: Boolean = false,
-    /** 从右边缘往左划返回；还有下一页时这一划交给翻页（11-03：悬浮键盘菜单分两页，往左划直接关掉了菜单）。 */
-    onSwipeBack: (() -> Unit)? = null,
     content: @Composable (T, Modifier) -> Unit,
 ) {
     if (items.isEmpty()) return
@@ -80,16 +77,12 @@ internal fun <T> KeyboardPanelGrid(
             maxOf(120.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight) else minOf(maxHeight,
             maxOf(104.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight)
         val gridWidth = if (compactCards) minOf(maxWidth, 180.dp * columns + spacing * (columns - 1)) else minOf(maxWidth, 144.dp * columns + spacing * (columns - 1))
-        // 手势放在整块面板上，不只在居中的网格上：平板上网格两边空着一大块，从右边缘起手的一划以前落在网格外没人接
-        // （11-03 平板实测）。最后一页往左划 64dp 就退一层，和翻页一样短，不用划过 112dp。
-        // 还有下一页时这一划交给翻页：在按下时判断，节点一直挂着。以前按能不能往后翻把返回换成 null，最后一页往右一划，
-        // 页面一动就能往后翻了，节点被摘掉，连带取消了翻页，回不到上一页（11-03 平板）。
+        // 划不动的方向（第一页往右、最后一页往左）：这一划什么也不做，也不能在松手时算成点了格子。
+        // 最后一页再往左划不退出菜单（11-10：翻到最后一页多划一下，什么都没点菜单就没了）；退出用返回键。
+        // 手势放在整块面板上，平板上从网格两边的空白起手也一样。
         Box(Modifier.fillMaxSize()
-            .menuSwipeBack(Unit, onSwipeBack, PointerEventPass.Initial, edgeOnly = false, distanceDp = 64f,
-                active = { !pagerState.canScrollForward })
-            // 划不动的方向（第一页往右、最后一页又没有返回时往左）：这一划什么也不做，也不能在松手时算成点了格子。
             .swallowDeadHorizontalDrag(rightDead = { !pagerState.canScrollBackward },
-                leftDead = { !pagerState.canScrollForward && onSwipeBack == null })) {
+                leftDead = { !pagerState.canScrollForward })) {
         Column(Modifier.align(Alignment.Center).width(gridWidth).height(gridHeight),
             horizontalAlignment = Alignment.CenterHorizontally) {
             HorizontalPager(pagerState, pageSpacing = spacing, modifier = Modifier.fillMaxWidth().weight(1f).wheelPages(pagerState).testTag(pagerTag)) { page ->

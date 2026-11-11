@@ -110,6 +110,7 @@ class PressBubbleFrameRenderTest {
             return pixels.count { it == bubbleColor.toArgb() }
         }
         assertEquals(0, paintedAboveCard("idle"))
+        val idle = shot("idle")
         rule.mainClock.autoAdvance = false
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeByFrame()
@@ -121,9 +122,24 @@ class PressBubbleFrameRenderTest {
         assertTrue("No opaque preview above the card on the first frame ($first, held $held)", first > 100)
         assertEquals(first, held)
         key.performTouchInput { up() }
+        assertEquals("松手当下就上屏，不等气泡", "A", scene.typed.toString())
+        // 松手停留 60 ms 后淡出（CyMotion.EXIT_FAST）：淡出中不再是不透明的气泡色，但还看得见；淡完什么都不留。
         rule.mainClock.advanceTimeBy(100)
         assertEquals(0, paintedAboveCard("released"))
+        assertTrue("淡出中应还有半透明的气泡", changedAboveCard(idle, top) > 100)
+        rule.mainClock.advanceTimeBy(com.kingzcheung.xime.ui.theme.CyMotion.EXIT_FAST + 64L)
+        assertEquals(0, changedAboveCard(idle, top))
         assertEquals("A", scene.typed.toString())
+    }
+
+    /** 卡片上方和没按键时不一样的像素（淡出中的半透明气泡和它的阴影）。 */
+    private fun changedAboveCard(idle: Bitmap, top: Int): Int {
+        val bitmap = shot("fading")
+        val now = IntArray(bitmap.width * top)
+        val before = IntArray(bitmap.width * top)
+        bitmap.getPixels(now, 0, bitmap.width, 0, 0, bitmap.width, top)
+        idle.getPixels(before, 0, idle.width, 0, 0, idle.width, top)
+        return now.indices.count { now[it] != before[it] }
     }
 
     @Test fun rotatedPreviewStaysCenteredAboveItsKey() {

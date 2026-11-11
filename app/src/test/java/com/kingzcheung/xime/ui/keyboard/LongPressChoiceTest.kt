@@ -41,4 +41,32 @@ class LongPressChoiceTest {
         // 其他键盘照旧直接上屏。
         assertEquals("commit" to "á", route("á"))
     }
+
+    @Test
+    fun accentBubbleFollowsShift() {
+        val italian = com.kingzcheung.xime.settings.LetterLanguage.ITALIAN.extraLetters
+        // Shift 后气泡显示大写，和键帽一致；没 Shift 照旧小写。
+        assertEquals(listOf("È", "É"), listOf("è", "é").map { longPressShownLabel(it, true, italian) })
+        assertEquals("è", longPressShownLabel("è", false, italian))
+        // 标点、别的语言的字母、没有单个大写的 ß 都不变。
+        assertEquals("«", longPressShownLabel("«", true, italian))
+        assertEquals("ñ", longPressShownLabel("ñ", true, italian))
+        val german = com.kingzcheung.xime.settings.LetterLanguage.GERMAN.extraLetters
+        assertEquals("ß", longPressShownLabel("ß", true, german))
+        assertEquals("Ä", longPressShownLabel("ä", true, german))
+        // 英文键盘（没有本语言字母）不改。
+        assertEquals("g", longPressShownLabel("g", true, ""))
+    }
+
+    @Test
+    fun everyLetterLanguageShowsCapitalAccentsUnderShift() {
+        // 用户 11-09：不止意大利语，西、德、法、俄语键盘长按出的小写字母 Shift 后都要显示大写（ß 没有单个大写除外）。
+        for (letters in com.kingzcheung.xime.settings.LetterLanguage.entries) {
+            if (letters == com.kingzcheung.xime.settings.LetterLanguage.KOREAN) continue // 韩文字母没有大小写
+            for (char in letters.extraLetters.filter { it.isLowerCase() && it != 'ß' }) {
+                assertEquals("${letters.schemaId} $char", char.uppercase(),
+                    longPressShownLabel(char.toString(), true, letters.extraLetters))
+            }
+        }
+    }
 }

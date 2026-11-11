@@ -137,7 +137,11 @@ internal fun Modifier.frostedGlassBackground(
     val normalized = config.normalized()
     var targetSize by remember { mutableStateOf(IntSize.Zero) }
     // Floating capsules resize during docking; keep their backdrop cache stable throughout.
-    val renderSize = if (translucentSurface) IntSize(512, 256) else targetSize
+    // 不模糊（「我的图片」）时画大一点，铺到长条上不发虚。
+    val renderSize = if (translucentSurface) translucentBackdropSize(normalized.blurRadiusDp) else targetSize
+    // 这张固定大小的图按条自己的比例铺满（多的裁掉），不再拉成条的形状：图片在实体键盘浮条上被压扁（用户 11-09）。
+    // 渐变照旧拉满，起止颜色才落在条的两头。
+    val coverImage = translucentSurface && background?.type == "image"
     val pixels = rememberFrostedBackgroundImage(background, isDark, fallbackColor, normalized, renderSize,
         clipboardInMotion = LocalClipboardBackdropMotion.current && !translucentSurface)
     val blurredImage = pixels.image
@@ -164,6 +168,9 @@ internal fun Modifier.frostedGlassBackground(
             val layer = pixels.layer(IntSize(size.width.roundToInt(), size.height.roundToInt()))
             if (layer != null) { if (imageSlot == null) drawBackdropLayer(layer, opacity) }
             else if (image == null) drawRect(fallbackColor, alpha = opacity)
+            else if (imageSlot == null && coverImage) drawBackdropLayer(BackdropLayer(image,
+                coverRect(IntSize(image.width, image.height), IntSize(size.width.roundToInt(), size.height.roundToInt())),
+                null), opacity)
             else if (imageSlot == null) drawImage(
                 image,
                 dstOffset = IntOffset.Zero,
@@ -175,6 +182,10 @@ internal fun Modifier.frostedGlassBackground(
         drawContent()
     }
 }
+
+/** 悬浮小条（实体键盘浮条、候选条）固定按这个大小画一张背景：模糊的小一点就够，不模糊时 1024 宽。 */
+internal fun translucentBackdropSize(blurRadiusDp: Float): IntSize =
+    if (blurRadiusDp < 1f) IntSize(1024, 512) else IntSize(512, 256)
 
 @Composable
 internal fun rememberFrostedBackgroundImage(

@@ -3,6 +3,7 @@ package com.kingzcheung.xime.service
 import com.kingzcheung.xime.rime.RimeEngine
 import com.kingzcheung.xime.settings.InputModes
 import com.kingzcheung.xime.settings.LanguagePreferences
+import com.kingzcheung.xime.settings.OrientationLayouts
 import com.kingzcheung.xime.settings.SchemaManager
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.keyboard.isHandwritingSchema
@@ -19,7 +20,10 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
             val engine = service.rimeEngine
             if (engine.isMaintaining()) return@postRimeJob
             val available = engine.getAvailableSchemas().toList()
-            val stored = SettingsPreferences.getCurrentSchema(service)
+            val saved = SettingsPreferences.getCurrentSchema(service)
+            // 横竖屏分开记布局：这个方向记的条目（横屏 26 键、竖屏九键），关着时就是 saved。
+            val stored = if (service.editorInputPolicy.scoped) saved
+                else OrientationLayouts.prepared(service, saved, InputModes.available(service.uiState.value.schemas))
             val selectable = if (stored.isNotBlank() && stored !in available && stored != InputModes.ENGLISH &&
                 (isHandwritingSchema(stored) || SchemaManager.isSchemaCompiled(service, stored))) available + stored else available
             val policy = service.editorInputPolicy
@@ -52,7 +56,10 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
             val ascii = engine.isAsciiMode()
             withContext(Dispatchers.Main) {
                 owner.requireCurrent(service.inputReadiness, service.uiState.value.inputSessionId)
-                if (target != stored && !policy.scoped) SettingsPreferences.setCurrentSchema(service, target)
+                if (target != saved && !policy.scoped) SettingsPreferences.setCurrentSchema(service, target)
+                // 换了方向的条目时，该语言的选中条目也跟着换，语言键切回来、菜单里打勾的都是它。
+                if (stored != saved && target == stored && !policy.scoped) InputModes.selectProfile(service, target,
+                    InputModes.languageOf(target, service.uiState.value.schemas))
                 val refreshName = service.uiState.value.currentSchemaId != target || service.uiState.value.schemas.isEmpty()
                 service.uiState.value = service.uiState.value.copy(currentSchemaId = target, isAsciiMode = ascii)
                 if (policy.scoped && !handwriting) {

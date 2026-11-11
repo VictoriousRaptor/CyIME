@@ -44,6 +44,9 @@ import com.kingzcheung.xime.clipboard.ClipboardGroupStore
 import com.kingzcheung.xime.clipboard.ClipboardImages
 import com.kingzcheung.xime.clipboard.ImageAccessActivity
 import com.kingzcheung.xime.settings.PerformanceCosts
+import com.kingzcheung.xime.clipboard.CLIPBOARD_IMAGE_HEIGHT_KEY
+import com.kingzcheung.xime.clipboard.ClipboardImageHeight
+import com.kingzcheung.xime.clipboard.clipboardImageHeight
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_MAX_LINES_KEY
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CLOSE_AFTER_PASTE_KEY
 import com.kingzcheung.xime.ui.menubar.clipboardCardMaxLines
@@ -91,6 +94,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     var lines by remember { mutableStateOf(clipboardCardMaxLines(prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))) }
+    var imageHeight by remember { mutableStateOf(clipboardImageHeight(prefs.getString(CLIPBOARD_IMAGE_HEIGHT_KEY, null))) }
     val groups by remember(context) { ClipboardGroupStore.getInstance(context) }.state.collectAsState()
     val images = remember(context) { ClipboardImages.getInstance(context) }
     // Same value as 启用/关闭最近截图 in the clipboard's ⋯ menu; the permission answer comes back on resume.
@@ -118,6 +122,27 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
                     RadioButton(selected = lines == option, onClick = null)
                     Spacer(Modifier.width(12.dp))
                     Text("$option 行", style = MaterialTheme.typography.titleSmall)
+                }
+            }
+        }
+        // 用户 11-09：图片卡片太矮。固定的图片照旧只露一条。
+        Column(Modifier.settingsSearchAnchor("图片高度").fillMaxWidth().padding(16.dp)) {
+            Text("图片高度", style = MaterialTheme.typography.titleSmall)
+            Text("剪贴板里图片卡片的高度，固定的图片不变", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ClipboardImageHeight.entries.forEach { option ->
+                Row(Modifier.fillMaxWidth().testTag("clipboard-image-height:${option.key}")
+                    .selectable(imageHeight == option, role = Role.RadioButton) {
+                        imageHeight = option
+                        prefs.edit().putString(CLIPBOARD_IMAGE_HEIGHT_KEY, option.key).apply()
+                    }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = imageHeight == option, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(option.label, style = MaterialTheme.typography.titleSmall)
+                        Text(option.caption, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

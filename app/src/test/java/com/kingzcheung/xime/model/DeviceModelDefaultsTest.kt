@@ -169,10 +169,14 @@ class DeviceModelDefaultsTest {
             assertEquals(profile.tier.name, stores.values()[DeviceDefaults.TIER])
             assertFalse(SettingsPreferences.isSingleAssociationMode(context))
             // A fresh install starts on 性能与省电 → 自动, so that page does not show 自定义 nobody chose.
-            val performance = com.kingzcheung.xime.settings.PerformanceProfile.presets.getValue(
-                com.kingzcheung.xime.runtime.adaptation.PerformanceTiers.classify(hardware))
+            val tier = com.kingzcheung.xime.runtime.adaptation.PerformanceTiers.classify(hardware)
+            // 按键浮标默认开（11-09），只有这档要关它（低配）时才关。
+            val performance = com.kingzcheung.xime.settings.PerformanceProfile.presets.getValue(tier).copy(pressBubble =
+                com.kingzcheung.xime.settings.PerformanceProfile.Extra.PRESS_BUBBLE !in
+                    com.kingzcheung.xime.settings.PerformanceProfile.turnsOff.getValue(tier))
             assertEquals(true, stores.values()["performance_profile_auto"])
             assertEquals(performance, com.kingzcheung.xime.settings.PerformanceProfile.read(context))
+            assertEquals(tier, com.kingzcheung.xime.settings.PerformanceProfile.matching(performance))
             assertEquals(hardware.maxCpuKHz, stores.values()["device_initial_max_cpu_khz"])
             assertFalse(stores.values("asr_model").containsKey("selected_model"))
             val expected = setOf("ochwpro", SpeechModelCatalog.SENSEVOICE)

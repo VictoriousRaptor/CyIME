@@ -71,6 +71,23 @@ class PairedSymbolsTest {
         assertFalse(connection.deleteEmptyPairAroundCursor())
     }
 
+    /** #280：编辑框不认 newCursorPosition 0（光标总落在上屏文字后面）时，照样落在一对符号中间。 */
+    @Test fun editorsThatIgnoreTheCaretPositionStillEndBetweenThePair() {
+        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
+        }
+        fun typeInto(literal: String) {
+            val (text, caret) = PairedSymbols.commitFor(literal)
+            assertTrue(ignoring.commitTextWithCaret(text, caret))
+        }
+        typeInto("《")
+        assertEquals("《|》", shown())
+        typeInto("好")
+        assertEquals("《好|》", shown())
+        typeInto("》")
+        assertEquals("《好》|", shown())
+    }
+
     @Test fun aSelectionIsReplacedByThePairLikeAnyTypedSymbol() {
         field.setText("你好")
         field.setSelection(0, 2)

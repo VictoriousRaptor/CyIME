@@ -17,10 +17,29 @@ using cyime_t9_ngram::Header;
 using cyime_t9_ngram::Header3;
 using cyime_t9_ngram::WordEntry;
 
-std::shared_ptr<const T9NgramModel> T9NgramModel::Open(const std::string& path) {
+namespace {
+std::mutex& OpenMutex() {
   static std::mutex mutex;
+  return mutex;
+}
+std::map<std::string, std::shared_ptr<const T9NgramModel>>& OpenModels() {
   static std::map<std::string, std::shared_ptr<const T9NgramModel>> models;
-  std::lock_guard<std::mutex> lock(mutex);
+  return models;
+}
+}  // namespace
+
+void T9NgramModel::ReleaseResidentPages() {
+  std::lock_guard<std::mutex> lock(OpenMutex());
+  for (const auto& entry : OpenModels()) {
+    const auto& model = entry.second;
+    // Read-only shared file mapping: DONTNEED only unmaps pages, it never loses data.
+    if (model && model->data_) madvise(model->data_, model->size_, MADV_DONTNEED);
+  }
+}
+
+std::shared_ptr<const T9NgramModel> T9NgramModel::Open(const std::string& path) {
+  std::lock_guard<std::mutex> lock(OpenMutex());
+  auto& models = OpenModels();
   auto found = models.find(path);
   if (found != models.end()) return found->second;
   std::shared_ptr<T9NgramModel> model(new T9NgramModel());

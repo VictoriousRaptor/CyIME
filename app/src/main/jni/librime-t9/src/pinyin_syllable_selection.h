@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iomanip>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <set>
@@ -14,6 +15,10 @@
 #include <rime/candidate.h>
 #include <rime/context.h>
 #include <rime/dict/dictionary.h>
+#include <rime/dict/corrector.h>
+#include <rime/engine.h>
+#include <rime/gear/translator_commons.h>
+#include <rime/menu.h>
 #include <rime/schema.h>
 #include <rime/ticket.h>
 
@@ -249,8 +254,7 @@ inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
   auto to = from->second.find(end);
   if (to == from->second.end()) return false;
   auto target = to->second.find(syllable);
-  if (target == to->second.end() || target->second.type >= rime::kAbbreviation ||
-      target->second.is_correction) return false;
+  if (target == to->second.end() || target->second.type >= rime::kAbbreviation) return false;
   auto chosen = target->second;
   chosen.ambiguous_source_positions.clear();
 
@@ -451,7 +455,7 @@ inline std::unique_ptr<rime::Dictionary> OpenDictionary(rime::Schema* schema) {
 }
 
 // Readings that start at [start] and end by the caret, from the prism itself.
-inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schema,
+inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schema, rime::Engine* engine,
                                      rime::Dictionary* dictionary, size_t start,
                                      const Lock* selected) {
   std::vector<Option> result;
@@ -488,13 +492,79 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
               })});
     }
   }
-  std::sort(result.begin(), result.end(), [](const Option& a, const Option& b) {
+  // Use the same schema and live keyboard geometry as the script translator.
+  // Corrections are graph edges, not necessarily entries in the prism itself.
+  // The schemas always enable correction; the keyboard switch only decides whether
+  // a neighbor map is sent (cyime_neighbors), so skip the extra graph when it is empty.
+  bool correction = false;
+  if (engine && !context->get_property("cyime_neighbors").empty() &&
+      schema->config()->GetBool("translator/enable_correction", &correction) && correction) {
+    auto component = rime::Corrector::Require("corrector");
+    std::unique_ptr<rime::Corrector> corrector(component
+        ? component->Create(rime::Ticket(engine, "translator", "script_translator")) : nullptr);
+    if (corrector) {
+      bool completion = false;
+      schema->config()->GetBool("translator/enable_completion", &completion);
+      rime::Syllabifier builder(delimiters, completion, strict);
+      bool preserve_final_ne = false;
+      if (!strict && schema->config()->GetBool("translator/preserve_final_ne", &preserve_final_ne) && preserve_final_ne)
+        builder.PreserveFinalNe();
+      builder.EnableCorrection(corrector.get());
+      rime::SyllableGraph graph;
+      builder.BuildSyllableGraph(context->input().substr(code_start, caret - code_start),
+                                *dictionary->prism(), &graph);
+      auto from = graph.edges.find(0);
+      if (from != graph.edges.end()) {
+        for (const auto& edge : from->second) {
+          const size_t end = code_start + edge.first;
+          if (end > caret) continue;
+          for (const auto& spelling : edge.second) {
+            if (!spelling.second.is_correction || spelling.second.type >= rime::kAbbreviation ||
+                !seen.emplace(end, spelling.first).second) continue;
+            const auto pinyin = dictionary->primary_table()->GetSyllableById(spelling.first);
+            if (pinyin.empty()) continue;
+            result.push_back({spelling.first, pinyin, start, end,
+                selected && std::any_of(selected->spans.begin(), selected->spans.end(),
+                    [&](const Span& span) { return span.start == start && span.end == end && span.syllable == spelling.first; })});
+          }
+        }
+      }
+    }
+  }
+  // Prefer readings used by already-visible candidates, in their existing
+  // order. Use the actual syllable IDs and spans rather than formatted comments.
+  std::map<std::pair<size_t, rime::SyllableId>, size_t> candidate_rank;
+  if (!context->composition().empty()) {
+    const auto menu = context->composition().back().menu;
+    if (menu) for (size_t i = 0; i < std::min<size_t>(menu->candidate_count(), 20); ++i) {
+      const auto displayed = menu->GetCandidateAt(i);
+      if (!displayed) continue;
+      const auto phrase = rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(displayed));
+      if (!phrase || phrase->start() > start || phrase->end() <= start) continue;
+      const auto spans = phrase->spans();
+      if (!spans.HasVertex(start)) continue;
+      const auto index = spans.Count(phrase->start(), start);
+      if (index >= phrase->code().size()) continue;
+      for (const auto& option : result) {
+        if (option.syllable == phrase->code()[index] && spans.HasVertex(option.end) &&
+            spans.Count(start, option.end) == 1)
+          candidate_rank.emplace(std::make_pair(option.end, option.syllable), i);
+      }
+    }
+  }
+  const auto rank = [&](const Option& option) {
+    const auto found = candidate_rank.find(std::make_pair(option.end, option.syllable));
+    return found == candidate_rank.end() ? size_t{20} : found->second;
+  };
+  std::stable_sort(result.begin(), result.end(), [&](const Option& a, const Option& b) {
+    const auto a_rank = rank(a), b_rank = rank(b);
+    if (a_rank != b_rank) return a_rank < b_rank;
     return a.end != b.end ? a.end > b.end : a.pinyin < b.pinyin;
   });
   return result;
 }
 
-inline std::vector<Option> Options(rime::Context* context, rime::Schema* schema,
+inline std::vector<Option> Options(rime::Context* context, rime::Schema* schema, rime::Engine* engine,
                                    rime::Dictionary* dictionary) {
   if (!context || !schema || !dictionary || context->get_option("ascii_mode")) return {};
   const size_t confirmed = context->composition().GetConfirmedPosition();
@@ -504,14 +574,14 @@ inline std::vector<Option> Options(rime::Context* context, rime::Schema* schema,
   const bool has_selected = ReadLock(context, schema, *dictionary->prism(), &selected);
   const Lock* lock = has_selected ? &selected : nullptr;
   const size_t active = has_selected ? ActiveSpans(selected, caret) : 0;
-  if (active == 0) return OptionsAt(context, schema, dictionary, confirmed, lock);
+  if (active == 0) return OptionsAt(context, schema, engine, dictionary, confirmed, lock);
   // Like the nine-key rail, the next syllable is offered once one is chosen.
   // When nothing can follow before the caret, the last chosen one can be changed.
-  auto next = OptionsAt(context, schema, dictionary,
+  auto next = OptionsAt(context, schema, engine, dictionary,
       SkipDelimiters(context->input(), selected.spans[active - 1].end, Delimiters(schema),
                      context->input().size()), lock);
   return next.empty()
-      ? OptionsAt(context, schema, dictionary, selected.spans[active - 1].start, lock) : next;
+      ? OptionsAt(context, schema, engine, dictionary, selected.spans[active - 1].start, lock) : next;
 }
 
 // Applies [lock] (empty spans: none) and keeps it only if Rime still has a menu.
@@ -537,7 +607,7 @@ inline bool Apply(rime::Context* context, rime::Schema* schema, const rime::Pris
   return false;
 }
 
-inline bool Select(rime::Context* context, rime::Schema* schema,
+inline bool Select(rime::Context* context, rime::Schema* schema, rime::Engine* engine,
                    const std::string& expected_input, const std::string& expected_schema,
                    size_t start, size_t end, rime::SyllableId syllable) {
   if (!context || !schema || context->get_option("ascii_mode") ||
@@ -546,7 +616,7 @@ inline bool Select(rime::Context* context, rime::Schema* schema,
       start < context->composition().GetConfirmedPosition()) return false;
   auto dictionary = OpenDictionary(schema);
   if (!dictionary) return false;
-  const auto options = Options(context, schema, dictionary.get());
+  const auto options = Options(context, schema, engine, dictionary.get());
   if (std::none_of(options.begin(), options.end(), [&](const Option& option) {
         return option.start == start && option.end == end && option.syllable == syllable;
       })) return false;

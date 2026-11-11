@@ -1181,3 +1181,8 @@ user-baomao-bao	26	baomao	豹猫	3	found	2026-11-06	同上反例：单打 baomao
 user-gulaorou	26	boluogulaorou	菠萝咕咾肉	1	user	2026-11-08	Q 群 2：咾 只在生僻字里，咕咾肉 成不了词；补 咾 咕咾肉 菠萝咕咾肉
 user-gulaorou-word	26	gulaorou	咕咾肉	1	user	2026-11-08	同上
 user-gulaorou-lao	26	lao	!咾	1	found	2026-11-08	同上反例：单打 lao 首选不能是 咾
+user-congqiangdaoruo	26	congqiangdaoruo	从强到弱	1	user	2026-11-10	B 站：微软双拼 cs'qd'dk'ro 曾出「从抢到若」(从强到弱、到弱不在词库)；补 从X到Y 一组
+user-congruodaoqiang	26	congruodaoqiang	从弱到强	1	found	2026-11-10	同上：原词频 53，补到 5000
+user-congshendaoqian	26	congshendaoqian	从深到浅	1	found	2026-11-10	同上：从X到Y 缺词
+user-congkuaidaoman	26	congkuaidaoman	从快到慢	1	found	2026-11-10	同上：从X到Y 缺词
+user-qiangdao	26	qiangdao	抢到	3	found	2026-11-10	同上反例：单打 qiangdao 时「抢到」还在前三

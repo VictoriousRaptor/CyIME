@@ -17,6 +17,9 @@ internal fun pluginEntryHint(context: Context, info: PluginInfo?, enabled: Boole
     // 字幕插件用内置的「字幕」按钮，manifest 里没有按钮。
     if (info?.id == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID) return pluginEntryHintText("字幕",
         if (enabled) SettingsPreferences.pluginButtonPlace(context, com.kingzcheung.xime.ui.caption.CaptionPlugin.BUTTON_ID) else null)
+    // 日语插件没有按钮：装好启用后日语在键盘的语言切换里。
+    if (info?.id == com.kingzcheung.xime.settings.JapanesePlugin.ID)
+        return if (enabled) "入口：键盘上切换语言；日语也可以在「语言与方案」里关掉" else "入口：打开开关后，日语出现在键盘的语言切换里"
     val button = info?.toolbarButtons?.firstOrNull() ?: return null
     val place = if (enabled) SettingsPreferences.pluginButtonPlace(context, button.id) else null
     return pluginEntryHintText(button.label.ifBlank { info.name }, place)

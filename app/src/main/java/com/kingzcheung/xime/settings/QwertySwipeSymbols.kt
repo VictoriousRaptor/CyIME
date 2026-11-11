@@ -10,19 +10,20 @@ internal object QwertySwipeSymbols {
     val rows = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
     val keys = rows.joinToString("")
     private fun preset(vararg values: String) = keys.map(Char::toString).zip(values.toList()).toMap()
+    // 用户 11-10 定：用他手机上存的「new」这一套作中文默认。
     val up = preset(
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-        "～", "—", "…", "·", "¥", "、", "【", "】", "！",
-        "（", "）", "：", "；", "《", "》", "？")
+        "｀", "～", "…", "—", "（", "）", "【", "】", "｜",
+        "！", "？", "：", "；", "《", "》", "、")
     val down = preset(
         "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
-        "~", "-", "_", "'", "=", "\\", "[", "]", "/",
-        "\"", "`", ":", ";", "<", ">", "?")
+        "`", "~", ".", "_", "'", "\"", "[", "]", "|",
+        "-", "=", ":", ";", "<", ">", "/")
     // 英文上角标和中文同一位置，换成对应的半角（没有半角的 … · ¥ 照旧）：中文上滑哪个，英文同一个键就是它的半角。
     val englishUp = preset(
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-        "~", "-", "…", "·", "¥", "\\", "[", "]", "!",
-        "(", ")", ":", ";", "<", ">", "?")
+        "`", "~", "…", "-", "(", ")", "[", "]", "|",
+        "!", "?", ":", ";", "<", ">", "\\")
     // 英文下角标作补充：中文下角标里不和上角标重复的留在原位，其余换成不常用符号（用户 10-19 定）。
     val englishDown = preset(
         "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
@@ -32,8 +33,10 @@ internal object QwertySwipeSymbols {
     // 第一排 Q 到 P 的上下 20 格空出来，换成下面这些；第二、三排不变（用户 11-01 定）。
     private fun firstRow(vararg values: String) = rows[0].map(Char::toString).zip(values.toList()).toMap()
     // 中文下方补齐英文键盘有、中文原来没有的符号，{ } 在 O、P 和电脑上一样靠右；上方放直角引号和常用记号。
-    val numberRowUp = firstRow("「", "」", "『", "』", "℃", "←", "→", "√", "★", "※")
-    val numberRowDown = firstRow("+", "×", "÷", "≈", "≤", "≥", "°", "|", "{", "}")
+    // 11-10：「new」里中文没有半角 ?，数字行上方 P 的 ※ 换成 ?，中文仍包含英文键盘的全部符号（11-01 的规则）。
+    val numberRowUp = firstRow("「", "」", "『", "』", "℃", "←", "→", "√", "★", "?")
+    // 11-10 中文换成「new」后 | 在 L 下方，这里原来的 | 换成中文没有的 \。
+    val numberRowDown = firstRow("+", "×", "÷", "≈", "≤", "≥", "°", "\\", "{", "}")
     // 英文上方照英文规则：这些没有半角写法，和中文同一格同一个；下方英文本来就全，补少用的。
     val numberRowEnglishUp = numberRowUp
     val numberRowEnglishDown = firstRow("€", "£", "±", "≠", "∞", "©", "®", "™", "§", "‰")
@@ -63,6 +66,9 @@ internal object QwertySwipeSymbols {
 
     const val LEGACY_VERSION = "旧布局"
     private const val VERSIONS_KEY = "qwerty_symbol_versions"
+    /** 英文26键自己的版本表，和中文分开存，两边的版本列表互不混入。 */
+    private const val ENGLISH_VERSIONS_KEY = "qwerty_symbol_versions_en"
+    private fun versionsKey(english: Boolean) = if (english) ENGLISH_VERSIONS_KEY else VERSIONS_KEY
     private const val LEGACY_SAVED_KEY = "qwerty_symbol_versions_legacy_saved"
     const val V1012_VERSION = "10-12布局"
     private const val FIXED_PRESET_KEY = "qwerty_symbol_fixed_preset_adopted"
@@ -71,9 +77,9 @@ internal object QwertySwipeSymbols {
     /** 一个版本的 52 个位置：先全部上方，再全部下方。 */
     val slotIds: List<String> get() = listOf("up", "down").flatMap { direction -> keys.map { "$direction.$it" } }
 
-    /** 用户另存的整套中文角标，按保存顺序。 */
-    fun versions(context: Context): Map<String, Map<String, String>> {
-        val raw = SettingsPreferences.getPrefsPublic(context).getString(VERSIONS_KEY, null).orEmpty()
+    /** 用户另存的整套角标，按保存顺序；[english] 为 true 时是英文26键的版本。 */
+    fun versions(context: Context, english: Boolean = false): Map<String, Map<String, String>> {
+        val raw = SettingsPreferences.getPrefsPublic(context).getString(versionsKey(english), null).orEmpty()
         val ids = slotIds
         return raw.split(RECORD).mapNotNull { record ->
             val fields = record.split(FIELD)
@@ -82,20 +88,21 @@ internal object QwertySwipeSymbols {
         }.toMap(LinkedHashMap<String, Map<String, String>>())
     }
 
-    fun saveVersion(context: Context, name: String, values: Map<String, String>) =
-        writeVersions(context, versions(context) + (versionName(name) to values))
+    fun saveVersion(context: Context, name: String, values: Map<String, String>, english: Boolean = false) =
+        writeVersions(context, versions(context, english) + (versionName(name) to values), english)
 
-    fun deleteVersion(context: Context, name: String) = writeVersions(context, versions(context) - name)
+    fun deleteVersion(context: Context, name: String, english: Boolean = false) =
+        writeVersions(context, versions(context, english) - name, english)
 
     fun versionName(name: String) = name.filter { it != RECORD && it != FIELD }.trim()
 
-    private fun writeVersions(context: Context, all: Map<String, Map<String, String>>) {
+    private fun writeVersions(context: Context, all: Map<String, Map<String, String>>, english: Boolean = false) {
         val ids = slotIds
         val raw = all.entries.joinToString(RECORD.toString()) { (name, values) ->
             (listOf(name) + ids.map { values[it].orEmpty().filter { c -> c != RECORD && c != FIELD } })
                 .joinToString(FIELD.toString())
         }
-        check(SettingsPreferences.getPrefsPublic(context).edit().putString(VERSIONS_KEY, raw).commit()) { "无法保存布局版本" }
+        check(SettingsPreferences.getPrefsPublic(context).edit().putString(versionsKey(english), raw).commit()) { "无法保存布局版本" }
     }
 
     /**

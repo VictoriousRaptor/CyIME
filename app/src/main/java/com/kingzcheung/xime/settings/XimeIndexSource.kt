@@ -151,6 +151,20 @@ object XimeIndexSource {
      */
     internal fun mayAutoPlaceButtons(pluginId: String): Boolean = pluginId !in RETIRED_PLUGIN_IDS
 
+    /**
+     * 线上目录补上安装包自带的插件：线上没有的整条补上；随包版本更新时用随包那条，线上独有的旧版本留在后面。
+     * 国内先读魔搭，魔搭目录没同步时翻译、字幕这些随包插件照样能在市场里找到、离线装上（11-09）。
+     */
+    internal fun withBundledPlugins(remote: PluginsDirectIndex, bundled: PluginsDirectIndex): PluginsDirectIndex {
+        val byId = remote.plugins.associateBy { it.id }
+        val merged = remote.plugins.map { online ->
+            val local = bundled.plugins.find { it.id == online.id } ?: return@map online
+            if (com.kingzcheung.xime.plugin.core.util.VersionUtil.compare(local.currentVersion, online.currentVersion) <= 0) online
+            else local.copy(versions = local.versions + online.versions.filter { v -> local.versions.none { it.version == v.version } })
+        }
+        return remote.copy(plugins = merged + bundled.plugins.filter { it.id !in byId })
+    }
+
     internal fun bundledPlugins(context: Context): PluginsDirectIndex =
         context.assets.open("plugin-market/index.yaml").bufferedReader().use {
             XimeIndexParser.parsePluginsDirectIndex(it.readText())

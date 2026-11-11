@@ -103,10 +103,10 @@ class QwertySwipeSymbolsTest {
     @Test fun presetMatchesEveryRequestedKeyExactly() {
         val keys = "qwertyuiopasdfghjklzxcvbnm"
         assertEquals(26, QwertySwipeSymbols.up.size)
-        // 中文：上方数字和常用全角符号，下方半角符号。英文上角标同位置换半角，下角标放补充符号（10-19）。
-        assertEquals("1234567890～—…·¥、【】！（）：；《》？", keys.map { QwertySwipeSymbols.up.getValue(it.toString()) }.joinToString(""))
-        assertEquals("!@#$%^&*()~-_'=\\[]/\"`:;<>?", keys.map { QwertySwipeSymbols.down.getValue(it.toString()) }.joinToString(""))
-        assertEquals("1234567890~-…·¥\\[]!():;<>?", keys.map { QwertySwipeSymbols.englishUp.getValue(it.toString()) }.joinToString(""))
+        // 中文：上方数字和常用全角符号，下方半角符号（11-10 换成用户的「new」）。英文上角标同位置换半角，下角标放补充符号（10-19）。
+        assertEquals("1234567890｀～…—（）【】｜！？：；《》、", keys.map { QwertySwipeSymbols.up.getValue(it.toString()) }.joinToString(""))
+        assertEquals("!@#$%^&*()`~._'\"[]|-=:;<>/", keys.map { QwertySwipeSymbols.down.getValue(it.toString()) }.joinToString(""))
+        assertEquals("1234567890`~…-()[]|!?:;<>\\", keys.map { QwertySwipeSymbols.englishUp.getValue(it.toString()) }.joinToString(""))
         assertEquals("!@#$%^&*()≈+_'=|{}/\"`×÷≤≥°", keys.map { QwertySwipeSymbols.englishDown.getValue(it.toString()) }.joinToString(""))
     }
     @Test fun editorOverridesYamlAndPreservesTapAndLongPress() {

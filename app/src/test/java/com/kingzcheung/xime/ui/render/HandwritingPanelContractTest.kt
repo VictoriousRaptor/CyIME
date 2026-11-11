@@ -9,7 +9,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -40,7 +42,8 @@ import org.robolectric.annotation.Config
  * - 全屏：底排换成「收起全屏手写」，上面多一排符号键（476392f23、8caab1742）；
  * - 当前手写语言写在空格键上，画板左上角平时不浮语言胶囊（#107，e5b518136）；
  * - 公式按钮只在英文手写里有，中文、日语没有（ec23da432）；
- * - 英文手写没装公式模型时点「公式」直接打开公式模型的下载页，不跳只列已装模型的页（8f8f1acf1）。
+ * - 英文手写没装公式模型时点「公式」直接打开公式模型的下载页，不跳只列已装模型的页（8f8f1acf1）；
+ * - 全屏时底下那块按键的底色铺满平时键盘的整宽、一直铺到面板底边，两侧和底下不漏透明的一条（11-09 截图）。
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = android.app.Application::class, qualifiers = "w400dp-h860dp-xhdpi")
@@ -87,6 +90,30 @@ class HandwritingPanelContractTest {
         }
         assertFalse(exists("handwriting-key:expand"))
         assertTrue(exists("handwriting-symbol-row"))
+    }
+
+    @Test fun fullscreenFooterMaterialCoversSidesAndBottom() {
+        rule.setContent {
+            CompositionLocalProvider(LocalKeyboardInputPreferences provides
+                KeyboardInputPreferences(frostedGlass = FrostedGlassConfig.defaults(false, enabled = false))) {
+                MaterialTheme {
+                    HandwritingKeyboardLayout(language = InputLanguage.CHINESE, bottomPaddingDp = 0, expanded = true,
+                        expandedControlsWidthDp = 400, modifier = Modifier.requiredSize(400.dp, 260.dp).testTag("host"))
+                }
+            }
+        }
+        rule.waitForIdle()
+        fun bounds(tag: String) = rule.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val host = bounds("host")
+        val material = bounds("handwriting-controls-material")
+        val controls = bounds("handwriting-controls")
+        assertEquals(host.left.value, material.left.value, 0.5f)
+        assertEquals(host.right.value, material.right.value, 0.5f)
+        // 底色接到面板底边，下面接导航栏那条，中间不留透明的缝
+        assertEquals(host.bottom.value, material.bottom.value, 0.5f)
+        // 按键还在平时的位置：两侧留边、底部留白都在底色里面
+        assertTrue(controls.left > material.left && controls.right < material.right)
+        assertTrue(controls.bottom < material.bottom)
     }
 
     @Test fun languageIsOnTheSpaceKeyNotFloatingOnTheBoard() {

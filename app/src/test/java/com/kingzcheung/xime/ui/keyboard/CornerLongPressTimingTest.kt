@@ -87,7 +87,7 @@ class CornerLongPressTimingTest {
                     Box(Modifier.requiredSize(400.dp, 260.dp)) {
                         KeyboardLayout({ typed += it }, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {},
                             onGlideWord = if (glide) ({ words, _ -> typed += "glide:${words.first().word}" }) else null,
-                            onGlideCode = if (glide) ({ code -> typed += "glide:$code" }) else null),
+                            onGlideCode = if (glide) ({ code, _, _ -> typed += "glide:$code" }) else null),
                             KeyboardUiState(currentSchemaId = schema), ascii, Modifier.requiredSize(400.dp, 260.dp))
                     }
                 }
@@ -122,21 +122,29 @@ class CornerLongPressTimingTest {
     }
 
     private fun popup() = rule.onNodeWithTag("key-choice-popup", useUnmergedTree = true)
+    /** 14 键、九键拂动的方向盘（默认开）：按住不动时也算气泡，到点前不能弹（用户 11-09）。 */
+    private fun disc() = rule.onNodeWithTag("letter-flick-preview", useUnmergedTree = true)
 
     /**
-     * 按住 [key]：到点前不出字、没有气泡；到点时（手还按着）恰好输入 [expected] 一次、气泡出来；
-     * 松手后不再多出字，气泡消失。按压气泡保持默认关，证明长按的气泡不靠它。
+     * 按住 [key]：到点前不出字、不弹方向盘；按键浮标开着时按下就出（[keyBubble]），关着时到点前没有气泡；
+     * 到点时（手还按着）恰好输入 [expected] 一次、气泡换成角标；松手后不再多出字，气泡消失。
+     * 关着按键浮标也要出角标气泡，证明长按的气泡不靠它。
      */
-    private fun holdAndCheck(id: String, key: SemanticsNodeInteraction, expected: String?, output: () -> List<String>) {
+    private fun holdAndCheck(id: String, key: SemanticsNodeInteraction, expected: String?, keyBubble: Boolean = false,
+        output: () -> List<String>) {
         val before = output().size
         rule.mainClock.autoAdvance = false
         key.performTouchInput { down(center) }
-        rule.mainClock.advanceTimeBy((delaySeconds * 1000).toLong() - 100)
+        rule.mainClock.advanceTimeBy(32)
+        if (keyBubble) popup().assertExists("$id 按下应立即显示按键浮标") else popup().assertDoesNotExist()
+        rule.mainClock.advanceTimeBy((delaySeconds * 1000).toLong() - 132)
         assertEquals("$id 没到设定时长不能出字", before, output().size)
-        popup().assertDoesNotExist()
+        if (keyBubble) popup().assertExists("$id 按住时按键浮标一直在") else popup().assertDoesNotExist()
+        disc().assertDoesNotExist()
         rule.mainClock.advanceTimeBy(200)
         assertEquals("$id 到点立刻输入（还没松手）", listOfNotNull(expected), output().drop(before))
         popup().assertExists("$id 长按到点后应显示输入的角标")
+        disc().assertDoesNotExist()
         key.performTouchInput { up() }
         rule.mainClock.advanceTimeBy(100)
         rule.mainClock.autoAdvance = true
@@ -148,14 +156,14 @@ class CornerLongPressTimingTest {
     private fun letterKeys(english: Boolean) = KeysConfigHelper.getKeyRows(english).flatten()
         .filter { key -> key.isNotEmpty() && key.all { it.lowercaseChar() in 'a'..'z' } }
 
-    private fun checkLetters(everyNth: Int, boards: List<Board> = layouts) {
+    private fun checkLetters(everyNth: Int, boards: List<Board> = layouts, keyBubble: Boolean = false) {
         for (board in boards) {
             use(board)
             letterKeys(board.english).filterIndexed { index, _ -> index % everyNth == 0 }.forEach { key ->
                 val tag = "qwerty-key:$key"
                 val top = topHint(tag, key)
                 assertTrue("$board $key 缺上角标", top != null)
-                holdAndCheck("$board $key", rule.onNodeWithTag(tag, true), top) { typed.toList() }
+                holdAndCheck("$board $key", rule.onNodeWithTag(tag, true), top, keyBubble) { typed.toList() }
             }
         }
     }
@@ -164,6 +172,14 @@ class CornerLongPressTimingTest {
         preferences = KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS, symbolLongPressSeconds = delaySeconds)
         showLetters()
         checkLetters(everyNth = 1)
+    }
+
+    @Test fun lettersShowTheKeyBubbleOnPressThenTheHintAtTheDelay() {
+        // 按键浮标（用户 11-09 改回默认开）：按下就显示按的键，到点换成输入的角标，松手消失。
+        preferences = KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS,
+            symbolLongPressSeconds = delaySeconds, showPressBubble = true)
+        showLetters()
+        checkLetters(everyNth = 4, keyBubble = true)
     }
 
     @Test fun lettersBehaveTheSameWithGlideTypingOn() {
@@ -214,8 +230,35 @@ class CornerLongPressTimingTest {
         showNine(prefs)
         for ((digit, letters) in listOf("1" to "分词", "2" to "ABC", "5" to "JKL", "7" to "PQRS", "9" to "WXYZ")) {
             val key = rule.onAllNodesWithText(letters, ignoreCase = true, useUnmergedTree = true).onFirst()
-            holdAndCheck("九键 $digit $prefs", key, digit) { committed.toList() }
+            holdAndCheck("九键 $digit $prefs", key, digit, prefs.showPressBubble) { committed.toList() }
         }
+    }
+
+    @Test fun nineKeyShowsTheKeyBubbleOnPressWithFlickAndDisc() {
+        // 以前开着方向盘的九键把按键浮标整个屏蔽了；现在按下就出，到点换数字，方向盘不出。
+        checkNine(KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS,
+            symbolLongPressSeconds = delaySeconds, t9FlickLetters = true, flickDirectionDisc = true, showPressBubble = true))
+    }
+
+    @Test fun withCornerSwipeOnTheDiscReplacesTheKeyBubbleInsteadOfStackingOnIt() {
+        // 角标滑动开着时按住 180 毫秒仍会出方向盘：方向盘出来时按键浮标收掉，同一时间只有一个。
+        showNine(KeyboardInputPreferences(symbolInputMode = SymbolInputMode.SWIPE_UP,
+            t9FlickLetters = true, flickDirectionDisc = true, showPressBubble = true))
+        val key = rule.onAllNodesWithText("JKL", ignoreCase = true, useUnmergedTree = true).onFirst()
+        rule.mainClock.autoAdvance = false
+        key.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(48)
+        popup().assertExists("按下应立即显示按键浮标")
+        disc().assertDoesNotExist()
+        rule.mainClock.advanceTimeBy(212)
+        disc().assertExists("按住一会儿出方向盘")
+        popup().assertDoesNotExist()
+        key.performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(100)
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        disc().assertDoesNotExist()
+        popup().assertDoesNotExist()
     }
 
     @Test fun nineKeyDigitsCommitAtTheConfiguredDelayWithFlickLetters() {

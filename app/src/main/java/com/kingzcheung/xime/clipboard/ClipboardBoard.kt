@@ -93,3 +93,36 @@ internal fun clipboardBoardContent(cards: List<ClipboardCard>, pins: Set<String>
 /** A tall picture or long text must not turn the collapsed row into the whole panel. */
 internal fun clipboardPinnedPreviewHeight(recordsHeightDp: Float): Float =
     (recordsHeightDp.coerceAtLeast(0f) * .35f).coerceAtMost(112f)
+
+/**
+ * 剪贴板里（没固定的）图片卡片多高（用户 11-09：图片太矮，给个选项）。固定的图片照旧只露一条。
+ * 默认「标准」：以前的高度，比宽稍高；「按图片比例」长图高、宽图矮；「矮」是 11-09 前的样子。
+ * 标准和按比例都不超过记录区的六成，一张长截图不会占满面板。
+ */
+internal enum class ClipboardImageHeight(val key: String, val label: String, val caption: String) {
+    STANDARD("standard", "标准", "比宽稍高"),
+    RATIO("ratio", "按图片比例", "长图高、宽图矮，最高到面板的六成"),
+    LOW("low", "矮", "只露一段，一屏看到的记录多"),
+}
+
+/** Preference (board prefs) for [ClipboardImageHeight]. */
+internal const val CLIPBOARD_IMAGE_HEIGHT_KEY = "image_height"
+
+internal fun clipboardImageHeight(stored: String?): ClipboardImageHeight =
+    ClipboardImageHeight.entries.firstOrNull { it.key == stored } ?: ClipboardImageHeight.STANDARD
+
+/** A picture card at least this tall stays easy to tap, however wide the picture. */
+internal const val ClipboardImageMinHeight = 80f
+
+/**
+ * One recent picture card's height in dp. [aspect] is the picture's width / height, null while
+ * not yet read (it then keeps the standard shape, so nothing jumps unless the picture differs).
+ */
+internal fun clipboardImageCardHeight(mode: ClipboardImageHeight, widthDp: Float, recordsHeightDp: Float,
+    aspect: Float?): Float {
+    if (mode == ClipboardImageHeight.LOW) return clipboardPinnedPreviewHeight(recordsHeightDp)
+    val most = (recordsHeightDp.coerceAtLeast(0f) * .6f).coerceAtLeast(ClipboardImageMinHeight)
+    val shape = if (mode == ClipboardImageHeight.RATIO) aspect?.takeIf { it > 0f } ?: ClipboardThumbnailAspectRatio
+        else ClipboardThumbnailAspectRatio
+    return (widthDp.coerceAtLeast(0f) / shape).coerceIn(ClipboardImageMinHeight, most)
+}

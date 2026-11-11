@@ -11,16 +11,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.settings.FrostedGlassPreferences
 import com.kingzcheung.xime.settings.SettingsPreferences
+import com.kingzcheung.xime.settings.SpellingPatches
 import com.kingzcheung.xime.ui.settings.LayoutDisplaySettingsContent
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.ui.theme.XimeTheme
@@ -74,6 +79,31 @@ class CandidateCancelSettingRenderTest {
         rule.onNodeWithText("候选词从最左边开始", useUnmergedTree = true).assertExists()
         rule.onNodeWithText("↑ 点它取消当前输入", useUnmergedTree = true).assertDoesNotExist()
         assertFalse(SettingsPreferences.shouldShowCandidateCancelButton(context))
+    }
+
+    @Test fun doublePinyinDisplayUsesTheSharedPreference() {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        prefs.edit().remove(SpellingPatches.DOUBLE_PINYIN_RAW_PREEDIT_KEY).commit()
+        assertTrue(SpellingPatches.doublePinyinRawPreedit(context))
+        KeyboardThemes.initFromConfig(context)
+        rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") {
+            LayoutDisplaySettingsContent(onBack = {}, initialPage = "candidates") } }
+        val settingTag = hasTestTag("settings-search-anchor:双拼编码显示全拼")
+        rule.onNode(hasScrollToNodeAction()).performScrollToNode(settingTag)
+        val setting = rule.onNode(isToggleable() and hasAnyAncestor(settingTag))
+        setting.assertIsOff()
+        setting.performClick()
+        setting.assertIsOn()
+        rule.runOnIdle { assertFalse(SpellingPatches.doublePinyinRawPreedit(context)) }
+        rule.runOnIdle { SpellingPatches.setDoublePinyinRawPreedit(context, true) }
+        setting.assertIsOff()
+        rule.onNode(hasScrollToNodeAction()).performTouchInput { swipeUp() }
+        val view = rule.activity.window.decorView
+        val frame = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        rule.runOnIdle { view.draw(android.graphics.Canvas(frame)) }
+        File("build/reports/double-pinyin-candidate-setting.png").apply { parentFile?.mkdirs() }
+            .outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        frame.recycle()
     }
 
     @Test fun renderLegend() {

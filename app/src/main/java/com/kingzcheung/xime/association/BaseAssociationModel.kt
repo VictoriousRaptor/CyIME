@@ -12,15 +12,26 @@ import java.io.Reader
  * (tools/ime_lab/ngram/tag_word_completions.py). It fits a bare character the user committed
  * on its own, not the end of a whole phrase: after 「你在吃饭莫」 the 莫 already ends a word.
  */
-class BaseAssociationModel private constructor(private val rows: Map<String, Row>) {
-    /** Candidates in score order; bit i of [completions] marks candidates[i] as finishing the last word. */
-    private class Row(val candidates: List<AssociationCandidate>, private val completions: Int) {
-        fun completesWord(index: Int): Boolean = completions and (1 shl index) != 0
-        val nextWordShare: Float = candidates.sumOf { it.score.toDouble() }.let { total ->
-            if (total <= 0.0) 1f
-            else (candidates.withIndex().filterNot { completesWord(it.index) }.sumOf { it.value.score.toDouble() } / total).toFloat()
-        }
-    }
+class BaseAssociationModel private constructor(
+    /** Contexts in sorted order; row r belongs to contexts[r]. */
+    private val contexts: Array<String>,
+    /** Candidates of row r are [rowStart[r], rowStart[r + 1]), in score order. */
+    private val rowStart: IntArray,
+    /** Bit i of rowMask[r] marks the row's i-th candidate (score order) as finishing the last word. */
+    private val rowMask: IntArray,
+    private val rowNextWordShare: FloatArray,
+    /** All candidate texts back to back; candidate c is text[textStart[c], textStart[c + 1]). */
+    private val text: CharArray,
+    private val textStart: IntArray,
+    private val scores: FloatArray,
+) {
+    // Packed arrays instead of one String + object per candidate: the bundled table has about
+    // 390k candidates under 40k contexts, which took roughly 30 MB of Java heap as objects.
+
+    private fun completesWord(row: Int, index: Int): Boolean = rowMask[row] and (1 shl index) != 0
+
+    private fun candidate(index: Int): AssociationCandidate =
+        AssociationCandidate(String(text, textStart[index], textStart[index + 1] - textStart[index]), scores[index])
 
     /**
      * [afterWholeWord]: the text was committed as a phrase of two or more characters (a sentence,
@@ -32,10 +43,18 @@ class BaseAssociationModel private constructor(private val rows: Map<String, Row
         if (topK <= 0) return emptyList()
         val tail = context.takeLastWhile { it in '一'..'鿿' }.takeLast(4)
         for (size in tail.length downTo 1) {
-            val row = rows[tail.takeLast(size)] ?: continue
-            if (!afterWholeWord) return row.candidates.take(topK)
-            if (size == 1 && tail.length >= 2 && row.nextWordShare < MIN_NEXT_WORD_SHARE) return emptyList()
-            return row.candidates.filterIndexed { index, _ -> !row.completesWord(index) }.take(topK)
+            val row = contexts.binarySearch(tail.takeLast(size))
+            if (row < 0) continue
+            val first = rowStart[row]
+            val count = rowStart[row + 1] - first
+            if (!afterWholeWord) return List(minOf(topK, count)) { candidate(first + it) }
+            if (size == 1 && tail.length >= 2 && rowNextWordShare[row] < MIN_NEXT_WORD_SHARE) return emptyList()
+            val result = ArrayList<AssociationCandidate>(minOf(topK, count))
+            for (index in 0 until count) {
+                if (result.size == topK) break
+                if (!completesWord(row, index)) result.add(candidate(first + index))
+            }
+            return result
         }
         return emptyList()
     }
@@ -56,7 +75,7 @@ class BaseAssociationModel private constructor(private val rows: Map<String, Row
             build(table, wordCompletions)
 
         private fun build(reader: Reader, masks: Map<String, Int>): BaseAssociationModel {
-            val groups = linkedMapOf<String, MutableList<AssociationCandidate>>()
+            val groups = HashMap<String, MutableList<AssociationCandidate>>()
             reader.buffered().useLines { lines -> lines.filterNot { it.startsWith("#") || it.isBlank() }.forEach { line ->
                 val fields = line.split('\t')
                 require(fields.size == 4)
@@ -67,15 +86,42 @@ class BaseAssociationModel private constructor(private val rows: Map<String, Row
                 require(list.size < MAX_PER_CONTEXT && groups.size <= MAX_CONTEXTS)
                 list.add(AssociationCandidate(fields[1], count.toFloat() / total))
             } }
-            return BaseAssociationModel(groups.mapValues { (context, list) ->
+            val contexts = groups.keys.toTypedArray().also { it.sort() }
+            val candidates = contexts.sumOf { groups.getValue(it).size }
+            val rowStart = IntArray(contexts.size + 1)
+            val rowMask = IntArray(contexts.size)
+            val rowNextWordShare = FloatArray(contexts.size)
+            val textStart = IntArray(candidates + 1)
+            val scores = FloatArray(candidates)
+            val text = StringBuilder()
+            var next = 0
+            contexts.forEachIndexed { row, context ->
+                val list = groups.getValue(context)
                 val fileMask = masks[context] ?: 0
                 require(fileMask ushr list.size == 0) { "联想补词标记超出 $context 的行数" }
                 // Stable sort, same order as before; marks follow their rows from file order to score order.
                 val order = list.indices.sortedByDescending { list[it].score }
                 var mask = 0
                 order.forEachIndexed { rank, fileIndex -> if (fileMask and (1 shl fileIndex) != 0) mask = mask or (1 shl rank) }
-                Row(order.map { list[it] }, mask)
-            })
+                rowStart[row] = next
+                rowMask[row] = mask
+                var total = 0.0
+                var nextWord = 0.0
+                order.forEachIndexed { rank, fileIndex ->
+                    val candidate = list[fileIndex]
+                    textStart[next] = text.length
+                    text.append(candidate.text)
+                    scores[next] = candidate.score
+                    next++
+                    total += candidate.score.toDouble()
+                    if (mask and (1 shl rank) == 0) nextWord += candidate.score.toDouble()
+                }
+                rowNextWordShare[row] = if (total <= 0.0) 1f else (nextWord / total).toFloat()
+            }
+            rowStart[contexts.size] = next
+            textStart[candidates] = text.length
+            val chars = CharArray(text.length).also { text.getChars(0, text.length, it, 0) }
+            return BaseAssociationModel(contexts, rowStart, rowMask, rowNextWordShare, chars, textStart, scores)
         }
 
         /** Lines `context\tMASK` after the header; bit i = the i-th row of that context in table file order. */

@@ -28,3 +28,39 @@
 咾	lao	50
 咕咾肉	gu lao rou	1000
 菠萝咕咾肉	bo luo gu lao rou	500
+# B站 report (2026-11-10, 微软双拼): cs'qd'dk'ro read 从抢到若 (从强到弱 and 到弱 not in the dictionary). Added with the
+# common 从X到Y/由X到Y opposites; missing ones are added, ones under 200 (tencent placeholders) raised.
+从强到弱	cong qiang dao ruo	5000
+从弱到强	cong ruo dao qiang	5000
+由强到弱	you qiang dao ruo	3000
+由弱到强	you ruo dao qiang	3000
+从深到浅	cong shen dao qian	2000
+从浅到深	cong qian dao shen	2000
+从快到慢	cong kuai dao man	2000
+从慢到快	cong man dao kuai	2000
+从重到轻	cong zhong dao qing	2000
+从轻到重	cong qing dao zhong	2000
+从短到长	cong duan dao chang	2000
+从长到短	cong chang dao duan	2000
+从新到旧	cong xin dao jiu	2000
+从旧到新	cong jiu dao xin	2000
+从好到坏	cong hao dao huai	2000
+从坏到好	cong huai dao hao	2000
+从冷到热	cong leng dao re	2000
+从热到冷	cong re dao leng	2000
+从前到后	cong qian dao hou	2000
+从后到前	cong hou dao qian	2000
+从易到难	cong yi dao nan	2000
+从难到易	cong nan dao yi	2000
+从少到多	cong shao dao duo	2000
+从多到少	cong duo dao shao	2000
+从低到高	cong di dao gao	2000
+从下到上	cong xia dao shang	2000
+从简到繁	cong jian dao fan	2000
+从近到远	cong jin dao yuan	2000
+从远到近	cong yuan dao jin	2000
+从内到外	cong nei dao wai	2000
+从外到内	cong wai dao nei	2000
+从东到西	cong dong dao xi	2000
+从西到东	cong xi dao dong	2000
+从粗到细	cong cu dao xi	2000

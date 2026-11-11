@@ -200,9 +200,11 @@ class PositionHighlightRenderTest {
         bar.performTouchInput {
             down(center)
             for (i in 1..18) moveTo(center + Offset(0f, i * 10f))
-            up()
         }
-        rule.runOnIdle { assertEquals("no hold is required after a deliberate drag to the bottom", 1, docks) }
+        // 11-10：拖到底要停 0.75 秒、渐变框走完才变固定（不再一碰底就贴）。
+        rule.mainClock.advanceTimeBy(900)
+        bar.performTouchInput { up() }
+        rule.runOnIdle { assertEquals("docks after holding at the bottom", 1, docks) }
     }
 
     private var floatingMode by mutableStateOf(false)

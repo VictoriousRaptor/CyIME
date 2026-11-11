@@ -27,8 +27,10 @@ import com.kingzcheung.xime.ui.keyboard.normalizeCandidateDragPercent
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 
 internal enum class LayoutInputCategory(val route: String, val title: String, val description: String) {
-    Qwerty("layout_input_qwerty", "26 键", "中英混输、滑行输入、字母错位、空格两侧标点、分词键"),
-    Nine("layout_input_nine", "九键与 14 键", "九键滑行、拂动选字母、14 键双字母键、触发距离、方向圆盘与假名提示"),
+    Qwerty("layout_input_qwerty", "26 键", "中英混输、字母错位、空格两侧标点、分词键"),
+    Nine("layout_input_nine", "九键与 14 键", "拂动选字母、14 键双字母键、触发距离、方向圆盘与假名提示"),
+    /** 英文、中文 26 键和九键滑行原来分在 26 键、九键两页三个开关（用户 11-09「三个入口太乱」），合到这一页；存的值不变。 */
+    Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行，实时显示词，逐字删除"),
 }
 
 /** 日语 26 键的长音 ー 放在哪：三张带图例的卡片，默认 L 键（见 JapaneseLongVowelKey）。 */
@@ -56,22 +58,23 @@ internal fun JapaneseLongVowelKeySettings(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: () -> Unit) {
+internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     val saved = rememberKeyboardInputPreferences()
     var settings by remember(saved) { mutableStateOf(saved) }
     KeyboardSettingsScaffold(category.title, onBack, preview = true, example = when (category) {
         LayoutInputCategory.Qwerty -> com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Letters
         LayoutInputCategory.Nine -> com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Keypad
+        LayoutInputCategory.Glide -> com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Letters
     }) { modifier ->
         Column(modifier.settingsVerticalScroll().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (category) {
                 LayoutInputCategory.Qwerty -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // 邻键纠错、模糊音 11-01 搬到「语言与方案」（跟着方案走，九键和 26 键页不再各放一份）。
-                SettingsSection(title = "英文输入", content = {
-                    SettingsToggleItem(Icons.TwoTone.Abc, "英文句首自动大写",
-                        "英文输入时，新句子和新段落的第一个字母自动大写。",
+                SettingsSection(title = "大小写", content = {
+                    SettingsToggleItem(Icons.TwoTone.Abc, "首字母大写",
+                        "英文(含英文单词方案)和西、德、法、意、俄语键盘上，新句子和新段落的第一个字母自动大写。",
                         checked = settings.englishSentenceCaps, onCheckedChange = {
                             settings = settings.copy(englishSentenceCaps = it); settings.save(context)
                         })
@@ -82,46 +85,6 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         checked = settings.mixedInput, onCheckedChange = {
                             settings = settings.copy(mixedInput = it); settings.save(context)
                         }, costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.MIXED_INPUT)
-                })
-                SettingsSection(title = "滑行", content = {
-                    // 「键盘滑动」移光标和滑行冲突：照常显示，被锁时置灰并写明被谁锁（见 InputGestureLocks）。
-                    SettingsToggleItem(Icons.TwoTone.Gesture, "滑行输入",
-                        "英文 26 键手指划过字母出整词，候选栏可换成其他词；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
-                        checked = settings.glideTyping, onCheckedChange = {
-                            settings = settings.copy(glideTyping = it); settings.save(context)
-                        },
-                        lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
-                            com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
-                            ?.takeIf { !settings.glideTyping }?.message,
-                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_TYPING)
-                    HorizontalDivider()
-                    SettingsToggleItem(Icons.TwoTone.Gesture, "中文滑行输入",
-                        "中文全拼、双拼 26 键划一个词的拼音，接着划或点按都接在后面，照常选字；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
-                        checked = settings.chineseGlideTyping, onCheckedChange = {
-                            settings = settings.copy(chineseGlideTyping = it); settings.save(context)
-                        },
-                        lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
-                            com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
-                            ?.takeIf { !settings.chineseGlideTyping }?.message,
-                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CHINESE_GLIDE)
-                    HorizontalDivider()
-                    SettingsToggleItem(Icons.TwoTone.Gesture, "逐字删除中文滑行",
-                        "开启后，删除键一次删除滑行输入中最后一个字对应的编码。",
-                        checked = settings.deleteChineseGlideCharacter, onCheckedChange = {
-                            settings = settings.copy(deleteChineseGlideCharacter = it); settings.save(context)
-                        })
-                    HorizontalDivider()
-                    // 别的用户 11-02 提的（用惯 Gboard）：默认关；两种滑行都没开时没有作用，关着就置灰。
-                    SettingsToggleItem(Icons.TwoTone.Gesture, "滑行时实时显示词",
-                        "划的过程中在手指上方显示现在抬手会出的词，中文显示拼音。不影响点按打字和抬手后出词的速度。",
-                        checked = settings.glidePreview, onCheckedChange = {
-                            settings = settings.copy(glidePreview = it); settings.save(context)
-                        },
-                        lockMessage = "需先打开「滑行输入」或「中文滑行输入」"
-                            .takeIf { !settings.glidePreview && !settings.glideTyping && !settings.chineseGlideTyping },
-                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_PREVIEW)
-                    HorizontalDivider()
-                    GlidePracticeItem(nine = false)
                 })
                 SettingsSection(title = "按键排列与分词", content = {
                     QwertyStaggerSettings(settings) { settings = it; it.save(context) }
@@ -144,7 +107,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         })
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "底排标点固定上滑",
-                        "在空格两侧的逗号或句号键上滑，输入右上角的符号。关闭后跟随全局角标设置。",
+                        "空格两侧的逗号、句号键和数字键盘的点键：上滑或长按输入右上角的符号。关闭后跟随全局角标设置。",
                         checked = settings.bottomPunctuationSwipeUp, onCheckedChange = {
                             settings = settings.copy(bottomPunctuationSwipeUp = it); settings.save(context)
                         })
@@ -176,18 +139,6 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 }
                 LayoutInputCategory.Nine -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     SettingsSection(title = "九键手势", content = {
-                        SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行输入",
-                            "一笔划过一个词的几个键，松手后按词库认出这笔划的是哪几个键，再照常选词：划 5→2→4 可以选“来”，从 9 直接划到 4 是 94，路过的键不算。开启后 2～9 键滑动只用于滑词。",
-                            checked = settings.t9GlideTyping, onCheckedChange = {
-                                settings = settings.copy(t9GlideTyping = it); settings.save(context)
-                            },
-                            lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
-                                com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
-                                ?.takeIf { !settings.t9GlideTyping }?.message,
-                            costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.T9_GLIDE)
-                        HorizontalDivider()
-                        GlidePracticeItem(nine = true)
-                        HorizontalDivider()
                         val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                             com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_FLICK_LETTERS, true)
                         SettingsToggleItem(Icons.TwoTone.OpenWith, "拂动选字母",
@@ -234,10 +185,60 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     })
                     InputExperienceSettings(setOf(InputExperiencePart.FLICK_DISC, InputExperiencePart.KANA), "拂动与假名提示")
                 }
+                LayoutInputCategory.Glide -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // 三个布局各一行，存的还是原来三个开关（glide_typing_v2、glide_typing_chinese、t9_glide_typing），默认值不变。
+                // 「键盘面板滑动光标」和滑行冲突：照常显示，被锁时置灰并写明被谁锁（见 InputGestureLocks）。
+                val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
+                    com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
+                SettingsSection(title = "布局", content = {
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "英文滑行",
+                        "英文 26 键手指划过字母出整词，候选栏可换成其他词；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
+                        checked = settings.glideTyping, onCheckedChange = {
+                            settings = settings.copy(glideTyping = it); settings.save(context)
+                        },
+                        lockMessage = glideLock?.takeIf { !settings.glideTyping }?.message,
+                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_TYPING)
+                    HorizontalDivider()
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "中文滑行",
+                        "中文全拼、双拼 26 键划一个词的拼音，接着划或点按都接在后面，照常选字；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
+                        checked = settings.chineseGlideTyping, onCheckedChange = {
+                            settings = settings.copy(chineseGlideTyping = it); settings.save(context)
+                        },
+                        lockMessage = glideLock?.takeIf { !settings.chineseGlideTyping }?.message,
+                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CHINESE_GLIDE)
+                    HorizontalDivider()
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行",
+                        "一笔划过一个词的几个键，松手后按词库认出这笔划的是哪几个键，再照常选词：划 5→2→4 可以选“来”，从 9 直接划到 4 是 94，路过的键不算。开启后 2～9 键滑动只用于滑词。",
+                        checked = settings.t9GlideTyping, onCheckedChange = {
+                            settings = settings.copy(t9GlideTyping = it); settings.save(context)
+                        },
+                        lockMessage = glideLock?.takeIf { !settings.t9GlideTyping }?.message,
+                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.T9_GLIDE)
+                })
+                SettingsSection(title = "选项", content = {
+                    // 别的用户 11-02 提的（用惯 Gboard）：默认关；英文、中文滑行都没开时没有作用，关着就置灰。
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "滑行时实时显示词",
+                        "划的过程中按编码显示位置展示识别结果，中文显示拼音；抬手后按最终结果输入。只用于 26 键。",
+                        checked = settings.glidePreview, onCheckedChange = {
+                            settings = settings.copy(glidePreview = it); settings.save(context)
+                        },
+                        lockMessage = "需先打开「英文滑行」或「中文滑行」"
+                            .takeIf { !settings.glidePreview && !settings.glideTyping && !settings.chineseGlideTyping },
+                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_PREVIEW)
+                    HorizontalDivider()
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "逐字删除中文滑行",
+                        "开启后，删除键一次删除中文滑行输入中最后一个字对应的编码。",
+                        checked = settings.deleteChineseGlideCharacter, onCheckedChange = {
+                            settings = settings.copy(deleteChineseGlideCharacter = it); settings.save(context)
+                        })
+                })
+                SettingsSection(title = "贡献", content = { GlidePracticeItem { onNavigate(SettingsRoutes.GlideContribute) } })
+                }
             }
-            SettingsJumpText("分体键盘、按键符号在上一页「键盘布局」；角标、光标与空格在「按键与手势」；字号在「主题与外观 › 按键字号」；" +
+            SettingsJumpText((if (category == LayoutInputCategory.Glide) "" else "滑行在「键盘布局 › 滑行输入」；") +
+                "分体键盘、按键符号在上一页「键盘布局」；角标、光标与空格在「按键与手势」；字号在「主题与外观 › 按键字号」；" +
                 "拼音纠错、模糊音在「语言与方案 › 中文输入」。",
-                jumps = listOf("键盘布局", "按键与手势", "主题与外观 › 按键字号", "语言与方案 › 中文输入"),
+                jumps = listOf("键盘布局 › 滑行输入", "键盘布局", "按键与手势", "主题与外观 › 按键字号", "语言与方案 › 中文输入"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

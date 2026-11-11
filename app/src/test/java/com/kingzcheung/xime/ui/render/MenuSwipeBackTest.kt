@@ -122,9 +122,9 @@ class MenuSwipeBackTest {
         rule.runOnIdle { assertEquals(1, backs) }
     }
 
-    @Test fun shortcutMenuPagesFirstThenEdgeSwipePopsOnlyOneLevel() {
+    /** 11-10：翻到最后一页再往左划一下，什么都没点菜单就退出了。最后一页往左划什么也不做，菜单留着。 */
+    @Test fun lastPageOverSwipeKeepsTheMenuOpen() {
         val model = KeyboardViewModel(app)
-        val keyboard = model.page.value
         model.showOverlay(OverlayRoute.Menu, listOf(OverlayRoute.SchemaList))
         val buttons = ToolbarButton.entries.take(13)
         var taps = 0
@@ -134,103 +134,99 @@ class MenuSwipeBackTest {
             val page by model.page.collectAsState()
             if ((page as? KeyboardPage.Overlay)?.route == OverlayRoute.Menu) {
                 MenuBar(MenuBarState(true, false, backgroundColor = Color.LightGray), actions,
-                    Modifier.width(360.dp).height(230.dp).testTag("menu-body"), onBack = model::backFromOverlay)
+                    Modifier.width(360.dp).height(230.dp).testTag("menu-body"))
             }
         }
         val menu = rule.onNodeWithTag("menu-body")
         rule.onNodeWithTag("menu-item:${buttons[0].id}").performTouchInput { click(); longClick() }
         rule.runOnIdle { assertEquals(1, taps); assertEquals(1, holds) }
-        menu.performTouchInput { swipe(Offset(width * .68f, centerY), Offset(width * .04f, centerY), 330) }
+        // 第一页往左划翻页
+        menu.performTouchInput { edgeSwipe() }
         rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
         shot("keyboard-second-page")
+        // 最后一页再划：边缘起手、中间起手、划得很远，都停在这一页
         menu.performTouchInput { edgeSwipe() }
-        rule.runOnIdle {
-            assertEquals(OverlayRoute.SchemaList, (model.page.value as KeyboardPage.Overlay).route)
-            assertEquals(1, taps)
-            model.showOverlay(OverlayRoute.Menu)
-        }
-        // 重新打开在第一页：还有下一页时边缘左滑先翻页（11-03 定），到最后一页再滑才退一层。
-        menu.performTouchInput { edgeSwipe() }
+        menu.performTouchInput { swipe(Offset(width * .8f, centerY), Offset(width * .2f, centerY), 330) }
+        menu.performTouchInput { swipe(Offset(width * .96f, centerY), Offset(width * .02f, centerY), 200) }
         rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
-        rule.runOnIdle { assertEquals(OverlayRoute.Menu, (model.page.value as KeyboardPage.Overlay).route) }
-        menu.performTouchInput { edgeSwipe() }
-        rule.runOnIdle { assertEquals(keyboard, model.page.value); assertEquals(1, taps); assertEquals(1, holds) }
+        rule.runOnIdle {
+            assertEquals(OverlayRoute.Menu, (model.page.value as KeyboardPage.Overlay).route)
+            assertEquals(1, taps); assertEquals(1, holds)
+        }
     }
 
     /** 11-03：在「声音振动」上往右划直接算点了。划不动的方向、没压到右边缘的格子，横划都不算点。 */
     @Test fun horizontalSwipesOnAMenuItemNeverCountAsATap() {
         val buttons = listOf(ToolbarButton.SOUND, ToolbarButton.EMOJI, ToolbarButton.CLIPBOARD, ToolbarButton.SCHEMA)
         var taps = 0
-        var backs = 0
         val actions = buttons.map { ToolbarAction(ToolbarButtonItem.Builtin(it)) { taps++ } }
         rule.setContent {
             MenuBar(MenuBarState(true, false, backgroundColor = Color.LightGray), actions,
-                Modifier.width(360.dp).height(230.dp).testTag("menu-body"), onBack = { backs++ })
+                Modifier.width(360.dp).height(230.dp).testTag("menu-body"))
         }
         val sound = rule.onNodeWithTag("menu-item:${ToolbarButton.SOUND.id}")
         // 只有一页：往右划翻不了页，什么也不做
         sound.performTouchInput { swipe(Offset(width * .2f, centerY), Offset(width * .9f, centerY), 300) }
-        rule.runOnIdle { assertEquals(0, taps); assertEquals(0, backs) }
-        // 最后一页往左划：从哪个格子起手都退一层，不算点
-        // 起手在格子里、没压到右边缘，划够返回距离（最多 112dp）
+        rule.runOnIdle { assertEquals(0, taps) }
+        // 往左划也翻不了页：不算点，菜单也还在
         sound.performTouchInput { swipe(Offset(width * .8f, centerY), Offset(width * .8f - 150f, centerY), 300) }
-        rule.runOnIdle { assertEquals(0, taps); assertEquals(1, backs) }
+        rule.runOnIdle { assertEquals(0, taps) }
+        sound.assertIsDisplayed()
         sound.performClick()
-        rule.runOnIdle { assertEquals(1, taps); assertEquals(1, backs) }
+        rule.runOnIdle { assertEquals(1, taps) }
     }
 
-    /** 11-03 平板：网格在宽面板里居中，从右边缘（网格外）起手、只划 100dp 都退不出去。 */
-    @Test fun lastPageBacksFromOutsideTheCenteredGridWithAShortSwipe() {
+    /** 平板：网格在宽面板里居中，从网格外的空白起手往左划，也不算点、不退出。 */
+    @Test fun lastPageSwipeFromOutsideTheCenteredGridDoesNothing() {
         // 两项时网格 296dp 宽、在 336dp 里居中，两边各空 20dp
         val buttons = listOf(ToolbarButton.SOUND, ToolbarButton.EMOJI)
         var taps = 0
-        var backs = 0
         val actions = buttons.map { ToolbarAction(ToolbarButtonItem.Builtin(it)) { taps++ } }
         rule.setContent {
             MenuBar(MenuBarState(true, false, backgroundColor = Color.LightGray), actions,
-                Modifier.width(360.dp).height(230.dp).testTag("menu-body"), onBack = { backs++ })
+                Modifier.width(360.dp).height(230.dp).testTag("menu-body"))
         }
         val body = rule.onNodeWithTag("menu-body")
-        // 从网格右边的空白起手（离面板右边 22dp）往左 70dp
         body.performTouchInput { swipe(Offset(width - 22f, centerY), Offset(width - 92f, centerY), 250) }
-        rule.runOnIdle { assertEquals(1, backs); assertEquals(0, taps) }
-        // 不够 64dp 不退
         body.performTouchInput { swipe(Offset(width * .5f, centerY), Offset(width * .5f - 40f, centerY), 250) }
-        rule.runOnIdle { assertEquals(1, backs); assertEquals(0, taps) }
+        rule.runOnIdle { assertEquals(0, taps) }
+        rule.onNodeWithTag("menu-item:${ToolbarButton.SOUND.id}").assertIsDisplayed()
     }
 
     /** 11-03 平板：翻到最后一页以后往右划回不到前一页，只能关了菜单重开。 */
     @Test fun lastPageSwipesRightBackToThePreviousPage() {
         val buttons = ToolbarButton.entries.take(13)
         var taps = 0
-        var backs = 0
         val actions = buttons.map { ToolbarAction(ToolbarButtonItem.Builtin(it)) { taps++ } }
         rule.setContent {
             MenuBar(MenuBarState(true, false, backgroundColor = Color.LightGray), actions,
-                Modifier.width(360.dp).height(230.dp).testTag("menu-body"), onBack = { backs++ })
+                Modifier.width(360.dp).height(230.dp).testTag("menu-body"))
         }
         val menu = rule.onNodeWithTag("menu-body")
         menu.performTouchInput { swipe(Offset(width * .68f, centerY), Offset(width * .04f, centerY), 330) }
         rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
         menu.performTouchInput { swipe(Offset(width * .3f, centerY), Offset(width * .96f, centerY), 330) }
         rule.onNodeWithTag("menu-item:${buttons[0].id}").assertIsDisplayed()
-        rule.runOnIdle { assertEquals(0, backs); assertEquals(0, taps) }
-        // 回到第一页后照样能翻过去，最后一页往左划照样退一层
+        rule.runOnIdle { assertEquals(0, taps) }
+        // 回到第一页后照样能翻过去，最后一页再往左划停在原地
         menu.performTouchInput { swipe(Offset(width * .68f, centerY), Offset(width * .04f, centerY), 330) }
         rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
         menu.performTouchInput { swipe(Offset(width * .8f, centerY), Offset(width * .2f, centerY), 330) }
-        rule.runOnIdle { assertEquals(1, backs); assertEquals(0, taps) }
+        rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
+        rule.runOnIdle { assertEquals(0, taps) }
+        // 往右照样回得去
+        menu.performTouchInput { swipe(Offset(width * .3f, centerY), Offset(width * .96f, centerY), 330) }
+        rule.onNodeWithTag("menu-item:${buttons[0].id}").assertIsDisplayed()
     }
 
     /** 三页的菜单：翻到第三页以后一页一页往右划回去，中间那页也照样能往回翻。 */
     @Test fun threePageMenuSwipesBackPageByPage() {
         val buttons = ToolbarButton.entries.take(20)
         var taps = 0
-        var backs = 0
         val actions = buttons.map { ToolbarAction(ToolbarButtonItem.Builtin(it)) { taps++ } }
         rule.setContent {
             MenuBar(MenuBarState(true, false, backgroundColor = Color.LightGray), actions,
-                Modifier.width(360.dp).height(230.dp).testTag("menu-body"), onBack = { backs++ })
+                Modifier.width(360.dp).height(230.dp).testTag("menu-body"))
         }
         val menu = rule.onNodeWithTag("menu-body")
         val forward: TouchInjectionScope.() -> Unit = { swipe(Offset(width * .68f, centerY), Offset(width * .04f, centerY), 330) }
@@ -243,7 +239,7 @@ class MenuSwipeBackTest {
         rule.onNodeWithTag("menu-item:${buttons[8].id}").assertIsDisplayed()
         menu.performTouchInput(backward)
         rule.onNodeWithTag("menu-item:${buttons[0].id}").assertIsDisplayed()
-        rule.runOnIdle { assertEquals(0, backs); assertEquals(0, taps) }
+        rule.runOnIdle { assertEquals(0, taps) }
     }
 
     private fun shot(name: String) {

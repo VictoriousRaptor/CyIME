@@ -10,9 +10,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.settings.SettingsPreferences
+import com.kingzcheung.xime.ui.keyboard.InputGestureLocks
+import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.rememberSwipeHintsEnabled
 
-/** 两处入口共用原有显示开关；与输入方式、角标方向独立，保留用户已保存的选择。 */
+/** 两处入口共用原有显示开关；与输入方式、角标方向独立，保留用户已保存的选择。滑行占用下滑时在下方开关下注明。 */
 @Composable
 internal fun CornerHintVisibilitySettings(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -35,6 +37,11 @@ internal fun CornerHintVisibilitySettings(modifier: Modifier = Modifier) {
         }
         toggle("下方角标提示", "显示按键左下角的小符号", hints.down) {
             SettingsPreferences.setSwipeDownHintsEnabled(context, it)
+        }
+        // 开着 26 键滑行时字母键的下滑用来滑词，下角标打不出来，键上也不画（KeyButton 的 downCornerLabel，用户 11-11）。
+        // 开关本身不锁：14 键、没开滑行的键盘下滑照样出下角标，还听它的；存的值不改，关掉滑行照旧。
+        InputGestureLocks.glideCornerLock(rememberKeyboardInputPreferences())?.let {
+            SettingsLockNote("${it.message}：滑行时字母键下滑用来滑词，不显示下角标；其他键照这个开关")
         }
     }
 }

@@ -122,8 +122,13 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
         if (asciiMode) return null
         if (isT9Schema(service.uiState.value.currentSchemaId)) return null
         val transformed = transformByPlugin(inputText, preedit, engineCandidates, asciiMode)
-        return withContacts(transformed, inputText, preedit, engineCandidates, firstPage)
+        val state = service.uiState.value
+        return glideAlternatives.inject(withContacts(transformed, inputText, preedit, engineCandidates, firstPage),
+            inputText, engineCandidates, firstPage, state.currentSchemaId, state.inputSessionId)
     }
+
+    /** 中文滑行这一笔的备选，见 [GlideAlternatives]。 */
+    val glideAlternatives = GlideAlternatives()
 
     /**
      * 通讯录插件（宿主内置查找，不经插件脚本）：编码正好是某个联系人名字的拼音时，

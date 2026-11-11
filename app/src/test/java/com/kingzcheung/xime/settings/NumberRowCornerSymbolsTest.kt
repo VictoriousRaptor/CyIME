@@ -35,8 +35,8 @@ class NumberRowCornerSymbolsTest {
                 }
             }
         }
-        assertEquals("「」『』℃←→√★※", firstRow.joinToString("") { QwertySwipeSymbols.up(false, true).getValue(it) })
-        assertEquals("+×÷≈≤≥°|{}", firstRow.joinToString("") { QwertySwipeSymbols.down(false, true).getValue(it) })
+        assertEquals("「」『』℃←→√★?", firstRow.joinToString("") { QwertySwipeSymbols.up(false, true).getValue(it) })
+        assertEquals("+×÷≈≤≥°\\{}", firstRow.joinToString("") { QwertySwipeSymbols.down(false, true).getValue(it) })
         // 第一排上方没有半角写法，中英同一格同一个。
         for (key in firstRow) assertEquals(key, QwertySwipeSymbols.up(false, true).getValue(key), QwertySwipeSymbols.up(true, true).getValue(key))
     }

@@ -121,6 +121,14 @@ private fun EmojiContent(
     var tonePicker by remember { mutableStateOf<SkinTonePicker?>(null) }
     val panelCoords = remember { arrayOfNulls<LayoutCoordinates>(1) }
     LaunchedEffect(pager.currentPage) { tonePicker = null }
+    // 正在「最近使用」页上点时只记下来，不立刻重排，免得表情在手指下面换位置；离开这一页再刷新。
+    LaunchedEffect(pager.settledPage) {
+        if (pager.settledPage != 0) recentEmojis = RecentUsageStore.get(context, RecentUsageStore.KEY_RECENT_EMOJIS)
+    }
+    val recordRecent: (String) -> Unit = { emoji ->
+        val updated = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_EMOJIS, emoji)
+        if (pager.settledPage != 0) recentEmojis = updated
+    }
     Column(Modifier.fillMaxSize().onPlaced { panelCoords[0] = it }) {
         ExpressionPanelBar(textColor, { onEmojiSelect("delete") }, leadingTabs) {
             LazyRow(Modifier.weight(1f).testTag("emoji-categories"), state = tabs,
@@ -191,7 +199,7 @@ private fun EmojiContent(
                                 row.forEach { emoji ->
                                     val tones = remember(emoji) { EmojiSkinTone.variants(emoji) }
                                     EmojiButton(emoji, {
-                                        recentEmojis = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_EMOJIS, emoji)
+                                        recordRecent(emoji)
                                         onEmojiSelect(emoji)
                                     }, Modifier.weight(1f).height(grid.rowHeightDp.dp), grid.rowHeightDp,
                                         onLongClick = tones.takeIf { it.isNotEmpty() }?.let { { cell: LayoutCoordinates ->
@@ -213,7 +221,7 @@ private fun EmojiContent(
     tonePicker?.let { picker ->
         SkinTonePickerOverlay(picker, onPick = { emoji ->
             tonePicker = null
-            recentEmojis = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_EMOJIS, emoji)
+            recordRecent(emoji)
             onEmojiSelect(emoji)
         }, onDismiss = { tonePicker = null })
     }

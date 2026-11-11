@@ -93,6 +93,34 @@ class CalculatorModeIntegrationTest {
     }
 
     @Test
+    fun `Number键盘_左栏自定义的多字符号也结束算式`() {
+        val engine = CalculatorEngine()
+
+        routeCalculatorKey("1", true, false, engine)
+        routeCalculatorKey("+", true, false, engine)
+        routeCalculatorKey("2", true, false, engine)
+        val result = routeCalculatorKey("（）", true, false, engine)
+
+        assertEquals("（）", (result as CalculatorRouteResult.Handled).commitText)
+        assertFalse(engine.isActive())
+        routeCalculatorKey("3", true, false, engine)
+        assertNull("Digits after a custom symbol start fresh, not 1+23", engine.getCandidate())
+    }
+
+    @Test
+    fun `Number键盘_点键角标冒号直接提交并结束算式`() {
+        val engine = CalculatorEngine()
+
+        routeCalculatorKey("8", true, false, engine)
+        routeCalculatorKey("+", true, false, engine)
+        routeCalculatorKey("1", true, false, engine)
+        val result = routeCalculatorKey(":", true, false, engine)
+
+        assertEquals(":", (result as CalculatorRouteResult.Handled).commitText)
+        assertFalse(engine.isActive())
+    }
+
+    @Test
     fun `CommonSymbol键盘_直接提交不经过计算器`() {
         val engine = CalculatorEngine()
 

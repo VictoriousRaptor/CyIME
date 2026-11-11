@@ -127,6 +127,7 @@ object InputModes {
     fun selectProfile(context: Context, entry: SchemaInfo) = selectProfile(context, entry.schemaId, entry.profile.language)
 
     fun selectProfile(context: Context, schemaId: String, language: InputLanguage = languageOf(schemaId)) {
+        OrientationLayouts.record(context, language, schemaId, rememberedModes(context)[language])
         SettingsPreferences.getPrefsPublic(context).edit()
             .putString("selected_input_profile_${language.id}", schemaId).apply()
     }

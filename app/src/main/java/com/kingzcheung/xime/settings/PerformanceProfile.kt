@@ -187,9 +187,11 @@ object PerformanceProfile {
             .putBoolean(SettingsPreferences.KEY_STT_KEEP_ENGINE_ALIVE, settings.speechEngineIdleMinutes == 0)
             .putBoolean(KEY_AUTO, true)
             .putString(KEY_AUTO_TIER, tier.name)
+        // 按键浮标 11-09 起默认开，不再“本来就关着”：这档要关它（低配）时新装就关上，性能页才显示“自动”而不是“自定义”。
+        if (Extra.PRESS_BUBBLE in turnsOff.getValue(tier)) editor.putBoolean(SettingsPreferences.KEY_SHOW_PRESS_BUBBLE, false)
     }
 
-    /** 只关不开：和各自设置页写同样的值（[PerformanceCosts.set]）。新装时这几项本来就关着，自动档首次写入不用碰它们。 */
+    /** 只关不开：和各自设置页写同样的值（[PerformanceCosts.set]）。新装时除按键浮标外这几项本来就关着（按键浮标见 [writeFirstRunAuto]）。 */
     private fun turnOff(context: Context, extras: Set<Extra>) {
         val current = read(context)
         extras.filter { current.isOn(it) }.forEach { extra ->

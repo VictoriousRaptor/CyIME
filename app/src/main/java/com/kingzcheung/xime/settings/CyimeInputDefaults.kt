@@ -19,7 +19,7 @@ object CyimeInputDefaults {
      * 关着也列在「语言与方案」的方案、布局里，点了才启用；不加进默认启用。
      */
     val shapeAndStroke = listOf("wubi86", "wubi98", "cyime_cangjie", "cyime_quick", "stroke", "cyime_zhuyin")
-    val dependencies = setOf("cyime_t9_english", "cyime_k14_english", "cyime_omission", "cyime_letter_swap",
+    val dependencies = setOf("cyime_t9_english", "cyime_k14_english", "cyime_cn_en", "cyime_omission", "cyime_letter_swap",
         "cyime_digit_edit", "cyime_digit_tap", "melt_eng", "radical_pinyin", "numbers", "handwriting", "stroke_phrase")
 
     /**

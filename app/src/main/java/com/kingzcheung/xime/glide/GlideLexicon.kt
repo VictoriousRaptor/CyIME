@@ -25,8 +25,6 @@ object GlideLexicon {
     @Volatile private var bigrams: EnglishBigrams? = null
     /** 英文、全拼、双拼各留一份；双拼换方案（或改了键位）时按方案内容重建。 */
     private val cached = HashMap<String, Pair<Any?, GlideDecoder>>()
-    /** 滑行实时预览用的编码 → 拼音，全拼、双拼各一份，只在打开预览时才建。 */
-    private val readings = HashMap<String, Pair<DoublePinyinScheme?, Map<String, String>>>()
 
     fun words(context: Context): List<String> = words ?: synchronized(this) {
         words ?: vocabulary(context).filter { it.length >= 2 && it.all { char -> char in 'a'..'z' } }.also { words = it }
@@ -65,19 +63,13 @@ object GlideLexicon {
     /** 布局变化（尺寸、错位、分体）时重建模板；同一布局复用。须在后台线程调用。 */
     fun decoder(context: Context, keyboard: GlideKeyboard): GlideDecoder = cachedDecoder("en", null, keyboard) { words(context) }
 
-    /** 中文滑行：[doublePinyin] 为空时按全拼，否则按该双拼方案的编码。须在后台线程调用。 */
+    /**
+     * 中文滑行：[doublePinyin] 为空时按全拼，否则按该双拼方案的编码。词表里没有的连划另按音节逐键认（#294）。
+     * 须在后台线程调用。
+     */
     fun chineseDecoder(context: Context, keyboard: GlideKeyboard, doublePinyin: DoublePinyinScheme?): GlideDecoder =
-        cachedDecoder(if (doublePinyin == null) "py" else "sp", doublePinyin, keyboard) { pinyinCodes(pinyin(context), doublePinyin) }
-
-    /** 中文滑行编码的拼音写法（nihao → ni hao，双拼也写成全拼），实时预览显示它；须在后台线程调用。 */
-    fun chineseReading(context: Context, code: String, doublePinyin: DoublePinyinScheme?): String? {
-        val kind = if (doublePinyin == null) "py" else "sp"
-        val map = synchronized(this) {
-            readings[kind]?.takeIf { it.first == doublePinyin }?.second
-                ?: pinyinReadings(pinyin(context), doublePinyin).also { readings[kind] = doublePinyin to it }
-        }
-        return map[code]
-    }
+        cachedDecoder(if (doublePinyin == null) "py" else "sp", doublePinyin, keyboard,
+            syllables = { glideSyllables(pinyin(context), doublePinyin) }) { pinyinCodes(pinyin(context), doublePinyin) }
 
     /**
      * 九键滑行出的数字串：全拼、双拼按词表比对整条线最像哪个词的编码（[dictionary] 为真）；
@@ -94,10 +86,11 @@ object GlideLexicon {
     }
 
     private fun cachedDecoder(kind: String, source: Any?, keyboard: GlideKeyboard,
-        maxEndpoint: Float = GlideDecoder.MAX_ENDPOINT, words: () -> List<String>): GlideDecoder =
+        maxEndpoint: Float = GlideDecoder.MAX_ENDPOINT, syllables: (() -> List<String>)? = null,
+        words: () -> List<String>): GlideDecoder =
         synchronized(this) {
             cached[kind]?.takeIf { (cachedSource, decoder) -> cachedSource == source && decoder.revision == keyboard.revision }?.second
-                ?: GlideDecoder(keyboard, words(), maxEndpoint).also { cached[kind] = source to it }
+                ?: GlideDecoder(keyboard, words(), maxEndpoint, syllables?.invoke()).also { cached[kind] = source to it }
         }
 
     fun keyboard(keys: Map<Char, LetterKeyRect>): GlideKeyboard {
@@ -114,16 +107,12 @@ internal fun pinyinCodes(entries: List<List<String>>, doublePinyin: DoublePinyin
         else syllables.map { doublePinyin.code(it) ?: return@mapNotNull null }.joinToString("")
     }.distinct()
 
-/** 编码 → 用空格隔开的拼音；同一编码取最常用的那个词（与 [pinyinCodes] 去重一致）。 */
-internal fun pinyinReadings(entries: List<List<String>>, doublePinyin: DoublePinyinScheme?): Map<String, String> {
-    val result = HashMap<String, String>(entries.size * 2)
-    for (syllables in entries) {
-        val code = if (doublePinyin == null) syllables.joinToString("")
-            else syllables.map { doublePinyin.code(it) }.takeIf { null !in it }?.joinToString("") ?: continue
-        result.putIfAbsent(code, syllables.joinToString(" "))
-    }
-    return result
-}
+/** 音节逐键识别用的音节编码：词表里单字的读音按常用程度在前，其余标准音节随后；双拼换成方案编码。 */
+internal fun glideSyllables(entries: List<List<String>>, doublePinyin: DoublePinyinScheme?): List<String> =
+    (entries.asSequence().filter { it.size == 1 }.map { it[0] } + DoublePinyinScheme.SYLLABLES.asSequence())
+        .distinct()
+        .mapNotNull { syllable -> if (doublePinyin == null) syllable else doublePinyin.code(syllable) }
+        .distinct().toList()
 
 /** Use the engine's reading to resolve codes such as xian (xian or xi an). */
 internal fun chineseGlideSyllables(

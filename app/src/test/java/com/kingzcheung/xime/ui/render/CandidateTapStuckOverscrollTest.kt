@@ -23,7 +23,10 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -128,6 +131,27 @@ class CandidateTapStuckOverscrollTest {
         rule.onNodeWithTag("bar-candidate:1", useUnmergedTree = true).performClick()
         rule.onNodeWithTag("bar-candidate:3", useUnmergedTree = true).performClick()
         rule.runOnIdle { assertEquals(listOf(1, 3), picked) }
+    }
+
+    @Test fun tapsAlongFirstCandidatesLowerLeftEdgeDoNotCancelComposition() {
+        val events = mutableListOf<String>()
+        rule.setContent {
+            Box(Modifier.testTag("strip-host")) {
+                Bar(CandidateBarState.ChineseCandidates(listOf("这", "着", "者", "折"), inputText = "zhe"),
+                    CandidateBarCallbacks(onCandidateSelect = { events += "pick:$it" }, onCancelInput = { events += "cancel" }))
+            }
+        }
+        val bar = rule.onNodeWithTag("strip-host")
+        val origin = bar.fetchSemanticsNode().boundsInRoot
+        val first = rule.onNodeWithTag("bar-candidate:0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val cancel = rule.onNodeWithContentDescription("取消输入", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        // #274: locations relative to the arrow and first word in the three filmed taps.
+        for ((fraction, drop) in listOf(.58f to .34f, .58f to .41f, .72f to 0f)) {
+            val x = cancel.center.x + fraction * (first.center.x - cancel.center.x)
+            bar.performTouchInput { click(Offset(x - origin.left, first.center.y + drop * origin.height - origin.top)) }
+        }
+        bar.performTouchInput { click(cancel.center - origin.topLeft) }
+        rule.runOnIdle { assertEquals(listOf("pick:0", "pick:0", "pick:0", "cancel"), events) }
     }
 
     @Test fun associationsStayTappableWhileOverscrollIsStuck() {

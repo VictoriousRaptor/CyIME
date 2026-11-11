@@ -41,6 +41,9 @@ data class PluginCapabilities(
      *  （查状态、下载模型、在手机上翻译）。模型在「扩展 › 模型」，装了才能用。 */
     @kotlinx.serialization.SerialName("offline_translate")
     val offlineTranslate: Boolean = false,
+    /** 日语（manifest 声明 `japanese: true`）：日语方案、键盘和转换都在宿主里，插件装上并启用才打开日语、
+     *  下载日语词库和转换引擎；停用就关掉日语，卸载时删掉下载的词库（学习记录留着）。 */
+    val japanese: Boolean = false,
 ) {
     companion object {
         val EMPTY = PluginCapabilities()

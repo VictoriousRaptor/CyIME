@@ -130,6 +130,9 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                 }
                             })
                         }
+                        // 日语是插件：轻量版的词库和转换引擎是下载的，没下好时在这里说明、给下载按钮。
+                        if (checked && language == InputLanguage.JAPANESE) JapanesePackStatus(
+                            Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
                         if (expanded && selected != null) InputProfileSelectors(pickableProfiles, selected,
                             Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) { entry ->
                             InputModes.selectProfile(context, entry)

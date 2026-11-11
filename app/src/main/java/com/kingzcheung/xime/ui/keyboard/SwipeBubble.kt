@@ -42,6 +42,7 @@ private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 private val bubbleMeasurePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 private val bubbleBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 private val bubbleLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+private val bubbleIconPaint = Paint()
 private val SHADOW_COLOR = android.graphics.Color.argb(0x26, 0, 0, 0)
 
 data class BubbleDrawData(
@@ -73,6 +74,12 @@ data class BubbleDrawData(
     val longPressIconBitmaps: List<Bitmap> = emptyList(),
     val accentArgb: Int = 0xFF8F73E2.toInt(),
     val gapPx: Float = 0f,
+    /** 动画中的高亮位置（可在两项之间）；静止时等于 [selectedLongPressIndex]。 */
+    val selectedPosition: Float = selectedLongPressIndex.toFloat(),
+    /** 长按选项从按键气泡展开的进度：0 是按键上方的圆气泡，1 是完整的选项条。 */
+    val reveal: Float = 1f,
+    /** 整个气泡的透明度，出现和松手淡出用。 */
+    val alpha: Float = 1f,
 )
 
 /** 按压气泡抬起后的滞留时长：随抬起瞬间消失看不清键位提示（主流输入法约 50~80ms），取中值。 */
@@ -98,6 +105,9 @@ class SwipeBubbleController(
     private var releaseJob: Job? = null
     private var overlappingPress = false
     internal var onPreviewChanged: ((SwipeState, Rect) -> Unit)? = null
+    /** 这次清空是按键气泡松手停留走完（可以淡出），不是拂动、关开关这类要立即清掉的。 */
+    internal var clearedAfterRelease = false
+        private set
 
     private fun publish(value: SwipeState, bounds: Rect = keyBounds) {
         if (state == value && keyBounds == bounds) return
@@ -154,7 +164,8 @@ class SwipeBubbleController(
             releaseJob = scope.launch {
                 delay(PRESS_BUBBLE_RELEASE_DELAY_MS)
                 releaseJob = null
-                publish(SwipeState())
+                clearedAfterRelease = true
+                try { publish(SwipeState()) } finally { clearedAfterRelease = false }
             }
             return
         }
@@ -319,14 +330,23 @@ fun DrawScope.drawSwipeBubble(data: BubbleDrawData) {
 }
 
 internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawData) {
+    val alpha = data.alpha.coerceIn(0f, 1f)
+    if (alpha <= 0f) return
     canvas.withSave {
         canvas.translate(data.boxLeft, data.boxTop)
 
-        val bodyLeft = data.pathBodyLeft
-        val bodyRight = bodyLeft + data.pathBodyWidth
+        // 选项按完整的条排，画出来的底板从按键上方的圆气泡横向长到整条（[BubbleDrawData.reveal]）。
+        val fullLeft = data.pathBodyLeft
+        val fullRight = fullLeft + data.pathBodyWidth
+        val reveal = data.reveal.coerceIn(0f, 1f)
+        val startWidth = minOf(data.bodyHeightPx, data.pathBodyWidth)
+        val startCenter = (data.pointerLeftInBox + data.keyWidthPx / 2f)
+            .coerceIn(fullLeft + startWidth / 2f, fullRight - startWidth / 2f)
+        val bodyLeft = lerp(startCenter - startWidth / 2f, fullLeft, reveal)
+        val bodyRight = lerp(startCenter + startWidth / 2f, fullRight, reveal)
         val radius = data.bodyHeightPx / 2f
-        bubbleFillPaint.color = data.bgColor
-        bubbleFillPaint.setShadowLayer(data.shadowRadiusPx, 0f, 0f, SHADOW_COLOR)
+        bubbleFillPaint.color = fade(data.bgColor, alpha)
+        bubbleFillPaint.setShadowLayer(data.shadowRadiusPx, 0f, 0f, fade(SHADOW_COLOR, alpha))
         canvas.drawRoundRect(bodyLeft, 0f, bodyRight, data.bodyHeightPx, radius, radius, bubbleFillPaint)
 
         // Small triangle on the pressed key's top edge, as on the kana keys.
@@ -340,7 +360,7 @@ internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawD
             bubblePath.lineTo(keyCenter, keyTop + depth)
             bubblePath.lineTo(keyCenter + halfBase, keyTop)
             bubblePath.close()
-            bubbleBgPaint.color = withAlpha(data.accentArgb, 0x99)
+            bubbleBgPaint.color = fade(withAlpha(data.accentArgb, 0x99), alpha)
             canvas.drawPath(bubblePath, bubbleBgPaint)
         }
 
@@ -348,31 +368,37 @@ internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawD
             canvas.save()
             canvas.clipRect(bodyLeft, 0f, bodyRight, data.bodyHeightPx)
             val cellWidth = data.pathBodyWidth / data.longPressItems.size
+            // 展开过半才显出选项，免得字挤在窄条里。
+            val itemsAlpha = alpha * ((reveal - 0.35f) / 0.65f).coerceIn(0f, 1f)
+            val position = data.selectedPosition.coerceIn(0f, (data.longPressItems.size - 1).toFloat())
+
+            // Light disc behind the chosen item only, like the kana preview; it slides between items.
+            bubbleBgPaint.color = fade(withAlpha(data.textColor, 0x33), itemsAlpha)
+            canvas.drawCircle(fullLeft + (position + 0.5f) * cellWidth, data.bodyHeightPx / 2f,
+                minOf(cellWidth, data.bodyHeightPx) * 0.42f, bubbleBgPaint)
 
             data.longPressItems.forEachIndexed { index, item ->
-                val itemLeft = bodyLeft + index * cellWidth
-                val selected = index == data.selectedLongPressIndex
-                if (selected) {
-                    // Light disc behind the chosen item only, like the kana preview.
-                    bubbleBgPaint.color = withAlpha(data.textColor, 0x33)
-                    canvas.drawCircle(itemLeft + cellWidth / 2f, data.bodyHeightPx / 2f,
-                        minOf(cellWidth, data.bodyHeightPx) * 0.42f, bubbleBgPaint)
-                }
+                val itemLeft = fullLeft + index * cellWidth
+                // 1 = 高亮正停在这一项，0 = 离开一格以上；字号、深浅跟着高亮渐变。
+                val emphasis = (1f - kotlin.math.abs(position - index)).coerceIn(0f, 1f)
                 if (data.longPressIconBitmaps.isNotEmpty() && index < data.longPressIconBitmaps.size) {
                     val icon = data.longPressIconBitmaps[index]
                     val iconSize = data.bodyHeightPx * 0.45f
                     val iconLeft = itemLeft + (cellWidth - iconSize) / 2f
                     val iconTop = (data.bodyHeightPx - iconSize) / 2f
+                    bubbleIconPaint.alpha = (itemsAlpha * 255f).toInt().coerceIn(0, 255)
                     canvas.drawBitmap(
                         icon, null,
                         android.graphics.RectF(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize),
-                        null
+                        bubbleIconPaint
                     )
                 } else {
-                    bubbleLabelPaint.color = if (selected) data.textColor else withAlpha(data.textColor, 0xBF)
-                    bubbleLabelPaint.textSize = if (selected) data.selectedFontSizePx else data.normalFontSizePx
+                    val restAlpha = data.textColor ushr 24
+                    bubbleLabelPaint.color = fade(if (emphasis >= 1f) data.textColor else withAlpha(data.textColor,
+                        (0xBF + (restAlpha - 0xBF) * emphasis).toInt().coerceIn(0, 255)), itemsAlpha)
+                    bubbleLabelPaint.textSize = lerp(data.normalFontSizePx, data.selectedFontSizePx, emphasis)
                     bubbleLabelPaint.textAlign = Paint.Align.CENTER
-                    bubbleLabelPaint.isFakeBoldText = selected
+                    bubbleLabelPaint.isFakeBoldText = emphasis >= 0.5f
                     bubbleLabelPaint.typeface = data.keyLabelTypeface
                     val textY = data.bodyHeightPx / 2f - (bubbleLabelPaint.fontMetrics.ascent + bubbleLabelPaint.fontMetrics.descent) / 2f
                     canvas.drawText(item, itemLeft + cellWidth / 2f, textY, bubbleLabelPaint)
@@ -382,17 +408,23 @@ internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawD
         } else if (data.displayText != null) {
             canvas.save()
             canvas.clipRect(bodyLeft, 0f, bodyRight, data.bodyHeightPx)
-            bubbleTextPaint.color = data.textColor
+            bubbleTextPaint.color = fade(data.textColor, alpha)
             bubbleTextPaint.textSize = data.selectedFontSizePx
             bubbleTextPaint.textAlign = Paint.Align.CENTER
             bubbleTextPaint.typeface = data.keyLabelTypeface
             bubbleTextPaint.isFakeBoldText = true
-            val textCenterX = bodyLeft + data.pathBodyWidth / 2f
+            val textCenterX = fullLeft + data.pathBodyWidth / 2f
             val textY = data.bodyHeightPx / 2f - (bubbleTextPaint.fontMetrics.ascent + bubbleTextPaint.fontMetrics.descent) / 2f
             canvas.drawText(data.displayText, textCenterX, textY, bubbleTextPaint)
             canvas.restore()
         }
     }
 }
+
+private fun lerp(start: Float, stop: Float, fraction: Float) = if (fraction >= 1f) stop else start + (stop - start) * fraction
+
+/** 按 [alpha] 再乘一次透明度；alpha 为 1 时原样返回，静止时画法与以前完全相同。 */
+private fun fade(argb: Int, alpha: Float): Int =
+    if (alpha >= 1f) argb else withAlpha(argb, ((argb ushr 24) * alpha).toInt().coerceIn(0, 255))
 
 private fun withAlpha(argb: Int, alpha: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)

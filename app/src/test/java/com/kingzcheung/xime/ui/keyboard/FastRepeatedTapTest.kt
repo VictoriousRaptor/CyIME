@@ -98,6 +98,20 @@ class FastRepeatedTapTest {
         show(ascii = true, prefs = KeyboardInputPreferences(glideTyping = true)); alternatingThumbsUuru("uuru")
     }
 
+    /**
+     * 用户 11-10：开着滑行快打吞键。手指在键上挪了一点（过了触摸阈值、没成滑行），这一下照常出字；
+     * 两手交替时也一样（中文滑行走同一个按键手势）。
+     */
+    @Test fun driftingTapWithGlideStillTypes() {
+        show(ascii = true, prefs = KeyboardInputPreferences(glideTyping = true))
+        val g = point('g'); val h = point('h')
+        // xhdpi：触摸阈值 8dp = 16px，这里挪 24px，还在 g 键里。
+        touches { step -> down(0, g); step(); moveTo(0, g + Offset(24f, 6f)); step(); up(0) }
+        assertEquals("g", typed.toString())
+        touches { step -> down(0, h); step(); moveTo(0, h + Offset(-20f, -10f)); step(); down(1, g); step(); up(0); step(); up(1) }
+        assertEquals("ghg", typed.toString())
+    }
+
     /** 14 键点双字母键提交整键：四下都要到。 */
     @Test fun alternatingThumbs14() { show("pinyin_14jian"); alternatingThumbsUuru("uiuierui") }
 

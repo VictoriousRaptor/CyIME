@@ -74,4 +74,15 @@ class T9GlideTest {
         assertTrue("accuracy $right/$total", right >= total * 0.85)
         assertTrue("too slow: $perWordMs ms", perWordMs < 50.0)
     }
+
+    /**
+     * 同一个键连按划不出来：你好 64426 与 年 6426、我们 96636 与 文 936 是同一条线（用户 11-10：九键划词老出单字）。
+     * 九键滑行用来划整词，同一条线先出多音节的词。
+     */
+    @Test fun aWordBeatsTheSingleSyllableOnTheSameLine() {
+        for ((word, digits) in listOf("nihao" to "64426", "women" to "96636", "niubi" to "64824")) {
+            val (xs, ys) = trace(digits, Random(3), noise = 0f)
+            assertEquals(word, digits, decoder.decode(xs, ys, limit = 1).single().word)
+        }
+    }
 }

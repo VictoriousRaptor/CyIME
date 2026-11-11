@@ -34,6 +34,9 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     private var omissionJob: kotlinx.coroutines.Job? = null
     private var omissionRevision = 0L
     private val omissionPause = OmissionPause()
+    /** 上一帧九键编码属于哪个输入框和方案；只有同一个才能借上一帧的字母编码，见 [com.kingzcheung.xime.rime.t9RawPreedit]。 */
+    private var t9PreeditOwner: Pair<Long, String>? = null
+    private val t9DigitPreeditLog = T9DigitPreeditLog()
 
     private fun scheduleOmission(ascii: Boolean) {
         val state = service.candidateState.value
@@ -122,11 +125,16 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // T9 编码显示永不回退原始数字 input：preedit 缺失，或含未转换数字
             //（合成切不出词时引擎把原始输入当编码回退，如全拼+简拼混合态）时，
             // 保留上一帧字母编码，用户看到的编码必须是字母
-            val rawPreedit = when {
-                preeditText.isNotEmpty() && preeditText.none { it.isDigit() } -> preeditText
-                inputText.isEmpty() -> ""
-                else -> service.candidateState.value.preeditText
-            }
+            val ui = service.uiState.value
+            val owner = ui.inputSessionId to ui.currentSchemaId
+            val previous = service.candidateState.value
+            val rawPreedit = com.kingzcheung.xime.rime.t9RawPreedit(preeditText, inputText,
+                previous.preeditText, previous.isComposing, t9PreeditOwner == owner)
+            t9PreeditOwner = if (inputText.isEmpty()) null else owner
+            if (inputText.isNotEmpty() && preeditText.any { it.isDigit() }) t9DigitPreeditLog.note(
+                inputText.length, preeditText.count { it.isDigit() }, candidatesWithComments.size,
+                candidatesWithComments.firstOrNull()?.comment?.count { it != ' ' && it != '\'' } ?: 0,
+                rawPreedit.isNotEmpty())
             FileLogger.i(XimeInputMethodService.TAG) {
                 "T9 display: enginePreedit='$preeditText' rawPreedit='$rawPreedit' input='$inputText' partials=${service.t9PartialSegments.size}"
             }
@@ -581,7 +589,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             if (scheme == InputScheme.CANGJIE) add("simplification" to !traditional)
             if (scheme == InputScheme.ZHUYIN) {
                 add("zh_tw" to true) // 声调表使用台湾字形，简体输出在声调筛选后转换。
-                add("zhuyin_simplified" to prefs.getBoolean(KeyboardInputPreferences.ZHUYIN_SIMPLIFIED_KEY, false))
+                add("zhuyin_simplified" to !traditional) // 注音也跟「繁体输出」：关时转简体。
             }
             add("_cyime_datetime_off" to !prefs.getBoolean(KeyboardInputPreferences.DATETIME_CANDIDATES_KEY, false))
             add("emoji" to prefs.getBoolean(KeyboardInputPreferences.CANDIDATE_EMOJI_KEY, false))
@@ -683,4 +691,22 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         return true
     }
 
+}
+
+/**
+ * 九键编码里还有没转成字母的数字（整串没有出整句，首选只盖住前面一段）时记一行 W 日志，
+ * 只记长度和个数，不记按键和文字；同一串只记一次，最多每 2 秒一行。11-10 录屏「突然什么都输入不了」用。
+ */
+internal class T9DigitPreeditLog(private val now: () -> Long = { android.os.SystemClock.uptimeMillis() }) {
+    private var lastAt = Long.MIN_VALUE / 2
+    private var lastInput = -1
+
+    fun note(inputLength: Int, digits: Int, candidates: Int, topSpellingLetters: Int, borrowed: Boolean) {
+        val t = now()
+        if (inputLength == lastInput || t - lastAt < 2_000L) return
+        lastAt = t
+        lastInput = inputLength
+        com.kingzcheung.xime.util.FileLogger.w("T9Display", "digit preedit: input_len=$inputLength " +
+            "digits_left=$digits candidates=$candidates top_spelling_letters=$topSpellingLetters borrowed=$borrowed")
+    }
 }

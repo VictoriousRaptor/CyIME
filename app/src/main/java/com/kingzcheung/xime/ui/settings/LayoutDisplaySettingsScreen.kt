@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.twotone.Dialpad
+import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.FormatListNumbered
 import androidx.compose.material.icons.twotone.FormatColorFill
 import androidx.compose.material.icons.twotone.AspectRatio
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.EmojiSymbols
 import androidx.compose.material.icons.twotone.Language
 import androidx.compose.material.icons.twotone.DashboardCustomize
+import androidx.compose.material.icons.twotone.ScreenRotation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.twotone.Send
@@ -61,11 +63,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.settings.SettingsPreferences
 
-/** 「键盘布局」里各布局一行的图标：26 键用键盘，九键与 14 键用拨号盘。 */
+/** 「键盘布局」里各布局一行的图标：26 键用键盘，九键与 14 键用拨号盘，滑行输入用手势。 */
 private val LayoutInputCategory.icon: androidx.compose.ui.graphics.vector.ImageVector
     get() = when (this) {
         LayoutInputCategory.Qwerty -> Icons.TwoTone.Keyboard
         LayoutInputCategory.Nine -> Icons.TwoTone.Dialpad
+        LayoutInputCategory.Glide -> Icons.TwoTone.Gesture
     }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,6 +131,15 @@ private fun LayoutDisplayPage(
                     SettingsItem(Icons.TwoTone.DashboardCustomize, "布局管理", "显示或排列切换栏里的布局，编辑自定义按键排列",
                         onClick = { context.startActivity(android.content.Intent(context, com.kingzcheung.xime.CustomLayoutActivity::class.java)) },
                         showArrow = true)
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    var perOrientation by remember {
+                        mutableStateOf(com.kingzcheung.xime.settings.OrientationLayouts.isEnabled(context))
+                    }
+                    SettingsToggleItem(Icons.TwoTone.ScreenRotation, "横竖屏分开记布局",
+                        "横屏、竖屏各记一个布局 (如横屏 26 键、竖屏九键)，在哪个方向选的就记到哪个方向，转屏后自动换。关闭时横竖屏用同一个布局。",
+                        checked = perOrientation, onCheckedChange = {
+                            perOrientation = it; com.kingzcheung.xime.settings.OrientationLayouts.setEnabled(context, it)
+                        })
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     SettingsItem(Icons.TwoTone.EmojiSymbols, "按键符号", "每个键滑出的符号，侧栏和数字行放什么",
                         onClick = { context.startActivity(android.content.Intent(context, com.kingzcheung.xime.CustomLayoutActivity::class.java)
@@ -252,6 +264,13 @@ private fun LayoutDisplayPage(
                             }
                         )
                     }
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 数字键盘左栏（用户 11-09）：进「按键符号 → 数字侧栏」改字、加减格子、调顺序。
+                    SettingsItem(Icons.TwoTone.EmojiSymbols, "左栏符号",
+                        "数字键盘左侧一列，默认 + - * /。可改字、加减、调顺序，多于 4 个时上下滑。",
+                        onClick = { com.kingzcheung.xime.ui.keyboard.openSideSymbolEditor(context,
+                            com.kingzcheung.xime.ui.keyboard.SideSymbolTarget.NUMBER) },
+                        showArrow = true, searchKey = "数字键盘左栏符号")
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     // 数字行（默认关）：点开关打开，点这一行进「按键符号 → 数字行」改键和顺序。
                     val numberRow = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences().numberRow
@@ -565,6 +584,10 @@ private fun LayoutDisplayPage(
             }
             if (page == "candidates") item {
                 SettingsSection(title = "拼音显示", content = {
+                    var showCorrectionMarks by remember { mutableStateOf(SettingsPreferences.showCorrectionMarks(context)) }
+                    SettingsToggleItem(Icons.TwoTone.Spellcheck, "显示纠错标记",
+                        "在纠错候选旁显示修正后的编码；关闭后仍可使用纠错候选。",
+                        showCorrectionMarks, { showCorrectionMarks = it; SettingsPreferences.setShowCorrectionMarks(context, it) })
                     var inputTextLocation by remember {
                         mutableStateOf(SettingsPreferences.getInputTextLocation(context))
                     }
@@ -613,6 +636,7 @@ private fun LayoutDisplayPage(
                         }
                     }
 
+                    DoublePinyinRawPreeditToggle()
                     if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR) {
                         var showPreview by remember { mutableStateOf(SettingsPreferences.showPreeditPreview(context)) }
                         SettingsToggleItem(Icons.TwoTone.DataObject, "显示拼音编辑栏", "打字时在候选区显示编码，支持编辑的方案可点按修改。",
@@ -886,7 +910,7 @@ internal fun KeyboardAppearanceSettings() {
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "按下时在键上方放大显示这个字，多一点动画开销",
+                                text = "按下时在键上方显示按的键，长按换成角标，拂动换成方向盘",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

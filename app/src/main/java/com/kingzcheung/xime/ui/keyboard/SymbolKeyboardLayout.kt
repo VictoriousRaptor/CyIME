@@ -28,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.kingzcheung.xime.keyboard.commonSymbolsFor
 import com.kingzcheung.xime.keyboard.KeyboardInputPage
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -104,6 +105,12 @@ fun SymbolKeyboardLayout(
         pageCount = { displayCategories.size }
     )
 
+    // 在「最近」页上点时不立刻重排，离开这一页再刷新，免得符号在手指下面换位置。
+    val onRecentPage = displayCategories.getOrNull(pagerState.settledPage)?.id == "recentSymbols"
+    LaunchedEffect(onRecentPage) {
+        if (!onRecentPage) recentSymbols = RecentUsageStore.get(context, RecentUsageStore.KEY_RECENT_SYMBOLS)
+    }
+
     val keySpacing = KeysConfigHelper.getKeyboardKeyConfig().spacingFor("qwerty")
     // The spacing scope hands back a fresh modifier; keep the host's glass inheritance marker,
     // otherwise the panel paints a second keyboard background over the glass.
@@ -171,9 +178,10 @@ fun SymbolKeyboardLayout(
                                         preserveWidth = preserveWidth,
                                         onClick = {
                                             if (onKeyPressDown != null) onKeyPressDown(symbol) else onHapticFeedback?.invoke()
-                                            recentSymbols = RecentUsageStore.record(
+                                            val updated = RecentUsageStore.record(
                                                 context, RecentUsageStore.KEY_RECENT_SYMBOLS, symbol
                                             )
+                                            if (!onRecentPage) recentSymbols = updated
                                             if (preserveWidth || (category.id == "common" && symbol in ownCommon)) onSelectExact(symbol)
                                             else onSelect(symbol)
                                         },

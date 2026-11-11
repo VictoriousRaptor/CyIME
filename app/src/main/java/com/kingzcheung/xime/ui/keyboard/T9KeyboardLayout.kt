@@ -926,12 +926,8 @@ private fun T9DigitKey(
         onFlickLetter = { letter -> currentOnLongPressSelect?.invoke(itemValue(letter)) },
         onFlickLongPress = currentSwipes.onSwipeUp,
         flickThresholdDp = normalizeLetterSwipeDistance(inputPreferences.fourteenLetterSwipeDp),
-        onSwipeStateChange = { state, bounds ->
-            // 拂动方向盘已经显示按下的键。其余普通点按由全局气泡开关决定。
-            val discPress = flick && inputPreferences.flickDirectionDisc && state.isPressed &&
-                !state.isLongPress && state.pressedText != null
-            if (!discPress) onSwipeStateChange?.invoke(state, bounds)
-        },
+        // 按下出按键浮标，和 26 键一样；方向盘出来时由按键自己把浮标收掉（用户 11-09）。
+        onSwipeStateChange = onSwipeStateChange,
         badgeText = digit,
         swipeText = currentSwipes.swipeUpText,
         symbolInputText = currentSwipes.symbolInputText,

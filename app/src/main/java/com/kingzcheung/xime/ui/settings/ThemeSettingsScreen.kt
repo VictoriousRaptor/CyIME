@@ -374,6 +374,9 @@ private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean
             }
         }
     }
+    // 两组：上面是「我的图片」本身（换图、调整、遮罩，删除放最后），下面是动态背景和轮播。
+    // 原来删除夹在遮罩和动态背景中间，轮播又挂在速度下面，整块看不出谁管谁（用户 11-09）。
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     SettingsSection(title = "背景图片") {
         SettingsItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
             subtitle = if (hasImage) "已设置，点这里换一张"
@@ -397,10 +400,15 @@ private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean
             CustomImageVeilSlider(dark = false, onChanged = onVeilChanged)
             CustomImageVeilSlider(dark = true, onChanged = onVeilChanged)
             SettingsItem(icon = Icons.TwoTone.Delete, title = "删除图片",
-                subtitle = "删掉这张图片，配色照旧",
+                subtitle = "连同轮播图片一起删，配色不变",
                 onClick = { confirmDelete = true })
         }
-        BackgroundMotionSettingsItems(hasCustomImage = hasImage)
+    }
+    SettingsSection(title = "动态与轮播") {
+        // 主图换了（调整页确认后 editing 清空）或删了，这里跟着重组，轮播那排的第一张随之换。
+        BackgroundMotionSettingsItems(mainImage = if (hasImage)
+            com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context) else null)
+    }
     }
     editing?.let { (src, base) ->
         val existing = src == com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context)
@@ -435,7 +443,7 @@ private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("删除图片") },
-            text = { Text("删掉这张背景图片；正在用它时，键盘留下图片下面那套配色。") },
+            text = { Text("删掉背景图片和轮播图片；正在用它时，键盘留下图片下面那套配色。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

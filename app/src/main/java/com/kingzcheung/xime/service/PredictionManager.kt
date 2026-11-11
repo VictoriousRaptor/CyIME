@@ -21,7 +21,25 @@ class PredictionManager(
     /** Language of the letters being completed: English, or a [com.kingzcheung.xime.settings.LetterLanguage] on its own keyboard. */
     private val completionLanguage: () -> com.kingzcheung.xime.settings.InputLanguage =
         { com.kingzcheung.xime.settings.InputLanguage.ENGLISH },
+    /** 「繁体输出」开着时的简繁转换，关着为 null；见 [ScriptBridge]。 */
+    private val traditionalBridge: () -> ScriptBridge? = { null },
 ) {
+    /**
+     * 联想表和个人学习都是简体。繁体输出时上文先转简体去查、去学，查出的联想词再转繁体显示，
+     * 繁体模式也有联想（以前繁体模式直接不出联想）。
+     */
+    class ScriptBridge(val toSimplified: (String) -> String, val toTraditional: (String) -> String) {
+        /** 一次转完整组联想词（一次 JNI）；换行分隔，行数对不上时逐个转。转完同形的只留一个。 */
+        fun traditionalWords(words: List<String>): List<String> {
+            if (words.isEmpty()) return words
+            val joined = toTraditional(words.joinToString("\n")).split('\n')
+            return (if (joined.size == words.size) joined else words.map(toTraditional)).distinct()
+        }
+    }
+
+    // 繁体时学习要先转简体，放到后台按顺序做，不在上屏的主线程上等转换表加载。
+    private val learningLane = Dispatchers.Default.limitedParallelism(1)
+
     companion object {
         private const val TAG = "PredictionManager"
         private const val MAX_CONTEXT_LENGTH = 25
@@ -44,7 +62,15 @@ class PredictionManager(
         try {
             if (!SettingsPreferences.isSmartPredictionEnabled(context)) emptyList()
             else if (!AssociationManager.isInitialized() && !AssociationManager.initialize(context)) emptyList()
-            else AssociationManager.predict(text, MAX_ASSOCIATION_COUNT, afterWholeWord = text == wholeWordContext).map { it.text }
+            else {
+                val afterWholeWord = text == wholeWordContext
+                val bridge = traditionalBridge()
+                if (bridge == null) AssociationManager.predict(text, MAX_ASSOCIATION_COUNT, afterWholeWord).map { it.text }
+                else withContext(Dispatchers.Default) {
+                    bridge.traditionalWords(AssociationManager.predict(bridge.toSimplified(text), MAX_ASSOCIATION_COUNT,
+                        afterWholeWord).map { it.text })
+                }
+            }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) { Log.e(TAG, "Prediction failed", error); emptyList() }
     }, deliver = onPredictionResult)
@@ -163,15 +189,22 @@ class PredictionManager(
         // 无痕只停止学习，联想仍按已有数据给出。
         if (com.kingzcheung.xime.settings.IncognitoState.active) return
         if (SettingsPreferences.isSmartPredictionEnabled(context) && AssociationManager.isInitialized()) {
-            AssociationManager.recordInput(text)
+            learn(text)
         }
     }
     
     fun recordInputPair(lastChar: String, candidate: String) {
         if (com.kingzcheung.xime.settings.IncognitoState.active) return
         if (SettingsPreferences.isSmartPredictionEnabled(context) && AssociationManager.isInitialized()) {
-            AssociationManager.recordInput(lastChar + candidate)
+            learn(lastChar + candidate)
         }
+    }
+
+    /** 学习记录一律存简体，切回简体后繁体时打的也能联想出来。 */
+    private fun learn(text: String) {
+        val bridge = traditionalBridge()
+        if (bridge == null) AssociationManager.recordInput(text)
+        else serviceScope.launch(learningLane) { AssociationManager.recordInput(bridge.toSimplified(text)) }
     }
     
     suspend fun getEnglishAssociations(text: String, limit: Int = MAX_ASSOCIATION_COUNT): List<String> {

@@ -22,8 +22,8 @@ class ReportedBehaviorTest {
     @Test fun sentenceCapitalizationIsFindable() {
         assertTrue("Control: settings search should find the existing flick option",
             searchSettings("长按").any { it.title == "拂动选字母" })
-        for (query in listOf("首字母大写", "句首大写", "首句大写", "自动大写")) {
-            assertTrue("未找到开关：$query", searchSettings(query).any { it.title == "英文句首自动大写" })
+        for (query in listOf("首字母大写", "句首大写", "首句大写", "自动大写", "英文句首自动大写", "俄语")) {
+            assertTrue("未找到开关：$query", searchSettings(query).any { it.title == "首字母大写" })
         }
     }
 

@@ -83,6 +83,10 @@ def catalog_hash(name: str) -> str | None:
     """模型目录里登记过的 Release 文件名 → sha256（防止传错文件）。
     按每个 ModelFile( 到下一个 ModelFile( 之间找：参数可以分好几行写，Release 上的名字也可以只出现在备用地址里。"""
     text = CATALOG.read_text(encoding="utf-8")
+    # 压缩包（按需下载的原生库）登记在 ModelVersion 里：archiveUrl = RELEASE + "<名字>", sha256 = "<哈希>"。
+    archive = re.search(re.escape(name) + r'",\s*sha256\s*=\s*"([0-9a-fA-F]{64})"', text)
+    if archive:
+        return archive.group(1).lower()
     starts = [m.start() for m in re.finditer(r"ModelFile\(", text)]
     for i, start in enumerate(starts):
         chunk = text[start:starts[i + 1] if i + 1 < len(starts) else len(text)]

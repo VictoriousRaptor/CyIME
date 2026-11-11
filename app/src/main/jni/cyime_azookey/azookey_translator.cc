@@ -1,9 +1,13 @@
 // Japanese kana-kanji conversion by azooKey (libCyAzooKey.so, loaded at runtime).
 // Rime keeps the romaji, segments, menu and selection; this translator only converts.
 // Schema: translators: [..., cyime_azookey_translator]. Dictionary: <user_data_dir>/azookey/dictionary,
-// learning: <user_data_dir>/azookey/memory. Without the library (32-bit x86, which the Swift SDK
-// does not target) the translator gives nothing and the schema's echo shows the romaji.
+// learning: <user_data_dir>/azookey/memory. The library is the APK's own copy (editions with models),
+// else the one the Japanese plugin downloaded (path in CYIME_AZOOKEY_LIBRARY, set by JapanesePack).
+// Without it (not downloaded yet, or 32-bit x86, which the Swift SDK does not target) the translator
+// gives nothing and the schema's echo shows the romaji.
 #include <dlfcn.h>
+#include <unistd.h>
+#include <cstdlib>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -47,22 +51,42 @@ struct AzooKeyApi {
   void (*end)(int32_t) = nullptr;
   void (*release)(char*) = nullptr;
   bool loaded = false;
+  bool broken = false;   // a library without the cyakkc_* functions; never retried
+  bool reported = false; // "not available" is logged once, not every retry
   std::atomic<bool> ready{false};
   std::chrono::steady_clock::time_point next_open;
 };
 
-// The library is loaded once. Opening the dictionary is retried (at most every 5 s), because the app
-// may still be unpacking it when the first key arrives after an update.
+// The APK's copy first (found by name in the app's library directory), then the downloaded one.
+void* OpenLibrary(string& error) {
+  if (void* lib = dlopen("libCyAzooKey.so", RTLD_NOW | RTLD_LOCAL)) return lib;
+  const char* reason = dlerror();
+  error = reason ? reason : "?";
+  const char* downloaded = getenv("CYIME_AZOOKEY_LIBRARY");
+  if (!downloaded || !*downloaded || access(downloaded, R_OK) != 0) return nullptr;
+  if (void* lib = dlopen(downloaded, RTLD_NOW | RTLD_LOCAL)) return lib;
+  reason = dlerror();
+  error = string(downloaded) + ": " + (reason ? reason : "?");
+  return nullptr;
+}
+
+// Loading the library and opening the dictionary are both retried (at most every 5 s): the Japanese
+// plugin may still be downloading them, or the app unpacking the dictionary, when the first key arrives.
 AzooKeyApi& Api() {
   static AzooKeyApi api;
-  static std::once_flag once;
   static std::mutex open_mutex;
-  std::call_once(once, [] {
-    void* lib = dlopen("libCyAzooKey.so", RTLD_NOW | RTLD_LOCAL);
+  if (api.ready) return api;
+  std::lock_guard<std::mutex> lock(open_mutex);
+  auto now = std::chrono::steady_clock::now();
+  if (api.ready || api.broken || now < api.next_open) return api;
+  api.next_open = now + std::chrono::seconds(5);
+  if (!api.loaded) {
+    string error;
+    void* lib = OpenLibrary(error);
     if (!lib) {
-      const char* error = dlerror();
-      Report(string("azooKey library not available: ") + (error ? error : "?"));
-      return;
+      if (!api.reported) Report("azooKey library not available: " + error);
+      api.reported = true;
+      return api;
     }
     api.open = reinterpret_cast<int32_t (*)(const char*, const char*)>(dlsym(lib, "cyakkc_open"));
     api.query = reinterpret_cast<char* (*)(const char*, int32_t, int32_t, int32_t)>(dlsym(lib, "cyakkc_query"));
@@ -70,13 +94,12 @@ AzooKeyApi& Api() {
     api.end = reinterpret_cast<void (*)(int32_t)>(dlsym(lib, "cyakkc_end"));
     api.release = reinterpret_cast<void (*)(char*)>(dlsym(lib, "cyakkc_free"));
     api.loaded = api.open && api.query && api.learn && api.end && api.release;
-    if (!api.loaded) Report("azooKey library lacks the cyakkc_* functions");
-  });
-  if (!api.loaded || api.ready) return api;
-  std::lock_guard<std::mutex> lock(open_mutex);
-  auto now = std::chrono::steady_clock::now();
-  if (api.ready || now < api.next_open) return api;
-  api.next_open = now + std::chrono::seconds(5);
+    if (!api.loaded) {
+      api.broken = true;
+      Report("azooKey library lacks the cyakkc_* functions");
+      return api;
+    }
+  }
   path base = Service::instance().deployer().user_data_dir / "azookey";
   string dictionary = (base / "dictionary").string(), memory = (base / "memory").string();
   api.ready = api.open(dictionary.c_str(), memory.c_str()) == 0;

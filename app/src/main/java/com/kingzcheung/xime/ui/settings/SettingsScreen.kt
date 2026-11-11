@@ -266,8 +266,12 @@ fun SettingsScreen(
         }
         LayoutInputCategory.entries.forEach { category ->
             composable(category.route) {
-                LayoutInputSettingsContent(category, onBack = { navController.popBackStack() })
+                LayoutInputSettingsContent(category, onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigate(it) })
             }
+        }
+        composable(SettingsRoutes.GlideContribute) {
+            GlideContributeScreen(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoutes.SmartPrediction) {
             SmartPredictionSettingsContent(onBack = { navController.popBackStack() })

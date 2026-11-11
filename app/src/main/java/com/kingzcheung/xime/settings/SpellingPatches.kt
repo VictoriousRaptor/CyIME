@@ -30,7 +30,7 @@ object SpellingPatches {
      */
     const val DOUBLE_PINYIN_ABBREVIATION_KEY = "double_pinyin_abbreviation"
     /**
-     * 打双拼时编码显示打的键（ul pb），不换回全拼（shuang pin）。别人提的需求（用户 11-04 转述），默认关，同以前。
+     * 打双拼时编码显示打的键（ul pb），不换回全拼（shuang pin）。默认显示双拼键，保留已保存的选择。
      * 26 键写方案补丁清空编码显示规则；九键在 [com.kingzcheung.xime.rime.RimeEngine] 显示层把读音换成双拼键。
      * 14 键和自建合并键布局上的双拼本来就显示双拼键，不受影响。
      */
@@ -131,7 +131,7 @@ object SpellingPatches {
     }
 
     fun doublePinyinRawPreedit(context: Context): Boolean =
-        SettingsPreferences.getPrefsPublic(context).getBoolean(DOUBLE_PINYIN_RAW_PREEDIT_KEY, false)
+        SettingsPreferences.getPrefsPublic(context).getBoolean(DOUBLE_PINYIN_RAW_PREEDIT_KEY, true)
 
     fun setDoublePinyinRawPreedit(context: Context, enabled: Boolean) {
         SettingsPreferences.getPrefsPublic(context).edit().putBoolean(DOUBLE_PINYIN_RAW_PREEDIT_KEY, enabled).apply()

@@ -20,7 +20,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.kingzcheung.xime.settings.InputLanguage
 import com.kingzcheung.xime.settings.InputMode
-import com.kingzcheung.xime.settings.InputModes
 import com.kingzcheung.xime.settings.LanguageSwitchMode
 import com.kingzcheung.xime.settings.LanguageSwitchOptions
 import com.kingzcheung.xime.settings.LanguageSwitchPreferences
@@ -40,7 +39,6 @@ internal fun LanguageKeySwitchSettings(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         options = LanguageSwitchPreferences.read(context)
     }
-    val currentNative = InputModes.languageOf(currentSchema, schemas)
     // 列出所有非英文语言（原来写死只有中文、日语，西班牙语等选不到）；此刻能选的只是已启用且方案已准备好的。
     val choices = LanguageSwitchPreferences.specificChoices(languageOrder)
     val nativeLanguages by produceState<List<InputLanguage>>(emptyList(), context, schemas, languageOrder) {
@@ -55,21 +53,22 @@ internal fun LanguageKeySwitchSettings(
         options = value
         LanguageSwitchPreferences.save(context, value)
     }
-    val selectedLanguage = options.language?.takeIf { it in nativeLanguages }
-        ?: currentNative.takeIf { it in nativeLanguages } ?: nativeLanguages.firstOrNull()
-    val modes = listOf(
-        LanguageSwitchMode.CURRENT_ENGLISH to "当前语言与英文切换(默认)",
-        LanguageSwitchMode.CYCLE to "按已启用语言顺序循环切换",
-        LanguageSwitchMode.SPECIFIC_ENGLISH to "指定语言与英文切换",
-    )
-    // 语言一多，指定语言那一列很长（用户 11-05）：默认收起，标题下一行写当前选的；设置搜索点中时自动展开。
+    // 用户 11-09：有了「两种语言互切」，「当前语言与英文」「指定语言与英文」都只是它的特例，合成一项；
+    // 另一项是按顺序循环。存的模式值不变（旧版本的设置照旧生效），默认仍是「当前语言 ↔ 英文」。
+    val pairMode = options.mode != LanguageSwitchMode.CYCLE
+    // 第一种：null 是「当前语言」（原来的默认）；存的语言没开或方案没准备好时同样按当前语言切。
+    val pairFirst = options.language?.takeIf { options.mode != LanguageSwitchMode.CURRENT_ENGLISH && it in nativeLanguages }
+    val pairPartner = options.partner?.takeIf {
+        options.mode == LanguageSwitchMode.SPECIFIC_PAIR && pairFirst != null && it != pairFirst && it in nativeLanguages
+    } ?: InputLanguage.ENGLISH
+    // 语言一多，选语言那几列很长（用户 11-05）：默认收起，标题下一行写当前选的；设置搜索点中时自动展开。
     var expanded by rememberSaveable { mutableStateOf(false) }
     val searchRequest = SettingsSearchFocus.request
     LaunchedEffect(searchRequest) {
         if (searchRequest != null && "语言键切换方式" in searchRequest.keys) expanded = true
     }
-    val summary = if (options.mode == LanguageSwitchMode.SPECIFIC_ENGLISH && selectedLanguage != null)
-        "${selectedLanguage.displayName} ↔ 英文" else modes.first { it.first == options.mode }.second
+    val summary = if (!pairMode) "按已启用语言顺序循环切换"
+        else "${pairFirst?.displayName ?: "当前语言"} ↔ ${pairPartner.displayName}"
     Surface(modifier = Modifier.settingsSearchAnchor("语言键切换方式").testTag("language-key-switch-settings"), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(16.dp)
@@ -85,44 +84,55 @@ internal fun LanguageKeySwitchSettings(
             Text("屏幕键盘和物理浮条共用此设置；点按语言键切换，长按打开语言列表。物理键盘的 Shift 和 Ctrl + 空格快捷键保持各自功能。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.selectableGroup()) {
-                for ((mode, title) in modes) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        .testTag("language-switch-mode:${mode.id}")
-                        .selectable(options.mode == mode, role = Role.RadioButton) {
-                            val selected = options.language?.takeIf { it in nativeLanguages }
-                                ?: currentNative.takeIf { it in nativeLanguages } ?: nativeLanguages.firstOrNull()
-                            save(options.copy(mode = mode, language = if (mode == LanguageSwitchMode.SPECIFIC_ENGLISH) selected else options.language))
-                        }, verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = options.mode == mode, onClick = null)
-                        Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    }
+                SwitchModeRow("pair", "两种语言互切(默认)", pairMode) {
+                    if (!pairMode) save(LanguageSwitchPreferences.pair(pairFirst, pairPartner))
+                }
+                SwitchModeRow(LanguageSwitchMode.CYCLE.id, "按已启用语言顺序循环切换", !pairMode) {
+                    save(options.copy(mode = LanguageSwitchMode.CYCLE))
                 }
             }
-            if (options.mode == LanguageSwitchMode.SPECIFIC_ENGLISH) {
-                if (nativeLanguages.isEmpty()) Text("先在上面打开一种语言(中文、日语、西班牙语等)，等它的输入方案准备好后再选。",
-                    style = MaterialTheme.typography.bodyMedium)
-                Column(Modifier.selectableGroup()) {
-                    for (language in choices) {
-                        val ready = language in nativeLanguages
-                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .testTag("language-switch-specific:${language.id}")
-                            .selectable(selectedLanguage == language, enabled = ready, role = Role.RadioButton) {
-                                save(options.copy(language = language))
-                            }, verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = selectedLanguage == language, onClick = null, enabled = ready)
-                            Column(Modifier.weight(1f)) {
-                                Text("${language.displayName} ↔ 英文", style = MaterialTheme.typography.bodyMedium,
-                                    color = if (ready) MaterialTheme.colorScheme.onSurface
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
-                                if (!ready) Text(if (language in languageOrder) "${language.displayName}的输入方案还在准备"
-                                    else "${language.displayName}未启用，在上面打开后可选",
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
+            if (pairMode) {
+                Text("第一种", style = MaterialTheme.typography.labelLarge)
+                // 只列已开启、方案准备好的语言；「当前语言」就是原来的默认，跟着正在用的语言走。
+                LanguagePairChoices("first", listOf<InputLanguage?>(null) + nativeLanguages, pairFirst) {
+                    save(LanguageSwitchPreferences.pair(it, pairPartner))
                 }
+                Text("另一种", style = MaterialTheme.typography.labelLarge)
+                // 第一种是「当前语言」时只能和英文互切：当前语言就是另一种时没法再切。
+                LanguagePairChoices("partner", listOf<InputLanguage?>(InputLanguage.ENGLISH) +
+                    (if (pairFirst == null) emptyList() else nativeLanguages.filter { it != pairFirst }), pairPartner) {
+                    save(LanguageSwitchPreferences.pair(pairFirst, it))
+                }
+                if (nativeLanguages.isEmpty()) Text("别的语言要先在上面打开，等它的输入方案准备好后才能选。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun SwitchModeRow(tag: String, title: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("language-switch-mode:$tag")
+        .selectable(selected, role = Role.RadioButton, onClick = onSelect), verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = selected, onClick = null)
+        Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 「两种语言互切」的一列语言单选；null 显示成「当前语言」。 */
+@Composable
+private fun LanguagePairChoices(tag: String, languages: List<InputLanguage?>, selected: InputLanguage?,
+    onSelect: (InputLanguage?) -> Unit) {
+    Column(Modifier.selectableGroup()) {
+        for (language in languages) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .testTag("language-switch-pair-$tag:${language?.id ?: "current"}")
+                .selectable(selected == language, role = Role.RadioButton) { onSelect(language) },
+                verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selected == language, onClick = null)
+                Text(language?.displayName ?: "当前语言", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
         }
     }
 }

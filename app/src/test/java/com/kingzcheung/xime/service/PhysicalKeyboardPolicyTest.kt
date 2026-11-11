@@ -132,4 +132,16 @@ class PhysicalKeyboardPolicyTest {
             assertNull(hardwareCandidateDigitIndex(KeyEvent.KEYCODE_NUMPAD_0 + digit, false))
         }
     }
+
+    /** GitHub #290：中文标点下 Shift 打的 " ( ) 等交给 Rime 出全角，英文 / 半角和小键盘照旧原样上屏。 */
+    @Test fun `shifted symbols follow chinese punctuation while numpad stays literal`() {
+        for (symbol in listOf("\"", "(", ")", ":", "?", "!", "<", ">", "_", "{", "}", "~")) {
+            assertFalse(symbol, hardwareSymbolIsLiteral(symbol, shifted = true, numpad = false, chinesePunctuation = true))
+            assertTrue(symbol, hardwareSymbolIsLiteral(symbol, shifted = true, numpad = false, chinesePunctuation = false))
+        }
+        assertTrue(hardwareSymbolIsLiteral("+", shifted = false, numpad = true, chinesePunctuation = true))
+        assertTrue(hardwareSymbolIsLiteral("7", shifted = false, numpad = true, chinesePunctuation = true))
+        assertFalse("不按 Shift 的符号本来就走 Rime", hardwareSymbolIsLiteral("'", shifted = false, numpad = false, chinesePunctuation = true))
+        assertFalse("Shift 字母不归这里管", hardwareSymbolIsLiteral("A", shifted = true, numpad = false, chinesePunctuation = false))
+    }
 }

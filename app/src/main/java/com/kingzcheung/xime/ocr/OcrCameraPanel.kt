@@ -114,9 +114,9 @@ internal fun OcrCameraPanel(
     LaunchedEffect(active) {
         permission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
-    // 轻量版不带拍照识别模型：没有时先给下载提示，下载完再开相机。null = 还在检查。
+    // 轻量版不带拍照识别模型和引擎（OpenCV）：缺哪个先给下载提示，下载完再开相机。null = 还在检查。
     var modelReady by remember { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(active) { modelReady = withContext(Dispatchers.IO) { OcrModelFiles.available(context) } }
+    LaunchedEffect(active) { modelReady = withContext(Dispatchers.IO) { OcrModelFiles.available(context) && OcrEngine.available(context) } }
     Box(modifier.fillMaxSize().background(background).testTag("ocr-camera-panel")) {
         Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { viewSize = it; frameSize.set(it) }) {
             if (modelReady == false) OcrModelDownloadPrompt(textColor, accent, Modifier.align(Alignment.Center)) { modelReady = true }

@@ -16,10 +16,10 @@ class KanaPrecomputedTemplatesTest {
     private fun assetFile(name: String) = listOf("src/main/assets/handwriting/$name", "app/src/main/assets/handwriting/$name")
         .map(::File).first { it.isFile }
 
-    /** 模型目录里内置汉字手写模型 ochwpro.onnx 的哈希（BuiltinModelCatalog 中同一文件，v1.1）。 */
-    private val builtinOchwproSha = "d625e6b6fa0dc39499bc15a8ac960249fcea9e71e34334522d32524557d1136d"
-    /** 还没在模型市场点「更新」的 v1.0：模板声明兼容，照样直接读预算特征。 */
-    private val previousOchwproSha = "eb04d62a314c7d7bac4e34d6ce0c24137474d30ff94b929115a621385420ce13"
+    /** 模型目录里内置汉字手写模型 ochwpro.onnx 的哈希（BuiltinModelCatalog 中同一文件，v1.2）。 */
+    private val builtinOchwproSha = "8a6095f9ccd222fa391d4e98e2795f478d3d88daaa62d4844677fac18c7acb02"
+    /** 还没在模型市场点「更新」的 v1.1：v1.2 的假名特征和它差得多，不声明兼容，在设备上现算。 */
+    private val previousOchwproSha = "d625e6b6fa0dc39499bc15a8ac960249fcea9e71e34334522d32524557d1136d"
 
     @Test fun shippedFeaturesMatchTheBuiltinChineseModelAndCoverEveryKana() {
         val meta = assetFile("kana_default_och.json").readText(Charsets.UTF_8)
@@ -41,7 +41,7 @@ class KanaPrecomputedTemplatesTest {
         val meta = assetFile("kana_default_och.json").readText(Charsets.UTF_8)
         val bin = assetFile("kana_default_och.bin").readBytes()
         assertNull(HandwritingTemplates.decodePrecomputed(meta, bin, "0".repeat(64)))
-        assertNotNull(HandwritingTemplates.decodePrecomputed(meta, bin, previousOchwproSha))
+        assertNull(HandwritingTemplates.decodePrecomputed(meta, bin, previousOchwproSha))
         assertNull(HandwritingTemplates.decodePrecomputed(meta, bin.copyOf(bin.size - 4), builtinOchwproSha))
     }
 

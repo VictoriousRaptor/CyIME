@@ -106,6 +106,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
     val layouts = "$input › 键盘布局"
     val qwertyPath = "$layouts › 26 键"
     val ninePath = "$layouts › 九键与 14 键"
+    val glidePath = "$layouts › 滑行输入"
     val gestures = "$input › 按键与手势"
     val hardware = "$input › 物理键盘"
     val theme = "$look › 主题与外观"
@@ -124,6 +125,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
     val about = "$system › 关于 CyIME"
     val qwerty = LayoutInputCategory.Qwerty.route
     val nine = LayoutInputCategory.Nine.route
+    val glide = LayoutInputCategory.Glide.route
     val layoutIndex = SettingsRoutes.LayoutDisplay
     val gesturePage = layoutPage("gestures")
     val candidatePage = layoutPage("candidates")
@@ -152,8 +154,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         page("关于 CyIME", system, SettingsRoutes.About, "版本 开发者 联系 许可 检查更新 最新版本 源代码 更新内容"),
         // 输入 › 语言与方案
         SettingsSearchEntry("语言键切换方式", languages, "languages", "语言键 切换语言 中英切换 循环切换 指定语言 英文 地球键 点按语言键"),
-        SettingsSearchEntry("繁体输出", chinesePath, chinese, "繁体 繁體 正体 简繁 简繁切换 简体 台湾 转换"),
-        SettingsSearchEntry("注音输出简体", chinesePath, chinese, "注音简体 注音繁体 注音转简体 大千 ㄅㄆㄇ 简繁切换"),
+        SettingsSearchEntry("繁体输出", chinesePath, chinese, "繁体 繁體 正体 简繁 简繁切换 简体 台湾 转换 注音简体 注音繁体 注音转简体 大千 ㄅㄆㄇ"),
         SettingsSearchEntry("生僻字", chinesePath, chinese, "生僻字 罕用字 缺字 打不出 大字表 扩展字 字库 冷僻字"),
         SettingsSearchEntry("时间日期候选", chinesePath, chinese, "时间 日期 星期 今天 几点 当前时间 当前日期 年月日 联想 候选 ts 时间戳 unix"),
         SettingsSearchEntry("网址、邮箱框自动切英文", englishPath, english, "网址 邮箱 链接 地址栏 url email 自动英文 自动切英文 切成英文 变英文 中文 换软件 输入框"),
@@ -170,12 +171,14 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("双拼键位提示", theme, SettingsRoutes.Theme, "双拼 键位 提示 键位图 记不住 韵母 声母 显示 键盘上 主题 双拼主题 小鹤 自然码 角标 一起显示 和角标一起显示", section = "角标与气泡"),
         SettingsSearchEntry("ing 放在 Shift 键上", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "微软双拼 分号 ing Shift 大写键 分词键 L 最右边 布局 搜狗 讯飞 微信"),
         SettingsSearchEntry("双拼简拼", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "简拼 双拼简拼 首字母 声母 缩写 只打声母 全拼简拼 小鹤 自然码 微软双拼 zgrm", section = "通用"),
-        SettingsSearchEntry("编码显示双拼键", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "通用"),
         // 输入 › 键盘布局
-        page("26 键", layouts, qwerty, "26键 全键盘 全拼 qwerty 中英混输 滑行输入"),
+        page("26 键", layouts, qwerty, "26键 全键盘 全拼 qwerty 中英混输"),
         page("九键与 14 键", layouts, nine, "九键 9键 14键 拂动 假名 触发距离"),
+        // 英文、中文、九键滑行 11-09 合到一页（原来分在 26 键、九键两页）。
+        page("滑行输入", layouts, glide, "滑行 划词 滑动输入 手势输入 swype 英文滑行 中文滑行 九键滑行 26键 九键"),
         SettingsSearchEntry("布局管理", layouts, SEARCH_TARGET_CUSTOM_LAYOUT, "自定义布局 自定义按键布局 切换栏 隐藏布局 布局排序 新建布局 复制 编辑按键排列", anchor = null),
-        SettingsSearchEntry("按键符号", layouts, layoutIndex, "角标 符号编辑 字母键符号 上下角标 下滑符号 14键符号 自定义布局符号 侧栏 笔画 短语 常用符号栏 手写符号 数字行 滑动动作 zxcv 撤销 剪切 复制 粘贴 全选 段首 段尾"),
+        SettingsSearchEntry("横竖屏分开记布局", layouts, layoutIndex, "横屏 竖屏 转屏 旋转 方向 横屏26键 竖屏九键 不同布局 分别 各自 记住布局"),
+        SettingsSearchEntry("按键符号", layouts, layoutIndex, "角标 符号编辑 字母键符号 上下角标 下滑符号 14键符号 自定义布局符号 侧栏 笔画 短语 常用符号栏 手写符号 数字行 数字侧栏 数字键盘 滑动动作 zxcv 撤销 剪切 复制 粘贴 全选 段首 段尾"),
         SettingsSearchEntry("语言键放左侧", layouts, layoutIndex, "中英切换键 语言切换 地球键 左边 左侧 数字键右边 123 合并按钮 符号键 位置"),
         SettingsSearchEntry("符号键循环切换", layouts, layoutIndex, "Gboard 符号键 数字键 循环切换 合并 单键 ?123 输入法键盘"),
         SettingsSearchEntry("标点上屏首选", layouts, layoutIndex, "标点 逗号 句号 问号 首选 第一个候选 上屏 候选上屏 打逗号 选词 搜狗"),
@@ -189,9 +192,10 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("数字框自动数字键盘", layouts, layoutIndex, "数字 验证码 号码 电话 数字键盘 自动弹出"),
         SettingsSearchEntry("数字出短语", layouts, layoutIndex, "数字 短语 我的短语 自定义短语 邮箱 网址 号码 数字串 数字键盘 候选"),
         SettingsSearchEntry("联想常用数字", layouts, layoutIndex, "数字 常用数字 号码 电话 联想 学习 数字键盘 候选"),
+        SettingsSearchEntry("数字键盘左栏符号", layouts, layoutIndex, "数字键盘 左栏 侧栏 符号 运算符 加减乘除 + - * / 冒号 自定义 顺序 上下滑 数字侧栏"),
         SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字"),
-        page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 位置 旋转"),
-        page("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 锁定按钮 底部小锁 长按 宽高 四角"),
+        page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 单手模式 位置 旋转"),
+        page("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 底部短横条 底部小锁 长按 宽高 四角"),
         SettingsSearchEntry("底部位置", layouts, layoutPage("bottom_gap"), "手势导航时键盘贴底 贴到最底 留出导航按钮 切换输入法按钮 收起键盘按钮 键盘底部留白 下边距 底部空白 贴到底 手势导航栏 忽略窗口边衬区 忽略系统窗口边衬区 边衬区 insets 全面屏手势 底部高度"),
         page("底部留白校准", layouts, layoutPage("bottom_gap"), "底部空白 多一行 全面屏手势 导航栏 挡住 按键重叠 底边拖不动 调低 抬高 恢复系统建议"),
         page("工具栏与菜单排列", layouts, SettingsRoutes.ToolbarArrange, "工具栏 菜单 排列 顺序 入口 图标 按钮 自定义工具栏"),
@@ -204,22 +208,23 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("九键按数字也模糊", chinesePath, chinese, "九键模糊音 九宫格模糊音 九键 模糊音 数字 直接模糊 平翘舌 前后鼻音 性能 卡顿", section = "模糊音"),
         SettingsSearchEntry("模糊音也用于双拼", chinesePath, chinese, "双拼模糊音 双拼 模糊音 小鹤 自然码 in ing 前后鼻音", section = "模糊音"),
         SettingsSearchEntry("模糊音", chinesePath, chinese, "模糊音 模糊 平翘舌 前后鼻音 z zh c ch s sh n l f h r an ang en eng in ing 分不清 口音 方言 九键模糊音 九宫格 14键模糊音 14 键 双拼"),
-        SettingsSearchEntry("滑行输入", qwertyPath, qwerty, "滑行 划词 滑动输入 手势输入 英文 整词 swype"),
-        SettingsSearchEntry("中文滑行输入", qwertyPath, qwerty, "滑行 划词 中文滑行 拼音滑行 双拼滑行 手势输入 swype"),
-        SettingsSearchEntry("逐字删除中文滑行", qwertyPath, qwerty, "滑行 划词 删除 退格 拼音 音节 中文"),
-        SettingsSearchEntry("滑行时实时显示词", qwertyPath, qwerty, "滑行 实时 预览 显示 抬手 gboard 划词 swype"),
+        SettingsSearchEntry("英文滑行", glidePath, glide, "滑行 划词 滑动输入 手势输入 英文 整词 26键 swype 滑行输入"),
+        SettingsSearchEntry("中文滑行", glidePath, glide, "滑行 划词 中文滑行 拼音滑行 双拼滑行 手势输入 26键 swype 中文滑行输入"),
+        SettingsSearchEntry("九键滑行", glidePath, glide, "九宫格 九鍵 九键 滑行 连划 滑动拼音 连续输入 手势 九键滑行输入"),
+        SettingsSearchEntry("逐字删除中文滑行", glidePath, glide, "滑行 划词 删除 退格 拼音 音节 中文"),
+        SettingsSearchEntry("滑行时实时显示词", glidePath, glide, "滑行 实时 预览 显示 抬手 gboard 划词 swype"),
+        SettingsSearchEntry("贡献滑行轨迹", glidePath, glide, "滑行练习 练习 贡献 上传 轨迹 魔搭 数据 改进识别"),
         SettingsSearchEntry("三行字母错位", qwertyPath, qwerty, "错位 排布 实体键盘 对齐 手机排布 字母行 偏移"),
         SettingsSearchEntry("空格两侧的标点", qwertyPath, qwerty, "逗号键 句号键 空格 标点 全角 半角 宽度"),
         SettingsSearchEntry("空格左侧逗号键", qwertyPath, qwerty, "逗号 空格 加宽 标点"),
-        SettingsSearchEntry("英文句首自动大写", qwertyPath, qwerty, "英文键盘 首字母大写 首句大写 句首大写 自动大写"),
-        SettingsSearchEntry("底排标点固定上滑", qwertyPath, qwerty, "逗号 句号 半角 点号 向上拖 上拉 符号 屏幕边缘"),
+        SettingsSearchEntry("首字母大写", qwertyPath, qwerty, "英文句首自动大写 英文键盘 首句大写 句首大写 自动大写 大小写 西班牙语 德语 法语 意大利语 俄语"),
+        SettingsSearchEntry("底排标点固定上滑", qwertyPath, qwerty, "逗号 句号 半角 点号 向上拖 上拉 长按 符号 屏幕边缘 数字键盘 点键 冒号 端口 IP"),
         SettingsSearchEntry("空格右侧句号键", qwertyPath, qwerty, "句号 空格 标点"),
         SettingsSearchEntry("逗号键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 单引号 撇号 音节 西安 xian 逗号"),
         SettingsSearchEntry("Shift 键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 Shift 大小写 大写键 音节 西安 xian"),
         SettingsSearchEntry("长音键", qwertyPath, qwerty, "长音 ー 伸ばし棒 日语 日文 罗马字 L 键 Shift 大写键 コーヒー"),
         SettingsSearchEntry("拖到候选选词的距离", ninePath, nine, "九键 0键 零键 拖动 拖拽 托转 选词 候选 距离 阈值 Shift 百分比 拖线"),
         SettingsSearchEntry("拂动选字母", ninePath, nine, "九键 拂动 滑动 长按 数字 字母 字母菜单 上下左右"),
-        SettingsSearchEntry("九键滑行输入", ninePath, nine, "九宫格 九鍵 滑行 连划 滑动拼音 连续输入 手势"),
         SettingsSearchEntry("左右滑动选字母", ninePath, nine, "14键 双字母键 滑动 选字母 小鹤 双拼 左滑 右滑 自建 合并 18键"),
         SettingsSearchEntry("滑动触发距离", ninePath, nine, "距离 灵敏度 误触 拂动 滑动 假名 dp"),
         SettingsSearchEntry("拂动时显示方向圆盘", ninePath, nine, "圆盘 方向 箭头 拂动 提示 假名 日语"),
@@ -267,8 +272,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("深色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 黑夜 夜间", section = "背景图片"),
         SettingsSearchEntry("配色方案", theme, SettingsRoutes.Theme, "配色 颜色 主题色 皮肤 预览"),
         SettingsSearchEntry("用自己的图片", theme, SettingsRoutes.Theme, "背景图 背景图片 自定义背景 图片 照片 相册 壁纸 我的图片 换背景 调整图片 裁剪 缩放 对齐 留白 删除图片", section = "背景图片"),
-        SettingsSearchEntry("动态背景", theme, SettingsRoutes.Theme, "动图 动态壁纸 背景动 会动 缓动 放大 缩小 推远 拉近 平移 左右移动 轮换 ken burns 背景动画", section = "背景图片"),
-        SettingsSearchEntry("轮播图片", theme, SettingsRoutes.Theme, "轮播 多张图片 多图 幻灯片 图片切换 换图 相册 背景图", section = "背景图片"),
+        SettingsSearchEntry("动态背景", theme, SettingsRoutes.Theme, "动图 动态壁纸 背景动 会动 缓动 放大 缩小 推远 拉近 平移 左右移动 轮换 ken burns 背景动画", section = "动态与轮播"),
+        SettingsSearchEntry("轮播图片", theme, SettingsRoutes.Theme, "轮播 多张图片 多图 幻灯片 图片切换 换图 相册 背景图 清空轮播 删除轮播", section = "动态与轮播"),
         SettingsSearchEntry("视觉样式", theme, SettingsRoutes.Theme, "样式 圆角 扁平 立体 材质"),
         SettingsSearchEntry("按键形状", theme, SettingsRoutes.Theme, "形状 圆角 方形 方角 直角 方块 键帽 按键外形 iOS"),
         SettingsSearchEntry("按键字号", theme, SettingsRoutes.Theme, "字号 字体 文字大小 按键文字 字体大小"),
@@ -284,12 +289,15 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         // 外观 › 候选词
         SettingsSearchEntry("候选字大小", candidates, candidatePage, "候选 字号 字体大小 文字大小"),
         SettingsSearchEntry("候选词间距加宽", candidates, candidatePage, "候选 间距 间隔 太挤 密度 单字 宽松 分隔线 竖线"),
-        SettingsSearchEntry("候选栏取消按钮", candidates, candidatePage, "取消 左箭头 取消输入"),
-        SettingsSearchEntry("联想关闭键用叉号", candidates, candidatePage, "联想 关闭联想 关闭键 叉 叉号 圆叉 左箭头"),
+        // 11-09 反馈：有人按「取消候选按钮」「关闭候选按钮」找，记不住「候选栏」在前。
+        SettingsSearchEntry("候选栏取消按钮", candidates, candidatePage, "取消 左箭头 取消输入 取消候选 关闭候选 取消候选按钮 关闭候选按钮 候选时取消按钮 关闭按钮 返回按钮 返回键 退出输入 取消联想 关闭联想"),
+        SettingsSearchEntry("联想关闭键用叉号", candidates, candidatePage, "联想 关闭联想 取消联想 关闭键 关闭按钮 叉 叉号 圆叉 左箭头"),
         SettingsSearchEntry("候选栏按钮按压高亮", candidates, candidatePage, "按住 反馈 取消键 关闭 展开箭头"),
         SettingsSearchEntry("候选注释", candidates, candidatePage, "注释 显示 自动 隐藏 候选显示"),
         SettingsSearchEntry("候选注释内容", candidates, candidatePage, "注释 拼音 释义 翻译 编码 中英 英文意思 词典 英文 单词 英文单词 选英文 出英文 上屏英文 打英文 中译英 下一项 长按下一项 shift"),
+        SettingsSearchEntry("显示纠错标记", candidates, candidatePage, "纠错 拼音 标注 红字 隐藏", section = "拼音显示"),
         SettingsSearchEntry("编码显示", candidates, candidatePage, "预编辑 输入框 候选栏 编码位置 拼音显示 拼音框 拼音浮框 拼音气泡"),
+        SettingsSearchEntry("双拼编码显示全拼", candidates, candidatePage, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "拼音显示"),
         SettingsSearchEntry("显示拼音编辑栏", candidates, candidatePage, "关闭 隐藏 顶部 拼音浮条 编码"),
         SettingsSearchEntry("拼音放在键盘内", candidates, candidatePage, "候选栏内部 拼音 编辑 遮挡 底栏"),
         SettingsSearchEntry("拼音气泡不透明度", candidates, candidatePage, "拼音 气泡 透明度 不透明度 透明 看不清 实底 浮条"),
@@ -361,6 +369,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("上屏后自动关闭剪贴板", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
         SettingsSearchEntry("卡片显示行数", clipboardPanel, SettingsRoutes.ClipboardPanel,
             "剪贴板 卡片 行数 几行 显示 记录 折叠 最多显示 剪贴板卡片最多显示 卡片最多显示"),
+        SettingsSearchEntry("图片高度", clipboardPanel, SettingsRoutes.ClipboardPanel,
+            "剪贴板 图片 高度 太矮 比例 长图 截图 卡片"),
         SettingsSearchEntry("最近截图", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 截图 截屏 相册 图片 照片"),
         SettingsSearchEntry("剪贴板数量上限", clipboardPanel, SettingsRoutes.ClipboardPanel,
             "剪贴板 条数 数量 最多 上限 保存 历史记录 不限 存文档", anchor = "数量上限", section = "历史记录"),

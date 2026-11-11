@@ -34,6 +34,7 @@ object SettingsRoutes {
     const val LogViewer = "log_viewer"
     const val HandwritingTraining = "handwriting_training"
     const val HandwritingContribute = "handwriting_contribute"
+    const val GlideContribute = "glide_contribute"
     const val Handwriting = "handwriting_settings"
     const val ClipboardSync = "clipboard_sync"
     const val ClipboardGroups = "clipboard_groups"

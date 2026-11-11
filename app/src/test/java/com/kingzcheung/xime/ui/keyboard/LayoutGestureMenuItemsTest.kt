@@ -15,7 +15,7 @@ class LayoutGestureMenuItemsTest {
     private fun shown(kind: LayoutKind) = ToolbarButton.LAYOUT_GESTURES.filter { it.appliesTo(kind) }
 
     @Test fun eachLayoutShowsOnlyItsOwnToggles() {
-        assertEquals(listOf(ToolbarButton.T9_FLICK, ToolbarButton.FLICK_DISC), shown(LayoutKind.T9))
+        assertEquals(listOf(ToolbarButton.GLIDE, ToolbarButton.T9_FLICK, ToolbarButton.FLICK_DISC), shown(LayoutKind.T9))
         assertEquals(listOf(ToolbarButton.FOURTEEN_SWIPE, ToolbarButton.FLICK_DISC), shown(LayoutKind.MERGED))
         assertEquals(listOf(ToolbarButton.KANA_HINTS, ToolbarButton.FLICK_DISC), shown(LayoutKind.KANA_KEYPAD))
         assertEquals(listOf(ToolbarButton.GLIDE), shown(LayoutKind.ALPHABETIC))
@@ -38,10 +38,19 @@ class LayoutGestureMenuItemsTest {
         assertEquals(listOf("glide_typing_v2", "glide_typing"), ToolbarButton.GLIDE.gestureKeys())
     }
 
+    /** 用户 11-09：开了九键滑行，九键菜单里找不到地方关。九键上「滑行输入」开关的是「九键滑行」，不碰 26 键的两个。 */
+    @Test fun glideToggleOnNineKeyFollowsNineKeyGlide() {
+        val nine = prefs.copy(glideTyping = false, chineseGlideTyping = false, t9GlideTyping = true)
+        assertTrue(ToolbarButton.GLIDE.gestureOn(nine, nine = true))
+        assertEquals(false, ToolbarButton.GLIDE.gestureOn(nine.copy(t9GlideTyping = false, glideTyping = true), nine = true))
+        assertEquals(listOf("t9_glide_typing"), ToolbarButton.GLIDE.gestureKeys(nine = true))
+        assertEquals(listOf("t9_glide_typing"), ToolbarButton.GLIDE.gestureKeys(chinese = true, nine = true))
+    }
+
     @Test fun nineKeyGlideOwnsDirectionalDragsAndRestoresPreviousFlickSetting() {
         val glide = prefs.copy(t9GlideTyping = true, cursorGesture = CursorGestureMode.NONE)
         assertEquals(false, ToolbarButton.T9_FLICK.gestureOn(glide))
-        assertEquals("九键滑行输入", InputGestureLocks.lockFor(glide, InputGestureLock.Option.T9_FLICK_LETTERS, true)?.by)
+        assertEquals("九键滑行", InputGestureLocks.lockFor(glide, InputGestureLock.Option.T9_FLICK_LETTERS, true)?.by)
         assertTrue(ToolbarButton.T9_FLICK.gestureOn(glide.copy(t9GlideTyping = false)))
     }
 

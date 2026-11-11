@@ -19,8 +19,12 @@ internal class HardwareLanguageShortcuts {
     private var shiftDownAt = 0L
     private var shiftUsed = false
     fun reset() { pressed.clear(); held.clear(); shift = null; shiftUsed = false }
+    /**
+     * [altTypesChar]：这台键盘上 Alt 加这个键本身打得出字（全键盘手机 Titan 2 等的 Alt 数字层）。
+     * 这时 Alt+V/H 是打数字，不当剪贴板、麦克风快捷键（GitHub #295）。
+     */
     fun down(key: Int, time: Long, repeat: Int, ctrl: Boolean, alt: Boolean, meta: Boolean,
-        shifted: Boolean, options: HardwareKeyboardOptions): HardwareShortcutResult {
+        shifted: Boolean, options: HardwareKeyboardOptions, altTypesChar: Boolean = false): HardwareShortcutResult {
         val otherKeyHeld = pressed.any { it != key }
         pressed += key
         val isShift = key == KeyEvent.KEYCODE_SHIFT_LEFT || key == KeyEvent.KEYCODE_SHIFT_RIGHT
@@ -28,8 +32,8 @@ internal class HardwareLanguageShortcuts {
         if (key in held) return HardwareShortcutResult(consume = true)
         val tool = if (options.toolShortcuts && !meta && !shifted) when {
             ctrl && !alt && key == KeyEvent.KEYCODE_PERIOD -> HardwareToolShortcut.PUNCTUATION
-            alt && !ctrl && key == KeyEvent.KEYCODE_V -> HardwareToolShortcut.CLIPBOARD
-            alt && !ctrl && key == KeyEvent.KEYCODE_H -> HardwareToolShortcut.MICROPHONE
+            alt && !ctrl && !altTypesChar && key == KeyEvent.KEYCODE_V -> HardwareToolShortcut.CLIPBOARD
+            alt && !ctrl && !altTypesChar && key == KeyEvent.KEYCODE_H -> HardwareToolShortcut.MICROPHONE
             else -> null
         } else null
         if (tool != null) {

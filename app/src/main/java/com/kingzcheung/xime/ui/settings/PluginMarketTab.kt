@@ -108,6 +108,14 @@ private fun PluginMarketDialog(
                 if (!item.compatible) Text("需要 CyIME ${item.minAppVersion} 或更高版本")
                 // 字幕插件随安装包带着，装它不联网；它没有接口和密钥。
                 else if (!item.installed && plugin.id == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID) Text("装好后键盘菜单里有「字幕」，设置在这个插件的那一页。不用联网。")
+                // 日语插件：轻量版装的时候下载词库和转换引擎，带模型的安装包里本来就有。
+                else if (!item.installed && plugin.id == com.kingzcheung.xime.settings.JapanesePlugin.ID) {
+                    val context = LocalContext.current
+                    val bytes = remember { com.kingzcheung.xime.settings.JapanesePack.downloadBytes(
+                        com.kingzcheung.xime.settings.JapanesePack.missing(context)) }
+                    Text("装好后日语出现在键盘的语言切换里。" +
+                        if (bytes > 0) "要下载日语词库和转换引擎（约 ${formatModelMegabytes(bytes)}）。" else "不用下载。")
+                }
                 else if (!item.installed && plugin.pluginType == "tool") Text("装好后在键盘菜单里；接口和密钥在这个插件的设置里。")
                 else if (!item.installed) Text("装好后到「已安装」点它，启用和设置都在那一页。")
             }

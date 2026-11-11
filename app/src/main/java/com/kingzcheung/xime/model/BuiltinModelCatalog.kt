@@ -8,11 +8,22 @@ object BuiltinModelCatalog {
     const val SPEAKER_MODEL_FILE = "3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx"
     /** 拍照识别（PP-OCRv5 mobile）。轻量版不带，第一次拍照识别时下载；带模型的安装包仍内置在 assets/ocr/ppocr-v5。 */
     const val OCR_MODEL = "ocr-ppocr-v5"
+    /** 拍照识别引擎（OpenCV 原生库）。轻量版不带，和拍照识别模型一起下载（ocr/OcrEngine.kt）。 */
+    const val OCR_ENGINE = "ocr-engine"
+    /** 日语词库（azooKey 词典 zip）和日语转换引擎（libCyAzooKey.so）。轻量版不带，装「日语」插件时下载（settings/JapanesePack.kt）。 */
+    const val JAPANESE_DICTIONARY = "japanese-dictionary"
+    const val JAPANESE_ENGINE = "japanese-engine"
 
     val models = com.kingzcheung.xime.speech.SpeechModelCatalog.models + CandidateModelCatalog.models + listOf(
         ModelInfo("ochwpro", "手写模型", "本地手写识别模型。", ModelCategory.HANDWRITING,
-            // v1.1：在 v1.0 上用用户贡献的手写样本微调（只改 100 个常用字的输出层），字表不变。最新的放第一个。
-            versions = listOf(ModelVersion(version = "v1.1", size = "6.7 MB",
+            // v1.1、v1.2：在 v1.0 上用用户贡献的手写样本微调（只改贡献题里常用字的输出层：v1.1 3 人 100 字，v1.2 45 人 180 字），
+            // 字表不变。最新的放第一个。
+            versions = listOf(ModelVersion(version = "v1.2", size = "6.7 MB",
+                files = listOf(
+                    ModelFile("ochwpro.onnx", "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/ochwpro-v1.2-ochwpro.onnx", "8a6095f9ccd222fa391d4e98e2795f478d3d88daaa62d4844677fac18c7acb02", 7001270L, mirrors = listOf(RELEASE + "ochwpro-v1.2-ochwpro.onnx")),
+                    ModelFile("char_index.json", "https://www.modelscope.cn/models/bikeand/ochwpro/resolve/master/char_index.json", "171cf2ac23731428ac9dd28f64be82dece5f66a0ca3d674ffb3b567b51532176", 51317L, mirrors = listOf(RELEASE + "ochwpro-v1.0-char_index.json")),
+                )),
+                ModelVersion(version = "v1.1", size = "6.7 MB",
                 files = listOf(
                     ModelFile("ochwpro.onnx", "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/ochwpro-v1.1-ochwpro.onnx", "d625e6b6fa0dc39499bc15a8ac960249fcea9e71e34334522d32524557d1136d", 7001270L, mirrors = listOf(RELEASE + "ochwpro-v1.1-ochwpro.onnx")),
                     ModelFile("char_index.json", "https://www.modelscope.cn/models/bikeand/ochwpro/resolve/master/char_index.json", "171cf2ac23731428ac9dd28f64be82dece5f66a0ca3d674ffb3b567b51532176", 51317L, mirrors = listOf(RELEASE + "ochwpro-v1.0-char_index.json")),
@@ -34,6 +45,37 @@ object BuiltinModelCatalog {
                     // 识别模型自带的字符表，RapidAI 同一版本里有原样的一份 (2026-11-03 核对哈希一致)。
                     ModelFile("ppocrv5-characters.txt", "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/ppocrv5_dict.txt", "d1979e9f794c464c0d2e0b70a7fe14dd978e9dc644c0e71f14158cdf8342af1b", 74012L,
                         mirrors = listOf(RELEASE + "ocr-ppocr-v5-characters.txt", DownloadMirrors.CYIME_MODELSCOPE + "ocr-ppocr-v5-characters.txt")),
+                )))),
+        // 拍照识别引擎：OpenCV 4.12.0 的 libopencv_java4.so，原样取自 Maven 上 org.opencv:opencv:4.12.0 的 AAR（Apache-2.0），
+        // 每个 ABI 打成一个 tar.bz2 传到 Release `models` 和魔搭。轻量版不带，第一次拍照识别时和识别模型一起下载；
+        // 完整版、离线包仍在安装包里（app/build.gradle.kts）。按这台手机跑的 ABI 选一份（[NativeAbi]）。
+        ModelInfo(OCR_ENGINE, "拍照识别引擎", "拍照识字时处理图片用的程序库（OpenCV）。轻量版第一次拍照识别时和识别模型一起下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(when (NativeAbi.current) {
+                "armeabi-v7a" -> ModelVersion(version = "4.12.0", size = "7.4 MB",
+                    archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-armeabi-v7a.tar.bz2", sha256 = "004ac5715c05070d44c3878cedc4b66cc1c32a783eb338c3bb4fbf7e0e1bd3f2",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-armeabi-v7a.tar.bz2"),
+                    files = listOf(ModelFile("libopencv_java4.so", "", "933fe7879c07fe603ce5e0f6a04298fa4b07e553c6dc83744a2779161d47e773", 15622192L)))
+                "x86_64" -> ModelVersion(version = "4.12.0", size = "19.7 MB",
+                    archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-x86_64.tar.bz2", sha256 = "e197526bf6b11fa273f2e2c729b46813cb816c76c436fb89e35093e4cf658e3c",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-x86_64.tar.bz2"),
+                    files = listOf(ModelFile("libopencv_java4.so", "", "373e5a25a92bf6a683fecf4d9c73adaf478c04efad10171d865dcf78b242709a", 55830920L)))
+                "x86" -> ModelVersion(version = "4.12.0", size = "14.0 MB",
+                    archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-x86.tar.bz2", sha256 = "2d1699a1f7ea8f56e5f9b8602b2cf8fa0f0929bc3058a26aaf73a41c4248fb3c",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-x86.tar.bz2"),
+                    files = listOf(ModelFile("libopencv_java4.so", "", "d906a2c418230a79689922000e962a6c1cea95925f430183abf331ab3669bfcc", 41727236L)))
+                else -> ModelVersion(version = "4.12.0", size = "8.5 MB",
+                    archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-arm64-v8a.tar.bz2", sha256 = "6a9571b82d6f7fae849a230a0db44e009e8681b611791e00ef3d0c2975ac9eb1",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-arm64-v8a.tar.bz2"),
+                    files = listOf(ModelFile("libopencv_java4.so", "", "144bbc9ad0b0bac4ba58f7d53198aead64379e5314f68200968c703d2c1c14ab", 23465088L)))
+            })),
+        // 日语词库：tasks-japanese.gradle.kts 生成的 azooKey 词典 zip（上游固定提交 + Mozc 名词，内容哈希 7776faa0…，
+        // 和以前打进安装包的 assets/azookey/dictionary.zip 逐字节相同），原样传到 Release `models` 和魔搭。
+        // 轻量版装「日语」插件时下载，解到 rime/azookey/dictionary；完整版、离线包仍在安装包里。
+        ModelInfo(JAPANESE_DICTIONARY, "日语词库", "日语转换用的 azooKey 词库（含 Mozc 的人名地名）。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(ModelVersion(version = "7776faa0", size = "18.3 MB",
+                files = listOf(
+                    ModelFile("dictionary.zip", RELEASE + "japanese-dictionary-7776faa0.zip", "0fd3bb8689ee4fde6519d0d12ad4fbc7e000d112be566ddae80499c6cbc7c486", 19213569L,
+                        mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-dictionary-7776faa0.zip")),
                 )))),
         // 公式手写（LaTeX）：tools/handwriting_training 训练，只用公开的 MathWriting 2024，不含用户样本；
         // 日语、英文手写的“边写边学”也用它算特征。
@@ -125,5 +167,24 @@ object BuiltinModelCatalog {
             versions = listOf(ModelVersion(version = "v1", size = "0.62 MB",
                 files = listOf(ModelFile("cyime-words-ru-v1.txt", RELEASE + "cyime-words-ru-v1.txt", "7a818abbe5e85670b76cdac369453848c664540122cf33112365eae749728177", 654612L,
                     mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "cyime-words-ru-v1.txt")))))),
+        // 日语转换引擎：tools/azookey/build-android.sh 编译的 libCyAzooKey.so（和 tasks-japanese.gradle.kts 登记的哈希相同），
+        // 每个 ABI 一个 tar.bz2。Swift 不支持 32 位 x86，那里没有这一项（日语照旧只显示罗马字）。
+        // 日语翻译器（jni/cyime_azookey）先找安装包里的，再找这里下载的 files/models/japanese-engine。
+    ) + listOfNotNull(if (NativeAbi.current == "x86") null else
+        ModelInfo(JAPANESE_ENGINE, "日语转换引擎", "把罗马字、假名转换成日语汉字假名的程序库（azooKey）。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(when (NativeAbi.current) {
+                "armeabi-v7a" -> ModelVersion(version = "01f5b76a", size = "5.8 MB",
+                    archiveUrl = RELEASE + "japanese-engine-azookey-01f5b76a-armeabi-v7a.tar.bz2", sha256 = "67508e978a5f5344fd2df0f729342aa0b364b06ab765052a38ebcf55a53af4c7",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-engine-azookey-01f5b76a-armeabi-v7a.tar.bz2"),
+                    files = listOf(ModelFile("libCyAzooKey.so", "", "01f5b76a443b22993de965aa3c4d0eeca67afb1b087451ca9b7bc585cd318f19", 15919728L)))
+                "x86_64" -> ModelVersion(version = "6589da41", size = "5.6 MB",
+                    archiveUrl = RELEASE + "japanese-engine-azookey-6589da41-x86_64.tar.bz2", sha256 = "ca4dce56918c5b9dfaa289b7a21c8bc71adefc642e7f3b5323a9993ad4b46b6d",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-engine-azookey-6589da41-x86_64.tar.bz2"),
+                    files = listOf(ModelFile("libCyAzooKey.so", "", "6589da4104294f49b430b1a65000b6e6a064841298bad6ef9303ebc3518287dc", 17043248L)))
+                else -> ModelVersion(version = "16907c1a", size = "5.3 MB",
+                    archiveUrl = RELEASE + "japanese-engine-azookey-16907c1a-arm64-v8a.tar.bz2", sha256 = "344037fa37a2cd65cc3005201bcf7e2ca23a51c039f3c7cfc1232590c16180d0",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-engine-azookey-16907c1a-arm64-v8a.tar.bz2"),
+                    files = listOf(ModelFile("libCyAzooKey.so", "", "16907c1acf748d8b0b731106fcc65c07d70f72eb04d6a5430718b39604b53b50", 15978288L)))
+            })),
     )
 }

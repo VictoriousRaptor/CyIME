@@ -7,34 +7,62 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FloatingDockGestureTest {
-    @Test fun aDeliberateDownwardDragDocksOnReleaseWithoutWaiting() {
+    /** 用户 11-10：一路往下拖到底，松手瞬间变固定、看不到渐变。拖到底之前的行程不算，到底后还得停住让渐变框走完。 */
+    @Test fun travelBeforeReachingTheBottomDoesNotCount() {
         val gesture = FloatingDockGesture()
-        gesture.move(0f, 120f, false)
+        // 卡片还没到底：走多远都不算。
+        gesture.move(0f, 400f, false)
+        assertFalse(gesture.armed)
+        // 这一下卡片刚好挪到底边（手指没有比卡片多走）：只是放在底边，不准备贴底。
+        gesture.move(0f, 0f, true)
+        gesture.advanceHold(2_000, gesture.epoch)
+        assertFalse(gesture.armed)
+        assertFalse(floatingDockOnRelease(gesture.progress, gesture.armed, true))
+        // 到底后手指再往下顶：开始准备，但渐变框从零开始，马上松手不贴底。
+        gesture.move(0f, FLOATING_DOCK_ARM_PUSH_DP, true)
+        assertTrue(gesture.armed)
         assertEquals(0f, gesture.progress, 0f)
-        gesture.move(0f, 26f, true)
-        assertEquals(1f, gesture.progress, 0f)
+        assertFalse(floatingDockOnRelease(gesture.progress, gesture.armed, true))
+        gesture.advanceHold(FLOATING_DOCK_DURATION_MILLIS / 2, gesture.epoch)
+        assertTrue(gesture.progress in 0.4f..0.6f)
+        gesture.advanceHold(FLOATING_DOCK_DURATION_MILLIS, gesture.epoch)
         assertTrue(floatingDockOnRelease(gesture.progress, gesture.armed, true))
-        gesture.move(0f, -2f, false)
-        assertEquals(0f, gesture.progress, 0f)
-        gesture.move(0f, 10f, true)
-        assertTrue(gesture.progress < 1f)
     }
 
-    @Test fun aShortDownwardDragNearTheEdgeCanUseTheShortHold() {
+    /** 他 10-23 定的 0.75 秒：比 0.5 秒不容易误贴，又不像 1 秒那么慢。 */
+    @Test fun dockingWaitsThreeQuartersOfASecondOnTheEdge() {
+        assertEquals(750L, FLOATING_DOCK_DURATION_MILLIS)
         val gesture = FloatingDockGesture()
         gesture.move(0f, 12f, true)
         val first = gesture.epoch
         gesture.advanceHold(299, first)
         assertTrue(gesture.progress < 1f)
-        gesture.move(0f, -3f, false)
+        gesture.advanceHold(700, first)
+        assertTrue(gesture.progress < 1f)
+        // 卡片离开底边贴边区：作废；回来要重新往下顶、重新计时。
+        gesture.move(0f, 0f, false)
+        assertFalse(gesture.armed)
         gesture.move(0f, 12f, true)
-        gesture.advanceHold(500, first)
+        gesture.advanceHold(900, first)
         assertEquals(0f, gesture.progress, 0f)
-        gesture.advanceHold(300, gesture.epoch)
+        gesture.advanceHold(750, gesture.epoch)
         assertEquals(1f, gesture.progress, 0f)
         gesture.cancel()
         assertFalse(gesture.armed)
         assertEquals(0f, gesture.progress, 0f)
+    }
+
+    /** 准备好以后手指在底边晃一下（卡片还在贴边区，手指没再往下顶）不打断计时。 */
+    @Test fun aSmallWobbleOnTheEdgeKeepsTheHold() {
+        val gesture = FloatingDockGesture()
+        gesture.move(0f, 10f, true)
+        val epoch = gesture.epoch
+        gesture.move(2f, 0f, true)
+        gesture.move(-3f, 0f, true)
+        assertTrue(gesture.armed)
+        assertEquals(epoch, gesture.epoch)
+        gesture.advanceHold(FLOATING_DOCK_DURATION_MILLIS, epoch)
+        assertEquals(1f, gesture.progress, 0f)
     }
 
     @Test fun beingAtTheBottomOrDraggingSidewaysCannotArmDocking() {

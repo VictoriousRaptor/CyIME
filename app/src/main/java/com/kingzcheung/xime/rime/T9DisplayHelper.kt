@@ -11,6 +11,24 @@ data class T9DisplayState(
 )
 
 /**
+ * 九键这一帧要用的字母编码。引擎编码全是字母就用它；还有没转成字母的数字时借上一帧的字母编码，
+ * 但只借同一输入框、同一九键方案里正在组的那串（[sameComposition]）。换了输入框、从英文或 26 键
+ * 切过来时上一帧是别的编码（11-10 录屏：英文滑行的 stamping 一直挂在九键拼音气泡上），借了就是错的，给空。
+ */
+internal fun t9RawPreedit(
+    enginePreedit: String,
+    input: String,
+    previousPreedit: String,
+    previousComposing: Boolean,
+    sameComposition: Boolean,
+): String = when {
+    enginePreedit.isNotEmpty() && enginePreedit.none { it.isDigit() } -> enginePreedit
+    input.isEmpty() -> ""
+    previousComposing && sameComposition -> previousPreedit
+    else -> ""
+}
+
+/**
  * 构建 T9 模式下的 UI 展示状态。
  *
  * 三种情形：

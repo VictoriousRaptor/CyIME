@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.ui.keyboard
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -93,6 +94,10 @@ internal fun letterSwipeCornerLabels(key: String): Pair<String?, String?> {
     return com.kingzcheung.xime.settings.LetterSwipeBindings.cornerLabels(bindings, key, preferences.reverseSymbolSwipe)
 }
 
+/**
+ * [reserveDragForGlide]：这个键上的拖动留给滑行（九键滑行、26 键英文/中文滑行），键自己不做上下滑、拂动。
+ * 拖动后滑行没接管（没有消费这根手指）时，抬手仍按点按结算（见 [glideDriftIsTap]）。
+ */
 internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
     reserveDragForGlide: Boolean = false,
     currentActions: () -> KeyGestureActions,
@@ -146,15 +151,18 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                 if (!longPressed && (abs(dx) > viewConfiguration.touchSlop || abs(dy) > viewConfiguration.touchSlop)) {
                     moved = true
                     longPressJob?.cancel()
-                    // The layout owns this drag even if it ends too short to decode a word.
-                    if (reserveDragForGlide) break
+                    // 留给滑行的键以前一过触摸阈值就放手，可滑行要走一段才接管（九键 DigitStroke.claimed、
+                    // 26 键 GlideTracker.claimed）：快打时手指一抖、没到滑行又不算点按，这一下就吞了（用户 11-10）。
+                    // 现在接着跟这根手指：滑行接管时会消费事件，下面照常放手；没接管就在抬手时按点按算。
                 }
                 val slop = viewConfiguration.touchSlop
                 // Back at the key's own centre also means the centre choice, for presses that began
                 // off-centre; a fixed tolerance, so wide tablet keys still flick sideways.
                 val atKeyCentre = actions.freeDirection && moved &&
                     abs(change.position.x - size.width / 2f) <= slop && abs(change.position.y - size.height / 2f) <= slop
-                if (actions.freeDirection) {
+                if (reserveDragForGlide) {
+                    // 留给滑行的拖动不认方向：不上下滑、不拂动，只等滑行接管或抬手。
+                } else if (actions.freeDirection) {
                     if (!longPressed) verticalDrag = when {
                         maxOf(abs(dx), abs(dy)) <= slop || atKeyCentre -> null
                         abs(dy) >= abs(dx) -> true
@@ -163,7 +171,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                     if (verticalDrag != null) flickClaimed = true
                 } else if ((verticalDrag == true && abs(dy) <= slop) || (verticalDrag == false && abs(dx) <= slop))
                     verticalDrag = null
-                if (verticalDrag == null && !longPressed && !actions.freeDirection) {
+                if (verticalDrag == null && !longPressed && !actions.freeDirection && !reserveDragForGlide) {
                     if (abs(dy) > slop && abs(dy) > abs(dx) * 1.1f &&
                         (actions.onUp != null || actions.onDown != null || actions.blockUpSwipe || actions.blockDownSwipe)) verticalDrag = true
                     else if (abs(dx) > slop && abs(dx) > abs(dy) * 1.1f &&
@@ -176,7 +184,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                 val blockedUp = verticalDrag == true && actions.blockUpSwipe && dy < -swipeThreshold
                 val blockedDown = verticalDrag == true && actions.blockDownSwipe && dy > swipeThreshold
                 // Free flicks are decided where the finger lifts, so leaving the centre is not sticky.
-                val outsideCentre = actions.freeDirection && !atKeyCentre && maxOf(abs(dx), abs(dy)) > swipeThreshold
+                val outsideCentre = !reserveDragForGlide && actions.freeDirection && !atKeyCentre && maxOf(abs(dx), abs(dy)) > swipeThreshold
                 crossedSwipeThreshold = if (actions.freeDirection) outsideCentre
                     else crossedSwipeThreshold || up || downSwipe || left || right || blockedUp || blockedDown
                 if (longPressed && items.isNotEmpty()) {
@@ -213,13 +221,16 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                         downSwipe -> actions.onDown?.invoke(actions.downText.orEmpty())
                         left -> actions.onLeft?.invoke()
                         right -> actions.onRight?.invoke()
+                        reserveDragForGlide && moved ->
+                            if (glideDriftIsTap(down.position, change.position, size.width.toFloat(), size.height.toFloat(),
+                                    viewConfiguration.touchSlop)) actions.onTap()
                         !crossedSwipeThreshold && (actions.freeDirection || abs(dx) < horizontalCancelThreshold) -> actions.onTap()
                     }
                     break
                 }
                 // Reserve paired-letter drags before the whole-keyboard cursor's
                 // activation distance, even when the user sets a longer threshold.
-                if (longPressed || crossedSwipeThreshold || verticalDrag != null || flickClaimed || actions.reserveHorizontalSwipe &&
+                if (longPressed || crossedSwipeThreshold || verticalDrag != null || flickClaimed || actions.reserveHorizontalSwipe && !reserveDragForGlide &&
                     abs(dx) > viewConfiguration.touchSlop && abs(dx) > abs(dy) * 1.1f) change.consume()
                 else {
                     // 父层光标/滚动手势可能在 Main 后半段消费；取消后不得补出普通字符。
@@ -234,6 +245,17 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
             actions.onPreview(SwipeState())
         }
     } }
+}
+
+/**
+ * 留给滑行的键上手指挪过了触摸阈值、滑行却没接管，抬手算不算点了这个键：
+ * 抬手点还在这个键上（各边放宽一个触摸阈值），或者离按下点不到滑行接管要走的距离
+ * （[DigitStroke.CLAIM_KEY_FRACTION] 个键的短边；快打时按在键边往隔壁抖一下也算这一键）。
+ * 都不是（拖到左栏、功能键或拖远了又没成滑行）就不出字，和以前滑出键外取消一样。
+ */
+internal fun glideDriftIsTap(down: Offset, up: Offset, keyWidth: Float, keyHeight: Float, slop: Float): Boolean {
+    val inside = up.x >= -slop && up.x <= keyWidth + slop && up.y >= -slop && up.y <= keyHeight + slop
+    return inside || (up - down).getDistance() < minOf(keyWidth, keyHeight) * DigitStroke.CLAIM_KEY_FRACTION
 }
 
 /** 这个键上新按下的一根手指；已经结算过、还按着的手指不算。 */

@@ -92,6 +92,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
       t9_ngram_ = T9NgramModel::Open(T9ResolveOnce("t9_ngram", ".lm", ngram_model));
     config->GetBool("t9/ngram_sentence_start", &t9_ngram_sentence_start_);
     config->GetDouble("t9/merged_tail_word_margin", &t9_merged_tail_word_margin_);
+    config->GetDouble("t9/rescore_rime_weight", &t9_rescore_rime_weight_);
     int keys_per_syllable = 0;
     config->GetInt("t9/rescore_keys_per_syllable", &keys_per_syllable);
     t9_rescore_keys_per_syllable_ = static_cast<size_t>(std::max(0, keys_per_syllable));

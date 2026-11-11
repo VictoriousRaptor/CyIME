@@ -76,6 +76,9 @@ def friend_violations(names: list[str], t9_sha256: str | None, public_sha256: st
     problems = []
     if not any(n.startswith("assets/rime_japanese/") for n in names):
         problems.append("日语资源缺失（朋友包保留日语，只是默认不开）")
+    # 轻量版的日语词库和转换引擎是插件下载的；朋友包带模型，要在包里（不联网也能用日语）。
+    if "assets/azookey/dictionary.zip" not in names or not any(n.endswith("/libCyAzooKey.so") for n in names):
+        problems.append("日语词库或转换引擎不在包里（朋友包要带，不能靠下载）")
     models = {n.split("/")[2] for n in names if n.startswith("assets/bundled-models/") and n.count("/") >= 3}
     if models != ELDER_MODELS:
         problems.append(f"内置模型应为 {sorted(ELDER_MODELS)}，实际 {sorted(models)}")

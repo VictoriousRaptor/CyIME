@@ -98,7 +98,9 @@ internal data class CapabilitiesConfig(
     val caption: Boolean = false,
     /** 离线翻译（注入 host.translate）。 */
     @kotlinx.serialization.SerialName("offline_translate")
-    val offlineTranslate: Boolean = false
+    val offlineTranslate: Boolean = false,
+    /** 日语（方案和转换在宿主里，插件只管装没装）。 */
+    val japanese: Boolean = false
 )
 
 @Serializable
@@ -187,7 +189,8 @@ private fun CapabilitiesConfig.toModel(): com.kingzcheung.xime.plugin.core.model
         clipboardRead = clipboardRead,
         contacts = contacts,
         caption = caption,
-        offlineTranslate = offlineTranslate
+        offlineTranslate = offlineTranslate,
+        japanese = japanese
     )
 }
 

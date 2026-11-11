@@ -40,21 +40,13 @@ class PluginMarketViewModel(app: Application) : AndroidViewModel(app) {
                 val local = withContext(Dispatchers.IO) { XimeIndexSource.bundledPlugins(context) }
                 if (state.value.plugins.isEmpty()) showCatalog("随包目录", local)
                 val remote = XimeIndexSource.remotePlugins(context)
-                if (remote != null) showCatalog(remote.first, withBundledCaption(remote.second, local))
+                if (remote != null) showCatalog(remote.first, XimeIndexSource.withBundledPlugins(remote.second, local))
             } catch (e: java.io.IOException) {
                 state.update { it.copy(message = e.message) }
             } finally {
                 state.update { it.copy(refreshing = false) }
             }
         }
-    }
-
-    /**
-     * 字幕插件随安装包发（11-05）：线上目录还没有它（新版刚出、目录还没推）时补上随包那一条，市场里照样找得到、装得上。
-     */
-    private fun withBundledCaption(remote: PluginsDirectIndex, local: PluginsDirectIndex): PluginsDirectIndex {
-        val caption = local.plugins.find { it.id == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID } ?: return remote
-        return if (remote.plugins.any { it.id == caption.id }) remote else remote.copy(plugins = remote.plugins + caption)
     }
 
     private fun showCatalog(source: String, index: PluginsDirectIndex) {

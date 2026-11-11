@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -35,8 +36,9 @@ import java.util.Collections
 
 /**
  * 滑行输入：英文滑行和中文滑行（全拼、双拼 26 键划一个词的编码）是两个开关，中文默认关；
- * 用户 10-31：滑行开着也照常画上下角标（只听两个角标提示开关），开着英文滑行的老用户中文键盘不能变。
- * 竖着滑仍出角标符号；14 键不滑行。
+ * 用户 10-31：滑行开着也照常画角标（听两个角标提示开关），开着英文滑行的老用户中文键盘不能变。
+ * 用户 11-11：滑行接管的字母键下滑打不出下角标，角标只剩长按出的上角标，键上只画上角标；关掉滑行恢复。
+ * 竖着滑不出角标符号（拖动给了滑行）；14 键不滑行。
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w400dp-h800dp-xhdpi")
@@ -45,9 +47,12 @@ class GlideCornerHintTest {
 
     private val typed: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val codes: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val previews: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val englishCandidates: MutableList<List<String>> = Collections.synchronizedList(mutableListOf())
     private var schema by mutableStateOf("rime_ice")
     private var ascii by mutableStateOf(false)
     private var boardWidth by mutableStateOf(400)
+    private var prefs by mutableStateOf(KeyboardInputPreferences())
 
     private fun show(glide: Boolean = true, chinese: Boolean = true, preview: Boolean = false) {
         val app = ApplicationProvider.getApplicationContext<Application>()
@@ -55,13 +60,15 @@ class GlideCornerHintTest {
         com.kingzcheung.xime.ui.theme.KeyboardThemes.initFromConfig(app)
         AppFonts.initialize(app)
         val vm = KeyboardViewModel(app)
-        val preferences = KeyboardInputPreferences(glideTyping = glide, chineseGlideTyping = chinese, glidePreview = preview)
+        prefs = KeyboardInputPreferences(glideTyping = glide, chineseGlideTyping = chinese, glidePreview = preview)
         rule.setContent {
-            CompositionLocalProvider(LocalKeyboardExplicitWidth provides true, LocalKeyboardInputPreferences provides preferences) {
+            CompositionLocalProvider(LocalKeyboardExplicitWidth provides true, LocalKeyboardInputPreferences provides prefs) {
                 MaterialTheme {
                     Box(Modifier.requiredSize(boardWidth.dp, 260.dp)) {
                         KeyboardLayout({ typed += it }, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {},
-                            onGlideWord = { words, _ -> codes += "en:${words.first().word}" }, onGlideCode = { codes += it }),
+                            onGlideWord = { words, _ -> codes += "en:${words.first().word}" }, onGlideCode = { code, _, _ -> codes += code },
+                            onGlideEnglishPreview = { shown, _ -> previews += shown.text; englishCandidates += shown.candidates },
+                            onGlidePreviewCode = { code, _, _ -> previews += code }, onGlidePreviewEnd = { previews += "" }),
                             KeyboardUiState(currentSchemaId = schema, isAsciiMode = ascii), ascii, Modifier.requiredSize(boardWidth.dp, 260.dp))
                     }
                 }
@@ -114,18 +121,36 @@ class GlideCornerHintTest {
 
     @Test fun cornerHintsStayWithoutGlide() {
         show(glide = false, chinese = false)
-        assertTrue(hints("q").isNotEmpty())
+        use("rime_ice")  // 默认空方案的测试布局 q 只配了一个角标；按真实中文 26 键布局数
+        assertEquals("没开滑行：上下角标都画", 2, hints("q").size)
         assertEquals(1, pullDown("q").size)
+    }
+
+    @Test fun glideOwnedLettersShowOnlyTheUpperCorner() {
+        show(glide = false, chinese = false)
+        val boards = listOf("rime_ice" to false, "double_pinyin_flypy" to false, "rime_ice" to true)
+        fun snapshot() = boards.flatMap { (id, english) -> use(id, english); listOf("q", "f", "m").map { "$id/$english/$it" to hints(it) } }
+        val plain = snapshot()
+        plain.forEach { (key, shown) -> assertEquals("$key 没开滑行：上下两个角标 $shown", 2, shown.size) }
+        rule.runOnIdle { prefs = prefs.copy(glideTyping = true, chineseGlideTyping = true) }
+        rule.waitForIdle()
+        plain.zip(snapshot()).forEach { (before, after) ->
+            assertEquals("${before.first} 滑行时只剩上角标（长按出的那个）", before.second.take(1), after.second)
+        }
+        rule.runOnIdle { prefs = prefs.copy(glideTyping = false, chineseGlideTyping = false) }
+        rule.waitForIdle()
+        assertEquals("关掉滑行，下角标照旧显示", plain, snapshot())
     }
 
     @Test fun englishGlideAloneLeavesTheChineseBoardAsBefore() {
         show(glide = true, chinese = false)
+        use("rime_ice")
         glide("nihao")
         rule.waitForIdle()
         Thread.sleep(300)
         rule.waitForIdle()
         assertEquals("中文滑行没开，中文 26 键不滑行", emptyList<String>(), codes.toList())
-        assertTrue(hints("q").isNotEmpty())
+        assertEquals("中文 26 键没滑行，下滑照样出下角标，上下角标都画", 2, hints("q").size)
     }
 
     @Test fun fourteenKeysDoNotGlideAndKeepTheirHints() {
@@ -147,29 +172,38 @@ class GlideCornerHintTest {
         }
     }
 
-    private fun previewText(): String? = rule.onAllNodes(hasTestTag("glide-preview"), useUnmergedTree = true).fetchSemanticsNodes()
-        .firstOrNull()?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
-
-    /** 别的用户 11-02（用惯 Gboard）：开着「滑行时实时显示词」时，手指没抬起就显示现在抬手会出的词，抬手后消失。 */
+    /** 按下期间把预览送往输入框，抬手时清除预览，再交付最终编码。 */
     @Test fun livePreviewShowsTheWordBeforeLiftingAndGoesAwayAfter() {
         show(glide = false, chinese = true, preview = true)
         glide("nihao", lift = false)
         // 第一次识别在刚确认是滑行时开始（只划过 ni），手指停下后最迟再隔一次识别就跟上整条轨迹。
-        rule.waitUntil(5000) { previewText() != null }
-        rule.waitUntil(5000) { previewText() == "ni hao" }
+        rule.waitUntil(5000) { previews.contains("nihao") }
+        assertTrue(rule.onAllNodes(hasTestTag("glide-preview"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue("还没抬手，不上屏", codes.isEmpty())
-        rule.onRoot().performTouchInput { up() }
+        // 预览是单独的小窗（另一个根），抬手要落在键盘那个根上。
+        rule.onAllNodes(isRoot())[0].performTouchInput { up() }
         rule.waitUntil(5000) { codes.isNotEmpty() }
         assertEquals(listOf("nihao"), codes.toList())
         rule.waitForIdle()
-        assertEquals(null, previewText())
+        assertEquals("", previews.last())
     }
 
     @Test fun noLivePreviewWhileTheSwitchIsOff() {
         show(glide = false, chinese = true, preview = false)
         glide("nihao")
         rule.waitUntil(5000) { codes.isNotEmpty() }
-        assertEquals(null, previewText())
+        assertTrue(previews.none { it.isNotEmpty() })
+    }
+
+    @Test fun englishGlideProvidesCandidatesBeforeRelease() {
+        show(glide = true, chinese = false, preview = true)
+        use("rime_ice", english = true)
+        glide("hello", lift = false)
+        rule.waitUntil(5000) { englishCandidates.any { it.isNotEmpty() } }
+        assertTrue(codes.isEmpty())
+        rule.onRoot().performTouchInput { up() }
+        rule.waitUntil(5000) { codes.isNotEmpty() }
+        assertTrue(codes.first().startsWith("en:"))
     }
 
     @Test fun chineseGlideTypesThePinyinOfOneWord() {

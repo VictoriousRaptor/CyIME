@@ -308,6 +308,7 @@ fun SwipeableKeyButton(
     swipeUpKeyLabel: String? = null,
     /** All corner-symbol keys use the same preference; dedicated icon actions are separate. */
     followSymbolSwipeDirection: Boolean = true,
+    /** 角标固定上滑且长按也输入（「底排标点固定上滑」）；不跟全局「长按输入/滑动输入」走。 */
     keepSymbolSwipeOnLongPress: Boolean = false,
     /** Literal upper-hint input, independent of whether its visual hint is enabled. */
     symbolInputText: String? = null,
@@ -388,6 +389,12 @@ fun SwipeableKeyButton(
         if (discKey && state.movedOffPress()) discRevealed = true
         return discFlickPreview(state.keyFlick, discKey)
     }
+    // 按键浮标和方向盘是同一个东西（用户 11-09）：按下先出按键浮标，方向盘一出来就把浮标收掉，
+    // 不两个叠着；长按到点换成角标气泡。
+    fun forwardPreview(state: SwipeState) {
+        val discOwnsPress = discRevealed && state.isPressed && !state.isLongPress && state.keyFlick == null
+        onSwipeStateChange?.invoke(if (discOwnsPress) SwipeState() else state, buttonBounds)
+    }
     // In flick mode the held key's own value (the digit) is a one-item long-press popup: it shows
     // what will be entered and commits only on release, like every other long-press choice.
     // 「长按输入」（关闭角标滑动）时和其他布局的角标一样：按满设定时长立刻输入，气泡显示它，松手消失（用户 11-08）。
@@ -410,13 +417,16 @@ fun SwipeableKeyButton(
     val letterGlideOwnsDrag = LocalLetterGlide.current && letterGroup?.singleOrNull()?.lowercaseChar()?.let { it in 'a'..'z' } == true
     val reserveDragForGlide = letterGlideOwnsDrag ||
         (LocalT9GlideKeys.current != null && badgeText?.singleOrNull()?.let { it in '2'..'9' } == true)
+    // 滑行接管拖动的键往下滑打不出下角标，角标只剩长按出上方那个：左下角不再画下角标（用户 11-11）。
+    // 只改显示，不动「下方角标提示」存的值；关掉滑行、或这个键盘没开滑行（14 键、数字行、没开中文滑行的中文 26 键）照旧显示。
+    val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide }
     val gestureActions = if (flick != null) KeyGestureActions(
         // 拂动：方向固定对应字母，不随角标方向反转；数字等改为长按。
         text = text,
         onTap = tapOrCtrl,
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
         onRelease = { isPressed = false; onRelease?.invoke() },
-        onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; onSwipeStateChange?.invoke(it, buttonBounds) },
+        onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         inlineVerticalPreview = true,
         inlineHorizontalPreview = true,
         leftText = flickAt(0), onLeft = flickAction(0),
@@ -442,7 +452,7 @@ fun SwipeableKeyButton(
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
         onRelease = { isPressed = false; onRelease?.invoke() },
         // 长按到点后（角标已输入或弹出菜单）方向盘收起，和拂动键一样只留长按气泡。
-        onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; onSwipeStateChange?.invoke(it, buttonBounds) },
+        onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         inlineVerticalPreview = true,
         upText = swipeText,
         downText = swipeDownText,
@@ -470,7 +480,8 @@ fun SwipeableKeyButton(
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
     ).withSymbolInput(
         // 26 键滑行开着时字母键的滑动给了滑行，角标改由长按输入（设置页同样锁在「长按输入」）。
-        if (letterGlideOwnsDrag) SymbolInputMode.LONG_PRESS else symbolInputMode,
+        // 底排标点固定上滑（空格两侧标点、数字键盘点键）：上滑和长按都输入角标（用户 11-09：键在底边，长按更顺手）。
+        if (letterGlideOwnsDrag || keepSymbolSwipeOnLongPress) SymbolInputMode.LONG_PRESS else symbolInputMode,
         symbolInputText, keepSymbolSwipeOnLongPress, inputPreferences.symbolLongPressMs).let {
         if (followSymbolSwipeDirection) it.withSymbolSwipeDirection(inputPreferences.reverseSymbolSwipe) else it
     }
@@ -508,10 +519,14 @@ fun SwipeableKeyButton(
                     discLabels[KanaFlickDirection.DOWN] != preview.text) KanaFlickDirection.UP else KanaFlickDirection.DOWN
         }
     } ?: KanaFlickDirection.TAP
-    if (discKey) LaunchedEffect(isPressed) {
+    // 「长按输入」时按住就是要长按出角标：方向盘不再按住 180 毫秒就弹，免得按下去先冒出方向盘再换成角标气泡；
+    // 拂出去时照样出方向盘（用户 11-09：按下时不出气泡，到点输入时才出，松手消失）。
+    val holdCommitsSymbol = gestureActions.longPressBubbleText != null
+    if (discKey && !holdCommitsSymbol) LaunchedEffect(isPressed) {
         if (isPressed) {
             delay(FLICK_DISC_HOLD_MS)
             discRevealed = true
+            if (!longPressShown) onSwipeStateChange?.invoke(SwipeState(), buttonBounds)
         }
     }
     val showDisc = inputPreferences.flickDirectionDisc && isPressed && discRevealed && !longPressShown &&
@@ -590,7 +605,10 @@ fun SwipeableKeyButton(
                     ctrlTapFraction[0] = if (size.width > 0) down.position.x / size.width else 0.5f
                 }
             } else Modifier)
-            .pointerInput(reserveDragForGlide) { detectExclusiveKeyGestures(reserveDragForGlide) { currentActions } }
+            .pointerInput(reserveDragForGlide) {
+                // 滑行没接管的拖动抬手仍算点按（用户 11-10：快打一句吞一半的键）。
+                detectExclusiveKeyGestures(reserveDragForGlide) { currentActions }
+            }
             .padding(edgeContentPadding)
             .onGloballyPositioned { coordinates ->
                 buttonBounds = coordinates.boundsInRoot()
@@ -632,7 +650,7 @@ fun SwipeableKeyButton(
         // 和角标一起显示时键面实际写的上下角标（截短规则同下面单独画角标时）。
         val dpUpCorner = (swipeUpKeyLabel ?: swipeText)?.takeIf { it.isNotEmpty() && it != badgeText }
             ?.let { punctuationKeyLabel(if (it.length <= 4) it else it.take(4)) }
-        val dpDownCorner = swipeDownKeyLabel?.takeIf { it.isNotEmpty() }
+        val dpDownCorner = downCornerLabel?.takeIf { it.isNotEmpty() }
             ?.let { punctuationKeyLabel(if (it.length <= 4) it else it.take(4)) }
         // 放不下（键太小）时为 null：这个键退回只画键位提示、不画角标，不让两者重叠。
         val dpCornerLayout = if (dpWithCorners && hintsVisible) fitDoublePinyinWithCorners(
@@ -693,7 +711,7 @@ fun SwipeableKeyButton(
                             )
                         }
 
-                        val swipeDownHint = swipeDownKeyLabel
+                        val swipeDownHint = downCornerLabel
                         if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != false && !swipeDownHint.isNullOrEmpty()) {
                             val hasChinese = swipeDownHint.any { it in '\u4e00'..'\u9fff' || it in '\u3400'..'\u4dbf' || it in '\uf900'..'\ufaff' }
                             val adjustedFontSize = if (hasChinese && effectiveSwipeFontSize > 6.sp) (effectiveSwipeFontSize.value * 0.85f).sp else effectiveSwipeFontSize
@@ -765,8 +783,8 @@ fun SwipeableKeyButton(
                     )
                 }
 
-                if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != false && !swipeDownKeyLabel.isNullOrEmpty()) {
-                    val displayText = if (swipeDownKeyLabel.length <= 4) swipeDownKeyLabel else swipeDownKeyLabel.take(4)
+                if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != false && !downCornerLabel.isNullOrEmpty()) {
+                    val displayText = if (downCornerLabel.length <= 4) downCornerLabel else downCornerLabel.take(4)
                     Text(
                         text = punctuationKeyLabel(displayText),
                         color = keyHintColor(resolvedText, frostedGlass, 0.5f, LocalKeyboardInputPreferences.current.cornerHintOpacity),

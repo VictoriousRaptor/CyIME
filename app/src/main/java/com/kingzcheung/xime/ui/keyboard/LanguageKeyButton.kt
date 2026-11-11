@@ -451,7 +451,11 @@ private fun rememberLanguageMenuBlurAvailable(): Boolean {
     }
 }
 
-/** 语言菜单的底色和文字色。底色取主题键帽色（字母键与功能键之间）；文字不够清楚时向黑/白调，不再退回 Material 白底。 */
+/**
+ * 语言菜单的底色和文字色。底色就是主题的字母键色，和菜单面板的格子、键盘上的按键是同一种键帽
+ * （原来取字母键与功能键之间的色，玻璃上和面板格子看起来是两种东西，用户 11-09）；
+ * 文字不够清楚时向黑/白调，不再退回 Material 白底。
+ */
 internal data class LanguageMenuColors(val surface: Color, val text: Color, val secondary: Color, val accent: Color)
 
 /**
@@ -463,8 +467,7 @@ internal fun languageMenuColors(
     palette: KeyboardPalette?, fallbackSurface: Color, fallbackText: Color, fallbackAccent: Color,
     glass: FrostedGlassConfig, blurBehind: Boolean,
 ): LanguageMenuColors {
-    val opaque = palette?.let { lerp(it.function.copy(alpha = 1f), it.key.copy(alpha = 1f), 0.5f) }
-        ?: fallbackSurface.copy(alpha = 1f)
+    val opaque = palette?.key?.copy(alpha = 1f) ?: fallbackSurface.copy(alpha = 1f)
     val text = resolveFrostedTextSurface(opaque, palette?.text ?: fallbackText).text
     val surface = if (glass.enabled && blurBehind) {
         // 目标比 4.5 稍高：sRGB 颜色按 8 位存，两次叠加的取整会把刚好达标的结果压到线下。
@@ -495,8 +498,11 @@ internal fun LanguageMenuCard(
     val accent = colors.accent
     // 选中行：菜单底向强调色偏一点，再加强调色细边，玻璃开关都一样。
     val selectedBackground = lerp(colors.surface, accent.copy(alpha = 1f), 0.22f)
+    // 半透明的玻璃菜单不投影：阴影会从半透明底下透上来，整块发灰发脏；边缘靠细边分开。
+    val translucent = colors.surface.alpha < 1f
     Surface(
-        shape = CompactMenuStyle.Shape, tonalElevation = 0.dp, shadowElevation = CompactMenuStyle.Elevation,
+        shape = CompactMenuStyle.Shape, tonalElevation = 0.dp,
+        shadowElevation = if (translucent) 0.dp else CompactMenuStyle.Elevation,
         color = colors.surface,
         contentColor = menuText,
         border = if (glass.enabled) BorderStroke(1.dp, menuText.copy(alpha = 0.14f)) else null,

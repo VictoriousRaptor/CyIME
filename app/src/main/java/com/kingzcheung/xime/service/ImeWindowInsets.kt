@@ -218,8 +218,18 @@ private fun gestureBarHeightPx(context: Context, hintHidden: Boolean): Int {
 }
 
 /** Pixel 等机型手势导航时，系统在输入法窗口底部自己画返回/切换输入法按钮（NavigationBarFrame）。 */
-private fun imeNavButtonHeightPx(imeWindow: Window): Int {
-    val decor = imeWindow.decorView
+private fun imeNavButtonHeightPx(imeWindow: Window): Int = imeNavButtonHeightInDecorPx(imeWindow.decorView)
+
+/**
+ * 系统在输入法窗口里画的那条「切换输入法 / 收起键盘」按钮的上沿（px，[view] 所在窗口的坐标）；没画时为 null。
+ * 键盘调节的底边把手要放在它上面：落在按钮那条里会被系统按钮盖住，也按不到（11-10 用户截图）。
+ */
+internal fun imeNavButtonsTopInWindowPx(view: View): Int? {
+    val decor = view.rootView
+    return imeNavButtonHeightInDecorPx(decor).takeIf { it > 0 }?.let { decor.height - it }
+}
+
+private fun imeNavButtonHeightInDecorPx(decor: View): Int {
     fun find(view: android.view.View): Int {
         val name = view.javaClass.name
         if ((name == "android.inputmethodservice.navigationbar.NavigationBarFrame" ||
@@ -274,7 +284,8 @@ internal fun fixedKeyboardMinimumInsetPx(insets: WindowInsets, window: Window, n
     val controls = maxOf(cutout, tappable, navButtons)
     // 「底部位置」选了固定的一档（11-08）：不猜导航方式。只有「自动」走下面 1.15.66 的算法。
     when (position) {
-        SettingsPreferences.KeyboardBottomPosition.FLUSH -> return maxOf(cutout, navButtons)
+        // 贴到最底：系统在键盘下面画的「切换输入法 / 收起键盘」那条也不留（11-10「后面都调不了」），只躲屏幕底部缺口。
+        SettingsPreferences.KeyboardBottomPosition.FLUSH -> return cutout
         SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS -> {
             val navBar = if (AndroidPlatform.windowInsetTypes) insets.getInsets(WindowInsets.Type.navigationBars()).bottom
                 else @Suppress("DEPRECATION") insets.systemWindowInsetBottom

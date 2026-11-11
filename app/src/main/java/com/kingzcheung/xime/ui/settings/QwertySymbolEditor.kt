@@ -90,7 +90,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         val boardKeys = if (merged == FOURTEEN) FourteenKeySymbols.keys
             else custom?.let(CustomLayoutSymbols::keys) ?: QwertySwipeSymbols.keys.map(Char::toString)
         if (editing !in boardKeys) editing = null
-        versions = withContext(Dispatchers.IO) { QwertySwipeSymbols.versions(context) }
+        versions = withContext(Dispatchers.IO) { QwertySwipeSymbols.versions(context, english) }
         originalValues = values
         loaded = true
     }
@@ -145,8 +145,8 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     }
     val sideTargets = SideSymbolTarget.entries
     val side = sideTargets.firstOrNull { it.key == sideTarget }
-    // 布局版本存的是 26 键 52 个位置，只在中文26键页提供。
-    val versionsAvailable = side == null && !english && merged == null
+    // 布局版本存的是 26 键 52 个位置，中文26键、英文26键各存各的（11-09 用户：英文布局没设计完没法存）。
+    val versionsAvailable = side == null && merged == null
     val tabName = side?.label ?: customLayout?.name ?: if (fourteen) "中文14键" else if (english) "英文26键" else "中文26键"
     KeyboardSettingsScaffold("按键符号", ::back, preview = true, actions = {
         Box {
@@ -273,8 +273,8 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             confirmButton = { TextButton(enabled = QwertySwipeSymbols.versionName(name).isNotEmpty(), onClick = {
                 val clean = QwertySwipeSymbols.versionName(name)
                 savingVersion = false
-                runCatching { QwertySwipeSymbols.saveVersion(context, clean, values) }
-                    .onSuccess { versions = QwertySwipeSymbols.versions(context); message = "已存为「$clean」" }
+                runCatching { QwertySwipeSymbols.saveVersion(context, clean, values, english) }
+                    .onSuccess { versions = QwertySwipeSymbols.versions(context, english); message = "已存为「$clean」" }
                     .onFailure { message = "保存失败：${it.message}" }
             }) { Text("保存") } },
             dismissButton = { TextButton(onClick = { savingVersion = false }) { Text("取消") } })
@@ -289,8 +289,8 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                             persist(versions.getValue(name), swipes, "已载入「$name」")
                         }.padding(vertical = 12.dp), style = MaterialTheme.typography.bodyLarge)
                         IconButton(onClick = {
-                            runCatching { QwertySwipeSymbols.deleteVersion(context, name) }
-                                .onSuccess { versions = QwertySwipeSymbols.versions(context)
+                            runCatching { QwertySwipeSymbols.deleteVersion(context, name, english) }
+                                .onSuccess { versions = QwertySwipeSymbols.versions(context, english)
                                     if (versions.isEmpty()) choosingVersion = false }
                                 .onFailure { message = "删除失败：${it.message}" }
                         }) { Icon(Icons.Default.Delete, "删除「$name」") }

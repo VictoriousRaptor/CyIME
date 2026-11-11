@@ -259,8 +259,11 @@ class RimeApiLibrary:
 
     def __init__(self, path):
         lib = C.CDLL(str(path))
-        lib.rime_get_api.restype = C.c_void_p
-        base = lib.rime_get_api()
+        # Windows host build (host_replay/build_host_windows.py): a DLL exports only what is marked, so the API
+        # comes through the host-only C entry point; the Linux .so exports rime_get_api itself.
+        get_api = getattr(lib, "cyime_host_rime_get_api", None) or lib.rime_get_api
+        get_api.restype = C.c_void_p
+        base = get_api()
         for i, name in enumerate(API_FUNCTIONS):
             address = C.c_void_p.from_address(base + C.sizeof(C.c_void_p) * (i + 1)).value
             restype = C.c_size_t if name == "create_session" else C.c_int
@@ -273,6 +276,11 @@ class RimeApiLibrary:
         initialize() to register the cyime_candidate_policy filter rime_ice lists; without it Rime drops that
         filter. The argument is a libstdc++ std::string built in place (pointer, size, capacity), only read."""
         text = C.create_string_buffer(user_dir.encode())
+        windows = getattr(self._lib, "cyime_host_initialize_candidate_policy", None)
+        if windows is not None:
+            windows.argtypes = [C.c_char_p]
+            windows(text.value)
+            return
         string = (C.c_size_t * 4)(C.addressof(text), len(text.value), len(text.value), 0)
         getattr(self._lib, "_ZN5cyime25InitializeCandidatePolicyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE")(
             C.byref(string))
@@ -280,6 +288,9 @@ class RimeApiLibrary:
 
 def load_engine(dll_dir):
     if str(dll_dir).endswith(".so"):
+        return RimeApiLibrary(dll_dir)
+    if str(dll_dir).endswith("librime_jni.dll"):  # Windows host build; onnxruntime.dll sits next to it
+        os.add_dll_directory(str(Path(dll_dir).parent))
         return RimeApiLibrary(dll_dir)
     os.add_dll_directory(str(dll_dir))
     rime = C.CDLL(str(Path(dll_dir) / "rime.dll"))

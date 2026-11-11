@@ -2,10 +2,14 @@ package com.kingzcheung.xime.service
 
 import android.view.KeyEvent
 
-/** 外接实体键盘按键音：与软键盘共用「按键音」开关和音色；修饰键、组合快捷键和按住自动重复不出声。 */
+/**
+ * 外接实体键盘按键音：与软键盘共用「按键音」开关和音色；修饰键和组合快捷键不出声。
+ * 按住自动重复时只有删除键每下都响（同软键盘长按连删，新一下切断上一下），其他键只响第一下。
+ */
 object HardwareKeySound {
     fun soundFor(keyCode: Int, repeatCount: Int, ctrl: Boolean, alt: Boolean, meta: Boolean): String? {
-        if (repeatCount > 0 || ctrl || alt || meta) return null
+        if (ctrl || alt || meta) return null
+        if (repeatCount > 0 && keyCode != KeyEvent.KEYCODE_DEL && keyCode != KeyEvent.KEYCODE_FORWARD_DEL) return null
         return when (keyCode) {
             KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_FORWARD_DEL -> KeyFeedbackType.DELETE.sound
             KeyEvent.KEYCODE_SPACE -> KeyFeedbackType.SPACE.sound

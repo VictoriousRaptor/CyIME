@@ -29,6 +29,17 @@ internal class CandidateDropTargets {
     /** 落点所在的候选；返回它的选择动作。 */
     fun at(point: Offset): Pair<Rect, () -> Unit>? = targets.values.firstOrNull { it.first.contains(point) }
 
+    /**
+     * 横向离 [point] 最近的候选（左右不超过 [maxDx]、上下不超过 [maxDy]）；点在候选栏空白处时用（#274）。
+     * 横向距离一样时取上下更近的。
+     */
+    fun nearest(point: Offset, maxDx: Float, maxDy: Float): (() -> Unit)? =
+        targets.values.mapNotNull { (bounds, select) ->
+            val dx = maxOf(bounds.left - point.x, 0f, point.x - bounds.right)
+            val dy = maxOf(bounds.top - point.y, 0f, point.y - bounds.bottom)
+            if (dx > maxDx || dy > maxDy) null else Triple(dx, dy, select)
+        }.minWithOrNull(compareBy<Triple<Float, Float, () -> Unit>> { it.first }.thenBy { it.second })?.third
+
     companion object {
         /** 键盘界面只有一份候选栏，Shift 键和候选栏不在同一个组件树分支里，用同一个实例对接。 */
         val shared = CandidateDropTargets()

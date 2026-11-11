@@ -20,4 +20,16 @@ class SideSymbolTargetTest {
         assertEquals(listOf("a", "b", "c"), SideSymbolTarget.HANDWRITING.resolve(listOf("a", "b", "c", "d")))
         assertEquals(listOf("；", "：", "！", "？", "，", "。"), SideSymbolTarget.HANDWRITING_ROW.resolve(null))
     }
+
+    @Test fun numberRailKeepsItsOperatorsUntilEditedAlone() {
+        // 旧的共用列表不顶掉数字键盘左栏：没单独改过就是原来的 + - * /。
+        val shared = KeyboardInputPreferences(fixedSymbols = "，\n。\n……")
+        assertNull(shared.symbolsFor(SideSymbolTarget.NUMBER))
+        assertEquals(listOf("+", "-", "*", "/"), SideSymbolTarget.NUMBER.resolve(shared.symbolsFor(SideSymbolTarget.NUMBER)))
+        // 改过就是自己的，不限格数（多出四格时键盘上下滑）。
+        val own = shared.copy(sideSymbols = mapOf("number" to "+\n-\n*\n/\n:\n%"))
+        assertEquals(listOf("+", "-", "*", "/", ":", "%"), SideSymbolTarget.NUMBER.resolve(own.symbolsFor(SideSymbolTarget.NUMBER)))
+        assertEquals("side_symbols_number", SideSymbolTarget.NUMBER.prefKey)
+        assertEquals(true, SideSymbolTarget.NUMBER.vertical)
+    }
 }

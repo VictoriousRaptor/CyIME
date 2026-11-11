@@ -441,21 +441,26 @@ fun KeyboardLayout(
                 val keys = geometry.snapshot()
                 val (xs, ys) = glidePreview.points?.invoke() ?: break
                 if (keys.size < 26) break
-                val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                val preview = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
                         val keyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
                         if (chinese) {
                             com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys, limit = 1)
-                                .firstOrNull()?.word?.let { com.kingzcheung.xime.glide.GlideLexicon.chineseReading(glideContext, it, doublePinyin) ?: it }
+                                .firstOrNull()?.word?.let { it to null }
                         } else {
                             val candidates = com.kingzcheung.xime.glide.GlideLexicon.decoder(glideContext, keyboard).decode(xs, ys)
-                            if (candidates.isEmpty()) null else english?.invoke(candidates, case) ?: case(candidates.first().word)
+                            if (candidates.isEmpty()) null else {
+                                val shown = english?.invoke(candidates, case) ?: GlideEnglishPreview(case(candidates.first().word),
+                                    candidates.map { case(it.word) })
+                                null to shown
+                            }
                         }
                     }.getOrNull()
                 }
                 // 抬手或已经开始下一笔：这次的结果不再显示。
                 if (glideTrail.gesture != gesture || glideTrail.points.isEmpty()) break
-                glideTrail.preview = text.orEmpty()
+                if (chinese) callbacks.onGlidePreviewCode?.invoke(preview?.first.orEmpty(), uiState.inputSessionId, gesture)
+                else preview?.second?.let { callbacks.onGlideEnglishPreview?.invoke(it, uiState.inputSessionId) }
                 // 歇一会儿再看手指有没有动，限制识别频率（在后台计时，不占主线程）。
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(GLIDE_PREVIEW_INTERVAL_MS) }
             } while (glidePreview.moved)
@@ -463,16 +468,22 @@ fun KeyboardLayout(
     }
     val onGlideTrace: (FloatArray, FloatArray) -> Unit = trace@{ xs, ys ->
         glidePreview.stop()
+        val heldPreview = if (chineseGlide) callbacks.onGlidePreviewHold?.invoke() else null
+        if (heldPreview == null) callbacks.onGlidePreviewEnd?.invoke()
         val keys = geometry.snapshot()
-        if (keys.size < 26) return@trace
+        if (keys.size < 26) { heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }; return@trace }
         // 输入框归属在抬手时确定；识别完成前切换输入框则作废。
-        val inputContext = runCatching { callbacks.captureInputContext() }.getOrNull() ?: return@trace
+        val inputContext = runCatching { callbacks.captureInputContext() }.getOrNull() ?: run {
+            heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }; return@trace
+        }
         val shift = viewModel.shiftMode.value
         // 中文：双拼按当前方案换码，全拼为空。
         val doublePinyin = if (chineseGlide && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
             com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
         val chinese = chineseGlide
         glideScope.launch {
+            var handedOff = false
+            try {
             val candidates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 val keyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
                 if (chinese) com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys)
@@ -481,12 +492,17 @@ fun KeyboardLayout(
             if (candidates.isEmpty()) return@launch
             viewModel.onCharacterTyped()
             if (chinese) {
-                kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideCode?.invoke(candidates.first().word) }
+                kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideCode?.invoke(candidates.first().word,
+                    candidates.drop(1).map { it.word }, heldPreview) }
+                handedOff = true
                 return@launch
             }
             val case: (String) -> String = { word -> com.kingzcheung.xime.glide.glideCased(word, shift.isShifted,
                 shift == com.kingzcheung.xime.viewmodel.ShiftMode.CAPS) }
             kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideWord?.invoke(candidates, case) }
+            } finally {
+                if (!handedOff) heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }
+            }
         }
     }
     // 提前读入词表，第一次滑行不必等待。
@@ -546,14 +562,14 @@ fun KeyboardLayout(
                 shiftSlideTargets.keyboardBounds = dragSpace.bounds(coordinates)
             }
             // 轨迹原点与键位同用键盘卡片坐标（未旋转时与 boundsInRoot 相同），旋转的悬浮键盘滑行落在手指下的键。
-            .glideTyping(glideEnabled, geometry, { shiftSlideTargets.keyboardBounds.topLeft }, glideTrail, onGlideTrace, onGlideProgress)
+            .glideTyping(glideEnabled, geometry, { shiftSlideTargets.keyboardBounds.topLeft }, glideTrail, onGlideTrace, onGlideProgress,
+                onEnd = { glidePreview.stop(); callbacks.onGlidePreviewEnd?.invoke() })
 
     ) {
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBgColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         if (glideEnabled) GlideTrailOverlay(glideTrail,
             KeyboardThemes.getAccentColor(uiState.themeId, uiState.isDarkTheme),
             Modifier.matchParentSize().zIndex(1f))
-        if (glidePreviewOn) GlidePreviewBubble(glideTrail, bubbleBgColor, keyTextColor, Modifier.matchParentSize().zIndex(2f))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -878,11 +894,11 @@ fun KeyboardLayout(
                 letterLongPressMenuAllowed(key, LocalKeyboardInputPreferences.current.letterLongPressMenu ||
                     KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty()) } ?: "key"
                                     val longPressLabels = if (longPressDisplay == "bubble") {
-                                        longPressConfig?.values?.map { it.label }
+                                        longPressConfig?.values?.map { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }
                                             ?.filter { it.isNotEmpty() }?.ifEmpty { null }
                                     } else null
                                     val longPressGestureMap = if (longPressDisplay == "bubble") {
-                                        longPressConfig?.values?.associateBy { it.label }
+                                        longPressConfig?.values?.associateBy { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }
                                     } else null
 
                                     val rawCommitValue = KeysConfigHelper.getKeyCommitValue(key, isAsciiMode)
@@ -916,7 +932,8 @@ fun KeyboardLayout(
                                                 gesture.action!!,
                                                 gesture.value.ifEmpty { selectedLabel })
                                         } else {
-                                            commitLongPressChoice(selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
+                                            // 气泡里显示的是 Shift 后的大写（È），送出的仍是原字母（è），大小写照点按一样由 Shift 决定。
+                                            commitLongPressChoice(gesture?.label ?: selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
                                         }
                                         Unit
                                     } }
@@ -1635,11 +1652,11 @@ fun KeyboardRowWithConfig(
                 letterLongPressMenuAllowed(key, LocalKeyboardInputPreferences.current.letterLongPressMenu ||
                     KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty()) } ?: "key"
             val longPressLabels = if (longPressDisplay == "bubble") {
-                longPressConfig?.values?.map { it.label }?.filter { it.isNotEmpty() }
+                longPressConfig?.values?.map { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }?.filter { it.isNotEmpty() }
                     ?.ifEmpty { null }
             } else null
             val longPressGestureMap = if (longPressDisplay == "bubble") {
-                longPressConfig?.values?.associateBy { it.label }
+                longPressConfig?.values?.associateBy { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }
             } else null
 
             // 键帽显示文本
@@ -1674,7 +1691,8 @@ fun KeyboardRowWithConfig(
                         gesture.action!!,
                         gesture.value.ifEmpty { selectedLabel })
                 } else {
-                    commitLongPressChoice(selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
+                    // 气泡里显示的是 Shift 后的大写（È），送出的仍是原字母（è），大小写照点按一样由 Shift 决定。
+                    commitLongPressChoice(gesture?.label ?: selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
                 }
                 Unit
             } }
@@ -2001,11 +2019,11 @@ fun CompactKeyboardRowWithConfig(
                 letterLongPressMenuAllowed(key, LocalKeyboardInputPreferences.current.letterLongPressMenu ||
                     KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty()) } ?: "key"
             val longPressLabels = if (longPressDisplay == "bubble") {
-                longPressConfig?.values?.map { it.label }?.filter { it.isNotEmpty() }
+                longPressConfig?.values?.map { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }?.filter { it.isNotEmpty() }
                     ?.ifEmpty { null }
             } else null
             val longPressGestureMap = if (longPressDisplay == "bubble") {
-                longPressConfig?.values?.associateBy { it.label }
+                longPressConfig?.values?.associateBy { longPressShownLabel(it.label, isShifted, KeysConfigHelper.longPressLetters(isAsciiMode)) }
             } else null
 
             val rawCommitValue = KeysConfigHelper.getKeyCommitValue(key, isAsciiMode)
@@ -2038,7 +2056,8 @@ fun CompactKeyboardRowWithConfig(
                         gesture.action!!,
                         gesture.value.ifEmpty { selectedLabel })
                 } else {
-                    commitLongPressChoice(selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
+                    // 气泡里显示的是 Shift 后的大写（È），送出的仍是原字母（è），大小写照点按一样由 Shift 决定。
+                    commitLongPressChoice(gesture?.label ?: selectedLabel, onCommitText, onKeyPress, KeysConfigHelper.longPressLetters(isAsciiMode))
                 }
                 Unit
             } }
@@ -2114,6 +2133,15 @@ private fun SpaceKey(
  * 长按菜单选中的小写字母当作点按：拼音组词中接到编码后面，不先上屏首选（h + 长按 g 不再变成「和g」）。
  * 其他字符（大写、变音字母、符号）照旧直接上屏。
  */
+/**
+ * 长按气泡里这个键盘自己的重音字母（è é ñ ä…）跟着 Shift 显示大写，和键帽一致（用户 11-09：Shift 后还显示 è é）。
+ * 只改显示；ß 这类没有单个大写字母的照旧，标点、数字和别的语言的字母不动。
+ */
+internal fun longPressShownLabel(label: String, isShifted: Boolean, accentLetters: String): String {
+    if (!isShifted || label.length != 1 || label[0] !in accentLetters || label[0].isUpperCase()) return label
+    return label.uppercase().takeIf { it.length == 1 && it[0] in accentLetters } ?: label
+}
+
 internal fun commitLongPressChoice(label: String, onCommitText: ((String) -> Unit)?, onKeyPress: (String) -> Unit,
     accentLetters: String = "") {
     // 西班牙、德、法、俄语键盘长按出的 á、ä、ё 也是字母：像点按一样接进正在打的词，补全才认得出整个词；

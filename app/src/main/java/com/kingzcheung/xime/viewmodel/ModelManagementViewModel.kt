@@ -96,7 +96,9 @@ class ModelManagementViewModel(application: Application) : AndroidViewModel(appl
     }
 
     private suspend fun loadModels() {
-        val allModels = ModelManager.getAllModels()
+        // 安装包里本来就有的拍照识别引擎、日语词库和引擎（带模型的安装包）不列出来。
+        val packaged = withContext(Dispatchers.IO) { com.kingzcheung.xime.model.packagedPacks(context) }
+        val allModels = ModelManager.getAllModels().filterNot { it.id in packaged }
         val versions = withContext(Dispatchers.IO) {
             MarketVersionStore.getAllModelVersions(context)
         }

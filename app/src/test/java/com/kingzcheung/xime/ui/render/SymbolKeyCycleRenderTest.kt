@@ -11,6 +11,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.keyboard.KeyboardPage
+import com.kingzcheung.xime.keyboard.CtrlShortcuts
+import com.kingzcheung.xime.keyboard.GestureAction
 import com.kingzcheung.xime.keyboard.MainType
 import com.kingzcheung.xime.keyboard.OverlayRoute
 import com.kingzcheung.xime.keyboard.PanelType
@@ -60,13 +62,14 @@ class SymbolKeyCycleRenderTest {
     }
 
     private fun mount(schema: String = "rime_ice", english: Boolean = false, cycle: Boolean = true,
-        handwriting: Boolean = false, width: Int = 400, split: Boolean = false, floating: Boolean = false, languageOnLeft: Boolean = false, languageMenu: Boolean = false) {
+        handwriting: Boolean = false, width: Int = 400, split: Boolean = false, floating: Boolean = false, languageOnLeft: Boolean = false, languageMenu: Boolean = false,
+        onGestureAction: ((GestureAction, String) -> Unit)? = null) {
         val app = rule.activity.application
         KeyboardInputPreferences.read(app).copy(symbolKeyCycle = cycle, languageKeyOnLeft = languageOnLeft).save(app)
         SettingsPreferences.setSplitKeyboardEnabled(app, split)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
         val callbacks = KeyboardCallbacks(onKeyPress = { key, _ -> pressed += key }, onCandidateSelect = {},
-            onSwitchSchema = if (languageMenu) ({ _: String -> }) else null)
+            onSwitchSchema = if (languageMenu) ({ _: String -> }) else null, onGestureAction = onGestureAction)
         vm = spy(KeyboardViewModel(app))
         val t9 = mock<T9InputController> {
             on { leftPanelState } doReturn T9InputController.LeftPanelState.IDLE
@@ -131,6 +134,32 @@ class SymbolKeyCycleRenderTest {
     @Test fun nineKeyCyclesBackToNineKeys() { mount("t9_pinyin"); verifyCycle("中文", "t9") }
     @Test fun strokeCyclesBackToStroke() { mount("stroke"); verifyCycle("中文", "stroke") }
     @Test fun kanaCyclesThroughItsNumericKeypad() { mount("japanese_kana"); verifyCycle("あいう", "kana") }
+    @Test fun kanaCycleModeKeyPreservesLongHoldCtrlEnter() { verifyKanaCtrlEnter(cycle = true) }
+    @Test fun kanaSeparateSymbolKeyPreservesLongHoldCtrlEnter() { verifyKanaCtrlEnter(cycle = false) }
+
+    private fun verifyKanaCtrlEnter(cycle: Boolean) {
+        val commands = mutableListOf<String>()
+        mount("japanese_kana", cycle = cycle, onGestureAction = { action, value ->
+            if (action == GestureAction.COMMAND) commands += value
+        })
+        val originalPage = vm.page.value
+        val modeTag = if (cycle) "mode-slot-1" else "kana-symbol"
+        val symbol = rule.onNodeWithTag(modeTag, true).fetchSemanticsNode().boundsInRoot.center
+        val enter = rule.onNodeWithTag("kana-enter", true).fetchSemanticsNode().boundsInRoot.center
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(0, symbol) }
+        rule.mainClock.advanceTimeBy(1_200)
+        rule.onRoot().performTouchInput { down(1, enter); up(1) }
+        rule.onRoot().performTouchInput { up(0) }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals(listOf(CtrlShortcuts.ENTER_COMMAND), commands)
+        assertTrue("Ctrl+Enter must not commit a plain Enter", pressed.isEmpty())
+        assertEquals("Releasing Ctrl must not open symbols", originalPage, vm.page.value)
+        rule.onNodeWithTag(modeTag, true).performTouchInput { click(center) }
+        assertEquals(OverlayRoute.Symbol, (vm.page.value as KeyboardPage.Overlay).route)
+    }
+
     @Test fun handwritingCyclesBackToCanvas() { mount(handwriting = true); verifyCycle("中文", "handwriting") }
     @Test fun handwritingCycleCanBeActivatedThroughAccessibility() {
         mount(handwriting = true)

@@ -121,6 +121,9 @@ fun KeyboardLayoutScreen(
                         keySpacingY = kbKey.spacingFor("japanese_kana").second?.dp,
                         isFloatingMode = uiState.isFloatingMode,
                         modifier = modifier,
+                        enterKeyText = uiState.enterKeyText,
+                        onGestureAction = onGestureAction,
+                        accentColor = accentColor,
                     )
                 } else {
                     KeyboardLayout(

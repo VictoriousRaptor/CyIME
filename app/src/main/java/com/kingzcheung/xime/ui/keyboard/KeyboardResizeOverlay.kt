@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.OpenWith
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -253,13 +252,16 @@ internal fun KeyboardResizeOverlay(
             return updated to padding
         }
         // 固定键盘底边把手：手势导航时抬到系统底部手势区上面，往上拖不会触发回桌面。
+        // 系统在键盘下面画了「切换输入法 / 收起键盘」那条按钮时也抬到它上面，不被按钮盖住、按得到（11-10）。
         val reportedGesturePx = WindowInsets.mandatorySystemGestures.getBottom(density)
         val tappablePx = WindowInsets.tappableElement.getBottom(density)
         val gestureZoneTopPx = remember(hostView, floatingMode, laidOutWindowHeight, overlayOrigin, reportedGesturePx, tappablePx,
             previewState.fixedBottomInsetDp) {
-            if (floatingMode || laidOutWindowHeight <= 0) null else (com.kingzcheung.xime.service.bottomGestureZoneTopInWindowPx(hostView)
-                ?: reportedGesturePx.takeIf { it > 0 }?.let { laidOutWindowHeight - it })
-                ?.let { it - overlayOrigin.y }
+            if (floatingMode || laidOutWindowHeight <= 0) null else listOfNotNull(
+                com.kingzcheung.xime.service.bottomGestureZoneTopInWindowPx(hostView)
+                    ?: reportedGesturePx.takeIf { it > 0 }?.let { laidOutWindowHeight - it },
+                com.kingzcheung.xime.service.imeNavButtonsTopInWindowPx(hostView),
+            ).minOrNull()?.let { it - overlayOrigin.y }
         }
         val bottomHandleClearancePx = BOTTOM_HANDLE_GESTURE_CLEARANCE_DP * density.density
         // 左右边把手常贴着屏幕边，从边上往里拖会被系统当成返回手势，直接退出调节（11-05 平板）。
@@ -342,12 +344,14 @@ internal fun KeyboardResizeOverlay(
         val dockGesture = remember(floatingMode) { FloatingDockGesture() }
         TrackDockHold(dockGesture)
         val morphProgress = if (floatingMode) dockGesture.progress else undockProgress
-        fun dragTowardDock(rect: ResizeRect, bounds: ResizeRect, amount: Offset) {
+        /** [cardMovedY] 是这一下卡片实际往下挪的距离：手指比卡片多走的（卡片已经顶在底边）才算往下顶。 */
+        fun dragTowardDock(rect: ResizeRect, bounds: ResizeRect, amount: Offset, cardMovedY: Float) {
             val onBottom = bounds.bottom - rect.bottom <= 12f * density.density &&
                 !isFloatingRotated(rotationState?.floatValue ?: 0f)
             if (onBottom && morphTarget == null)
                 morphTarget = currentModeSwitchTarget?.invoke(false, currentViewRect.width, currentViewRect.height)
-            dockGesture.move(amount.x / density.density, amount.y / density.density, onBottom && morphTarget != null)
+            dockGesture.move(amount.x / density.density, (amount.y - cardMovedY) / density.density,
+                onBottom && morphTarget != null)
         }
         fun endMorph() {
             morphTarget = null
@@ -695,6 +699,7 @@ internal fun KeyboardResizeOverlay(
                                     maxWidth = maxWidthPx,
                                     maxHeight = screenMaxHeightPx,
                                 )
+                                val cardMovedY = proposed.top - rawResizeRect.top
                                 rawResizeRect = proposed
                                 val reachable = if (dragEdge == ResizeHandle.NONE) proposed else
                                     gestureRect.resizeWithReachableWidth(proposed, dragEdge, stableBounds, aspect,
@@ -705,7 +710,7 @@ internal fun KeyboardResizeOverlay(
                                 snapFeedback(if (workingRect != reachable) "square" else null)
                                 dragRect = workingRect
                                 currentOnPreviewRectChange(workingRect)
-                                if (dragEdge == ResizeHandle.NONE) dragTowardDock(workingRect, stableBounds, amount)
+                                if (dragEdge == ResizeHandle.NONE) dragTowardDock(workingRect, stableBounds, amount, cardMovedY)
                                 currentWidthDp = (workingRect.width / density.density)
                                 currentHeightDp = (workingRect.height / density.density) - footerDp
                             } else {
@@ -1129,7 +1134,7 @@ internal fun KeyboardResizeOverlay(
                 val moved = base.translated(dxPx, if (floatingMode) dyPx else 0f).coerceInside(moveBounds)
                 dragRect = moved
                 currentOnPreviewRectChange(moved)
-                if (floatingMode) dragTowardDock(moved, moveBounds, Offset(dxPx, dyPx))
+                if (floatingMode) dragTowardDock(moved, moveBounds, Offset(dxPx, dyPx), moved.top - base.top)
                 // 预览矩形是调节事务的唯一位置源；确认时统一保存，避免同时改宿主偏移。
             }
         }
@@ -1286,6 +1291,14 @@ internal fun KeyboardResizeOverlay(
             }
         }
         if (!editingOpacity && !adjustingOpacity && floatingMode) {
+            // 调节界面里长按底部拖动条也锁定（用户 11-09：不要锁定按钮）：按现在的样子确认并锁住，关掉调节界面；
+            // 进度和普通悬浮一样沿卡片边框从底边中点走到顶边中点。
+            var holdPhase by remember { mutableStateOf(FloatingLockHoldPhase.Idle) }
+            val sweep = rememberFloatingLockSweep(holdPhase, FLOATING_LOCK_HOLD_MS - FLOATING_HOLD_QUIET_MS)
+            Spacer(Modifier.absoluteOffset { IntOffset(frame.left.roundToInt(), frame.top.roundToInt()) }
+                .size(with(density) { frame.width.toDp() }, with(density) { frame.height.toDp() })
+                .zIndex(2f).graphicsLayer { rotationZ = rotationState?.floatValue ?: 0f }
+                .floatingLockOutline(false, sweep, accentColor))
             Box(
                 modifier = Modifier
                     .absoluteOffset {
@@ -1294,6 +1307,10 @@ internal fun KeyboardResizeOverlay(
                     .size(with(density) { (frame.width.toDp() - (RESIZE_CORNER_HIT_DP * 2).dp).coerceAtLeast(1.dp) }, dragAreaHeightDp.dp)
                     .zIndex(1f)
                     .testTag("keyboard-resize-move-bar")
+                    .floatingFooterHold(false, { holdPhase = it }) {
+                        confirmResize()
+                        com.kingzcheung.xime.settings.SettingsPreferences.setFloatingGeometryLocked(hostView.context, true)
+                    }
                     .then(floatingMoveGesture),
             )
         }
@@ -1307,13 +1324,6 @@ internal fun KeyboardResizeOverlay(
                 RotateHandle(handle, card, rotationState, overlayOrigin, viewRect, previewState, functionColor, functionTextColor,
                     accentColor, currentPreviewRectSink, onEnd = { currentPreviewState.onDragEnd() })
             }
-            // 锁定按钮挨在旋转手柄右边（用户 11-08）：点一下按现在的样子确认并锁住，关掉调节界面。
-            FloatingLockButton(floatingRotateHandleRect(card, rotation, viewport, density.density, slot = 1),
-                functionColor, functionTextColor) {
-                confirmResize()
-                com.kingzcheung.xime.settings.SettingsPreferences.setFloatingGeometryLocked(hostView.context, true)
-            }
-
         }
     }
 }
@@ -1424,28 +1434,6 @@ private fun RotateHandle(
                 Icon(Icons.AutoMirrored.Rounded.RotateRight, contentDescription = null,
                     tint = functionTextColor.copy(alpha = .78f), modifier = Modifier.size(17.dp))
             }
-        }
-    }
-}
-
-/** 调节界面里旋转手柄旁的锁定按钮：和旋转手柄同样大小、同样淡。 */
-@Composable
-private fun FloatingLockButton(rect: ResizeRect, functionColor: Color, functionTextColor: Color, onLock: () -> Unit) {
-    val density = LocalDensity.current
-    Box(
-        Modifier
-            .atFloatingControl(rect, density)
-            .zIndex(3f)
-            .clip(CircleShape)
-            .testTag("keyboard-resize-lock-button")
-            .semantics { contentDescription = "锁定悬浮键盘位置和大小" }
-            .clickable(onClick = onLock),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(26.dp).graphicsLayer { alpha = FLOATING_CONTROL_ALPHA }
-            .background(functionColor.copy(alpha = .22f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = functionTextColor.copy(alpha = .78f),
-                modifier = Modifier.size(15.dp))
         }
     }
 }

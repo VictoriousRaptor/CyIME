@@ -1,0 +1,26 @@
+# =============================================
+# CyIME Lua 插件元数据（宿主用 YAML 解析）
+# =============================================
+
+id: com.kingzcheung.xime.plugin.japanese
+
+name: 日语
+icon: "あ"
+description: 日语罗马字、假名九键输入，azooKey 整句转换成汉字假名。装好后日语出现在语言切换里，第一次要下载日语词库和转换引擎（约 24 MB）。转换在手机上做，不联网。
+
+version: 0.1.0
+
+# tool：没有键盘菜单按钮，日语在「语言与方案」里开关
+type: tool
+activation: multi
+
+entry: main.lua
+
+# 宿主从这一版起按插件管日语、按需下载日语词库
+minHostVersion: 1.15.75
+
+# 不联网：不声明任何域名（词库和引擎由宿主从模型目录下载）
+
+capabilities:
+  # 日语方案、键盘、转换都在宿主里；装上并启用才打开日语并下载词库，停用就关掉日语
+  japanese: true

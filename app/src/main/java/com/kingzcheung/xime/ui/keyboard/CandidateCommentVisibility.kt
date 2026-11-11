@@ -60,3 +60,35 @@ internal fun rememberCandidateCommentsAllowed(): CandidateCommentMode {
     }
     return allowed
 }
+
+@Composable
+internal fun rememberCorrectionMarksVisible(): Boolean {
+    val context = LocalContext.current
+    val preferences = remember(context) { SettingsPreferences.getPrefsPublic(context) }
+    var visible by remember(preferences) { mutableStateOf(SettingsPreferences.showCorrectionMarks(context)) }
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == SettingsPreferences.KEY_SHOW_CORRECTION_MARKS)
+                visible = SettingsPreferences.showCorrectionMarks(context)
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return visible
+}
+
+@Composable
+internal fun rememberDoublePinyinKeysShown(): Boolean {
+    val context = LocalContext.current
+    val preferences = remember(context) { SettingsPreferences.getPrefsPublic(context) }
+    var keysShown by remember(preferences) { mutableStateOf(com.kingzcheung.xime.settings.SpellingPatches.doublePinyinRawPreedit(context)) }
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_RAW_PREEDIT_KEY)
+                keysShown = com.kingzcheung.xime.settings.SpellingPatches.doublePinyinRawPreedit(context)
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return keysShown
+}

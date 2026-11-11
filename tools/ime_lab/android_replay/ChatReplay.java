@@ -28,6 +28,9 @@ import java.util.zip.ZipFile;
 
 /** Standalone JVM/app_process replay, with fresh bundled resources and no access to app data. */
 public final class ChatReplay {
+    /** Native library suffix of the host build: .so on Linux, .dll on Windows (host_replay/build_host_windows.py). */
+    private static final String NATIVE_SUFFIX =
+        System.getProperty("os.name", "").startsWith("Windows") ? ".dll" : ".so";
     private static final String[] FIELDS = {
         "text", "comment", "type", "quality", "index", "start", "end", "weight", "code", "components"
     };
@@ -177,7 +180,10 @@ public final class ChatReplay {
                     ? "Native engine with isolated audit resources; no app data imported, no UI, commit, or personalization"
                     : "Native engine with isolated audit resources and a preset user dictionary snapshot; no app data, UI, commit, or learning"));
             output.flush();
-            System.load(new File(libDir, "librime_jni.so").getAbsolutePath());
+            // Windows host build: load ONNX Runtime from the same directory first so librime_jni.dll resolves it.
+            File ort = new File(libDir, "onnxruntime" + NATIVE_SUFFIX);
+            if (NATIVE_SUFFIX.equals(".dll") && ort.isFile()) System.load(ort.getAbsolutePath());
+            System.load(new File(libDir, "librime_jni" + NATIVE_SUFFIX).getAbsolutePath());
             engine.nativeInitialize(user.getPath(), user.getPath());
             initialized = true;
             engine.nativeEnsureT9SchemaPatches(schema);
@@ -569,10 +575,10 @@ public final class ChatReplay {
     }
 
     private static JSONObject libraryHashes(File directory) throws Exception {
-        if (!new File(directory, "librime_jni.so").isFile()) {
-            throw new IOException("Native library directory has no librime_jni.so: " + directory);
+        if (!new File(directory, "librime_jni" + NATIVE_SUFFIX).isFile()) {
+            throw new IOException("Native library directory has no librime_jni" + NATIVE_SUFFIX + ": " + directory);
         }
-        String[] names = directory.list((dir, name) -> name.endsWith(".so"));
+        String[] names = directory.list((dir, name) -> name.endsWith(NATIVE_SUFFIX));
         if (names == null) throw new IOException("Could not list native library directory: " + directory);
         Arrays.sort(names);
         JSONObject hashes = new JSONObject();

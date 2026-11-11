@@ -111,6 +111,47 @@ class T9GlideInputTest {
         assertEquals("", input)
     }
 
+    /** 用户 11-09：九键滑行开着打不了字。落在 5 的上沿、手指往上抖进 2 一点点，不能被当成滑行吞掉。 */
+    @Test fun shortDriftFromAKeyEdgeIsNotAGlide() {
+        show(true)
+        val five = centerOf("JKL"); val two = centerOf("ABC")
+        board.performTouchInput { down(lerp(five, two, 0.35f)); moveTo(lerp(five, two, 0.75f)); up() }
+        val glided = runCatching { rule.waitUntil(1500) { input.contains("52") } }.isSuccess
+        org.junit.Assert.assertFalse("短短一抖不该滑出 52：$input", glided)
+        // 用户 11-10：开着九键滑行快打一句吞一半的键。没成滑行的这一下要照常出 5，不能两头都不算。
+        assertEquals("没成滑行就是点了 5", "5", input)
+        // 从 5 中间划到 2 中间仍是滑行。
+        input = ""
+        board.performTouchInput { down(five); moveTo(two); up() }
+        rule.waitUntil(5000) { input.length >= 2 }
+        assertEquals("从 5 起滑出两个键", "5", input.take(1))
+    }
+
+    /** 用户 11-10：快打时手指在键上挪了一点（过了触摸阈值、没进别的键），这一下照常出字。 */
+    @Test fun driftInsideOneKeyIsStillATap() {
+        show(true)
+        val five = centerOf("JKL")
+        board.performTouchInput { down(five); moveTo(five + Offset(20f, 6f)); up() }
+        assertEquals("5", input)
+        board.performTouchInput { down(five + Offset(-6f, 4f)); moveTo(five + Offset(14f, -10f)); moveTo(five + Offset(18f, -8f)); up() }
+        assertEquals("55", input)
+        // 第二根手指在别的键上按下时，前一下照样算（两手交替快打）。
+        val six = centerOf("MNO")
+        board.performTouchInput { down(0, five); moveTo(0, five + Offset(15f, 0f)); down(1, six); up(0); up(1) }
+        assertEquals("5556", input)
+    }
+
+    /** 从数字键拖到左栏没成滑行：和以前一样不出字（滑出键外取消）。 */
+    @Test fun dragFromADigitOntoTheRailEntersNothing() {
+        show(true)
+        val four = centerOf("GHI")
+        val rail = rule.onNodeWithTag("t9-left-rail").fetchSemanticsNode().boundsInRoot.center -
+            board.fetchSemanticsNode().boundsInRoot.topLeft
+        board.performTouchInput { down(four); moveTo(lerp(four, rail, 0.5f)); moveTo(rail); up() }
+        rule.waitForIdle()
+        assertEquals("", input)
+    }
+
     @Test fun disabledGlideDoesNotFeedCrossedDigits() {
         show(false)
         val five = centerOf("JKL"); val six = centerOf("MNO")
@@ -134,8 +175,8 @@ class T9GlideInputTest {
 
     @Test fun nineKeySettingsAreIndependentOfLetterKeyboardGlide() {
         rule.setContent { com.kingzcheung.xime.ui.settings.LayoutInputSettingsContent(
-            com.kingzcheung.xime.ui.settings.LayoutInputCategory.Nine, onBack = {}) }
-        val row = rule.onNodeWithText("九键滑行输入", useUnmergedTree = true).performScrollTo()
+            com.kingzcheung.xime.ui.settings.LayoutInputCategory.Glide, onBack = {}) }
+        val row = rule.onNodeWithText("九键滑行", useUnmergedTree = true).performScrollTo()
         org.junit.Assert.assertFalse(KeyboardInputPreferences.read(rule.activity).t9GlideTyping)
         row.performTouchInput { click() }
         rule.runOnIdle {

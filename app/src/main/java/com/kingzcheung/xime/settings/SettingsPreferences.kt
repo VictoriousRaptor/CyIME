@@ -144,7 +144,8 @@ object SettingsPreferences {
     
     const val KEY_SWIPE_UP_HINTS_ENABLED = "swipe_up_hints_enabled"
     const val KEY_SWIPE_DOWN_HINTS_ENABLED = "swipe_down_hints_enabled"
-    const val KEY_SHOW_PRESS_BUBBLE = "show_press_bubble"
+    /** 按键浮标默认开（用户 11-09，别家和 Xime 都有）；换键名让 09-24 默认关时存下的值作废一次。 */
+    const val KEY_SHOW_PRESS_BUBBLE = "show_press_bubble_v2"
 
     private const val KEY_AUTO_NUMBER_KEYBOARD = "auto_number_keyboard_for_number_fields"
 
@@ -367,6 +368,8 @@ object SettingsPreferences {
         }
         editor.apply()
         if (caption) com.kingzcheung.xime.ui.caption.CaptionPlugin.sync(context)
+        // 日语插件：卸载就关掉日语、删掉下载的日语词库和引擎（学习记录留着）。
+        if (pluginId == JapanesePlugin.ID) JapanesePlugin.onUninstalled(context)
     }
 
     /** 插件按钮现在在哪：设置里「用法」那一行照这个写。 */
@@ -440,6 +443,7 @@ object SettingsPreferences {
     const val KEY_SHOW_CANDIDATE_COMMENTS = "show_candidate_comments"
     const val KEY_CANDIDATE_COMMENT_MODE = "candidate_comment_mode"
     const val KEY_CANDIDATE_COMMENT_CONTENT = "candidate_comment_content"
+    const val KEY_SHOW_CORRECTION_MARKS = "show_correction_marks"
     const val KEY_SHOW_CANDIDATE_CANCEL_BUTTON = "show_candidate_cancel_button"
     const val KEY_ASSOCIATION_CANCEL_CROSS = "association_cancel_cross"
     const val KEY_HANDWRITING_WUBI_HINTS = "handwriting_wubi_hints"
@@ -468,6 +472,12 @@ object SettingsPreferences {
     const val INPUT_TEXT_INPUT_BOX = "input_box"
     const val INPUT_TEXT_CANDIDATE_BAR = "candidate_bar"
     const val DEFAULT_PAGE_SIZE = 20 // 手机候选栏每页候选词数；schema 里的 page_size 来自 PC 版（5），太短，默认用 20
+
+    fun showCorrectionMarks(context: Context): Boolean = getPrefs(context).getBoolean(KEY_SHOW_CORRECTION_MARKS, true)
+
+    fun setShowCorrectionMarks(context: Context, show: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SHOW_CORRECTION_MARKS, show).apply()
+    }
 
     fun candidateCommentMode(context: Context): CandidateCommentMode {
         val prefs = getPrefs(context)
@@ -810,6 +820,8 @@ object SettingsPreferences {
         com.kingzcheung.xime.plugin.core.config.PluginEnablementStore.setEnabled(context, pluginId, enabled)
         // 字幕插件：开关一拨，键盘菜单、下拉快捷开关、桌面图标、设置里的字幕跟着出现或收起。
         if (pluginId == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID) com.kingzcheung.xime.ui.caption.CaptionPlugin.sync(context)
+        // 日语插件：开关一拨，日语跟着打开（缺的词库开始下载）或从语言切换里拿掉。
+        if (pluginId == JapanesePlugin.ID) JapanesePlugin.sync(context)
         // 通讯录插件：关掉立刻丢掉内存里的通讯录，打开（已授权）就后台读入。
         if (com.kingzcheung.xime.contacts.ContactSuggestions.isContactsPlugin(pluginId)) {
             val app = context.applicationContext
@@ -1156,7 +1168,7 @@ object SettingsPreferences {
     }
 
     fun shouldShowPressBubble(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_SHOW_PRESS_BUBBLE, false)
+        return getPrefs(context).getBoolean(KEY_SHOW_PRESS_BUBBLE, true)
     }
 
     fun setShowPressBubble(context: Context, show: Boolean) {

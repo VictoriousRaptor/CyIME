@@ -171,13 +171,18 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         }
         service.editorInputPolicy.choose(service.rimeEngine.isAsciiMode(), targetSchema)
         service.sessionController.persistSchemaOption("ascii_mode", service.rimeEngine.isAsciiMode())
+        // 换了方案就在这里先取好新方案名，和退出英文同一帧换上：以前名字要等 updateSchemaName 在后台读完，
+        // 从英文切到意大利语时空格先闪一下旧的「中文26键」（11-09）。
+        val switchedName = if (changesSchema) service.rimeEngine.getCurrentSchema().let { id ->
+            SchemaManager.getSchemaDisplayName(service, id) ?: id } else null
         withContext(Dispatchers.Main) {
             // 显式同步 uiState.isAsciiMode（权威源 = rime 引擎状态），
             // 不依赖 updateUI 链路异步回写，避免键盘 UI 与 rime 状态脱钩。
             val ascii = service.rimeEngine.isAsciiMode()
             FileLogger.i(XimeInputMethodService.TAG, "switchInputMethod: rime ascii=$ascii, ui before=${service.uiState.value.isAsciiMode}")
             service.uiState.value = service.uiState.value.copy(isAsciiMode = ascii,
-                currentSchemaId = service.rimeEngine.getCurrentSchema())
+                currentSchemaId = service.rimeEngine.getCurrentSchema(),
+                schemaName = switchedName ?: service.uiState.value.schemaName)
             val keepHandwriting = changesSchema && handwritingOpen()
             if (changesSchema) {
                 com.kingzcheung.xime.handwriting.HandwritingEngine.release()
@@ -734,6 +739,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 service.rimeEngine.setOption("ascii_mode", false)
                 service.editorInputPolicy.choose(false, schemaId)
                 service.sessionController.persistSchemaOption("ascii_mode", false)
+                // 同 switchInputMethod：长按语言列表从英文选别的语言时，名字和退出英文同一帧换上，不闪旧方案名。
+                val switchedName = SchemaManager.getSchemaDisplayName(service, schemaId) ?: schemaId
                 withContext(Dispatchers.Main) {
                     val keepHandwriting = stayInHandwriting && handwritingOpen()
                     com.kingzcheung.xime.handwriting.HandwritingEngine.release()
@@ -745,7 +752,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                     service.uiState.value.schemas.firstOrNull { it.schemaId == schemaId && !service.editorInputPolicy.scoped }?.let {
                         com.kingzcheung.xime.settings.InputModes.selectProfile(service, it)
                     }
-                    service.uiState.value = service.uiState.value.copy(isAsciiMode = false, currentSchemaId = schemaId)
+                    service.uiState.value = service.uiState.value.copy(isAsciiMode = false, currentSchemaId = schemaId,
+                        schemaName = switchedName)
                     model.switchMain(com.kingzcheung.xime.keyboard.MainType.FULL)
                     model.dispatch(com.kingzcheung.xime.ui.keyboard.KeyboardDispatchAction.AsciiModeChanged(false, schemaId))
                     reopenHandwriting(keepHandwriting, targetLanguage)

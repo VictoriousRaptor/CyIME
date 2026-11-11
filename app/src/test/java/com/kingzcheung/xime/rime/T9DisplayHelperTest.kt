@@ -105,4 +105,20 @@ class T9DisplayHelperTest {
         assertTrue(state.displayText.contains("e"))
         assertFalse(state.displayText.any { it.isDigit() })
     }
+
+    @Test
+    fun `引擎编码有数字 - 只借同一串的上一帧字母编码`() {
+        // 同一输入框、同一方案里接着打：借上一帧
+        assertEquals("ni hao", t9RawPreedit("ni hao 6", "644266", "ni hao", previousComposing = true, sameComposition = true))
+        // 换了输入框或从英文、26 键切过来：上一帧是别的编码（录屏里的 stamping），不借
+        assertEquals("", t9RawPreedit("qu a 6744", "7826744", "stamping", previousComposing = true, sameComposition = false))
+        // 上一帧已经不在组字：不借
+        assertEquals("", t9RawPreedit("qu a 6744", "7826744", "stamping", previousComposing = false, sameComposition = true))
+    }
+
+    @Test
+    fun `引擎编码全是字母 - 照用 - 没有输入 - 给空`() {
+        assertEquals("qu a", t9RawPreedit("qu a", "782", "stamping", previousComposing = true, sameComposition = false))
+        assertEquals("", t9RawPreedit("", "", "stamping", previousComposing = true, sameComposition = true))
+    }
 }

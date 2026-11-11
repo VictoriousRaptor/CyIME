@@ -55,13 +55,6 @@ class GlideChineseLexiconTest {
             pinyinCodes(listOf(listOf("zhong", "guo")), flypy).single()))
     }
 
-    @Test fun previewShowsThePinyinOfTheGlidedCode() {
-        assertEquals("ni hao", pinyinReadings(entries, null)["nihao"])
-        assertEquals("zhong guo", pinyinReadings(entries, flypy)["vsgo"])
-        // 同一编码只留最常用的读法（xian 是 xian，不是 xi an）。
-        assertEquals("xian", pinyinReadings(entries, null)["xian"])
-    }
-
     /** 实时预览在手指移动中按半截轨迹反复识别：半截轨迹也要在时限内算完。 */
     @Test fun partialTracesDecodeWithinThePreviewBudget() {
         val decoder = GlideDecoder(GlideLexicon.keyboard(keys), pinyinCodes(entries, null))

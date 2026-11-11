@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.zIndex
 
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -343,13 +344,15 @@ internal fun FloatingKeyboardContainer(
             val liveRect = liveShiftPx().let { normalRect.translated(it.x, it.y) }
             val shown = ResizeRect(between(liveRect.left, destination.left), between(liveRect.top, destination.top),
                 between(liveRect.right, destination.right), between(liveRect.bottom, destination.bottom))
-            KeyboardModeMorphOutline(Modifier.align(Alignment.TopStart), shown, progress, fixedCardShape, progress >= 1f,
-                "floating-dock-preview")
+            // 画在卡片上面（和调节界面里一样）：压在卡片底下时被不透明的卡片挡住大半，看着像没有动画。
+            KeyboardModeMorphOutline(Modifier.align(Alignment.TopStart).zIndex(1f), shown, progress, fixedCardShape,
+                progress >= 1f, "floating-dock-preview")
         }
         // 正常态和调节态共用 TopStart 放置，不在确认时重新换坐标系。
         val context = LocalContext.current
-        var holdingFooter by remember { mutableStateOf(false) }
-        val lockProgress = floatingLockProgress(holdingFooter)
+        var holdPhase by remember { mutableStateOf(FloatingLockHoldPhase.Idle) }
+        val lockSweep = rememberFloatingLockSweep(holdPhase, floatingLockHoldMs(geometryLocked) - FLOATING_HOLD_QUIET_MS)
+        val lockNudge = rememberFloatingLockNudge()
         var suppressCornerHint by remember(highlight.epoch) { mutableStateOf(false) }
         val cardPlacement = Modifier
             .align(Alignment.TopStart)
@@ -392,12 +395,13 @@ internal fun FloatingKeyboardContainer(
                 // 绕卡片中心转；调节界面的角度只在图层里读。
                 .graphicsLayer { rotationZ = previewRotationState?.value ?: restingRotation }
                 .clip(FloatingKeyboardCardShape)
+                // 边框和长按进度画在透明度图层外面：键盘调得再透明，进度也看得清。
+                .floatingLockOutline(geometryLocked, lockSweep, highlightColor, lockNudge)
                 .graphicsLayer {
                     alpha = opacity.coerceIn(0.3f, 1f)
                     // 只有半透明时才需要离屏合成；不透明时用 Auto，少一次全卡片离屏绘制。
                     compositingStrategy = if (opacity < 1f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
                 }
-                .floatingLockOutline(geometryLocked, highlightColor)
                 .testTag("floating-keyboard-card")
         ) {
             Column {
@@ -420,16 +424,17 @@ internal fun FloatingKeyboardContainer(
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height((dragAreaHeight + capInset.floatValue.dp).coerceAtMost(cardTotalHeight))
                 .testTag("floating-footer").keyboardPanelBackground(backgroundColor), contentAlignment = Alignment.Center) {
-                if (!hideDragBar) FloatingFooterIndicator(geometryLocked, dragIndicatorColor, lockProgress)
+                if (!hideDragBar) FloatingFooterIndicator(geometryLocked, dragIndicatorColor, footerDp.toFloat(), lockNudge)
             }
             if (!hideDragBar && previewRect == null) DragBar(
                 modifier = Modifier.align(Alignment.BottomCenter).height(dragAreaHeight),
                 geometryLocked = geometryLocked,
-                onHolding = {
-                    holdingFooter = it
-                    if (it) suppressCornerHint = true
+                onHoldPhase = {
+                    holdPhase = it
+                    if (it == FloatingLockHoldPhase.Holding) suppressCornerHint = true
                 },
                 onToggle = { SettingsPreferences.setFloatingGeometryLocked(context, !lockedNow) },
+                onLockedDrag = lockNudge::trigger,
                 onDragStart = {
                     dockGesture.cancel()
                     dragX = safeOffsetX
@@ -452,11 +457,13 @@ internal fun FloatingKeyboardContainer(
                     }
                     val dxDp = with(density) { dragAmount.x.toDp().value }
                     val dyDp = with(density) { dragAmount.y.toDp().value }
+                    val beforeY = dragY
                     dragX = (dragX + dxDp).coerceIn(-horizontalTravel, horizontalTravel)
                     dragY = (dragY - dyDp).coerceIn(minimumY, maxOffsetY)
                     val nextEdge = floatingDockEdge(dragX.roundToInt().toFloat(), dragY.roundToInt().toFloat(),
                         horizontalTravel, maxOffsetY, minOffsetY.toFloat())
-                    dockGesture.move(dxDp, dyDp, nextEdge != null && destination != null)
+                    // 只把卡片已经顶在底边、手指还往下走的那部分交给贴底判定；卡片跟着往下挪的不算。
+                    dockGesture.move(dxDp, dyDp - (beforeY - dragY), nextEdge != null && destination != null)
                 },
                 onDragEnd = {
                     // Dock exactly when the preview shows it docked; the old separate timer could end a
@@ -698,8 +705,10 @@ internal const val UNDOCK_HANDLE_HEIGHT_DP = 14
 private fun DragBar(
     modifier: Modifier,
     geometryLocked: Boolean,
-    onHolding: (Boolean) -> Unit,
+    onHoldPhase: (FloatingLockHoldPhase) -> Unit,
     onToggle: () -> Unit,
+    /** 锁定时拖过了触摸阈值：卡片不动，交给外面提示一下为什么不动。每次按下最多一次。 */
+    onLockedDrag: () -> Unit,
     onDragStart: () -> Unit,
     onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, dragAmount: androidx.compose.ui.geometry.Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -711,27 +720,48 @@ private fun DragBar(
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
     val currentOnDragCancel by rememberUpdatedState(onDragCancel)
+    val currentOnLockedDrag by rememberUpdatedState(onLockedDrag)
     Box(
         modifier = modifier
             .fillMaxWidth()
             .testTag("floating-drag-bar")
-            .floatingFooterHold(geometryLocked, onHolding, onToggle)
-            .then(if (geometryLocked) Modifier else Modifier
+            // 长按锁定/解锁：锁没锁都在，同一个节点。
+            .floatingFooterHold(geometryLocked, onHoldPhase, onToggle)
+            // 点按、拖动的节点锁没锁都留着、顺序不变，只按 geometryLocked 重启，锁定时直接不处理：
+            // 锁定、解锁时不增删手势节点，解锁后拖动从新的一次按下开始，和没锁过一样。
             // 点一下（没拖动）：自己等按下和抬起，不要求按下没被消费，拖动手势先吃掉按下时也认得出点击；
             // 拖过了触摸阈值时拖动手势会消费移动，这里就不算点击。
-            .pointerInput(Unit) {
+            .pointerInput(geometryLocked) {
+                if (geometryLocked) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     if (waitForUpOrCancellation() != null) currentOnTap()
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(geometryLocked) {
+                if (geometryLocked) return@pointerInput
                 detectDragGestures(
                     onDragStart = { currentOnDragStart() },
                     onDrag = { change, amount -> currentOnDrag(change, amount) },
                     onDragEnd = { currentOnDragEnd() },
                     onDragCancel = { currentOnDragCancel() },
                 )
-            }),
+            }
+            // 锁定时拖：卡片不动，挪过触摸阈值时提示一次（小锁抖、边框亮）。长按解锁满了以后这根手指的事件
+            // 已经被长按吃掉，不再提示；只按着不动、点一下都不提示。没锁时直接不处理，和上面两个节点对称。
+            .pointerInput(geometryLocked) {
+                if (!geometryLocked) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed || change.isConsumed) break
+                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                            currentOnLockedDrag()
+                            break
+                        }
+                    }
+                }
+            },
     )
 }

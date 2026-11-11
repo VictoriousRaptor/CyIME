@@ -38,7 +38,7 @@ object PerformanceCosts {
         OMISSION_CORRECTION("omission_correction", "漏键纠错", redeploy = true),
         DOUBLE_PINYIN_ABBREVIATION("double_pinyin_abbreviation", "双拼简拼", redeploy = true),
         MIXED_INPUT("mixed_input", "中英混输"),
-        CHINESE_GLIDE("chinese_glide", "中文滑行输入"),
+        CHINESE_GLIDE("chinese_glide", "中文滑行"),
         TRADITIONAL("traditional_output", "繁体输出"),
         RARE_CHARACTERS("rare_characters", "生僻字"),
         DATETIME("datetime_candidates", "时间日期候选"),
@@ -80,10 +80,10 @@ object PerformanceCosts {
         T9_FUZZY_IAN("t9_fuzzy_ian_iang", "九键模糊音 ian 和 iang", redeploy = true),
         T9_FUZZY_UAN("t9_fuzzy_uan_uang", "九键模糊音 uan 和 uang", redeploy = true),
         // 11-03 补登记（用户：每个开关都要有代价）。滑行类只在划的时候干活，点按打字基本不经过它们。
-        GLIDE_TYPING("glide_typing", "滑行输入"),
+        GLIDE_TYPING("glide_typing", "英文滑行"),
         GLIDE_PREVIEW("glide_preview", "滑行时实时显示词"),
         // t9_ 开头：九键上的手势，按九键测、按九键基线算百分比。
-        T9_GLIDE("t9_glide_typing", "九键滑行输入"),
+        T9_GLIDE("t9_glide_typing", "九键滑行"),
         // 开着 = 玻璃和液态玻璃都开；单开它会连玻璃一起开，实测值要减去玻璃那一项再写进表。
         LIQUID_GLASS("liquid_glass", "液态玻璃"),
         PRESS_BUBBLE("press_bubble", "点按弹出气泡"),

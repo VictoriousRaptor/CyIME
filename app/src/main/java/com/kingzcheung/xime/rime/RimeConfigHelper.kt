@@ -256,8 +256,10 @@ object RimeConfigHelper {
                 context.assets.open("rime-bundled-manifest.tsv").bufferedReader().use { it.readText() }),
         ) { context.assets.open(it) }
         // 日语词典装不上只影响日语转换，不能连累其它输入方案启动。
+        // 词典和引擎在安装包里或是「日语」插件下载的（JapanesePack）；告诉日语翻译器下载的引擎在哪。
         try {
-            com.kingzcheung.xime.settings.JapaneseSchemas.installAzooKeyDictionary(rimeDir) { context.assets.open(it) }
+            com.kingzcheung.xime.settings.JapanesePack.exportLibraryPath(context)
+            com.kingzcheung.xime.settings.JapanesePack.installDictionary(context)
         } catch (e: Exception) {
             FileLogger.e(TAG, "Failed to install the Japanese dictionary", e)
         }

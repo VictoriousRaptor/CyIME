@@ -37,6 +37,27 @@ class NeighborAndMixedInputTest {
         } finally { e.setNeighborMap(""); e.clearQueuedComposition() }
     }
 
+    @Test fun correctedSyllableCanBeSelectedAndUndoneWithoutRewritingCode() {
+        val e = engine()
+        try {
+            e.setNeighborMap(graph())
+            "nihso".forEach { e.processQueuedKeyAndGetResult(it.code, 0) }
+            val first = e.readPinyinSyllableChoices(e.currentCandidateRevision(), false)!!
+            val ni = first.options.indexOfFirst { it.pinyin == "ni" }
+            assertTrue("ni must be available", ni >= 0)
+            assertNotNull(e.selectPinyinSyllable(first, ni))
+            val second = e.readPinyinSyllableChoices(e.currentCandidateRevision(), false)!!
+            val hao = second.options.indexOfFirst { it.pinyin == "hao" }
+            assertTrue("corrected hao must be available: ${second.labels}", hao >= 0)
+            assertNotNull(e.selectPinyinSyllable(second, hao))
+            assertEquals("nihso", e.getInput())
+            assertTrue(e.getCandidates().contains("你好"))
+            val selected = e.readPinyinSyllableChoices(e.currentCandidateRevision(), false)!!
+            assertNotNull(e.undoPinyinSyllable(selected))
+            assertEquals("nihso", e.getInput())
+        } finally { e.setNeighborMap(""); e.clearQueuedComposition() }
+    }
+
     @Test fun englishAndChineseWordsCommitInTheSameChineseMode() {
         val e = engine()
         try {

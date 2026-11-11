@@ -201,7 +201,8 @@ class KeyboardResizeGeometryTest {
             assertEquals(480, floatingResizeFloorWidthDp(shortSide, 2000))
         }
         // 横竖屏同一个值（只看短边）；可用高度、宽度不够时取可用的。
-        assertEquals(150 - FLOATING_DRAG_BAR_HEIGHT_DP, floatingResizeFloorContentDp(411, 150))
+        // 底部拖动条手机 16dp、平板 28dp（11-08 起，floatingFooterHeightDp）。
+        assertEquals(150 - floatingFooterHeightDp(411), floatingResizeFloorContentDp(411, 150))
         assertEquals(250, floatingResizeFloorWidthDp(411, 250))
 
         // 点亮四角直接拖和调节界面同一组下限：手机竖屏、手机横屏、平板横屏。
@@ -214,7 +215,7 @@ class KeyboardResizeGeometryTest {
                 screen.widthDp > screen.heightDp, d, shortSide)
             val availableHeightDp = (limits.bounds.height / d).roundToInt()
             val availableWidthDp = (limits.bounds.width / d).roundToInt()
-            assertEquals("$screen", (floatingResizeFloorContentDp(shortSide, availableHeightDp) + FLOATING_DRAG_BAR_HEIGHT_DP) * d,
+            assertEquals("$screen", (floatingResizeFloorContentDp(shortSide, availableHeightDp) + floatingFooterHeightDp(shortSide)) * d,
                 limits.minHeight, 0.5f)
             assertEquals("$screen", floatingResizeFloorWidthDp(shortSide, availableWidthDp) * d, limits.minWidth, 0.5f)
         }
