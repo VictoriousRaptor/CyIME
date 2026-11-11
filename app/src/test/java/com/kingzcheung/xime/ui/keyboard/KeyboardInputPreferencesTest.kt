@@ -17,6 +17,35 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 class KeyboardInputPreferencesTest {
+    @Test fun `magnifier defaults on and its switch preserves width and cursor behavior`() {
+        val before = KeyboardInputPreferences.read(context)
+        assertEquals(true, before.cursorMagnifierEnabled)
+        assertEquals(280f, before.cursorMagnifierWidthDp, 0f)
+        assertTrue(KeyboardInputPreferences.CURSOR_MAGNIFIER_ENABLED_KEY in KeyboardInputPreferences.watchedKeys)
+        assertTrue(KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY in KeyboardInputPreferences.watchedKeys)
+        for (enabled in listOf(false, true)) {
+            before.copy(cursorMagnifierEnabled = enabled, cursorMagnifierWidthDp = 360f).save(context)
+            val restored = KeyboardInputPreferences.read(context)
+            assertEquals(enabled, restored.cursorMagnifierEnabled)
+            assertEquals(360f, restored.cursorMagnifierWidthDp, 0f)
+            assertEquals(before, restored.copy(cursorMagnifierEnabled = true, cursorMagnifierWidthDp = 280f))
+        }
+    }
+
+    @Test fun `magnifier widths persist every slider step and reject invalid widths`() {
+        for (width in 160..480 step 10) {
+            KeyboardInputPreferences(cursorMagnifierWidthDp = width.toFloat()).save(context)
+            assertEquals(width.toFloat(), KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
+        }
+        for ((stored, expected) in listOf(Float.NaN to 280f, Float.POSITIVE_INFINITY to 280f,
+            Float.NEGATIVE_INFINITY to 280f, -1f to 160f, 1000f to 480f, 285f to 290f)) {
+            values[KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY] = stored
+            assertEquals(expected, KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
+            KeyboardInputPreferences(cursorMagnifierWidthDp = stored).save(context)
+            assertEquals(expected, values[KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY] as Float, 0f)
+        }
+    }
+
     @Test fun `kana hints persist independently of symbol direction and cursor gestures`() {
         val before = KeyboardInputPreferences.read(context)
         assertEquals(false, before.kanaDirectionHints)

@@ -61,10 +61,12 @@ class CursorMagnifierRenderTest {
     @After fun reset() { IncognitoState.passwordField = false; SpaceAfterCursorGuard.resetForTest() }
 
     private fun mount(schema: String = "rime_ice", floating: Boolean = false,
+        enabled: Boolean = true, width: Float = 280f,
         reader: suspend () -> CursorMagnifierText? = { reads++; CursorMagnifierText.from(text, caret) }) {
         val app = rule.activity.application
         KeyboardInputPreferences.read(app).copy(cursorGesture = CursorGestureMode.SPACE,
-            spaceHold = SpaceHoldAction.CURSOR, cursorHoldSeconds = 0.2f, cursorStepDp = 10f).save(app)
+            spaceHold = SpaceHoldAction.CURSOR, cursorHoldSeconds = 0.2f, cursorStepDp = 10f,
+            cursorMagnifierEnabled = enabled, cursorMagnifierWidthDp = width).save(app)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
         val callbacks = KeyboardCallbacks(onKeyPress = { key, _ -> keys += key }, onCandidateSelect = {},
             onCursorMove = { moves++; caret = (caret + it).coerceIn(0, text.length); editor.setSelection(caret) },
@@ -108,6 +110,50 @@ class CursorMagnifierRenderTest {
         rule.onNodeWithTag("space-key").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(320)
         rule.waitForIdle()
+    }
+
+    @Test fun disabledMagnifierDoesNotReadOrTrackAndCursorMovementStillWorks() {
+        mount(enabled = false)
+        hold()
+        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
+        rule.onNodeWithTag("space-key").performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(28f, 0f)) }
+        rule.mainClock.advanceTimeBy(160)
+        rule.runOnIdle { assertEquals(0, reads); assertTrue(tracking.isEmpty()); assertTrue(moves > 0) }
+        rule.onNodeWithTag("space-key").performTouchInput { up() }
+    }
+
+    @Test fun persistedWidthAndSwitchApplyLiveAndWidthIsLimitedByScreenInsteadOfFloatingKeyboard() {
+        mount(floating = true, width = 160f)
+        hold()
+        popupLocation()
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(160.dp)
+        shot("width-160")
+        rule.runOnIdle {
+            KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierWidthDp = 480f).save(rule.activity)
+        }
+        rule.mainClock.advanceTimeBy(160)
+        popupLocation()
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(384.dp)
+        shot("width-480-screen-limited")
+        rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierEnabled = false).save(rule.activity) }
+        rule.mainClock.advanceTimeBy(160)
+        rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
+        val stopped = reads
+        rule.mainClock.advanceTimeBy(320)
+        rule.runOnIdle {
+            assertEquals(stopped, reads)
+            assertEquals(listOf(true, false), tracking)
+            assertEquals(480f, KeyboardInputPreferences.read(rule.activity).cursorMagnifierWidthDp, 0f)
+            KeyboardInputPreferences.read(rule.activity).copy(cursorMagnifierEnabled = true).save(rule.activity)
+        }
+        rule.mainClock.advanceTimeBy(160)
+        popupLocation()
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(384.dp)
+        rule.onNodeWithTag("space-key").performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(32)
+        rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(listOf(true, false, true, false), tracking) }
     }
 
     private fun shot(name: String) {
