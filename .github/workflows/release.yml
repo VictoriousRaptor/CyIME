@@ -208,8 +208,25 @@ jobs:
         run: |
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
 
+      - name: Route Swift key refresh through HKPS
+        shell: bash
+        run: |
+          # setup-swift@v2.4.0 hard-codes plain HKP for this refresh. Route only that
+          # command through HKPS; key import and signature verification remain unchanged.
+          wrapper_dir="$RUNNER_TEMP/swift-gpg-wrapper"
+          mkdir -p "$wrapper_dir"
+          cat > "$wrapper_dir/gpg" <<'EOF'
+          #!/usr/bin/env bash
+          if [[ "$#" -eq 4 && "$1" == "--keyserver" && "$2" == "hkp://keyserver.ubuntu.com" && "$3" == "--refresh-keys" && "$4" == "Swift" ]]; then
+            set -- "$1" "hkps://keyserver.ubuntu.com" "$3" "$4"
+          fi
+          exec /usr/bin/gpg "$@"
+          EOF
+          chmod +x "$wrapper_dir/gpg"
+          echo "$wrapper_dir" >> "$GITHUB_PATH"
+
       - name: Set up pinned Swift compiler
-        uses: swift-actions/setup-swift@v2
+        uses: swift-actions/setup-swift@v2.4.0
         with:
           swift-version: '6.2.0'
 
