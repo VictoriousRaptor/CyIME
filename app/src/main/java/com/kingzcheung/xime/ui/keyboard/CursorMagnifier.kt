@@ -81,6 +81,7 @@ internal fun CursorMagnifier(
     composition: CursorMagnifierText? = null,
     readAnchor: (() -> HardwareCursorAnchor?)? = null,
     onTrackingChange: ((Long, Boolean) -> Unit)? = null,
+    widthDp: Float = 280f,
 ) {
     val currentReadAnchor by rememberUpdatedState(readAnchor)
     val currentTrackingChange by rememberUpdatedState(onTrackingChange)
@@ -116,15 +117,15 @@ internal fun CursorMagnifier(
     val location = IntArray(2).also(view::getLocationOnScreen)
     val inWindow = IntArray(2).also(view::getLocationInWindow)
     val origin = IntOffset(location[0] - inWindow[0], location[1] - inWindow[1])
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
-        val screen = IntRect(screenRect.left, screenRect.top, screenRect.right, screenRect.bottom)
-        Popup(popupPositionProvider = CursorMagnifierPosition(anchor, screen, origin, gap),
-            properties = PopupProperties(focusable = false, dismissOnBackPress = false,
-                dismissOnClickOutside = false, clippingEnabled = false)) {
-            CursorMagnifierCapsule(shown, background, foreground, accent,
-                Modifier.width(minOf(280.dp, (maxWidth - 16.dp).coerceAtLeast(1.dp))))
-        }
+    val density = LocalDensity.current
+    val gap = with(density) { 8.dp.roundToPx() }
+    val availableWidth = with(density) { screenRect.width().toDp() - 16.dp }.coerceAtLeast(1.dp)
+    val screen = IntRect(screenRect.left, screenRect.top, screenRect.right, screenRect.bottom)
+    Popup(popupPositionProvider = CursorMagnifierPosition(anchor, screen, origin, gap),
+        properties = PopupProperties(focusable = false, dismissOnBackPress = false,
+            dismissOnClickOutside = false, clippingEnabled = false)) {
+        CursorMagnifierCapsule(shown, background, foreground, accent,
+            Modifier.width(minOf(normalizeCursorMagnifierWidth(widthDp).dp, availableWidth)))
     }
 }
 

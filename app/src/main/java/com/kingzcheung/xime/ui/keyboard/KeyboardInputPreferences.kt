@@ -20,6 +20,10 @@ internal fun normalizeHandwritingPause(value: Float): Float =
 internal fun normalizeCursorHoldSeconds(value: Float): Float =
     ((value.takeIf { it.isFinite() } ?: 0.2f).coerceIn(0.1f, 1f) * 10).roundToInt() / 10f
 
+/** 放大镜宽度：160–480 dp，每档 10 dp，默认沿用 280 dp。 */
+internal fun normalizeCursorMagnifierWidth(value: Float): Float =
+    ((value.takeIf { it.isFinite() } ?: 280f).coerceIn(160f, 480f) / 10).roundToInt() * 10f
+
 /** 移光标时从中间滑到边缘走几行：0.5–3 行，每档 0.25 行，默认 1 行。 */
 internal fun normalizeCursorSwipeLines(value: Float): Float =
     ((value.takeIf { it.isFinite() } ?: 1f).coerceIn(0.5f, 3f) * 4).roundToInt() / 4f
@@ -190,6 +194,8 @@ data class KeyboardInputPreferences(
     /** 删除键上下滑清空、撤回要滑多远，按原来距离的百分比，见 [normalizeClearSwipePercent]；默认 100% 不变（11-05 别人提的需求）。 */
     val clearSwipePercent: Float = 100f,
     val cursorHoldSeconds: Float = 0.2f,
+    val cursorMagnifierEnabled: Boolean = true,
+    val cursorMagnifierWidthDp: Float = 280f,
     /** 移动光标时每走一字轻震一下；原来一直有，默认开保持手感（2026-10-22 起可关）。 */
     val cursorStepHaptic: Boolean = true,
     /** 移动光标时每走一字播放按键音；新加，默认关。 */
@@ -275,6 +281,8 @@ data class KeyboardInputPreferences(
         const val CLEAR_ALL_WHILE_COMPOSING_KEY = "clear_all_while_composing"
         /** 只清空光标前的内容；输入法在清空时读它（ImeKeyRouter）。 */
         const val CLEAR_BEFORE_CURSOR_ONLY_KEY = "clear_before_cursor_only"
+        const val CURSOR_MAGNIFIER_ENABLED_KEY = "cursor_magnifier_enabled"
+        const val CURSOR_MAGNIFIER_WIDTH_KEY = "cursor_magnifier_width_dp"
         /** 删除键左右滑动删除；键盘界面读它决定删除键接不接横滑删字（KeyboardView）。 */
         const val SWIPE_DISTANCE_DELETE_KEY = "swipe_distance_delete"
         /** 删除键单独反向、清空滑动距离；键盘界面读（KeyButton）。 */
@@ -333,6 +341,7 @@ data class KeyboardInputPreferences(
             setOf(KeyEffectPreferences.GLOW, KeyEffectPreferences.ANIMATION, SettingsPreferences.KEY_SHOW_PRESS_BUBBLE,
                 SettingsPreferences.KEY_SHOW_PREEDIT_PREVIEW, SettingsPreferences.KEY_INLINE_PREEDIT_PREVIEW, SettingsPreferences.KEY_INPUT_TEXT_LOCATION,
                 SettingsPreferences.KEY_PREEDIT_BUBBLE_OPACITY,
+                CURSOR_MAGNIFIER_ENABLED_KEY, CURSOR_MAGNIFIER_WIDTH_KEY,
                 com.kingzcheung.xime.settings.LetterSwipeBindings.CHINESE, com.kingzcheung.xime.settings.LetterSwipeBindings.ENGLISH,
                 SettingsPreferences.KEY_SPLIT_KEYBOARD, SettingsPreferences.KEY_SPLIT_RIGHT_G, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK, SettingsPreferences.KEY_WIDE_KEYS, SettingsPreferences.KEY_EVEN_MERGED_KEYS, SettingsPreferences.KEY_NUMBER_ROW, SettingsPreferences.KEY_SPLIT_GAP_PORTRAIT, SettingsPreferences.KEY_SPLIT_GAP_LANDSCAPE, CHINESE_GLIDE_KEY, DELETE_CHINESE_GLIDE_CHARACTER_KEY, GLIDE_PREVIEW_KEY, ENGLISH_AUTO_SPACE_KEY, ENGLISH_PUNCTUATION_SPACE_KEY, EMAIL_SUFFIXES_KEY, ADDRESS_FIELDS_ENGLISH_KEY, SYMBOL_NAMES_KEY, GREEK_LETTERS_KEY, CYLM_LONG_ALTERNATIVE_KEY,
                 "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, ZHUYIN_SIMPLIFIED_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
@@ -402,6 +411,8 @@ data class KeyboardInputPreferences(
                 cursorStepDp = prefs.getFloat("cursor_step_dp", 10f).takeIf { it.isFinite() }?.coerceIn(6f, 24f) ?: 10f,
                 cursorSwipeLines = normalizeCursorSwipeLines(prefs.getFloat("cursor_swipe_lines", 1f)),
                 cursorHoldSeconds = normalizeCursorHoldSeconds(prefs.getFloat("cursor_hold_seconds", 0.2f)),
+                cursorMagnifierEnabled = prefs.getBoolean(CURSOR_MAGNIFIER_ENABLED_KEY, true),
+                cursorMagnifierWidthDp = normalizeCursorMagnifierWidth(prefs.getFloat(CURSOR_MAGNIFIER_WIDTH_KEY, 280f)),
                 cursorStepHaptic = prefs.getBoolean("cursor_step_haptic", true),
                 cursorStepSound = prefs.getBoolean("cursor_step_sound", false),
                 bottomLiftCursor = prefs.getBoolean(BOTTOM_LIFT_CURSOR_KEY, false),
@@ -478,6 +489,8 @@ data class KeyboardInputPreferences(
             .putString("space_hold_action", spaceHold.name)
             .putString("cursor_gesture_mode", cursorGesture.name)
             .putFloat("cursor_hold_seconds", normalizeCursorHoldSeconds(cursorHoldSeconds))
+            .putBoolean(CURSOR_MAGNIFIER_ENABLED_KEY, cursorMagnifierEnabled)
+            .putFloat(CURSOR_MAGNIFIER_WIDTH_KEY, normalizeCursorMagnifierWidth(cursorMagnifierWidthDp))
             .putFloat("language_key_hold_seconds_v2", normalizeLanguageMenuHoldSeconds(languageMenuHoldSeconds))
             .putFloat("language_key_hold_seconds", normalizeLanguageMenuHoldSeconds(languageMenuHoldSeconds))
             .putBoolean(LANGUAGE_KEY_IME_PICKER_KEY, languageKeyImePicker)
