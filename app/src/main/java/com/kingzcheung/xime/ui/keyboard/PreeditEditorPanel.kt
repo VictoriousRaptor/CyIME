@@ -59,23 +59,6 @@ internal fun PreeditEditorBar(
     val display = remember(session.text, session.isT9, session.protectedText, preedit) { PinyinEditDisplay(session.text, preedit.removePrefix(session.protectedText).trim(), session.isT9, includeAutomaticBoundaries = false) }
     val code = display.text.ifEmpty { " " }
     val displayCaret = display.displayOffset(session.caret)
-    val view = LocalView.current
-    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    fun reportCaret() {
-        val c = coordinates?.takeIf { it.isAttached }
-        val result = layout?.takeIf { it.layoutInput.text.text == code }
-        val anchor = if (c == null || result == null) null else {
-            val rect = result.getCursorRect(displayCaret.coerceIn(0, code.length))
-            val top = c.localToRoot(Offset(rect.left, rect.top))
-            val bottom = c.localToRoot(Offset(rect.left, rect.bottom))
-            val origin = IntArray(2).also(view::getLocationOnScreen)
-            com.kingzcheung.xime.service.HardwareCursorAnchor(minOf(top.x, bottom.x) + origin[0], minOf(top.y, bottom.y) + origin[1],
-                maxOf(top.x, bottom.x) + origin[0], maxOf(top.y, bottom.y) + origin[1])
-        }
-        onCaretBounds?.invoke(anchor)
-    }
-    SideEffect { reportCaret() }
-    DisposableEffect(Unit) { onDispose { onCaretBounds?.invoke(null) } }
     LaunchedEffect(session.caret, code, layout) {
         layout?.takeIf { it.layoutInput.text.text == code }?.getCursorRect(displayCaret.coerceIn(0, code.length))?.let {
             if (it.left < scroll.value) scroll.scrollTo(it.left.toInt().coerceAtLeast(0))
@@ -91,6 +74,28 @@ internal fun PreeditEditorBar(
             (anchorBounds.top - popupContentSize.height - gap).coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)))
     } }
     val content: @Composable (Dp) -> Unit = { width ->
+            val caretBoundsModifier = if (onCaretBounds == null) Modifier else {
+                val view = LocalView.current
+                var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                fun reportCaret() {
+                    val c = coordinates?.takeIf { it.isAttached }
+                    val result = layout?.takeIf { it.layoutInput.text.text == code }
+                    val anchor = if (c == null || result == null) null else {
+                        val rect = result.getCursorRect(displayCaret.coerceIn(0, code.length))
+                        val top = c.localToRoot(Offset(rect.left, rect.top))
+                        val bottom = c.localToRoot(Offset(rect.left, rect.bottom))
+                        val origin = IntArray(2).also(view::getLocationOnScreen)
+                        if (!top.x.isFinite() || !top.y.isFinite() || !bottom.x.isFinite() || !bottom.y.isFinite()) null else
+                            com.kingzcheung.xime.service.HardwareCursorAnchor(
+                                minOf(top.x, bottom.x) + origin[0], minOf(top.y, bottom.y) + origin[1],
+                                maxOf(top.x, bottom.x) + origin[0], maxOf(top.y, bottom.y) + origin[1])
+                    }
+                    onCaretBounds(anchor)
+                }
+                SideEffect { reportCaret() }
+                DisposableEffect(Unit) { onDispose { onCaretBounds(null) } }
+                Modifier.onGloballyPositioned { coordinates = it; reportCaret() }
+            }
             Row(Modifier.width(width).height(44.dp).testTag("preedit-editor")
                 .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -99,7 +104,7 @@ internal fun PreeditEditorBar(
                     Text(code, color = textColor.copy(alpha = 0.9f), fontSize = PreeditStyle.FontSize, maxLines = 1, softWrap = false,
                         onTextLayout = { layout = it }, modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)
                             .testTag("preedit-editor-code")
-                            .onGloballyPositioned { coordinates = it; reportCaret() }
+                            .then(caretBoundsModifier)
                             .semantics {
                                 editableText = AnnotatedString(session.text)
                                 textSelectionRange = TextRange(session.caret)

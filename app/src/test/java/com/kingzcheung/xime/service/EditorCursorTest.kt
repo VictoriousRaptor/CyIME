@@ -9,6 +9,23 @@ import org.mockito.Mockito.mockConstruction
 import org.mockito.kotlin.*
 
 class EditorCursorTest {
+    @Test fun `magnifier reuses long selection snapshot without any further host reads`() {
+        val ic = editor(3000, text = "a".repeat(5000), normalized = true)
+        var now = 0L
+        val cursor = EditorCursor { now }
+        cursor.observeSelection(ic, 3000, 3000)
+        cursor.moveWithFeedback(ic, -100, selecting = true) {}
+        assertEquals(2900..3000, cursor.selectionRange(ic))
+        clearInvocations(ic)
+        assertEquals(com.kingzcheung.xime.ui.keyboard.CursorMagnifierText("aaaaaaa", 4),
+            cursor.magnifierText(ic, 2900, 2890 until 2903))
+        verifyNoInteractions(ic)
+        assertEquals(null, cursor.magnifierText(mock(), 2900, 2890 until 2903))
+        now = 1501L
+        assertEquals(null, cursor.magnifierText(ic, 2900, 2890 until 2903))
+        verifyNoInteractions(ic)
+    }
+
     @Test fun `preview active end follows reverse selection and never leaks to another connection`() {
         val ic = editor(6, text = "hello world", normalized = true)
         val cursor = EditorCursor()

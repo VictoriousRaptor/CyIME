@@ -10,17 +10,71 @@ class CursorMagnifierTextTest {
         assertEquals(CursorMagnifierText("左右", 0), CursorMagnifierText.from("左右", 0))
         assertEquals(CursorMagnifierText("左右", 1), CursorMagnifierText.from("左右", 1))
         assertEquals(CursorMagnifierText("左右", 2), CursorMagnifierText.from("左右", 2))
-        assertEquals(CursorMagnifierText("", 0), CursorMagnifierText.from("", 0))
+        assertNull(CursorMagnifierText.from("", 0))
         assertNull(CursorMagnifierText.from("左右", -1))
         assertNull(CursorMagnifierText.from("左右", 3))
     }
 
-    @Test fun previewIsBoundedAndKeepsSurrogatePairsAndLineBreakOffsets() {
+    @Test fun previewIsBoundedAndKeepsSurrogatePairs() {
         val text = "😀".repeat(100)
         val preview = CursorMagnifierText.from(text, 101)!!
-        assertEquals(64, preview.caret)
-        assertEquals("😀".repeat(64), preview.text)
-        assertEquals(CursorMagnifierText("甲↵😀 乙", 5), CursorMagnifierText.from("甲\n😀\t乙", 5))
+        assertEquals(8, preview.caret)
+        assertEquals("😀".repeat(8), preview.text)
+        assertEquals(preview, CursorMagnifierText.from(text, 100))
+        assertEquals(CursorMagnifierText("😀".repeat(4), 0), CursorMagnifierText.from(text, 0))
+        assertEquals(CursorMagnifierText("😀".repeat(4), 8), CursorMagnifierText.from(text, text.length))
+        assertEquals(CursorMagnifierText("😀 乙", 3), CursorMagnifierText.from("甲\n😀\t乙", 5))
+    }
+
+    @Test fun onlyTheCurrentLineIsShownAtBothSidesOfEachLineBreak() {
+        for (separator in listOf("\n", "\r", "\r\n", "\u2028", "\u2029")) {
+            val text = "上一行${separator}甲😀乙${separator}下一行"
+            val start = 3 + separator.length
+            assertEquals(CursorMagnifierText("上一行", 3), CursorMagnifierText.from(text, 3))
+            for (caret in listOf(0, 1, 3, 4)) {
+                assertEquals(CursorMagnifierText("甲😀乙", caret), CursorMagnifierText.from(text, start + caret))
+            }
+            assertEquals(CursorMagnifierText("下一行", 0), CursorMagnifierText.from(text, start + 4 + separator.length))
+        }
+        assertEquals(CursorMagnifierText("", 0), CursorMagnifierText.from("前\n\n后", 2))
+        assertEquals(CursorMagnifierText("", 0), CursorMagnifierText.from("前\n", 2))
+    }
+
+    @Test fun longCurrentLineStillHonorsTheTextWindowAndCaretOffset() {
+        val text = "前一行\n" + "😀".repeat(100) + "\n后一行"
+        assertEquals(CursorMagnifierText("😀".repeat(8), 8), CursorMagnifierText.from(text, 105))
+    }
+
+    @Test fun actualLayoutLineBoundsExcludeSoftWrappedNeighbors() {
+        val text = "上一行甲😀乙下一行"
+        for (caret in listOf(3, 4, 6, 7)) {
+            assertEquals(CursorMagnifierText("甲😀乙", caret - 3),
+                CursorMagnifierText.from(text, caret, lineStart = 3, lineEnd = 7))
+        }
+        assertEquals(CursorMagnifierText("上一行", 3), CursorMagnifierText.from(text, 3, 0, 3))
+        assertEquals(CursorMagnifierText("下一行", 0), CursorMagnifierText.from(text, 7, 7, text.length))
+        assertEquals(CursorMagnifierText("", 0), CursorMagnifierText.from(text, 7, 7, 7))
+    }
+
+    @Test fun invalidLayoutLineBoundsDoNotMoveTheCaretToAnotherLine() {
+        val text = "甲😀乙"
+        for ((start, end, caret) in listOf(
+            Triple(-1, 4, 0), Triple(0, 5, 0), Triple(3, 1, 3),
+            Triple(1, 3, 0), Triple(1, 3, 4),
+            Triple(2, 4, 3), Triple(0, 2, 1),
+        )) {
+            assertNull("start=$start end=$end caret=$caret", CursorMagnifierText.from(text, caret, start, end))
+        }
+    }
+
+    @Test fun hugeTextRetainsOnlyFourCodePointsOnEachSide() {
+        val text = "甲😀乙😁".repeat(100_000)
+        val caret = text.length / 2
+        val preview = CursorMagnifierText.from(text, caret)!!
+        assertEquals("甲😀乙😁甲😀乙😁", preview.text)
+        assertEquals(6, preview.caret)
+        assertEquals(4, preview.text.codePointCount(0, preview.caret))
+        assertEquals(4, preview.text.codePointCount(preview.caret, preview.text.length))
     }
 
     @Test fun popupFollowsTextInsteadOfKeyboardAndPrefersAboveTheText() {

@@ -342,6 +342,11 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
 
     internal fun cursorSelectionActiveEnd(connection: InputConnection): Int? = editorCursor.selectionActiveEnd(connection)
 
+    internal fun cursorSelectionRange(connection: InputConnection): IntRange? = editorCursor.selectionRange(connection)
+
+    internal fun cachedCursorMagnifierText(connection: InputConnection, caret: Int, line: IntRange) =
+        editorCursor.magnifierText(connection, caret, line)
+
     internal fun cursorSelectionActiveEnd(editor: android.widget.EditText): Int? =
         internalConnection?.takeIf { it.first === editor }?.second?.let(editorCursor::selectionActiveEnd)
 
