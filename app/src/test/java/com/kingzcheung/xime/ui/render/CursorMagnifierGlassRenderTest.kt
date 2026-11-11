@@ -112,7 +112,7 @@ class CursorMagnifierGlassRenderTest {
         val caret = mutableStateOf<HardwareCursorAnchor?>(HardwareCursorAnchor(200f, 300f, 200f, 324f))
         val dark = mutableStateOf(true)
         val session = mutableStateOf(1L)
-        val width = mutableStateOf(280f)
+        val width = mutableStateOf(200f)
         val visible = mutableStateOf(true)
         val tracking = mutableListOf<Boolean>()
         rule.setContent {
@@ -143,10 +143,10 @@ class CursorMagnifierGlassRenderTest {
         }
         settle()
         assertEquals(.8f, lensAlpha(), .02f)
-        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(280.dp).assertHeightIsEqualTo(56.dp)
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(200.dp).assertHeightIsEqualTo(56.dp)
         rule.runOnIdle {
             caret.value = HardwareCursorAnchor(310f, 400f, 310f, 424f)
-            width.value = 10f
+            width.value = 50f
             glass = glass.copy(blurRadiusDp = 28f, backgroundOpacity = .95f)
             FrostedGlassPreferences.save(rule.activity, glass, isDark = true)
         }
@@ -154,7 +154,7 @@ class CursorMagnifierGlassRenderTest {
         settle()
         assertSame(original, assertBlurMatchesPopup())
         assertEquals(.95f, lensAlpha(), .02f)
-        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(10.dp).assertHeightIsEqualTo(56.dp)
+        rule.onNodeWithTag("cursor-magnifier").assertWidthIsEqualTo(50.dp).assertHeightIsEqualTo(56.dp)
         rule.runOnIdle { MagnifierWindowBlurShadow.setAvailable(false) }
         settle()
         assertTrue(blurViews().isEmpty())

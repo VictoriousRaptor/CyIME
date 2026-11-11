@@ -20,25 +20,26 @@ class KeyboardInputPreferencesTest {
     @Test fun `magnifier defaults on and its switch preserves width and cursor behavior`() {
         val before = KeyboardInputPreferences.read(context)
         assertEquals(true, before.cursorMagnifierEnabled)
-        assertEquals(280f, before.cursorMagnifierWidthDp, 0f)
+        assertEquals(70f, before.cursorMagnifierWidthDp, 0f)
         assertTrue(KeyboardInputPreferences.CURSOR_MAGNIFIER_ENABLED_KEY in KeyboardInputPreferences.watchedKeys)
         assertTrue(KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY in KeyboardInputPreferences.watchedKeys)
         for (enabled in listOf(false, true)) {
-            before.copy(cursorMagnifierEnabled = enabled, cursorMagnifierWidthDp = 360f).save(context)
+            before.copy(cursorMagnifierEnabled = enabled, cursorMagnifierWidthDp = 150f).save(context)
             val restored = KeyboardInputPreferences.read(context)
             assertEquals(enabled, restored.cursorMagnifierEnabled)
-            assertEquals(360f, restored.cursorMagnifierWidthDp, 0f)
-            assertEquals(before, restored.copy(cursorMagnifierEnabled = true, cursorMagnifierWidthDp = 280f))
+            assertEquals(150f, restored.cursorMagnifierWidthDp, 0f)
+            assertEquals(before, restored.copy(cursorMagnifierEnabled = true, cursorMagnifierWidthDp = 70f))
         }
     }
 
     @Test fun `magnifier widths persist every slider step and reject invalid widths`() {
-        for (width in 10..480 step 10) {
+        for (width in 50..200 step 10) {
             KeyboardInputPreferences(cursorMagnifierWidthDp = width.toFloat()).save(context)
             assertEquals(width.toFloat(), KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
         }
-        for ((stored, expected) in listOf(Float.NaN to 280f, Float.POSITIVE_INFINITY to 280f,
-            Float.NEGATIVE_INFINITY to 280f, -1f to 10f, 1000f to 480f, 15f to 20f, 285f to 290f)) {
+        for ((stored, expected) in listOf(Float.NaN to 70f, Float.POSITIVE_INFINITY to 70f,
+            Float.NEGATIVE_INFINITY to 70f, -1f to 50f, 10f to 50f, 280f to 200f,
+            480f to 200f, 1000f to 200f, 55f to 60f, 155f to 160f)) {
             values[KeyboardInputPreferences.CURSOR_MAGNIFIER_WIDTH_KEY] = stored
             assertEquals(expected, KeyboardInputPreferences.read(context).cursorMagnifierWidthDp, 0f)
             KeyboardInputPreferences(cursorMagnifierWidthDp = stored).save(context)
