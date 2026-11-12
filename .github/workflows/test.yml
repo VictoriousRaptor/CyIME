@@ -93,6 +93,10 @@ jobs:
           cat > "$RUNNER_TEMP/ci-test-logging.gradle" <<'EOF'
           allprojects {
               tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+                  // The full Robolectric/native-graphics suite outgrows Gradle's default test heap.
+                  maxHeapSize = '2g'
+                  maxParallelForks = 1
+                  doFirst { logger.lifecycle("CI test JVM ${path}: maxHeapSize=${maxHeapSize}, maxParallelForks=${maxParallelForks}") }
                   testLogging { events 'started', 'failed', 'skipped'; exceptionFormat 'full' }
                   def progress = new File(System.getenv('CYIME_TEST_PROGRESS'), path.replace(':', '_'))
                   beforeTest { descriptor ->
