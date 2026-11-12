@@ -122,9 +122,9 @@ jobs:
                 [[ "$started" =~ ^[0-9]+$ ]] || continue
                 if (( $(date +%s) - started / 1000 > 300 )); then
                   echo "::error::Unit test exceeded five minutes: $(tail -n +2 "$progress")"
-                  jps -l | while read -r pid main_class; do
+                  { timeout 5s jps -l || true; } | while read -r pid main_class; do
                     if [[ "$main_class" == worker.org.gradle.process.internal.worker.GradleWorkerMain ]]; then
-                      jcmd "$pid" Thread.print || true
+                      timeout 15s jcmd "$pid" Thread.print || true
                     fi
                   done
                   kill -TERM "$gradle_pid" 2>/dev/null || true
