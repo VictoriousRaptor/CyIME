@@ -24,6 +24,8 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     name: Unit Tests
+    outputs:
+      test-results-id: ${{ steps.test-results.outputs.artifact-id }}
     
     steps:
       - name: Checkout code
@@ -85,7 +87,12 @@ jobs:
       - name: Run All Gradle Unit Tests
         run: |
           git show -s --format='%H %s' HEAD
-          ./gradlew test --no-daemon --max-workers=2 --console=plain
+          # JVM tests do not load Android JNI libraries. Japanese dictionary tests
+          # supply their own fixtures; keep the generated Chinese/stroke/cangjie assets.
+          ./gradlew test --no-daemon --max-workers=2 --console=plain \
+            -x :app:prepareAzooKeyLibraries \
+            -x :app:prepareOfflineTranslateLibraries \
+            -x :app:prepareJapaneseDictionaries
         
       - name: Generate Test Report
         if: always()
@@ -95,6 +102,7 @@ jobs:
           fail_on_failure: true
           
       - name: Upload Test Results
+        id: test-results
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -183,7 +191,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Test Coverage Report
     needs: [unit-tests]
-    if: always()
+    if: ${{ always() && needs.unit-tests.outputs.test-results-id != '' }}
     
     steps:
       - name: Checkout code
@@ -206,12 +214,16 @@ jobs:
           TEST_FILES=$(find test-results -name "*.xml" | wc -l)
           echo "Total test result files: $TEST_FILES" >> $GITHUB_STEP_SUMMARY
           
-          # Parse test results
-          for xml_file in test-results/**/*.xml; do
-            if [ -f "$xml_file" ]; then
-              TESTS=$(grep 'tests=' "$xml_file" | sed 's/.*tests="\([0-9]*\)".*/\1/')
-              FAILURES=$(grep 'failures=' "$xml_file" | sed 's/.*failures="\([0-9]*\)".*/\1/' || echo 0)
-              ERRORS=$(grep 'errors=' "$xml_file" | sed 's/.*errors="\([0-9]*\)".*/\1/' || echo 0)
-              echo "- $(basename ${xml_file%.xml}): $TESTS tests, $FAILURES failures, $ERRORS errors" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
+          # upload-artifact preserves module/variant directories; recurse through all of them.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              for xml_file in sorted(Path('test-results').rglob('TEST-*.xml')):
+                  suite = ET.parse(xml_file).getroot()
+                  counts = {key: int(suite.get(key, '0')) for key in ('tests', 'failures', 'errors', 'skipped')}
+                  summary.write(f"- {xml_file}: {counts['tests']} tests, {counts['failures']} failures, "
+                                f"{counts['errors']} errors, {counts['skipped']} skipped\n")
+          PY
