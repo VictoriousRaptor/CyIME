@@ -1,12 +1,19 @@
 ﻿name: Full Test Suite
+run-name: Gradle test - ${{ inputs.source_ref || github.ref_name }}
 
 permissions:
   contents: read
   actions: read
+  checks: write
 
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: 'Source branch, tag or commit to test (blank uses workflow ref)'
+        required: false
+        default: ''
+        type: string
       run_instrumented_tests:
         description: 'Run instrumented tests (requires emulator)'
         required: false
@@ -22,6 +29,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.source_ref || github.ref }}
           submodules: recursive
           fetch-depth: 0
         
@@ -74,8 +82,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Run Unit Tests
-        run: ./gradlew :app:testDebugUnitTest :plugin-core:testDebugUnitTest --no-daemon
+      - name: Run All Gradle Unit Tests
+        run: |
+          git show -s --format='%H %s' HEAD
+          ./gradlew test --no-daemon --max-workers=2 --console=plain
         
       - name: Generate Test Report
         if: always()
@@ -90,8 +100,8 @@ jobs:
         with:
           name: unit-test-results
           path: |
-            app/build/test-results/testDebugUnitTest/
-            plugin-core/build/test-results/
+            **/build/test-results/test*UnitTest/
+            **/build/reports/tests/test*UnitTest/
           retention-days: 7
 
   instrumented-tests:
@@ -104,6 +114,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.source_ref || github.ref }}
           submodules: recursive
           fetch-depth: 0
         
