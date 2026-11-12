@@ -88,10 +88,17 @@ class CornerVisibilitySettingsTest {
             assertTrue(layouts.isNotEmpty())
             shot("corner-diagnostic-" + w)
             val layout = layouts.single()
+            // A reused paragraph can retain a wider layout box after the card shrinks.
+            // Check the actual visible text, rather than that cached paragraph width.
+            val text = layout.layoutInput.text.text
+            assertEquals("重音字母必须完整显示", text.length, layout.getLineEnd(0, visibleEnd = true))
             assertFalse("重音字母裁切: width=" + w + " size=" + layout.size +
                 " widthOverflow=" + layout.didOverflowWidth + " heightOverflow=" + layout.didOverflowHeight +
                 " intrinsicWidth=" + layout.multiParagraph.intrinsics.maxIntrinsicWidth +
-                " paragraphHeight=" + layout.multiParagraph.height, layout.hasVisualOverflow)
+                " paragraphWidth=" + layout.multiParagraph.width +
+                " paragraphHeight=" + layout.multiParagraph.height,
+                layout.didOverflowHeight || layout.isLineEllipsized(0) ||
+                    layout.getLineLeft(0) < 0f || layout.getLineRight(0) > layout.size.width)
             shot("corner-settings-$w-" + if (isDark) "dark" else "light")
         }
         rule.runOnIdle { appearance = true }
