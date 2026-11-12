@@ -87,12 +87,51 @@ jobs:
       - name: Run All Gradle Unit Tests
         run: |
           git show -s --format='%H %s' HEAD
+          # Print test starts and record active tests so a stalled JVM leaves a thread dump.
+          export CYIME_TEST_PROGRESS="$RUNNER_TEMP/cyime-test-progress"
+          mkdir -p "$CYIME_TEST_PROGRESS"
+          cat > "$RUNNER_TEMP/ci-test-logging.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+                  testLogging { events 'started', 'failed', 'skipped'; exceptionFormat 'full' }
+                  def progress = new File(System.getenv('CYIME_TEST_PROGRESS'), path.replace(':', '_'))
+                  beforeTest { descriptor ->
+                      progress.text = "${System.currentTimeMillis()}\n${descriptor.className}.${descriptor.name}\n"
+                  }
+                  afterTest { descriptor, result -> progress.delete() }
+              }
+          }
+          EOF
           # JVM tests do not load Android JNI libraries. Japanese dictionary tests
           # supply their own fixtures; keep the generated Chinese/stroke/cangjie assets.
           ./gradlew test --continue --no-daemon --max-workers=2 --console=plain \
+            -I "$RUNNER_TEMP/ci-test-logging.gradle" \
             -x :app:prepareAzooKeyLibraries \
             -x :app:prepareOfflineTranslateLibraries \
-            -x :app:prepareJapaneseDictionaries
+            -x :app:prepareJapaneseDictionaries &
+          gradle_pid=$!
+          (
+            while sleep 30; do
+              for progress in "$CYIME_TEST_PROGRESS"/*; do
+                [[ -f "$progress" ]] || continue
+                started=$(head -n 1 "$progress" 2>/dev/null) || continue
+                [[ "$started" =~ ^[0-9]+$ ]] || continue
+                if (( $(date +%s) - started / 1000 > 300 )); then
+                  echo "::error::Unit test exceeded five minutes: $(tail -n +2 "$progress")"
+                  jps -l | while read -r pid main_class; do
+                    if [[ "$main_class" == worker.org.gradle.process.internal.worker.GradleWorkerMain ]]; then
+                      jcmd "$pid" Thread.print || true
+                    fi
+                  done
+                  kill -TERM "$gradle_pid" 2>/dev/null || true
+                  exit 1
+                fi
+              done
+            done
+          ) &
+          watchdog_pid=$!
+          trap 'kill "$watchdog_pid" 2>/dev/null || true' EXIT
+          wait "$gradle_pid"
         
       - name: Generate Test Report
         if: always()
