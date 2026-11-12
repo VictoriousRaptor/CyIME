@@ -89,7 +89,7 @@ jobs:
           git show -s --format='%H %s' HEAD
           # JVM tests do not load Android JNI libraries. Japanese dictionary tests
           # supply their own fixtures; keep the generated Chinese/stroke/cangjie assets.
-          ./gradlew test --no-daemon --max-workers=2 --console=plain \
+          ./gradlew test --continue --no-daemon --max-workers=2 --console=plain \
             -x :app:prepareAzooKeyLibraries \
             -x :app:prepareOfflineTranslateLibraries \
             -x :app:prepareJapaneseDictionaries
