@@ -41,6 +41,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -337,8 +339,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("开车连续语音", speech, SettingsRoutes.SpeechToText, "开车 驾驶 免手 连续 自动 接着听 悬浮条 浮窗 发送 语音", section = "语音输入"),
         SettingsSearchEntry("隔空输入", speech, SettingsRoutes.SpeechToText, "隔空输入 电脑 Windows 发到电脑 手机说话 电脑打字 远程 光标 微信", section = "语音输入"),
         SettingsSearchEntry("保存语音调优录音", speech, SettingsRoutes.SpeechToText, "录音 保存 调优 回放 分析", section = "本地识别"),
-        SettingsSearchEntry("X-ASR", speech, SettingsRoutes.SpeechToText, "X-ASR XASR 中文 定稿 整句 准确 错字 模型 下载 语音", section = "中文定稿"),
-        SettingsSearchEntry("整句定稿", speech, SettingsRoutes.SpeechToText, "整句 定稿 校正 断句 分段 准确 SenseVoice X-ASR 说完", section = "二次校正"),
+        SettingsSearchEntry("X-ASR", speech, SettingsRoutes.SpeechToText, "X-ASR XASR 中文 定稿 整句 准确 错字 模型 下载 语音", anchor = "整句定稿", section = "中文语音"),
+        SettingsSearchEntry("整句定稿", speech, SettingsRoutes.SpeechToText, "整句 定稿 校正 二次校正 不校正 说完后 断句 分段 准确 SenseVoice X-ASR 说完", section = "中文语音"),
+        SettingsSearchEntry("语音模型", speech, SettingsRoutes.SpeechToText, "语音模型 说话时 主模型 边说边出字 Paraformer SenseVoice Zipformer 日语 英文 二次校正 SenseVoice 校正 换模型", anchor = null, section = "中文语音"),
         SettingsSearchEntry("自动加标点", speech, SettingsRoutes.SpeechToText, "标点 逗号 句号 问号 感叹号 顿号 分号 自动标点 去掉标点 不加标点 部分标点 只要逗号 不要句号 末尾标点 句末标点 最后不带标点 空格 在线接口 语音", section = "语音标点"),
         SettingsSearchEntry("数字转阿拉伯数字", speech, SettingsRoutes.SpeechToText, "数字 阿拉伯数字 中文数字 大写数字 小写数字 ITN 金额 年份 电话 百分比 小数 时间 语音", section = "数字"),
         SettingsSearchEntry("语音纠错", speech, SettingsRoutes.SpeechToText, "纠错 错词 正词 替换 同音字 识别错 认错 改词 映射 纠错词库 语音", section = "纠错"),
@@ -555,8 +558,34 @@ internal fun searchSettings(query: String, index: List<SettingsSearchEntry> = Se
     }.sortedByDescending { it.second }.map { it.first }
 }
 
+/**
+ * 输入框里没上屏的部分（composing）。输入法「编码显示在输入框」时，没选字的拼音（如 wu'hen）就在这里，
+ * 拿它去搜会在选字前先闪一句「没有找到「wu'hen」相关的设置」。
+ */
+internal fun committedSearchText(text: String, composition: TextRange?): String {
+    if (composition == null || composition.collapsed) return text
+    val start = composition.min.coerceIn(0, text.length)
+    val end = composition.max.coerceIn(start, text.length)
+    return text.removeRange(start, end)
+}
+
+/**
+ * 实际拿去搜的词：整段文字能搜到就用整段（别的输入法边拼英文单词边搜照旧），
+ * 搜不到而且有没上屏的部分，就只用已上屏的字，不为拼音报「没有找到」。
+ */
+internal fun searchTextFor(text: String, composition: TextRange?): String {
+    val committed = committedSearchText(text, composition)
+    if (committed == text || text.isBlank() || searchSettings(text).isNotEmpty()) return text
+    return committed
+}
+
 @Composable
 internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    var field by remember { mutableStateOf(TextFieldValue(query, TextRange(query.length))) }
+    // 外面改了搜索词（点清除、返回时恢复）才同步回输入框；拼音还在拼时 query 不变，不打断输入法。
+    LaunchedEffect(query) {
+        if (searchTextFor(field.text, field.composition) != query) field = TextFieldValue(query, TextRange(query.length))
+    }
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
@@ -566,14 +595,18 @@ internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit,
         Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
         Box(Modifier.weight(1f).padding(vertical = 14.dp)) {
-            BasicTextField(value = query, onValueChange = onQueryChange, singleLine = true,
+            BasicTextField(value = field, onValueChange = {
+                    field = it
+                    val next = searchTextFor(it.text, it.composition)
+                    if (next != query) onQueryChange(next)
+                }, singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().testTag("settings-search"))
-            if (query.isEmpty()) Text("搜索设置，如“拂动”“长按”“字号”", style = MaterialTheme.typography.bodyLarge,
+            if (field.text.isEmpty()) Text("搜索设置，如“拂动”“长按”“字号”", style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
-        if (query.isNotEmpty()) IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Close, "清除搜索") }
+        if (field.text.isNotEmpty()) IconButton(onClick = { field = TextFieldValue(""); onQueryChange("") }) { Icon(Icons.Default.Close, "清除搜索") }
         else Spacer(Modifier.size(48.dp))
     }
 }

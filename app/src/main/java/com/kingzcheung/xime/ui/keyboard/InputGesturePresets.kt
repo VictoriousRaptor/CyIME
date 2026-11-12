@@ -107,6 +107,9 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
  * 两项都已开着（加锁以前开的）时都不锁，关掉哪个都行；设置页只在被锁的一项关着时置灰它。
  */
 object InputGestureLocks {
+    /** 九键滑行锁角标时写的名字；设置页据此只说九键的事（26 键字母键不受它影响，照自己的滑行开关）。 */
+    const val T9_GLIDE_LOCK = "九键滑行"
+
     fun of(settings: KeyboardInputPreferences): List<InputGestureLock> = buildList {
         if (settings.t9GlideTyping && settings.cursorGesture != CursorGestureMode.KEYBOARD) {
             add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, true, "九键滑行"))
@@ -114,9 +117,12 @@ object InputGestureLocks {
             add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, false, "按键角标的符号和数字：长按输入"))
         }
         // 26 键滑行开着时字母键往任何方向滑都是滑行，角标的滑动输入用不了：锁在「长按输入」，写明是哪个滑行锁的（11-08）。
+        // 九键滑行同样占了 2～9 键的滑动（上滑出数字也滑不出来）：一样锁成长按（用户 11-11「只有九键不会跳转」）。
         when {
             settings.glideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "英文滑行"))
             settings.chineseGlideTyping -> add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, "中文滑行"))
+            settings.t9GlideTyping && settings.cursorGesture != CursorGestureMode.KEYBOARD ->
+                add(InputGestureLock(InputGestureLock.Option.SYMBOL_INPUT_MODE, SymbolInputMode.SWIPE_UP, T9_GLIDE_LOCK))
         }
         if (settings.glideTyping) {
             add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "英文滑行"))

@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.speech
 
+import com.kingzcheung.xime.speech.SpeechModelSelection.Finish
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -71,6 +72,40 @@ class SpeechModelSelectionTest {
         assertFalse(SpeechModelSelection.pipeline(c.TWO_PASS, chinese = true, wholeSentenceOn = false, xasrReady = true).wholeSentence)
         assertEquals(c.PARAFORMER, SpeechModelSelection.pipeline(c.TWO_PASS, true, true, false).preview)
         assertNull(SpeechModelSelection.pipeline(c.SENSEVOICE, true, true, false).preview)
+    }
+
+    /** 「说完后」单选的三项各对应一种原有存储组合，选了再读回来是同一项，且与 :asr 实际定稿一致。 */
+    @Test fun finishChoiceRoundTripsThroughStoredValues() {
+        val c = SpeechModelCatalog
+        fun roundTrip(mode: String, chinese: Boolean, whole: Boolean, pick: SpeechModelSelection.Finish): SpeechModelSelection.Finish {
+            val (stored, wholeAfter) = SpeechModelSelection.applyFinish(mode, chinese, pick)
+            return SpeechModelSelection.finish(stored, chinese, wholeAfter ?: whole)
+        }
+        for (mode in listOf(c.PARAFORMER, c.TWO_PASS, c.ZIPFORMER_TWO_PASS, c.SENSEVOICE)) for (whole in listOf(true, false)) {
+            SpeechModelSelection.finishOptions(mode, chinese = true).forEach { pick ->
+                assertEquals("$mode whole=$whole", pick, roundTrip(mode, true, whole, pick))
+            }
+        }
+        // 用户当前的组合：Paraformer + SenseVoice + 整句开 → 整句定稿 (X-ASR 已下载时由它定稿)。
+        assertEquals(Finish.WHOLE, SpeechModelSelection.finish(c.TWO_PASS, chinese = true, wholeSentenceOn = true))
+        assertEquals(Finish.SENSEVOICE, SpeechModelSelection.finish(c.TWO_PASS, chinese = true, wholeSentenceOn = false))
+        assertEquals(Finish.NONE, SpeechModelSelection.finish(c.PARAFORMER, chinese = true, wholeSentenceOn = true))
+        // 英文：整句开关不影响；只用 SenseVoice 或日语时没得选。
+        assertEquals(Finish.SENSEVOICE, SpeechModelSelection.finish(c.TWO_PASS, chinese = false, wholeSentenceOn = true))
+        assertEquals(listOf(Finish.NONE, Finish.SENSEVOICE), SpeechModelSelection.finishOptions(c.TWO_PASS, chinese = false))
+        assertEquals(listOf(Finish.NONE), SpeechModelSelection.finishOptions(c.SENSEVOICE, chinese = false))
+        assertEquals(listOf(Finish.NONE), SpeechModelSelection.finishOptions(c.ZIPFORMER_JA, chinese = false))
+        assertEquals(listOf(Finish.NONE, Finish.WHOLE), SpeechModelSelection.finishOptions(c.SENSEVOICE, chinese = true))
+        // 英文的选择从不改整句开关（它只管中文）。
+        assertNull(SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = false, finish = Finish.NONE).second)
+        assertNull(SpeechModelSelection.applyFinish(c.PARAFORMER, chinese = false, finish = Finish.SENSEVOICE).second)
+        // 流式中文选「不校正」不动整句开关（没有校正时它本来不生效）。
+        assertNull(SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = true, finish = Finish.NONE).second)
+        // 各项与 :asr 的定稿模型一致。
+        val (whole, on) = SpeechModelSelection.applyFinish(c.PARAFORMER, chinese = true, finish = Finish.WHOLE)
+        assertEquals(c.XASR, SpeechModelSelection.pipeline(whole, true, on!!, xasrReady = true).finalizer)
+        val (sense, off) = SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = true, finish = Finish.SENSEVOICE)
+        assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(sense, true, off!!, xasrReady = true).finalizer)
     }
 
     @Test fun chineseZipformerIsOfferedOnlyToItsCurrentUsers() {

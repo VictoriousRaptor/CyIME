@@ -7,7 +7,7 @@ from pathlib import Path
 import zipfile
 
 
-def resource_files(repo):
+def resource_files(repo, t9_ngram=None):
     repo = Path(repo)
     base = repo / "app/src/main/assets"
     generated = repo / "app/build/generated"
@@ -48,6 +48,12 @@ def resource_files(repo):
                                                          "pinyin_colemak.schema.yaml", "pinyin_typewise.schema.yaml"))):
                 continue
             targets[relative] = ("assets/" + name + "/" + relative, path)
+    if t9_ngram is not None:
+        # Model A/B (2026-11-11, private p4 vs public v9): the given word model replaces the built one.
+        t9_ngram = Path(t9_ngram)
+        if not t9_ngram.is_file():
+            raise ValueError("Word model not found: " + str(t9_ngram))
+        targets["t9_ngram.lm"] = ("assets/rime_chinese/t9_ngram.lm", t9_ngram)
     for destination, (entry, path) in targets.items():
         files[entry] = (path, destination)
     return files
@@ -61,7 +67,7 @@ def file_digest(path):
     return value.hexdigest()
 
 
-def snapshot_resources(repo, output):
+def snapshot_resources(repo, output, t9_ngram=None):
     """Write a deterministic ZIP from exact bytes read, recording every source hash."""
     output = Path(output)
     sidecar = output.with_suffix(".json")
@@ -70,7 +76,7 @@ def snapshot_resources(repo, output):
     for path in (output, sidecar):
         if path.exists():
             raise ValueError("Resource snapshot already exists: " + str(path))
-    files = resource_files(repo)
+    files = resource_files(repo, t9_ngram)
     records, manifest, captured = [], [], []
     with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
         for entry, (path, destination) in sorted(files.items()):
@@ -86,7 +92,7 @@ def snapshot_resources(repo, output):
             if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns) or count != before.st_size:
                 raise ValueError("Resource changed during snapshot: " + str(path))
             captured.append((path, after.st_size, after.st_mtime_ns))
-            item = dict(source=str(path.relative_to(repo)), entry=entry, destination=destination,
+            item = dict(source=str(path.relative_to(repo)) if path.is_relative_to(repo) else str(path), entry=entry, destination=destination,
                         bytes=count, sha256=value.hexdigest())
             records.append(item)
             if destination is not None:

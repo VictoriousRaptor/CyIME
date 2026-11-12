@@ -2,6 +2,7 @@
 #include "candidate_pins.h"
 #include "basic_particle_choices.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -68,6 +69,39 @@ bool SameLastWord(const an<Phrase>& phrase, const an<Phrase>& best) {
     return false;
   return a->components().back().text == b->components().back().text &&
          a->word_lengths().back() == b->word_lengths().back();
+}
+
+// A word reached through a spelling correction (neighbour key, swapped letters…): some syllable reads "typed=correct".
+bool Corrected(const an<Phrase>& phrase) {
+  return phrase && phrase->correction_marks().find('=') != std::string::npos;
+}
+
+// Every corrected syllable is the typed letters with one key replaced, same length (wp=wo, ni for nu): a slip of one
+// key on a whole syllable. Not a reading that grows the letters into a longer syllable (ok read as kong).
+bool OneKeySubstitution(const std::string& marks) {
+  std::istringstream syllables(marks);
+  bool corrected = false;
+  for (std::string syllable; syllables >> syllable;) {
+    const auto eq = syllable.find('=');
+    if (eq == std::string::npos) continue;
+    const auto typed = syllable.substr(0, eq), correct = syllable.substr(eq + 1);
+    if (typed.size() != correct.size()) return false;
+    size_t changed = 0;
+    for (size_t i = 0; i < typed.size(); ++i) changed += typed[i] != correct[i];
+    if (changed != 1) return false;
+    corrected = true;
+  }
+  return corrected;
+}
+
+// A whole-input candidate that is the typed letters in other capitals (OK when ok was typed).
+bool SameWordOtherCase(const an<Candidate>& c, const std::string& input, size_t end) {
+  const auto& text = c->text();
+  if (c->start() != 0 || c->end() != end || text.size() != input.size() || text == input) return false;
+  for (size_t i = 0; i < text.size(); ++i)
+    if (std::tolower(static_cast<unsigned char>(text[i])) != std::tolower(static_cast<unsigned char>(input[i])))
+      return false;
+  return true;
 }
 
 double SpellingCoverage(const an<Phrase>& phrase) {
@@ -151,8 +185,9 @@ class EditLookup : public Engine {
 class PolicyTranslation : public Translation {
  public:
   PolicyTranslation(an<Translation> source, const std::string& input, bool numeric, Translator* omission,
-                    EditLookup* edits, an<Candidate> edit, BasicParticleChoices* particles, size_t particle_start)
-      : source_(source), end_(input.size()) {
+                    EditLookup* edits, an<Candidate> edit, BasicParticleChoices* particles, size_t particle_start,
+                    bool drop_corrections = false)
+      : source_(source), end_(input.size()), drop_corrections_(drop_corrections) {
     // Bound the work independently of dictionary size. This is native candidate
     // identity-preserving ordering, not a separate UI list with stale indices.
     for (size_t i = 0; i < 64 && !source_->exhausted(); ++i) {
@@ -247,6 +282,12 @@ class PolicyTranslation : public Translation {
     // A whole English word should not lose to guessed Chinese abbreviations.
     // Fully spelled Chinese (e.g. you -> 有) and explicit non-dictionary entries
     // retain their native priority. No word list or fixed candidate is injected.
+    // Nor does it lose to a word reached only through a spelling correction (2026-11-11: with 邻键纠错 on, a
+    // corrected 空 "kong" in second place kept ok below it).
+    // The same word written another way (OK for ok, US for us: the English dictionary has both, with the same
+    // code) does not stop it either: before, ok stopped right behind OK, which came after the guessed 偶看 欧卡
+    // 藕块 欧坑, so ok was 6th with the switch off too (2026-11-11, tablet probe). The variant keeps its place
+    // after the Chinese words.
     if (!numeric && !input.empty() && input.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos) {
       const auto exact = std::find_if(head_.begin(), head_.end(), [&](const auto& c) {
         return c->start() == 0 && c->end() == end_ && c->text() == input && c->type() == "table";
@@ -256,7 +297,9 @@ class PolicyTranslation : public Translation {
         while (insertion != head_.begin()) {
           auto previous = insertion - 1;
           const auto phrase = As<Phrase>(Candidate::GetGenuineCandidate(*previous));
-          if (!phrase || HanCharacters(phrase->text()).empty() || SpellingCoverage(phrase) >= 1.0) break;
+          if (SameWordOtherCase(*previous, input, end_)) { insertion = previous; continue; }
+          if (!phrase || HanCharacters(phrase->text()).empty() ||
+              (SpellingCoverage(phrase) >= 1.0 && !Corrected(phrase))) break;
           insertion = previous;
         }
         std::rotate(insertion, exact, exact + 1);
@@ -279,6 +322,9 @@ class PolicyTranslation : public Translation {
     // on nine keys, B站 118th on 14 keys and 45th on 26 keys). A first version put them 6th outright, which moved
     // a fully spelled 傍 from 20th to 21st (nine-key replay gate, 2026-11-08). A learned one is left where its
     // learned quality puts it (first after one pick); 26 keys' English words (melt_eng) keep their rule above.
+    // 2026-11-11「都按权重算」: mixed words (B站, 哆啦A梦, C罗) are no longer placed here. Typed in full they sat 6th,
+    // off the candidate bar; they now carry public-corpus weights on the Chinese scale (data/cyime_mixed_word_counts.tsv)
+    // and stand where Rime's quality puts them. Only pure English words keep this rule.
     {
       constexpr size_t kSlot = 5;
       auto bundled = [&](const an<Candidate>& c, bool* pull_only) {
@@ -286,12 +332,10 @@ class PolicyTranslation : public Translation {
         if (!p || !p->language() || c->end() != end_ || p->entry().commit_count > 0 ||
             (p->type() != "table" && p->type() != "user_table")) return false;
         const auto& name = p->language()->name();
-        *pull_only = name == "cyime_cn_en" || name == "en_dicts/cn_en";
-        if (name != "cyime_t9_english" && name != "cyime_k14_english" && !*pull_only) return false;
-        // Four keys or more, or a mixed word: shorter English words (go, the) stay after the Chinese ones.
-        const auto& text = p->text();
-        return c->end() - c->start() >= 4 ||
-               std::any_of(text.begin(), text.end(), [](char ch) { return static_cast<unsigned char>(ch) >= 0x80; });
+        *pull_only = false;
+        if (name != "cyime_t9_english" && name != "cyime_k14_english") return false;
+        // Four keys or more: shorter English words (go, the) stay after the Chinese ones. Mixed words: by weight.
+        return c->end() - c->start() >= 4 && HanCharacters(p->text()).empty();
       };
       // A Chinese candidate reading every key of the input as a full letter of its pinyin (one letter per key on
       // 9/14/26 keys), not an abbreviation: what a typed word is, at the end of a syllable.
@@ -334,19 +378,8 @@ class PolicyTranslation : public Translation {
         if (!inserted) result.insert(result.end(), moved.begin(), moved.end());
         head_.swap(result);
       }
-      // 2026-11-09「打 bzhan 选了 B站 记不住」: 26 keys' mixed words are learned in cyime_cn_en's user dictionary
-      // (upstream's cn_en table was read-only). One the user picked comes first when its whole code is typed again,
-      // ahead of the Chinese readings through initials (b + zhan: 不占), unless the first candidate is itself a
-      // learned word. Completions (bzha) and the nine-key and 14-key tables keep the rule above.
-      if (!numeric) {
-        const auto learned_mixed = std::find_if(head_.begin(), head_.end(), [&](const auto& c) {
-          const auto p = As<Phrase>(Candidate::GetGenuineCandidate(c));
-          return p && p->language() && p->language()->name() == "cyime_cn_en" && c->start() == 0 &&
-                 c->end() == end_ && p->type() != "completion" && p->entry().commit_count > 0;
-        });
-        if (learned_mixed != head_.end() && learned_mixed != head_.begin() && !Learned(head_.front()))
-          std::rotate(head_.begin(), learned_mixed, learned_mixed + 1);
-      }
+      // (2026-11-09's「a learned mixed word comes first」was removed on 2026-11-11: a pick raises its weight in the
+      // user dictionary like any learned word, and the weight decides.)
     }
     // A corrected whole word goes first when it is far more common than the typed reading's word (2026-11-05,
     // replacing the 10-21 rule that kept the typed reading first: fandu gave 贩毒 before 单独). The corrected word's
@@ -495,6 +528,15 @@ class PolicyTranslation : public Translation {
   }
   an<Candidate> Prepare(an<Candidate> cand) {
     if (!cand || hidden.count(cand->text())) return nullptr;
+    // Two letters or fewer in full pinyin: only a one-key slip on a whole syllable is corrected (wp → 我, ni typed
+    // nu). A correction that reads the letters as a longer syllable invents one (2026-11-11: ok gave 空 kong second,
+    // and an emoji for it third, only with 邻键纠错 on). Longer input keeps every correction.
+    if (drop_corrections_) {
+      if (const auto p = As<Phrase>(Candidate::GetGenuineCandidate(cand))) {
+        const auto marks = p->correction_marks();
+        if (marks.find('=') != std::string::npos && !OneKeySubstitution(marks)) return nullptr;
+      }
+    }
     // Keep the engine's complete predictive word and identity. Trimming to the
     // matched prefix discarded precisely the completion the user could select.
     if (hidden.count(cand->text()) || !seen_.insert(cand->text()).second) return nullptr;
@@ -510,6 +552,7 @@ class PolicyTranslation : public Translation {
   }
   an<Translation> source_;
   size_t end_, position_ = 0;
+  bool drop_corrections_ = false;
   CandidateList head_;
   std::set<std::string> seen_;
   an<Candidate> current_;
@@ -525,6 +568,9 @@ class CandidatePolicy : public Filter {
   explicit CandidatePolicy(const Ticket& ticket) : Filter(ticket), particles_(ticket) {
     ticket.schema->config()->GetBool("cyime_particle_shortcuts/selected_tail", &selected_tail_);
     engine_->schema()->config()->GetString("cyime_omission_schema", &omission_id_);
+    // Swapped-letter correction is on only in full pinyin (26 keys); double pinyin, 14 keys and nine keys
+    // keep their short-input corrections (a two-key slip in double pinyin is a whole syllable).
+    engine_->schema()->config()->GetBool("translator/cyime_transposition_correction", &full_pinyin_);
     if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_))
       spelling_policies[engine_->context()] = this;
   }
@@ -552,9 +598,11 @@ class CandidatePolicy : public Filter {
     const bool whole = at_end && comp.size() == 1 && comp.back().start == 0;
     const bool tail = selected_tail_ && at_end && comp.size() >= 2 && comp.back().start + 1 == input.size() &&
         comp[comp.size() - 2].status >= Segment::kSelected && comp[comp.size() - 2].end == comp.back().start;
+    const bool short_letters = full_pinyin_ && !input.empty() && input.size() <= 2 &&
+        input.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == std::string::npos;
     return New<PolicyTranslation>(source, input, numeric, idle ? Omission() : nullptr, edits,
                                   idle && numeric ? pending_digit_edit : nullptr, whole || tail ? &particles_ : nullptr,
-                                  tail ? comp.back().start : 0);
+                                  tail ? comp.back().start : 0, short_letters);
   }
  private:
   Translator* Omission() {
@@ -575,6 +623,7 @@ class CandidatePolicy : public Filter {
   string edit_id_, omission_id_;
   BasicParticleChoices particles_;
   bool selected_tail_ = false;
+  bool full_pinyin_ = false;
 };
 
 bool StoreHidden(const std::set<std::string>& next) {

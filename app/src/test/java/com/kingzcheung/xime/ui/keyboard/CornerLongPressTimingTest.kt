@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -182,15 +183,68 @@ class CornerLongPressTimingTest {
         checkLetters(everyNth = 4, keyBubble = true)
     }
 
-    @Test fun lettersBehaveTheSameWithGlideTypingOn() {
-        // 滑行锁住字母键的滑动、角标锁成长按输入（99a2c07 和设置锁），长按这条路必须照常；
-        // 存的仍是「滑动输入」的老用户也一样按设定时长。
+    /** 键面左下（比中线低）画的下角标。 */
+    private fun bottomHint(tag: String, key: String): String? {
+        val center = rule.onNodeWithTag(tag, true).fetchSemanticsNode().boundsInRoot.center.y
+        return rule.onAllNodes(hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true).fetchSemanticsNodes()
+            .mapNotNull { node ->
+                node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                    ?.takeIf { it.isNotEmpty() && !it.equals(key, ignoreCase = true) }?.let { it to node.boundsInRoot.center.y }
+            }.firstOrNull { (_, y) -> y > center }?.first
+    }
+
+    /** 滑行接管的键：单个字母，在开着滑行的英文或中文全拼、双拼 26 键上（同 KeyboardLayout 的 glideEnabled）。 */
+    private fun glideOwns(board: Board, key: String) = key.length == 1 && (board.english ||
+        com.kingzcheung.xime.glide.chineseGlideSupported(com.kingzcheung.xime.settings.InputProfiles.current(board.schema, false), board.schema))
+
+    /**
+     * 滑行时长按：到点弹出上下两个角标，不出字；不动松手出 [top]，[slide] 往右挪大半个键松手出 [bottom]。
+     */
+    private fun pickAndCheck(id: String, tag: String, top: String, bottom: String, slide: Boolean) {
+        val before = typed.size
+        val key = rule.onNodeWithTag(tag, true)
+        rule.mainClock.autoAdvance = false
+        key.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy((delaySeconds * 1000).toLong() + 100)
+        assertEquals("$id 到点只弹出两格，不出字", before, typed.size)
+        popup().assertExists("$id 长按到点应弹出上下两个角标")
+        if (slide) key.performTouchInput { moveTo(center + Offset(width * 0.75f, 0f)) }
+        rule.mainClock.advanceTimeBy(50)
+        key.performTouchInput { up() }
+        rule.mainClock.advanceTimeBy(100)
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals("$id ${if (slide) "往右挪" else "不动"}松手", listOf(if (slide) bottom else top), typed.drop(before))
+        popup().assertDoesNotExist()
+    }
+
+    @Test fun glideLettersOfferBothCornersOnLongPress() {
+        // 用户 11-11「关闭数字行，滑行输入打不出 !@#$%^&*()」：滑行锁住字母键的滑动后，长按弹出上下两个角标，
+        // 不动松手出上角标、往右挪一格松手出下角标；存的仍是「滑动输入」的老用户也一样。
+        // 滑行管不到的键（14/17/18 键的字母对等）存「长按输入」时照旧到点立刻输入上角标。
         for (stored in listOf(SymbolInputMode.LONG_PRESS, SymbolInputMode.SWIPE_UP)) {
             preferences = KeyboardInputPreferences(symbolInputMode = stored, symbolLongPressSeconds = delaySeconds,
                 glideTyping = true, chineseGlideTyping = true)
             if (stored == SymbolInputMode.LONG_PRESS) showLetters(glide = true) else rule.waitForIdle()
-            // 存「滑动输入」时只有滑行管得到的 26 键字母（全拼、双拼、英文）被锁成长按；14/17/18 键的字母对仍是滑动。
-            checkLetters(everyNth = 3, boards = if (stored == SymbolInputMode.LONG_PRESS) layouts else layouts.take(3))
+            var menus = 0
+            for (board in layouts) {
+                use(board)
+                letterKeys(board.english).filterIndexed { index, _ -> index % 3 == 0 }.forEach { key ->
+                    val tag = "qwerty-key:$key"
+                    val top = topHint(tag, key)
+                    assertTrue("$board $key 缺上角标", top != null)
+                    if (glideOwns(board, key)) {
+                        val bottom = bottomHint(tag, key)
+                        assertTrue("$board $key 滑行时下角标照样画", bottom != null)
+                        pickAndCheck("$board $key", tag, top!!, bottom!!, slide = false)
+                        pickAndCheck("$board $key", tag, top, bottom, slide = true)
+                        menus++
+                    } else if (stored == SymbolInputMode.LONG_PRESS) {
+                        holdAndCheck("$board $key", rule.onNodeWithTag(tag, true), top) { typed.toList() }
+                    }
+                }
+            }
+            assertTrue("至少查到全拼、双拼、英文 26 键", menus >= 3)
         }
     }
 
@@ -277,6 +331,20 @@ class CornerLongPressTimingTest {
             committed.clear()
             checkNine(KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS,
                 symbolLongPressSeconds = delaySeconds, t9FlickLetters = flick, t9GlideTyping = true))
+        }
+    }
+
+    /**
+     * 用户 11-11「开着滑行长按失效…只有九键不会跳转」：存的是「滑动输入」时开九键滑行，2～9 键的滑动给了滑行，
+     * 以前上滑出数字滑不出来、长按也不出；现在和 26 键滑行一样按长按输入，到点出数字。
+     */
+    @Test fun nineKeyGlideTurnsSavedSwipeIntoLongPressDigits() {
+        val prefs = KeyboardInputPreferences(symbolInputMode = SymbolInputMode.SWIPE_UP,
+            symbolLongPressSeconds = delaySeconds, t9FlickLetters = false, t9GlideTyping = true)
+        showNine(prefs)
+        for ((digit, letters) in listOf("2" to "ABC", "5" to "JKL", "7" to "PQRS", "9" to "WXYZ")) {
+            val key = rule.onAllNodesWithText(letters, ignoreCase = true, useUnmergedTree = true).onFirst()
+            holdAndCheck("九键滑行 $digit", key, digit, prefs.showPressBubble) { committed.toList() }
         }
     }
 }

@@ -78,6 +78,24 @@ class GlideTracker(
 }
 
 /**
+ * 滑行接管了、却认不出词，而且只划了很短一段（不到 [SHORT_GLIDE_TAP_KEYS] 个键）：多半是快打时手指一抖被当成了滑行，
+ * 按点了起点那个键算，返回那个键；划得长或起点不在键上返回空，照旧什么都不出（用户 11-11「打两个字第二个字被吞」）。
+ * 键的大小取各键短边的中位数（26 键是键宽，九键是键高）。
+ */
+fun shortGlideTapKey(keys: Map<Char, LetterKeyRect>, xs: FloatArray, ys: FloatArray): Char? {
+    if (xs.isEmpty() || xs.size != ys.size) return null
+    val unit = keys.values.map { minOf(it.width, it.height) }.sorted().let { it.getOrNull(it.size / 2) } ?: return null
+    if (unit <= 0f) return null
+    var length = 0f
+    for (i in 1 until xs.size) length += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+    if (length >= SHORT_GLIDE_TAP_KEYS * unit) return null
+    return keys.entries.firstOrNull { (_, r) -> xs[0] >= r.x && xs[0] < r.x + r.width && ys[0] >= r.y && ys[0] < r.y + r.height }?.key
+}
+
+/** 认不出词时按点按算的滑行最长多少个键。 */
+const val SHORT_GLIDE_TAP_KEYS = 1.5f
+
+/**
  * 滑行整词上屏的文字：前面紧挨字母、数字或句末标点时补一个空格，
  * 开头、空白后、左括号或左引号后不补。
  */

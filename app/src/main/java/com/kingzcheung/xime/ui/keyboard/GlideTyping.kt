@@ -13,6 +13,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.glide.GlideTracker
@@ -83,54 +85,82 @@ internal fun Modifier.glideTyping(
     val holdMs by rememberUpdatedState(LocalKeyboardInputPreferences.current.glideHoldMs)
     if (!enabled || letterGeometry == null) return this
     return pointerInput(letterGeometry, trail) { awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val keys = letterGeometry.snapshot()
-        if (keys.size < 26) return@awaitEachGesture
-        val origin = currentOrigin()
-        val tracker = GlideTracker(keys, viewConfiguration.touchSlop,
-            down.position.x + origin.x, down.position.y + origin.y, down.uptimeMillis, holdMs)
-        if (tracker.abandoned) return@awaitEachGesture
-        val local = arrayListOf(down.position)
-        var traced = false
-        try {
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                // 另一根手指按下（快速连打）时放弃，不影响任何按键。
-                if (!tracker.claimed && event.changes.any { it.id != down.id && it.pressed }) break
-                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!tracker.claimed && change.isConsumed) break
-                // 抬手也是最后一个轨迹点：短滑行可能在这里才到达相邻字母。
-                // 历史采样必须用各自的时刻，不能把整批都算成最后一刻。
-                change.historical.forEach { sample ->
-                    local += sample.position
-                    tracker.move(sample.position.x + origin.x, sample.position.y + origin.y, sample.uptimeMillis, change.uptimeMillis)
-                }
-                local += change.position
-                tracker.move(change.position.x + origin.x, change.position.y + origin.y, change.uptimeMillis)
-                if (tracker.abandoned) break
-                if (!change.pressed) {
-                    if (tracker.claimed) {
-                        change.consume()
-                        traced = true
-                        val xs = tracker.xs(); val ys = tracker.ys()
-                        // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
-                        com.kingzcheung.xime.glide.GlideSampleRecorder.record("qwerty", keys, xs, ys, tracker.ts())
-                        currentOnTrace(xs, ys)
+        var next: PointerInputChange? = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // 先点一个字母紧接着就划（用户 11-11「先打一个字再划…划了就没了」）：点字母的手指还没抬，划的手指已经按下。
+        // 以前看到第二根手指就放弃，要等所有手指抬起才看下一笔，这一划什么都不出；现在改跟后按下的那根，
+        // 前一根照常由按键按点按算。已经接管的滑行中途再按下手指仍不理会。
+        while (next != null) {
+            val down: PointerInputChange = next ?: break
+            next = null
+            val keys = letterGeometry.snapshot()
+            if (keys.size < 26) break
+            val origin = currentOrigin()
+            val tracker = GlideTracker(keys, viewConfiguration.touchSlop,
+                down.position.x + origin.x, down.position.y + origin.y, down.uptimeMillis, holdMs)
+            val local = arrayListOf(down.position)
+            var traced = false
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (!tracker.claimed) {
+                        val another = event.changes.firstOrNull { it.id != down.id && it.changedToDownIgnoreConsumed() }
+                        if (another != null) { next = another; break }
                     }
-                    break
+                    // 这根手指不是滑行（按在功能键上、按住后才动、被按键自己的手势拿走）或已抬起：
+                    // 别的手指还按着时等下一根新按下的手指，都抬起了这次触摸结束。
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                    if (change == null || tracker.abandoned || (!tracker.claimed && change.isConsumed)) {
+                        next = awaitNextDown(event)
+                        break
+                    }
+                    // 抬手也是最后一个轨迹点：短滑行可能在这里才到达相邻字母。
+                    // 历史采样必须用各自的时刻，不能把整批都算成最后一刻。
+                    change.historical.forEach { sample ->
+                        local += sample.position
+                        tracker.move(sample.position.x + origin.x, sample.position.y + origin.y, sample.uptimeMillis, change.uptimeMillis)
+                    }
+                    local += change.position
+                    tracker.move(change.position.x + origin.x, change.position.y + origin.y, change.uptimeMillis)
+                    if (tracker.abandoned) { next = awaitNextDown(event); break }
+                    if (!change.pressed) {
+                        if (tracker.claimed) {
+                            change.consume()
+                            traced = true
+                            val xs = tracker.xs(); val ys = tracker.ys()
+                            // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
+                            com.kingzcheung.xime.glide.GlideSampleRecorder.record("qwerty", keys, xs, ys, tracker.ts())
+                            currentOnTrace(xs, ys)
+                        } else next = awaitNextDown(event)
+                        break
+                    }
+                    if (tracker.claimed) {
+                        if (trail.points.isEmpty()) trail.startGesture()
+                        change.consume()
+                        trail.points = local.toList()
+                        currentOnProgress?.invoke { tracker.xs() to tracker.ys() }
+                    }
                 }
-                if (tracker.claimed) {
-                    if (trail.points.isEmpty()) trail.startGesture()
-                    change.consume()
-                    trail.points = local.toList()
-                    currentOnProgress?.invoke { tracker.xs() to tracker.ys() }
-                }
+            } finally {
+                if (tracker.claimed && !traced) currentOnEnd?.invoke()
+                trail.points = emptyList()
             }
-        } finally {
-            if (tracker.claimed && !traced) currentOnEnd?.invoke()
-            trail.points = emptyList()
         }
     } }
+}
+
+/**
+ * 跟着的手指不是滑行时，其余手指还按着就等下一根新按下的手指（返回它），都抬起了返回空。
+ * [last] 是刚处理完的那一批事件（为空时先等下一批）。九键滑行也用它。
+ */
+internal suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitNextDown(
+    last: androidx.compose.ui.input.pointer.PointerEvent?,
+): PointerInputChange? {
+    var event = last
+    while (true) {
+        if (event != null && event.changes.none { it.pressed }) return null
+        event = awaitPointerEvent(PointerEventPass.Initial)
+        event.changes.firstOrNull { it.changedToDownIgnoreConsumed() }?.let { return it }
+    }
 }
 
 /**

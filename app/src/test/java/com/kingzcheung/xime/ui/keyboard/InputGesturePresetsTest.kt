@@ -117,8 +117,12 @@ class InputGesturePresetsTest {
         assertEquals(CornerInputChoice.LONG_PRESS, CornerInputChoice.of(glide))
         assertEquals("已被「英文滑行」锁定", InputGestureLocks.glideCornerLock(glide)?.message)
         assertEquals("已被「中文滑行」锁定", InputGestureLocks.glideCornerLock(base.copy(chineseGlideTyping = true))?.message)
-        // 九键滑行只占 2～9 键，不锁 26 键的角标；没开滑行也不锁。
-        assertNull(InputGestureLocks.glideCornerLock(base.copy(t9GlideTyping = true)))
+        // 用户 11-11「只有九键不会跳转」：九键滑行占了 2～9 键的滑动，同样锁成长按；整个键盘滑动移光标时九键不滑行，不锁。
+        val nine = base.copy(t9GlideTyping = true)
+        assertEquals("已被「九键滑行」锁定", InputGestureLocks.glideCornerLock(nine)?.message)
+        assertEquals(CornerInputChoice.LONG_PRESS, CornerInputChoice.of(CornerInputChoice.SWIPE.applyTo(nine)))
+        assertEquals("关掉九键滑行，存的选择照旧", CornerInputChoice.SWIPE, CornerInputChoice.of(nine.copy(t9GlideTyping = false)))
+        assertNull(InputGestureLocks.glideCornerLock(nine.copy(cursorGesture = CursorGestureMode.KEYBOARD)))
         assertNull(InputGestureLocks.glideCornerLock(base))
         assertEquals(CornerInputChoice.SWIPE, CornerInputChoice.of(base))
     }

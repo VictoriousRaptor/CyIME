@@ -62,7 +62,8 @@ class CandidateGlossEdgeTest {
         } }
         fun inRow(gloss: Boolean, tag: String) = rule.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("row-$gloss")))
         saveComparison()
-        inRow(false, "bar-candidate:2").assertDoesNotExist()
+        // 右边放不下的候选照常显示、被栏边裁掉，不再整项藏起来（用户 11-11）。
+        inRow(false, "bar-candidate:2").assertExists()
         val word = inRow(true, "bar-candidate:2")
         word.assertIsDisplayed()
         val edge = inRow(true, "candidate-fixed-strip").fetchSemanticsNode().boundsInWindow.right

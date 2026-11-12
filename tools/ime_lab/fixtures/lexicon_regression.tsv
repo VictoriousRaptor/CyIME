@@ -1186,3 +1186,16 @@ user-congruodaoqiang	26	congruodaoqiang	从弱到强	1	found	2026-11-10	同上�
 user-congshendaoqian	26	congshendaoqian	从深到浅	1	found	2026-11-10	同上：从X到Y 缺词
 user-congkuaidaoman	26	congkuaidaoman	从快到慢	1	found	2026-11-10	同上：从X到Y 缺词
 user-qiangdao	26	qiangdao	抢到	3	found	2026-11-10	同上反例：单打 qiangdao 时「抢到」还在前三
+must-lianshanglema	26	lianshanglema	连上了吗	1	user	2026-11-11	排序必过句（原来不在这张表里）
+must-cewanlema	26	cewanlema	测完了吗	1	user	2026-11-11	排序必过句
+must-dabuchulai	26	dabuchulai	打不出来	1	user	2026-11-11	排序必过句
+user-bzhan-26	26	bzhan	B站	5	user	2026-11-11	1.15.78 手机「B站又打不出来」：中英混合词打全编码要在候选栏露出来的前 5 个里，按权重排，不靠位置规则
+user-bzhan-9	9	29426	B站	5	user	2026-11-11	同上，九键
+user-doraemon-9	9	3865226364	哆啦A梦	5	user	2026-11-11	「多按一个字儿就打不出来了」：少按一键时补全排第 2，按全后前 5 个里没有
+user-doraemon-26	26	duolaameng	哆啦A梦	5	user	2026-11-11	同上，26 键
+user-agu-26	26	agu	A股	5	user	2026-11-11	「A股也打不出来」
+user-cluo-26	26	cluo	C罗	5	user	2026-11-11	「C罗」打不出来
+user-cluo-9	9	2586	C罗	5	user	2026-11-11	同上，九键
+user-vitd-26	26	weishengsud	维生素D	5	user	2026-11-11	「维生素D」打不出来
+user-vitd-9	9	93474364783	维生素D	5	user	2026-11-11	同上，九键
+user-chu-not-agu-9	9	248	出	1	user	2026-11-11	反例：A股 的九键码 248 和 chu 相同，按权重「出」仍是首选

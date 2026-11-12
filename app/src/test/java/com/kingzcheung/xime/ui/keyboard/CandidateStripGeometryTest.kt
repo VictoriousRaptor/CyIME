@@ -8,6 +8,12 @@ class CandidateStripGeometryTest {
   assertEquals(false, candidateLabelFits(-9, 36, 8, 0, 100))
   assertEquals(false, candidateLabelFits(73, 36, 8, 0, 100))
  }
+ @Test fun onlyTheLeftEdgeHidesACutWord() {
+  assertEquals(false, candidateLabelCutAtStart(-8, 8, 0))
+  assertEquals(true, candidateLabelCutAtStart(-9, 8, 0))
+  // 右边放不下的不算，照常显示、被栏边裁掉（用户 11-11）。
+  assertEquals(false, candidateLabelCutAtStart(73, 8, 0))
+ }
  @Test fun focusWindowKeepsOriginalIndicesAndFitsTheSelectedItem() {
   val widths=listOf(40,70,80,30,50)
   fun window(selected:Int, available:Int=114)=candidateWindow(widths.size,selected,available,4) { widths[it] }

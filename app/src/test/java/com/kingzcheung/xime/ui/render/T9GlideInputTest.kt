@@ -94,6 +94,23 @@ class T9GlideInputTest {
         assertEquals("524494", input)
     }
 
+    /**
+     * 用户 11-11「先打一个字再划…划了就没了」：点 9 的手指还没抬，另一根手指已经从 5 划向 2、4。
+     * 以前第二根手指一按下整次触摸就放弃，这一划什么都不出；现在 9 照常出，划的 524（来）接在后面。
+     */
+    @Test fun glideRightAfterATapWithTheOtherThumbStillGlides() {
+        show(true)
+        val five = centerOf("JKL"); val two = centerOf("ABC"); val four = centerOf("GHI"); val nine = centerOf("WXYZ")
+        board.performTouchInput { down(0, nine); advanceEventTime(30); down(1, five); moveTo(1, two); up(0); moveTo(1, four); up(1) }
+        rule.waitUntil(5000) { input.length >= 4 }
+        assertEquals("9524", input)
+        // 点按的手指等划完才抬：一样两样都出。
+        board.performTouchInput { down(0, nine); advanceEventTime(30); down(1, five); moveTo(1, two); moveTo(1, four); up(1); up(0) }
+        rule.waitUntil(5000) { input.length >= 8 }
+        // 划的词在后台比对，和后抬起的点按谁先到都行，两样都不能丢。
+        org.junit.Assert.assertTrue(input, input == "95249524" || input == "95245249")
+    }
+
     @Test fun leavingDigitsCancellingOrChangingEditorDropsTheStroke() {
         show(true)
         val five = centerOf("JKL"); val six = centerOf("MNO")

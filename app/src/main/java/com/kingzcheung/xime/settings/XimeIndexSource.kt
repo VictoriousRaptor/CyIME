@@ -145,6 +145,10 @@ object XimeIndexSource {
         "funasr_asr", "tencent_asr", "volc_asr", "webdav_backup", "webdav_clipboard_sync", "ximed_sync",
     ).mapTo(HashSet()) { "com.kingzcheung.xime.plugin.$it" }
 
+    /** 已下架的插件；老包的 manifest 里也有只写短 id（如 ai_translate）的。 */
+    internal fun isRetiredPlugin(pluginId: String): Boolean =
+        pluginId in RETIRED_PLUGIN_IDS || "com.kingzcheung.xime.plugin.$pluginId" in RETIRED_PLUGIN_IDS
+
     /**
      * 键盘菜单里能不能自动放这个插件的按钮。已下架的不放：以前开过的 AI 翻译在 11-03 又自己冒进菜单，
      * 和 AI 改写里的翻译重复。用户自己拖进工具栏或菜单的照旧留着。

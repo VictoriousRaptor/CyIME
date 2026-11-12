@@ -445,6 +445,15 @@ private fun ExtensionItem(
                     )
                 }
 
+                // 已下架的老插件（如并进 AI 改写的「AI 翻译」）在列表里也说清楚，免得当成市场里同名的新插件（11-12 平板）。
+                if (com.kingzcheung.xime.settings.XimeIndexSource.isRetiredPlugin(extension.id)) {
+                    Text(
+                        text = retiredPluginNote(extension.id),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                    )
+                }
+
                 // 入口说明、联网授权、设置、卸载都在点进去的那一页（11-03 一个插件一页）。
                 if (!hostCompatible) {
                     Text(

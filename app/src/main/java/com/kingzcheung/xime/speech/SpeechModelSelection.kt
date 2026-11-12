@@ -79,6 +79,37 @@ internal object SpeechModelSelection {
         return Pipeline(primary.takeIf { streaming }, finalizer, wholeSentenceOn && wholeSentenceApplies(mode, chinese))
     }
 
+    /**
+     * 「说完后」怎么定稿：语音页每种语言一组单选（2026-11-09 起代替「二次校正」两个开关 + 「整句定稿」开关）。
+     * 每项只是已有两个存储值的一种组合（模型组合里的 SenseVoice 校正 + 整句定稿开关），不新增存储、不改识别流程。
+     */
+    enum class Finish { NONE, SENSEVOICE, WHOLE }
+
+    /** [mode] 能选的定稿方式；只剩 [Finish.NONE] 时（日语、只用 SenseVoice 的英文）页面不出单选。 */
+    fun finishOptions(mode: String, chinese: Boolean): List<Finish> = buildList {
+        add(Finish.NONE)
+        if (supportsCorrection(mode)) add(Finish.SENSEVOICE)
+        if (chinese && (supportsCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)) add(Finish.WHOLE)
+    }
+
+    /** 现在实际生效的定稿方式；与 [pipeline] 同一条规则。 */
+    fun finish(mode: String, chinese: Boolean, wholeSentenceOn: Boolean): Finish = when {
+        wholeSentenceOn && wholeSentenceApplies(mode, chinese) -> Finish.WHOLE
+        hasCorrection(mode) -> Finish.SENSEVOICE
+        else -> Finish.NONE
+    }
+
+    /**
+     * 选了 [finish] 后要存的值：新的模型组合，以及整句定稿开关（null = 不动；这个开关只影响中文）。
+     * 流式中文选「不校正」时不动整句开关：没有 SenseVoice 校正时它本来就不生效。
+     */
+    fun applyFinish(mode: String, chinese: Boolean, finish: Finish): Pair<String, Boolean?> = when (finish) {
+        Finish.NONE -> withCorrection(mode, false) to
+            (if (chinese && primary(mode) == SpeechModelCatalog.SENSEVOICE) false else null)
+        Finish.SENSEVOICE -> withCorrection(mode, true) to (if (chinese) false else null)
+        Finish.WHOLE -> withCorrection(mode, true) to true
+    }
+
     fun displayName(model: String): String? = when (model) {
         SpeechModelCatalog.ZIPFORMER -> "Zipformer · 中文"
         SpeechModelCatalog.ZIPFORMER_JA -> "Zipformer · 日语原版"

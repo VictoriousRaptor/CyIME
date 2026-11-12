@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -61,7 +62,7 @@ import java.io.File
 
 /**
  * 候选栏左右滑动、长候选完整显示、展开页「单字/候选」按钮（用户 10-23）。
- * 收起：平时只显示放得下的几个，滑一下露出后面的；展开：放不全的长候选在展开页里折行显示全文。
+ * 收起：右边放不下的候选照常显示、被栏边裁掉，滑过去看全；展开：放不全的长候选在展开页里折行显示全文。
  * 主题 × 玻璃 × 26 键/九键，用真实 CandidateBar / CandidatePage 代码出图。只在设了 CYIME_RENDER_OUT 时出图。
  */
 @RunWith(AndroidJUnit4::class)
@@ -108,8 +109,33 @@ class CandidateScrollRenderTest {
             org.junit.Assert.assertEquals("requested $width, strip $actualWidth px", words.take(4), visible)
             width = end - 15.dp
         }
-        item.assertDoesNotExist()
+        // 字被右边栏边切掉一截：照常显示，不藏起来（用户 11-11）；展开页仍从它开始排。
+        item.assertExists()
         rule.runOnIdle { org.junit.Assert.assertEquals(words.take(3), visible) }
+    }
+
+    /** 用户 11-11：h'h'h'h'h'h'h'h 第一个候选很长，第二个只放得下一半，原先藏起来、要拖一下才出来。 */
+    @Test fun candidateCutAtRightEdgeShowsWithoutDragging() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        KeyboardThemes.initFromConfig(app)
+        val words = listOf("哈哈哈哈哈哈哈哈", "呵呵哈哈哈哈哈哈", "哈哈哈")
+        var width by mutableStateOf(900.dp)
+        var visible = emptyList<String>()
+        rule.setContent {
+            FixedCandidateStrip(words, comments = emptyList(),
+                visuals = CandidateBarVisuals(Color.White, Color.Black, Color.Gray),
+                callbacks = CandidateBarCallbacks(onCandidateSelect = {}, onVisibleCandidatesChanged = { visible = it }),
+                fontSize = 19.sp, modifier = Modifier.width(width).height(44.dp),
+                scrollable = true, itemPadding = 10.dp)
+        }
+        val second = rule.onNodeWithTag("bar-candidate:1", useUnmergedTree = true)
+        val strip = rule.onNodeWithTag("candidate-scroll-row", useUnmergedTree = true)
+        val left = strip.fetchSemanticsNode().boundsInRoot.left
+        val bounds = second.fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { width = with(rule.density) { ((bounds.left + bounds.right) / 2f - left).toDp() } }
+        rule.waitForIdle()
+        second.assertExists().assertIsDisplayed()
+        rule.runOnIdle { org.junit.Assert.assertEquals(words.take(1), visible) }
     }
 
     @Test fun renderCandidateScroll() {

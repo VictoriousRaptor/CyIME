@@ -77,11 +77,12 @@ internal object CandidateModelAssets {
     }
 
     fun installDownloaded(context: Context, model: ModelInfo, version: ModelVersion) {
-        // 用户主动安装时，同名文件若是目录里的已知内容（旧格式、或二选一的另一档）或安装包自带的那份，属于 CyIME 自己的文件，直接替换。
+        // 用户主动安装时，同名文件若是目录里的已知内容（旧格式、或二选一的另一档）、安装包自带的那份，
+        // 或以前的安装包带过的那份，属于 CyIME 自己的文件，直接替换。
         installCandidateModel(ModelStorage.getModelDir(context, model.id), File(context.filesDir, "rime"), version) { name, file ->
             val owner = knownCatalogOwner(name, file)
             if (owner != null && owner.id != model.id) setDisabled(context, owner.id, true)
-            owner != null || isBundledCopy(context, name, file)
+            owner != null || isBundledCopy(context, name, file) || isEarlierBundledCopy(name, file)
         }
         setDisabled(context, model.id, false)
         if (model.id == CandidateModelCatalog.NGRAM || model.id == CandidateModelCatalog.NGRAM_SMALL) {
@@ -189,6 +190,23 @@ internal fun hasExternalGrammarConsumer(runtime: File, bundledManifest: String, 
             file.isFile && file.useLines { lines -> lines.any { line -> names.any { it in line } } }
         }
     } ?: true
+}
+
+/**
+ * 以前的公开安装包带过、模型目录里又没有的文件（哈希 to 大小）。安装包换掉或不再带它以后，它留在 rime/ 里继续用
+ * （BundledRimeSync 不删包里去掉的文件），但新安装包的清单里已经没有它，会被当成用户自己的同名文件，
+ * 下载目录里的九键词组模型时装不上。1.15.73 完整版带的 t9_ngram.lm（110 MB）就是这样。
+ * 以后公开包带的九键模型不在模型目录里时，把它加到这里。
+ */
+internal val EARLIER_BUNDLED_FILES: Map<String, List<Pair<String, Long>>> = mapOf(
+    "t9_ngram.lm" to listOf("eaa084e142bdeed0b82fb15969992d7a726a6631f24cc594c81d0b773c91a5da" to 109685746L),
+)
+
+/** [file] 是以前的安装包带过的那份（大小和哈希都一致），不是用户自己的文件。 */
+internal fun isEarlierBundledCopy(
+    name: String, file: File, known: Map<String, List<Pair<String, Long>>> = EARLIER_BUNDLED_FILES,
+): Boolean = file.isFile && known[name].orEmpty().any { (sha256, size) ->
+    file.length() == size && runCatching { verifyModelDigest(file, sha256) }.isSuccess
 }
 
 /** [file] 与安装包清单里同名条目的大小和哈希一致。 */

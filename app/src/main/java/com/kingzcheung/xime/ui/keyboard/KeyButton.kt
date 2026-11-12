@@ -312,6 +312,8 @@ fun SwipeableKeyButton(
     keepSymbolSwipeOnLongPress: Boolean = false,
     /** Literal upper-hint input, independent of whether its visual hint is enabled. */
     symbolInputText: String? = null,
+    /** 下角标直接上屏的那个符号（不受「下方角标提示」开关影响）；26 键滑行时放进长按弹出的两格，见 [withGlideCornerMenu]。 */
+    symbolInputDownText: String? = null,
     onSwipe: ((String) -> Unit)? = null,
     onSwipeDown: ((String) -> Unit)? = null,
     onSwipeLeft: (() -> Unit)? = null,
@@ -362,7 +364,10 @@ fun SwipeableKeyButton(
     val resolvedColors = customLayoutKeyColors(customLayout, text, backgroundColor, textColor, customAccent, glassLabelSurface)
     val resolvedBackground = resolvedColors.first
     val resolvedText = resolvedColors.second
-    val symbolInputMode = LocalKeyboardInputPreferences.current.symbolInputMode
+    // 九键滑行占了 2～9 键的滑动，上滑出数字、角标都滑不出来：这些键的角标改为长按输入，和 26 键滑行一样
+    // （用户 11-11「开着滑行长按失效…只有九键不会跳转」：以前照存的「滑动输入」，长按什么都不出）。
+    val t9GlideOwnsDrag = LocalT9GlideKeys.current != null && badgeText?.singleOrNull()?.let { it in '2'..'9' } == true
+    val symbolInputMode = if (t9GlideOwnsDrag) SymbolInputMode.LONG_PRESS else LocalKeyboardInputPreferences.current.symbolInputMode
     val inputPreferences = LocalKeyboardInputPreferences.current
     val letterSwipeLayout = letterSwipeAvailable(LocalFourteenKeyLayout.current,
         customLayout?.mergedGroups?.isNotEmpty() == true)
@@ -374,6 +379,8 @@ fun SwipeableKeyButton(
     // 方向圆盘只在手指拂出去或按住一会儿后出现；快速点按不弹（用户 11-03：只点不拂时轮盘让打字发卡）。
     var discRevealed by remember { mutableStateOf(false) }
     var buttonBounds by remember { mutableStateOf(Rect.Zero) }
+    // 浮标按这一刻按键的位置画，见 [LiveBounds]。
+    val liveBounds = remember { LiveBounds() }
 
     val view = LocalView.current
     val density = LocalDensity.current
@@ -393,7 +400,7 @@ fun SwipeableKeyButton(
     // 不两个叠着；长按到点换成角标气泡。
     fun forwardPreview(state: SwipeState) {
         val discOwnsPress = discRevealed && state.isPressed && !state.isLongPress && state.keyFlick == null
-        onSwipeStateChange?.invoke(if (discOwnsPress) SwipeState() else state, buttonBounds)
+        onSwipeStateChange?.invoke(if (discOwnsPress) SwipeState() else state, liveBounds.current(buttonBounds, "key $text"))
     }
     // In flick mode the held key's own value (the digit) is a one-item long-press popup: it shows
     // what will be entered and commits only on release, like every other long-press choice.
@@ -415,11 +422,10 @@ fun SwipeableKeyButton(
         if (ctrlTargets?.ctrlTap(pick) != true) onClick()
     }
     val letterGlideOwnsDrag = LocalLetterGlide.current && letterGroup?.singleOrNull()?.lowercaseChar()?.let { it in 'a'..'z' } == true
-    val reserveDragForGlide = letterGlideOwnsDrag ||
-        (LocalT9GlideKeys.current != null && badgeText?.singleOrNull()?.let { it in '2'..'9' } == true)
-    // 滑行接管拖动的键往下滑打不出下角标，角标只剩长按出上方那个：左下角不再画下角标（用户 11-11）。
-    // 只改显示，不动「下方角标提示」存的值；关掉滑行、或这个键盘没开滑行（14 键、数字行、没开中文滑行的中文 26 键）照旧显示。
-    val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide }
+    val reserveDragForGlide = letterGlideOwnsDrag || t9GlideOwnsDrag
+    // 九键滑行接管拖动的数字键往下滑打不出下角标：左下角不画（用户 11-11）。26 键字母滑行改成长按弹出上下两个角标
+    // （[withGlideCornerMenu]），下角标打得到，照旧画（用户 11-11「关闭数字行滑行打不出 !@#」）。
+    val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide && !letterGlideOwnsDrag }
     val gestureActions = if (flick != null) KeyGestureActions(
         // 拂动：方向固定对应字母，不随角标方向反转；数字等改为长按。
         text = text,
@@ -478,11 +484,13 @@ fun SwipeableKeyButton(
         onLongPressSelect = onLongPressSelect,
         longPressTimeoutMillis = longPressTimeoutMillis,
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
-    ).withSymbolInput(
-        // 26 键滑行开着时字母键的滑动给了滑行，角标改由长按输入（设置页同样锁在「长按输入」）。
+    ).let { actions ->
+        // 26 键滑行开着时字母键的滑动给了滑行：长按弹出上下两个角标，挪过去松手选（设置页锁在「长按输入」）。
+        if (letterGlideOwnsDrag) actions.withGlideCornerMenu(symbolInputText, symbolInputDownText, inputPreferences.symbolLongPressMs)
         // 底排标点固定上滑（空格两侧标点、数字键盘点键）：上滑和长按都输入角标（用户 11-09：键在底边，长按更顺手）。
-        if (letterGlideOwnsDrag || keepSymbolSwipeOnLongPress) SymbolInputMode.LONG_PRESS else symbolInputMode,
-        symbolInputText, keepSymbolSwipeOnLongPress, inputPreferences.symbolLongPressMs).let {
+        else actions.withSymbolInput(if (keepSymbolSwipeOnLongPress) SymbolInputMode.LONG_PRESS else symbolInputMode,
+            symbolInputText, keepSymbolSwipeOnLongPress, inputPreferences.symbolLongPressMs)
+    }.let {
         if (followSymbolSwipeDirection) it.withSymbolSwipeDirection(inputPreferences.reverseSymbolSwipe) else it
     }
     val inputActions = LocalKeyboardInputActions.current
@@ -526,7 +534,7 @@ fun SwipeableKeyButton(
         if (isPressed) {
             delay(FLICK_DISC_HOLD_MS)
             discRevealed = true
-            if (!longPressShown) onSwipeStateChange?.invoke(SwipeState(), buttonBounds)
+            if (!longPressShown) onSwipeStateChange?.invoke(SwipeState(), liveBounds.current(buttonBounds, "key $text"))
         }
     }
     val showDisc = inputPreferences.flickDirectionDisc && isPressed && discRevealed && !longPressShown &&
@@ -605,13 +613,14 @@ fun SwipeableKeyButton(
                     ctrlTapFraction[0] = if (size.width > 0) down.position.x / size.width else 0.5f
                 }
             } else Modifier)
-            .pointerInput(reserveDragForGlide) {
+            .pointerInput(reserveDragForGlide, letterGlideOwnsDrag) {
                 // 滑行没接管的拖动抬手仍算点按（用户 11-10：快打一句吞一半的键）。
-                detectExclusiveKeyGestures(reserveDragForGlide) { currentActions }
+                detectExclusiveKeyGestures(reserveDragForGlide, letterGlide = letterGlideOwnsDrag) { currentActions }
             }
             .padding(edgeContentPadding)
             .onGloballyPositioned { coordinates ->
                 buttonBounds = coordinates.boundsInRoot()
+                liveBounds.coordinates = coordinates
                 if (shiftTargets != null) dragBounds = if (dragSpace.card == null) buttonBounds else dragSpace.bounds(coordinates)
                 // 滑行的键位与轨迹同在键盘卡片坐标里：悬浮键盘旋转后 boundsInRoot 是斜放键的外接框，滑行会落到别的键。
                 letterGeometry?.place(text, if (dragSpace.card == null) buttonBounds else dragSpace.bounds(coordinates))
@@ -1042,6 +1051,7 @@ fun SwipeableIconKeyButton(
     var isPressed by remember { mutableStateOf(false) }
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     var buttonBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    val liveBounds = remember { LiveBounds() }
     val keyLabelFontFamily = AppFonts.keyLabelFontFamily
     val density = LocalDensity.current
 
@@ -1113,13 +1123,14 @@ fun SwipeableIconKeyButton(
                         actionDistanceDp = actionDistanceDp,
                         onPreview = { state ->
                             flickPreview = state.keyFlick
-                            currentOnSwipeStateChange?.invoke(state, buttonBounds)
+                            currentOnSwipeStateChange?.invoke(state, liveBounds.current(buttonBounds, "function key"))
                         },
                     ).let { if (swapVertical) it.withSymbolSwipeDirection(reverse = false) else it }
                 }
             }
             .onGloballyPositioned { coordinates ->
                 buttonBounds = coordinates.boundsInRoot()
+                liveBounds.coordinates = coordinates
             }
             .padding(visualPadding ?: scaledKeyVisualPadding())
             .then(if (honeycombEdge != null) Modifier.honeycombCap() else Modifier)

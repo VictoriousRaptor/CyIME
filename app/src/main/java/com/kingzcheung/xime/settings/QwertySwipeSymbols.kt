@@ -29,17 +29,24 @@ internal object QwertySwipeSymbols {
         "!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
         "≈", "+", "_", "'", "=", "|", "{", "}", "/",
         "\"", "`", "×", "÷", "≤", "≥", "°")
-    // 开了「数字行」：数字和 ! @ # … 都在数字行上（和电脑键帽一样，见 numberRowShiftSymbol），
-    // 第一排 Q 到 P 的上下 20 格空出来，换成下面这些；第二、三排不变（用户 11-01 定）。
+    // 开了「数字行」：数字和 ! @ # … 都在数字行上（和电脑键帽一样，见 numberRowShiftSymbol），第一排 Q 到 P 的上下 20 格空出来。
+    // 用户 11-11「开启数字行多了一堆乱七八糟的符号」：只放中文第二、三排没有的半角符号，其余留空；第二、三排不变。
     private fun firstRow(vararg values: String) = rows[0].map(Char::toString).zip(values.toList()).toMap()
-    // 中文下方补齐英文键盘有、中文原来没有的符号，{ } 在 O、P 和电脑上一样靠右；上方放直角引号和常用记号。
-    // 11-10：「new」里中文没有半角 ?，数字行上方 P 的 ※ 换成 ?，中文仍包含英文键盘的全部符号（11-01 的规则）。
-    val numberRowUp = firstRow("「", "」", "『", "』", "℃", "←", "→", "√", "★", "?")
-    // 11-10 中文换成「new」后 | 在 L 下方，这里原来的 | 换成中文没有的 \。
-    val numberRowDown = firstRow("+", "×", "÷", "≈", "≤", "≥", "°", "\\", "{", "}")
-    // 英文上方照英文规则：这些没有半角写法，和中文同一格同一个；下方英文本来就全，补少用的。
-    val numberRowEnglishUp = numberRowUp
-    val numberRowEnglishDown = firstRow("€", "£", "±", "≠", "∞", "©", "®", "™", "§", "‰")
+    // 中文缺的只有 + \ { } ?：位置照 11-01 起的不动（Q 下 +，I 下 \，O P 下 { }，P 上 ?）。
+    val numberRowUp = firstRow("", "", "", "", "", "", "", "", "", "?")
+    val numberRowDown = firstRow("+", "", "", "", "", "", "", "\\", "{", "}")
+    // 英文第二、三排已经有 ? \ + { }，第一排全空。
+    val numberRowEnglishUp = firstRow("", "", "", "", "", "", "", "", "", "")
+    val numberRowEnglishDown = numberRowEnglishUp
+    // 11-01 到 11-11 的数字行预设（11-10 前 P 上是 ※、I 下是 |）：载入的版本或旧修改里存着的这些格子算预设，换成上面这套；
+    // 自己改成别的符号的格子照旧。
+    private val oldNumberRowUp = listOf(firstRow("「", "」", "『", "』", "℃", "←", "→", "√", "★", "?"),
+        firstRow("「", "」", "『", "』", "℃", "←", "→", "√", "★", "※"))
+    private val oldNumberRowDown = listOf(firstRow("+", "×", "÷", "≈", "≤", "≥", "°", "\\", "{", "}"),
+        firstRow("+", "×", "÷", "≈", "≤", "≥", "°", "|", "{", "}"))
+    private val oldNumberRowEnglishDown = listOf(firstRow("€", "£", "±", "≠", "∞", "©", "®", "™", "§", "‰"))
+    private fun oldNumberRow(direction: String, english: Boolean, key: String, saved: String?): Boolean = saved != null &&
+        (if (direction == "up") oldNumberRowUp else if (english) oldNumberRowEnglishDown else oldNumberRowDown).any { it[key] == saved }
     fun up(english: Boolean, numberRow: Boolean = false) =
         (if (english) englishUp else up) + (if (!numberRow) emptyMap<String, String>() else if (english) numberRowEnglishUp else numberRowUp)
     fun down(english: Boolean, numberRow: Boolean = false) =
@@ -177,10 +184,11 @@ internal object QwertySwipeSymbols {
         custom: KeyGestureConfig?, english: Boolean = false, numberRow: Boolean = false): KeyGestureConfig? {
         if (key !in up) return original
         fun gesture(direction: String, preset: String, configured: GestureDef?): GestureDef {
-            // 开着数字行时，第一排存着的数字或 ! @ # …（「恢复预设」或载入版本时写进去的旧预设）算预设，换成数字行那一套。
+            // 开着数字行时，第一排存着的数字或 ! @ # …（「恢复预设」或载入版本时写进去的旧预设）和 11-11 以前的数字行预设算预设，
+            // 换成数字行这一套。
             val saved = overrides["$direction.$key"]
             val legacyFirstRow = numberRow && key in numberRowUp &&
-                saved == (if (direction == "up") up(english) else down(english))[key]
+                (saved == (if (direction == "up") up(english) else down(english))[key] || oldNumberRow(direction, english, key, saved))
             val override = if (legacyFirstRow) preset else saved
             if (override == null && configured != null) return configured
             val value = override ?: preset

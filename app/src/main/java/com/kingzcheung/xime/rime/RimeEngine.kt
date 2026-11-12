@@ -251,6 +251,13 @@ class RimeEngine {
     }
 
     private val candidateRevision = java.util.concurrent.atomic.AtomicLong(1L)
+
+    /**
+     * 长按整句点词重选时挪到词后面的光标位置和当时的编码；没在重选时为 -1。
+     * 只在锁内读写。见 [resumeCaretAfterPartialReselect]。
+     */
+    private var reselectCaret = -1
+    private var reselectInput = ""
     internal fun currentCandidateRevision(): Long = candidateRevision.get()
 
     internal fun glidePreviewRevision(): Long = candidateRevision.get()
@@ -1537,8 +1544,10 @@ class RimeEngine {
     internal fun selectCandidateAtRevision(index: Int, revision: Long, global: Boolean = false): RimeProcessResult? = locked {
         if (!isCandidateRevisionCurrent(revision) || !isInitialized || !nativeHasSession() || nativeIsMaintaining()) return@locked null
         candidateRevision.incrementAndGet()
+        val caret = reselectCaret.also { reselectCaret = -1 }
         val selected = if (global) nativeSelectCandidateByGlobalIndex(index) else nativeSelectCandidate(index)
         if (!selected) return@locked null
+        if (caret > 0) resumeCaretAfterPartialReselect(caret, reselectInput)
         withDisplayPreedit(nativeGetProcessResult(true))
     }
 
@@ -1640,6 +1649,7 @@ class RimeEngine {
             if (nativePinyinEditSnapshot().getOrNull(1)?.toIntOrNull() != input.length) return@editPinyinAndReadState false
             if (nativeInspectCandidates(1).firstOrNull()?.getOrNull(0) != words.joinToString("")) return@editPinyinAndReadState false
             candidateRevision.incrementAndGet()
+            reselectCaret = -1
             for (i in 0 until target) {
                 val span = candidateSpan(words[i]) ?: return@editPinyinAndReadState true
                 if (!nativeSelectCandidateByGlobalIndex(span.first)) return@editPinyinAndReadState true
@@ -1669,7 +1679,21 @@ class RimeEngine {
         if (caret <= 0 || caret >= inputEnd) return
         candidateRevision.incrementAndGet()
         nativeSetCaret(caret)
-        if (candidateSpan(word) == null) nativeSetCaret(inputEnd)
+        if (candidateSpan(word) == null) { nativeSetCaret(inputEnd); return }
+        reselectCaret = caret
+        reselectInput = nativeGetInput().orEmpty()
+    }
+
+    /**
+     * 重选的这个词只选了一部分（wo'men 这段点了「我么」，只吃掉 wome）：Rime 只在选到光标处才把光标送回末尾，
+     * 没选到就停在原处，剩下的 n 单独成段、只出单字。这时把光标送回末尾，剩下的拼音和后面一起照常组句。
+     * 编码已经变了（中间打字、删字）或光标已经不在原处时不动。须在锁内、选词之后调用。
+     */
+    private fun resumeCaretAfterPartialReselect(caret: Int, input: String) {
+        val now = nativeGetInput().orEmpty()
+        if (now != input || caret >= now.length) return
+        if (nativePinyinEditSnapshot().getOrNull(1)?.toIntOrNull() != caret) return
+        nativeSetCaret(now.length)
     }
 
     /** 固定：当前编码下排第一，固定多个按先后排；取消固定回到原位。候选过期时不做。 */

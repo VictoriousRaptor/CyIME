@@ -118,11 +118,19 @@ class ClipboardSelectionPinsUiTest {
     @Test fun selectAllRevealsCollapsedPinsAndCanBeClearedWithoutDeleting() {
         show(pinnedAndRecent(pinCount = 8))
         selectByLongPress(1)
-        rule.onNodeWithTag("clipboard-select-all").performClick()
-        rule.onNodeWithText("已选 9").assertExists()
+        // Each section has its own select-all row (user 11-11); the fixed one opens folded pins.
+        rule.onNodeWithTag("clipboard-select-fixed").performClick()
+        rule.onNodeWithText("已选 8").assertExists()
         rule.onNodeWithTag("clipboard-records").performScrollToNode(hasTestTag("clipboard-card:text:8"))
         rule.onNodeWithTag("clipboard-card:text:8").assertIsDisplayed().assertIsSelected()
-        rule.onNodeWithTag("clipboard-select-all").performClick()
+        rule.onNodeWithTag("clipboard-records").performScrollToNode(hasTestTag("clipboard-select-recent"))
+        rule.onNodeWithTag("clipboard-select-recent").performClick()
+        rule.onNodeWithText("已选 9").assertExists()
+        // Clearing one section leaves the other.
+        rule.onNodeWithTag("clipboard-select-recent").performClick()
+        rule.onNodeWithText("已选 8").assertExists()
+        rule.onNodeWithTag("clipboard-records").performScrollToNode(hasTestTag("clipboard-select-fixed"))
+        rule.onNodeWithTag("clipboard-select-fixed").performClick()
         rule.onNodeWithText("已选 0").assertExists()
         rule.onNodeWithTag("clipboard-pin").assertIsNotEnabled()
         rule.onNodeWithTag("clipboard-delete").assertIsNotEnabled()
@@ -157,7 +165,7 @@ class ClipboardSelectionPinsUiTest {
         selectByLongPress(1)
         val controls = rule.onNodeWithTag("clipboard-controls").fetchSemanticsNode().boundsInRoot
         val board = rule.onNodeWithTag("clipboard-board").fetchSemanticsNode().boundsInRoot
-        val tags = listOf("clipboard-exit-selection", "clipboard-select-all", "clipboard-pin", "clipboard-delete")
+        val tags = listOf("clipboard-exit-selection", "clipboard-selected-count", "clipboard-pin", "clipboard-delete")
         for (tag in tags) {
             val item = rule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertTrue("$tag starts within controls", item.left >= controls.left - 1f && item.top >= controls.top - 1f)
@@ -172,7 +180,8 @@ class ClipboardSelectionPinsUiTest {
         show(pinnedAndRecent(pinCount = 1), width = 360, height = 240)
         val before = rule.onNodeWithTag("clipboard-card:text:1").fetchSemanticsNode().boundsInRoot.height
         selectByLongPress(1)
-        rule.onNodeWithTag("clipboard-select-all").performClick()
+        rule.onNodeWithTag("clipboard-select-fixed").performClick()
+        rule.onNodeWithTag("clipboard-select-recent").performClick()
         rule.onNodeWithTag("clipboard-exit-selection").performClick()
         val after = rule.onNodeWithTag("clipboard-card:text:1").fetchSemanticsNode().boundsInRoot.height
         val region = rule.onNodeWithTag("clipboard-records-region").fetchSemanticsNode().boundsInRoot

@@ -405,4 +405,31 @@ class BackupManagerTest {
         assertTrue(result.isFailure)
         assertTrue(!File(filesDir, "plugins.xml").exists())
     }
+
+    // ---- 剪贴板（用户 11-11 转述：备份不包括剪贴板） ----
+
+    private fun clip(id: Long, pinned: Boolean = false, sensitive: Boolean = false) =
+        com.kingzcheung.xime.clipboard.ClipboardItem(id, "记录$id", timestamp = id, isPinned = pinned, sensitive = sensitive)
+
+    @Test
+    fun `clipboard backup keeps fixed and grouped records, history only when asked, never passwords`() {
+        val items = listOf(clip(1, pinned = true), clip(2), clip(3), clip(4, sensitive = true),
+            clip(5, pinned = true, sensitive = true))
+        val inGroup: (com.kingzcheung.xime.clipboard.ClipboardItem) -> Boolean = { it.id == 3L || it.id == 4L }
+        assertEquals(listOf(1L, 3L), BackupManager.clipboardBackupItems(items, includeHistory = false, inGroup).map { it.id })
+        assertEquals(listOf(1L, 3L, 2L), BackupManager.clipboardBackupItems(items, includeHistory = true, inGroup).map { it.id })
+    }
+
+    @Test
+    fun `clipboard entry is read back and skipped by the file restore`() {
+        val json = """{"app":"CyIME","items":[{"text":"固定的","pinned":true}]}"""
+        val bytes = zipOfText(linkedMapOf(BackupManager.META_PREFIX + "settings.json" to "{}",
+            BackupManager.CLIPBOARD_ENTRY to json))
+        assertEquals(json, BackupManager.clipboardEntry(bytes))
+        val filesDir = tempDir.newFolder("files-clipboard")
+        assertTrue(restore(filesDir, bytes).isSuccess)
+        assertTrue(File(filesDir, "rime").listFiles().isNullOrEmpty())
+        // An old backup has none.
+        assertEquals(null, BackupManager.clipboardEntry(zipOfText(mapOf(BackupManager.META_PREFIX + "settings.json" to "{}"))))
+    }
 }

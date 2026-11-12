@@ -93,7 +93,10 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("measuredNeighborCorrection", 3)
     inputs.property("idleSpellingEdits", 3)
     inputs.property("candidatePolicy", 4)
-    inputs.property("learnedMixedWords", 1)
+    inputs.property("learnedMixedWords", 2)
+    // 中英混合词按公开语料词频排（2026-11-11「都按权重算」），不再全是 1000。
+    val mixedWordCounts = file("data/cyime_mixed_word_counts.tsv")
+    inputs.file(mixedWordCounts)
     inputs.property("particleShortcuts", 2)
     inputs.property("pinyinFinalNe", 1)
     inputs.property("pinyin26WordModel", 5)
@@ -362,6 +365,22 @@ val prepareChineseDictionaries by tasks.registering {
                 }
             }
         }
+        // Mixed words' weights on the Chinese dictionary's scale (2026-11-11「都按权重算」: B站, 哆啦A梦, C罗 typed in
+        // full sat 6th by a placing rule, off the candidate bar). data/cyime_mixed_word_counts.tsv holds each word's
+        // public-corpus counts and the two scale factors; weight = lccc_scale × (LCCC + subs_to_lccc × subtitles), at
+        // least 1 like the lowest base.dict entries. Ranking then follows Rime's own weight, no placing rule.
+        val mixedWeights: Map<String, Long> = run {
+            val lines = mixedWordCounts.readLines()
+            fun factor(name: String) = lines.first { it.startsWith("#! $name\t") }.substringAfter('\t').trim().toDouble()
+            val scale = factor("lccc_scale")
+            val subs = factor("subs_to_lccc")
+            lines.filter { it.isNotBlank() && !it.startsWith("#") }.associate { line ->
+                val f = line.split('\t')
+                f[0] to maxOf(1L, Math.round(scale * (f[1].toLong() + subs * f[2].toLong())))
+            }
+        }
+        check((mixedWeights["B站"] ?: 0) > 1000) { "Mixed word counts missing or rescaled" }
+        fun mixedWeight(word: String) = mixedWeights[word] ?: 1L
         // Mixed Latin + Chinese words (B站, T恤, A股, 卡拉OK) from upstream's 26-key cn_en table (letters + full pinyin),
         // encoded the same way, so 九键 and 14 键 type them like English words and learn them the same way.
         File(root, "en_dicts/cn_en.txt").useLines { lines ->
@@ -372,15 +391,16 @@ val prepareChineseDictionaries by tasks.registering {
                     !fields[1].all { it in 'A'..'Z' || it in 'a'..'z' }) return@forEach
                 val letters = fields[1].lowercase(java.util.Locale.ROOT)
                 val code = letters.map { digits[it - 'a'] }.joinToString("")
-                english.putIfAbsent(fields[0] + "\t" + code, fields[0] + "\t" + code + "\t1000")
+                val weight = mixedWeight(fields[0])
+                english.putIfAbsent(fields[0] + "\t" + code, fields[0] + "\t" + code + "\t" + weight)
                 val code14 = letters.map { keys14[it - 'a'] }.joinToString("")
-                english14.putIfAbsent(fields[0] + "\t" + code14, fields[0] + "\t" + code14 + "\t1000")
+                english14.putIfAbsent(fields[0] + "\t" + code14, fields[0] + "\t" + code14 + "\t" + weight)
             }
         }
         // 26 keys' mixed words, learned (2026-11-09「打 bzhan 选了 B站 记不住」): upstream reads en_dicts/cn_en.txt as a
         // read-only stabledb, so a pick was never remembered. The same words and codes (both Bzhan and bzhan) become
         // the cyime_cn_en table with a user dictionary, compiled by its own dependency schema like cyime_t9_english;
-        // every word weighs the same, as before. cyime_candidate_policy puts a learned one first for its whole code.
+        // weights from data/cyime_mixed_word_counts.tsv (above); a picked word gains weight like any learned word.
         val cnEnWords = linkedSetOf<String>()
         File(root, "en_dicts/cn_en.txt").useLines { lines ->
             lines.forEach { line ->
@@ -388,7 +408,7 @@ val prepareChineseDictionaries by tasks.registering {
                 val fields = line.split('\t')
                 if (fields.size < 2 || fields[0].isBlank() || fields[1].length !in 2..64 ||
                     !fields[1].all { it in 'A'..'Z' || it in 'a'..'z' }) return@forEach
-                cnEnWords.add(fields[0] + "\t" + fields[1] + "\t1000")
+                cnEnWords.add(fields[0] + "\t" + fields[1] + "\t" + mixedWeight(fields[0]))
             }
         }
         check(cnEnWords.any { it.startsWith("B站\tbzhan\t") }) { "Upstream cn_en table changed" }
@@ -457,6 +477,11 @@ val prepareChineseDictionaries by tasks.registering {
         val baseSchema = taiwanForms(File(root, "rime_ice.schema.yaml").readText())
             .also { check(it.split(cnEnStable).size == 2) { "Upstream cn_en translator changed" } }
             .replace(cnEnStable, "\ncn_en:\n  dictionary: cyime_cn_en\n  enable_user_dict: true\n")
+            // Same footing as a fully typed pinyin word (script translator: initial_quality 1.2 + full coverage 1.0;
+            // a table candidate gets neither), so the weight decides between B站 and 霸占 for bzhan (2026-11-11).
+            .let { val q = "\n  initial_quality: 0.5\n  comment_format:\n    - xform/^.+\$//\n"
+                check(it.split(q).size == 2) { "Upstream cn_en quality changed" }
+                it.replace(q, "\n  initial_quality: 2.2\n  comment_format:\n    - xform/^.+\$//\n") }
             .replace("\ntranslator:\n",
             "\ntranslator:\n  enable_correction: true\n  cyime_neighbor_correction: true\n" +
             // chen can also end a phrase as che + abbreviated ne (他在等车呢).

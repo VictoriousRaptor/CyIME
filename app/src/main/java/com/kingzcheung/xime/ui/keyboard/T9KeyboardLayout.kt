@@ -215,6 +215,7 @@ private fun T9KeyboardSwipeOverlay(
 ) {
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    val liveKeyboardBounds = remember { LiveBounds() }
     val dragSpace = LocalKeyDragSpace.current
     var dragArea by remember { mutableStateOf(Rect.Zero) }
     val input = LocalKeyboardInputPreferences.current
@@ -237,6 +238,8 @@ private fun T9KeyboardSwipeOverlay(
     }
 
     fun processSwipeState(state: SwipeState, bounds: Rect) {
+        // 按键和键盘都按这一刻的位置算，见 [LiveBounds]。
+        val origin = liveKeyboardBounds.current(keyboardBounds, "keyboard")
         val newState = if (state.isSwipeDown && state.swipeText != null) {
             state.copy(charInfos = SubcharHelper.parseSwipeDownText(state.swipeText))
         } else {
@@ -245,10 +248,10 @@ private fun T9KeyboardSwipeOverlay(
         swipeBubble.update(
             newState,
             Rect(
-                left = bounds.left - keyboardBounds.left,
-                top = bounds.top - keyboardBounds.top,
-                right = bounds.right - keyboardBounds.left,
-                bottom = bounds.bottom - keyboardBounds.top
+                left = bounds.left - origin.left,
+                top = bounds.top - origin.top,
+                right = bounds.right - origin.left,
+                bottom = bounds.bottom - origin.top
             )
         )
     }
@@ -272,11 +275,12 @@ private fun T9KeyboardSwipeOverlay(
                 val dictionary = glideDictionary
                 val doublePinyin = glideDoublePinyin
                 glideScope.launch {
+                    // 很短又认不出：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
                     val digits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                         runCatching {
                             com.kingzcheung.xime.glide.GlideLexicon.t9Digits(glideContext, keys, xs, ys, dictionary, doublePinyin)
                         }.getOrDefault("")
-                    }
+                    }.ifEmpty { com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString().orEmpty() }
                     if (digits.isEmpty()) return@launch
                     kotlinx.coroutines.withContext(inputContext) {
                         for (digit in digits) {
@@ -288,6 +292,7 @@ private fun T9KeyboardSwipeOverlay(
             }
             .onGloballyPositioned { coordinates ->
                 keyboardBounds = coordinates.boundsInRoot()
+                liveKeyboardBounds.coordinates = coordinates
                 dragArea = dragSpace.bounds(coordinates)
             }
             .padding(bottom = if (isFloatingMode || isLandscape) 0.dp else 0.dp)) {

@@ -13,7 +13,7 @@ class BundledRimeSyncTest {
         val hash = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
         return "$hash\t${text.toByteArray().size}\tbundled/$name\t$name\n"
     }
-    @Test fun replacesSameSizeOldDictionaryBacksUpAndInvalidatesOnlyCompiledCache() {
+    @Test fun replacesSameSizeOldDictionaryBacksUpAndKeepsCompiledCacheForIncrementalRebuild() {
         val target = folder.newFolder("rime"); val backups = folder.newFolder("backup")
         File(target, "core.dict.yaml").writeText("old")
         File(target, "build").mkdir(); File(target, "build/core.table.bin").writeText("cache")
@@ -21,7 +21,8 @@ class BundledRimeSyncTest {
         assertTrue(BundledRimeSync.install(target, backups, manifest("new")) { "new".byteInputStream() })
         assertEquals("new", File(target, "core.dict.yaml").readText())
         assertEquals("old", backups.walkTopDown().single { it.isFile }.readText())
-        assertFalse(File(target, "build").exists())
+        // librime rebuilds only the tables whose source checksum changed; the cache is not wiped on upgrade.
+        assertEquals("cache", File(target, "build/core.table.bin").readText())
         listOf("personal.dict.yaml", "core.custom.yaml", "core.userdb").forEach { assertEquals("personal", File(target, it).readText()) }
         assertFalse(BundledRimeSync.install(target, backups, manifest("new")) { error("Must not reopen large assets") })
     }

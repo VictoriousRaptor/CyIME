@@ -404,6 +404,7 @@ fun KeyboardLayout(
 
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    val liveKeyboardBounds = remember { LiveBounds() }
     // 滑行：英文 26 键出整词（「滑行输入」）；中文全拼、双拼 26 键（含分体、自定义字母排列）出一个词的编码交给 Rime
     // （「中文滑行输入」，单独的开关，默认关）。整键盘滑动移动光标与其冲突时让位。
     // 角标照常按两个角标提示开关显示，滑行不改它（用户 10-31：不能改他的习惯）。
@@ -489,7 +490,15 @@ fun KeyboardLayout(
                 if (chinese) com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys)
                 else com.kingzcheung.xime.glide.GlideLexicon.decoder(glideContext, keyboard).decode(xs, ys)
             }
-            if (candidates.isEmpty()) return@launch
+            if (candidates.isEmpty()) {
+                // 很短又认不出词：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
+                com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString()?.let { key ->
+                    val value = com.kingzcheung.xime.rime.MergedLetterInput.tapValue(key,
+                        KeysConfigHelper.getKeyCommitValue(key, isAsciiMode), false, shift.isShifted)
+                    kotlinx.coroutines.withContext(inputContext) { onKeyPress(value) }
+                }
+                return@launch
+            }
             viewModel.onCharacterTyped()
             if (chinese) {
                 kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideCode?.invoke(candidates.first().word,
@@ -519,6 +528,8 @@ fun KeyboardLayout(
     }
 
     fun processSwipeState(state: SwipeState, bounds: Rect) {
+        // 按键和键盘都按这一刻的位置算，见 [LiveBounds]。
+        val origin = liveKeyboardBounds.current(keyboardBounds, "keyboard")
         val newState = if (state.isSwipeDown && state.swipeText != null) {
             state.copy(charInfos = SubcharHelper.parseSwipeDownText(state.swipeText))
         } else {
@@ -527,10 +538,10 @@ fun KeyboardLayout(
         swipeBubble.update(
             newState,
             Rect(
-                left = bounds.left - keyboardBounds.left,
-                top = bounds.top - keyboardBounds.top,
-                right = bounds.right - keyboardBounds.left,
-                bottom = bounds.bottom - keyboardBounds.top
+                left = bounds.left - origin.left,
+                top = bounds.top - origin.top,
+                right = bounds.right - origin.left,
+                bottom = bounds.bottom - origin.top
             )
         )
     }
@@ -559,6 +570,7 @@ fun KeyboardLayout(
         modifier = bodyModifier
             .onGloballyPositioned { coordinates ->
                 keyboardBounds = coordinates.boundsInRoot()
+                liveKeyboardBounds.coordinates = coordinates
                 shiftSlideTargets.keyboardBounds = dragSpace.bounds(coordinates)
             }
             // 轨迹原点与键位同用键盘卡片坐标（未旋转时与 boundsInRoot 相同），旋转的悬浮键盘滑行落在手指下的键。
@@ -725,6 +737,8 @@ fun KeyboardLayout(
                             val row1 = renderRows.getOrElse(1) { listOf("a", "s", "d", "f", "g", "h", "j", "k", "l") }
                             val row1Inset = if (zhuyin) (splitCellDp / 2f).dp else standardRowInset
                                 ?: if ((if (LocalCustomLayout.current != null) row1.sumOf { it.length } else row1.size) > 9) 0.dp else 16.dp
+                            val (row1Start, row1End) = fourteenHomeRowInsets(fourteenKey, evenMergedKeys,
+                                row1Inset.value, (standardRowEndInset ?: row1Inset).value)
                             KeyboardRowWithConfig(
                                 keys = row1,
                                 keySpans = renderSpans?.getOrNull(1),
@@ -739,9 +753,9 @@ fun KeyboardLayout(
                                 ),
                                 isShifted = isShifted,
                                 isAsciiMode = isAsciiMode,
-                                edgeInset = row1Inset,
-                                edgeEndInset = standardRowEndInset ?: row1Inset,
-                                extendLastKeyToEdge = fourteenKey && row1.lastOrNull()?.length == 1,
+                                edgeInset = row1Start.dp,
+                                edgeEndInset = row1End.dp,
+                                extendLastKeyToEdge = fourteenHomeRowLastKeyToEdge(fourteenKey, row1, evenMergedKeys),
                                 onSwipeStateChange = { state, bounds ->
                                     processSwipeState(
                                         state,
@@ -954,6 +968,7 @@ fun KeyboardLayout(
                                         swipeText = swipeUpText,
                                         symbolInputText = symbolInputValue(swipeUpCommitValue, swipeUpAction)
                     .takeUnless { longPressLabels != null && KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty() },
+                                        symbolInputDownText = symbolInputValue(swipeDownLabel, swipeDownAction),
                                         swipeDownText = swipeDownBubbleText,
                                         swipeUpKeyLabel = swipeUpKeyLabel,
                                         swipeDownKeyLabel = boundDownLabel?.takeIf { swipeDownHintsEnabled }
@@ -1718,6 +1733,7 @@ fun KeyboardRowWithConfig(
                 swipeText = swipeUpText,
                 symbolInputText = symbolInputValue(swipeUpCommitValue, swipeUpAction)
                     .takeUnless { longPressLabels != null && KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty() },
+                symbolInputDownText = symbolInputValue(swipeDownLabel, swipeDownAction),
                 swipeDownText = swipeDownBubbleText,
                 swipeUpKeyLabel = swipeUpKeyLabel,
                 swipeDownKeyLabel = boundDownLabel?.takeIf { swipeDownHintsEnabled }
@@ -1944,6 +1960,7 @@ fun SwipeableKeyButtonLandscape(
     modifier: Modifier = Modifier,
     swipeText: String? = null,
     symbolInputText: String? = null,
+    symbolInputDownText: String? = null,
     swipeDownText: String? = null,
     swipeUpKeyLabel: String? = null,
     swipeDownKeyLabel: String? = null,
@@ -1964,7 +1981,7 @@ fun SwipeableKeyButtonLandscape(
     SwipeableKeyButton(text = text, onClick = onClick, letterGroup = letterGroup, onLetterSelection = onLetterSelection, backgroundColor = backgroundColor,
         followSymbolSwipeDirection = true,
         textColor = textColor, modifier = modifier, swipeText = swipeText, swipeDownText = swipeDownText,
-        symbolInputText = symbolInputText,
+        symbolInputText = symbolInputText, symbolInputDownText = symbolInputDownText,
         swipeUpKeyLabel = swipeUpKeyLabel, swipeDownKeyLabel = swipeDownKeyLabel,
         onSwipe = onSwipe, onSwipeDown = onSwipeDown, onPress = onPress, onRelease = onRelease,
         onLongPressSelect = onLongPressSelect, longPressItems = longPressItems,
@@ -2074,6 +2091,7 @@ fun CompactKeyboardRowWithConfig(
                 swipeText = swipeUpText,
                 symbolInputText = symbolInputValue(swipeUpCommitValue, swipeUpAction)
                     .takeUnless { longPressLabels != null && KeysConfigHelper.longPressLetters(isAsciiMode).isNotEmpty() },
+                symbolInputDownText = symbolInputValue(swipeDownLabel, swipeDownAction),
                 swipeDownText = swipeDownBubbleText,
                 swipeUpKeyLabel = swipeUpKeyLabel,
                 swipeDownKeyLabel = swipeDownKeyLabel,

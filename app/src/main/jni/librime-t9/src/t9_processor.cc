@@ -82,6 +82,9 @@ T9Processor::T9Processor(const Ticket& ticket) : Processor(ticket) {
             }
             left_panel_mode_ = t9_panel_state::ResolveLeftPanelMode(
                 has_script_translator, panel_mode);
+            bool double_pinyin = false;
+            config->GetBool("t9/double_pinyin", &double_pinyin);
+            full_pinyin_ = has_script_translator && !double_pinyin;
         }
     }
 
@@ -786,7 +789,7 @@ void T9Processor::AdoptLetterInput() {
         const char digit = kDigitOfLetter[c - 'a'];
         undo_model_.DigitPressed(digit);
         input_buffer_ = input_buffer_.AddDigit(digit);
-        letter_constraints_[pos] = c;
+        if (KeepsLetterConstraint(pos, c)) letter_constraints_[pos] = c;
         original_digit_sequence_ += digit;
     }
     if (input_buffer_.has_separator()) {
@@ -796,13 +799,25 @@ void T9Processor::AdoptLetterInput() {
     T9LOG(">> AdoptLetterInput: '%s' → digits '%s'", input.c_str(), input_buffer_.digit_sequence.c_str());
 }
 
+// 全拼里 i、u、v 不能开头一个音节。拂动出的这三个字母落在开头（或分词符后面）时记成约束，候选就一个不剩，
+// 输入框只显示英文候选的字母（如 HK），拂出的字母看不见，还要多按一下删除（11-11 平板复现：
+// ghi 右拂出 i 再按 jkl、mno）。这时只当按了所在的数字键，不记约束。双拼九键里 i、u、v 是声母，照记。
+bool T9Processor::KeepsLetterConstraint(int pos, char letter) const {
+    if (!full_pinyin_ || (letter != 'i' && letter != 'u' && letter != 'v')) return true;
+    const bool syllable_start = pos == 0 ||
+        std::find(input_buffer_.separator_positions.begin(), input_buffer_.separator_positions.end(), pos) !=
+            input_buffer_.separator_positions.end();
+    return !syllable_start;
+}
+
 bool T9Processor::FixLetter(char letter) {
     if (letter >= 'A' && letter <= 'Z') letter = static_cast<char>(letter - 'A' + 'a');
     if (letter < 'a' || letter > 'z') return false;
     if (input_buffer_.is_empty() || state_machine_.is_idle()) return false;
     const char digit = kDigitOfLetter[letter - 'a'];
     HandleDigitKey(digit);
-    letter_constraints_[static_cast<int>(input_buffer_.digit_sequence.size()) - 1] = letter;
+    const int pos = static_cast<int>(input_buffer_.digit_sequence.size()) - 1;
+    if (KeepsLetterConstraint(pos, letter)) letter_constraints_[pos] = letter;
     T9LOG(">> FixLetter: '%c' as digit %c at %zu", letter, digit, input_buffer_.digit_sequence.size() - 1);
     return true;
 }

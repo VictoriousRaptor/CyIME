@@ -198,7 +198,8 @@ class ClipboardBoardContextMenuTest {
         showBoard()
         rule.onNodeWithTag("clipboard-more").performClick()
         rule.onNodeWithTag("clipboard-select").performScrollTo().performClick()
-        rule.onNodeWithTag("clipboard-select-all").performClick()
+        // No fixed records here: the one select-all row above the records takes both.
+        rule.onNodeWithTag("clipboard-select-recent").performClick()
         rule.onNodeWithTag("clipboard-delete").performClick()
         rule.onNodeWithText("删除 1 条文本和 1 条图片记录？").assertExists()
         rule.onNodeWithText("只移除剪贴板记录，保留原始图片。").assertExists()

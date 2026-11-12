@@ -25,4 +25,11 @@ class RetiredPluginsTest {
         assertTrue(XimeIndexSource.mayAutoPlaceButtons(id("ai_rewrite")))
         assertTrue(XimeIndexSource.mayAutoPlaceButtons(id("ai_reply")))
     }
+
+    @Test fun `老 AI 翻译是已下架插件，新的翻译插件不是`() {
+        assertTrue(XimeIndexSource.isRetiredPlugin(id("ai_translate")))
+        assertTrue(XimeIndexSource.isRetiredPlugin("ai_translate"))
+        assertFalse(XimeIndexSource.isRetiredPlugin(id("translate")))
+        assertFalse(XimeIndexSource.isRetiredPlugin(id("caption")))
+    }
 }

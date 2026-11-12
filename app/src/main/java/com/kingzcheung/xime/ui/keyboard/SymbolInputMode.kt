@@ -58,3 +58,34 @@ internal fun KeyGestureActions.withSymbolInput(
         longPressBubbleText = symbol,
     )
 }
+
+/**
+ * 26 键字母滑行开着时（用户 11-11「关闭数字行，滑行输入打不出 !@#$%^&*()」）：字母键往哪个方向滑都是滑行，
+ * 只靠长按出上角标，下角标那一层就打不到了。这时长按弹出上下两个角标，默认选上角标：不动松手出上角标，
+ * 往右挪一格松手出下角标（和「长按弹出字母气泡」同一个选法）。键上印的位置不变，开关滑行符号不挪。
+ * 只有一个角标时照「长按输入」按满立刻输入。西班牙语等长按出带重音字母的键（[upper] 为空、已有长按选项）不动。
+ * 选中后走原来的上滑／下滑那条路上屏，所以自定义的角标动作（不是直接上屏的）也照旧。
+ */
+internal fun KeyGestureActions.withGlideCornerMenu(
+    upper: String?, lower: String?, timeoutMillis: Long = DEFAULT_SYMBOL_LONG_PRESS_MS,
+): KeyGestureActions {
+    if (onLongPress != null || longPressDrawableIds.isNotEmpty()) return this
+    val commitUpper = onUp
+    val commitLower = onDown
+    val top = upper?.takeIf { it.isNotBlank() && commitUpper != null }
+    val bottom = lower?.takeIf { it.isNotBlank() && commitLower != null && it != top }
+    if (top == null && longPressItems.isNotEmpty()) return this
+    val items = listOfNotNull(top, bottom)
+    if (items.isEmpty()) return this
+    val pick: (String) -> Unit = { chosen ->
+        if (top != null && chosen == top) commitUpper?.invoke(top) else commitLower?.invoke(bottom.orEmpty())
+    }
+    return copy(
+        onUp = null, blockUpSwipe = true, onDown = null, blockDownSwipe = true,
+        longPressTimeoutMillis = timeoutMillis,
+        longPressItems = if (items.size > 1) items else emptyList(),
+        onLongPressSelect = if (items.size > 1) pick else null,
+        onLongPress = if (items.size > 1) null else ({ pick(items.single()) }),
+        longPressBubbleText = items.singleOrNull(),
+    )
+}

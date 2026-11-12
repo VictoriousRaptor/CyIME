@@ -50,7 +50,7 @@ class FastRepeatedTapTest {
                 MaterialTheme {
                     Box(Modifier.requiredSize(width.dp, height.dp)) {
                         KeyboardLayout(onKeyPress, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {},
-                            onGlideWord = { _, _ -> }),
+                            onGlideWord = { _, _ -> }, onGlideCode = { _, _, _ -> }),
                             KeyboardUiState(currentSchemaId = schema, isAsciiMode = ascii), ascii,
                             Modifier.requiredSize(width.dp, height.dp))
                     }
@@ -110,6 +110,30 @@ class FastRepeatedTapTest {
         assertEquals("g", typed.toString())
         touches { step -> down(0, h); step(); moveTo(0, h + Offset(-20f, -10f)); step(); down(1, g); step(); up(0); step(); up(1) }
         assertEquals("ghg", typed.toString())
+    }
+
+    /**
+     * 用户 11-11「打两个字第二个字被吞」：快打时落在键的上沿，手指往上抖进上一排（半个键高，不到滑行接管的距离），
+     * 以前出了键又超过 0.6 个短边，不算点按也不是滑行，这一下没了。现在照常出字；中文滑行同一个按键手势。
+     */
+    private fun upwardDriftTypesG() {
+        val bounds = rule.onNodeWithTag("qwerty-key:g", true).fetchSemanticsNode().boundsInRoot
+        val start = Offset(bounds.center.x, bounds.top + 4f)
+        touches { step ->
+            down(0, start); step()
+            moveTo(0, start - Offset(0f, bounds.height * 0.25f)); step()
+            moveTo(0, start - Offset(0f, bounds.height * 0.5f)); step()
+            up(0)
+        }
+        assertEquals("g", typed.toString())
+    }
+
+    @Test fun upwardDriftOffTheKeyWithEnglishGlideStillTypes() {
+        show(ascii = true, prefs = KeyboardInputPreferences(glideTyping = true)); upwardDriftTypesG()
+    }
+
+    @Test fun upwardDriftOffTheKeyWithChineseGlideStillTypes() {
+        show("rime_ice", prefs = KeyboardInputPreferences(chineseGlideTyping = true)); upwardDriftTypesG()
     }
 
     /** 14 键点双字母键提交整键：四下都要到。 */

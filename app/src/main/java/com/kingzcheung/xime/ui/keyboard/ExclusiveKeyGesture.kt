@@ -100,6 +100,8 @@ internal fun letterSwipeCornerLabels(key: String): Pair<String?, String?> {
  */
 internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
     reserveDragForGlide: Boolean = false,
+    /** 拖动留给的是 26 键字母滑行（不是九键）：没成滑行时按字母滑行的接管距离判点按，见 [glideDriftIsTap]。 */
+    letterGlide: Boolean = false,
     currentActions: () -> KeyGestureActions,
 ) = coroutineScope {
     val gestureScope = this
@@ -223,7 +225,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                         right -> actions.onRight?.invoke()
                         reserveDragForGlide && moved ->
                             if (glideDriftIsTap(down.position, change.position, size.width.toFloat(), size.height.toFloat(),
-                                    viewConfiguration.touchSlop)) actions.onTap()
+                                    viewConfiguration.touchSlop, letterGlide)) actions.onTap()
                         !crossedSwipeThreshold && (actions.freeDirection || abs(dx) < horizontalCancelThreshold) -> actions.onTap()
                     }
                     break
@@ -251,11 +253,18 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
  * 留给滑行的键上手指挪过了触摸阈值、滑行却没接管，抬手算不算点了这个键：
  * 抬手点还在这个键上（各边放宽一个触摸阈值），或者离按下点不到滑行接管要走的距离
  * （[DigitStroke.CLAIM_KEY_FRACTION] 个键的短边；快打时按在键边往隔壁抖一下也算这一键）。
+ * 26 键字母滑行（[letterGlide]）接管要横竖合起来走满 [GlideTracker.MIN_SPAN_KEYS] 个键（宽、高各按键宽、键高算），
+ * 比九键的 0.6 个短边远，竖着更远：以前两条线中间那一段（快打时手指一抖出键 0.6～0.75 个键）既不是滑行也不算点按，
+ * 这一下就吞了（用户 11-11「打两个字第二个字被吞」）。现在没到字母滑行的接管距离都算点按。
  * 都不是（拖到左栏、功能键或拖远了又没成滑行）就不出字，和以前滑出键外取消一样。
  */
-internal fun glideDriftIsTap(down: Offset, up: Offset, keyWidth: Float, keyHeight: Float, slop: Float): Boolean {
+internal fun glideDriftIsTap(down: Offset, up: Offset, keyWidth: Float, keyHeight: Float, slop: Float,
+                             letterGlide: Boolean = false): Boolean {
     val inside = up.x >= -slop && up.x <= keyWidth + slop && up.y >= -slop && up.y <= keyHeight + slop
-    return inside || (up - down).getDistance() < minOf(keyWidth, keyHeight) * DigitStroke.CLAIM_KEY_FRACTION
+    val drift = up - down
+    val belowLetterClaim = letterGlide && keyWidth > 0f && keyHeight > 0f &&
+        kotlin.math.hypot(drift.x / keyWidth, drift.y / keyHeight) < com.kingzcheung.xime.glide.GlideTracker.MIN_SPAN_KEYS
+    return inside || belowLetterClaim || drift.getDistance() < minOf(keyWidth, keyHeight) * DigitStroke.CLAIM_KEY_FRACTION
 }
 
 /** 这个键上新按下的一根手指；已经结算过、还按着的手指不算。 */

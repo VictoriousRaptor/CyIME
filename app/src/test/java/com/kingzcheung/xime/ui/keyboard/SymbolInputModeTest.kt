@@ -65,6 +65,43 @@ class SymbolInputModeTest {
         }
     }
 
+    @Test fun `glide long press offers top and bottom corner and commits the chosen one`() {
+        for (reverse in listOf(false, true)) {
+            val events = mutableListOf<String>()
+            val mapped = actions(events).copy(longPressItems = emptyList(), onLongPressSelect = null)
+                .withGlideCornerMenu("1", "!", 300L).withSymbolSwipeDirection(reverse)
+            // 上下滑都给了滑行：两个方向都不出角标。
+            assertNull(mapped.onUp); assertNull(mapped.onDown)
+            assertTrue(mapped.blockUpSwipe && mapped.blockDownSwipe)
+            assertEquals(listOf("1", "!"), mapped.longPressItems)
+            assertNull(mapped.onLongPress)
+            assertEquals(300L, mapped.longPressTimeoutMillis)
+            mapped.onLongPressSelect!!("1")
+            mapped.onLongPressSelect!!("!")
+            assertEquals(listOf("symbol:1", "down:!"), events)
+        }
+    }
+
+    @Test fun `glide long press with one corner commits at once and accent keys stay`() {
+        val events = mutableListOf<String>()
+        // 开数字行时中文 Q 上方空、下方 +：按满立刻出 +。
+        val lowerOnly = actions(events).copy(longPressItems = emptyList(), onLongPressSelect = null)
+            .withGlideCornerMenu(null, "+")
+        assertTrue(lowerOnly.longPressItems.isEmpty())
+        assertEquals("+", lowerOnly.longPressBubbleText)
+        lowerOnly.onLongPress!!()
+        assertEquals(listOf("down:+"), events)
+        // 上下一样只出一个。
+        val same = actions(mutableListOf()).copy(longPressItems = emptyList()).withGlideCornerMenu("?", "?")
+        assertEquals("?", same.longPressBubbleText)
+        // 西班牙语元音：没有上角标可长按、本来长按出 á，不动。
+        val accent = actions(mutableListOf())
+        assertSame(accent, accent.withGlideCornerMenu(null, "~"))
+        // 两个都没有也不动。
+        val none = actions(mutableListOf()).copy(longPressItems = emptyList())
+        assertSame(none, none.withGlideCornerMenu(null, null))
+    }
+
     @Test fun `disabled symbol stays disabled after direction flip`() {
         val original = actions(mutableListOf()).copy(onDown = null, downText = null, downPreviewText = null)
         val mapped = original.withSymbolSwipeDirection(reverse = false)

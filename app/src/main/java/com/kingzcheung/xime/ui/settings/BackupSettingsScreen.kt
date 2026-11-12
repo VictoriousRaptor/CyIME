@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.twotone.ContentPaste
 import androidx.compose.material.icons.twotone.Download
 import androidx.compose.material.icons.twotone.Person
 import androidx.compose.material.icons.twotone.Upload
@@ -57,6 +58,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     // 和其他开关一样记住选择（以前只存在页面状态里，退出再进来就变回关）。
     var includePersonal by remember { mutableStateOf(BackupChoices.includePersonal(context)) }
+    var includeClipboardHistory by remember { mutableStateOf(BackupChoices.includeClipboardHistory(context)) }
     // 当前操作（"export"/"import"）：loading 只出现在触发它的按钮上，其余按钮仅禁用
     var busyOp by remember { mutableStateOf<String?>(null) }
     val busy = busyOp != null
@@ -70,7 +72,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
         busyOp = "export"
         message = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { BackupManager.exportTo(context, uri, includePersonal) }
+            val result = withContext(Dispatchers.IO) { BackupManager.exportTo(context, uri, includePersonal, includeClipboardHistory) }
             busyOp = null
             message = result.fold(
                 onSuccess = { "备份已导出" + if (includePersonal) "(含个人词库与学习数据)" else "" },
@@ -99,7 +101,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingImport = null },
             title = { Text("从备份恢复") },
-            text = { Text("备份中的设置会覆盖当前对应的设置；若备份含个人词库，也会覆盖当前词库。恢复后输入方案会重新部署。") },
+            text = { Text("备份中的设置会覆盖当前对应的设置；若备份含个人词库，也会覆盖当前词库。剪贴板记录合并进来，已有的不重复。恢复后输入方案会重新部署。") },
             confirmButton = {
                 TextButton(onClick = {
                     pendingImport = null
@@ -157,9 +159,16 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                         checked = includePersonal,
                         onCheckedChange = { includePersonal = it; BackupChoices.setIncludePersonal(context, it) }
                     )
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.ContentPaste,
+                        title = "包含剪贴板历史",
+                        subtitle = "没固定的剪贴板记录也备份",
+                        checked = includeClipboardHistory,
+                        onCheckedChange = { includeClipboardHistory = it; BackupChoices.setIncludeClipboardHistory(context, it) }
+                    )
                     Text(
-                        text = "始终包含：全部设置项、工具栏与菜单排列、主题与背景图、键盘布局与尺寸、自定义布局和方案定制。" +
-                            "不含插件、下载的模型、补充词库和剪贴板内容。",
+                        text = "始终包含：全部设置项、工具栏与菜单排列、主题与背景图、键盘布局与尺寸、自定义布局和方案定制、" +
+                            "剪贴板里固定和分组的记录。不含插件、下载的模型、补充词库、剪贴板图片和记下的密码。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
@@ -194,7 +203,9 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                                 Text("导出备份", modifier = Modifier.padding(start = 6.dp))
                             }
                             OutlinedButton(
-                                onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+                                // 不按类型过滤：别处传来的 zip 可能被标成 application/x-zip-compressed 等别的类型，
+                                // 在选择器里会变灰选不了；是不是 CyIME 备份由 readBackup 看内容判断。
+                                onClick = { importLauncher.launch(arrayOf("*/*")) },
                                 modifier = Modifier.weight(1f),
                                 enabled = !busy
                             ) {
@@ -236,5 +247,14 @@ internal object BackupChoices {
     fun setIncludePersonal(context: android.content.Context, include: Boolean) {
         com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).edit()
             .putBoolean(KEY_INCLUDE_PERSONAL, include).apply()
+    }
+
+    /** 「包含剪贴板历史」，默认关（用户 11-11 转述）；固定和分组的记录不看它，总会备份。 */
+    const val KEY_INCLUDE_CLIPBOARD_HISTORY = "backup_include_clipboard_history"
+    fun includeClipboardHistory(context: android.content.Context): Boolean =
+        com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).getBoolean(KEY_INCLUDE_CLIPBOARD_HISTORY, false)
+    fun setIncludeClipboardHistory(context: android.content.Context, include: Boolean) {
+        com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).edit()
+            .putBoolean(KEY_INCLUDE_CLIPBOARD_HISTORY, include).apply()
     }
 }

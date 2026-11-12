@@ -4,6 +4,9 @@ package com.kingzcheung.xime.ui.keyboard
 internal fun candidateLabelFits(offset: Int, size: Int, padding: Int, start: Int, end: Int): Boolean =
     offset + padding >= start && offset + size - padding <= end
 
+/** 候选的字被左边栏边切掉了（透明的点按留白越界不算）。右边越界的照常显示、被裁掉。 */
+internal fun candidateLabelCutAtStart(offset: Int, padding: Int, start: Int): Boolean = offset + padding < start
+
 /** Keep a contiguous prefix, no clipped last candidate. A single oversized first word is ellipsized. */
 internal fun candidatePrefixCount(widths: List<Int>, available: Int, spacing: Int): Int =
     candidatePrefixCount(widths.size, available, spacing) { widths[it] }

@@ -42,7 +42,7 @@ class ClipboardPanelMatrixTest {
             val available = s.screen - s.bottom
             val results = clipboardSearchResultsTarget(true, clipboardPanelBounds(k, s.screen, s.bottom), k, available)
             val inline = clipboardSearchInline(k, available)
-            val window = k + clipboardSearchExtraHeight(true, false, results, inline)
+            val window = k + clipboardSearchExtraHeight(true, results, inline)
             val room = available - k - clipboardSearchPanelHeight(inline)
             if (room >= 0) assertTrue("${s.name} 键盘 $k：搜索后 $window > 可用 $available", window <= available)
             // Wherever there is room, results get at least one row of cards (or all the room there is).

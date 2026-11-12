@@ -79,6 +79,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -529,7 +531,7 @@ fun KeyboardView(
         // A floating card holds the search results and bar above its keys; without them in its height
         // the results squeezed the keys.
         contentHeightDp = state.keyboardHeightDp + clipboardSearchExtraHeight(
-            state.isFloatingMode && state.clipboardSearchVisible, overlayPage = false, state.clipboardSearchResultsHeight,
+            state.isFloatingMode && state.clipboardSearchVisible, state.clipboardSearchResultsHeight,
             state.clipboardSearchInline),
         bottomContentPaddingDp = renderedBottomPaddingDp,
         bottomKeyClearance = floatingBottomClearance,
@@ -574,6 +576,8 @@ fun KeyboardView(
                     ?: state.fixedWidthDp.takeIf { it > 0 } ?: screenW).toFloat(),
                 state.keyboardHeightDp.toFloat()))
         }
+        // 候选栏上面那一截的高度（翻译栏、工具面板、剪贴板搜索、拼音编辑条）；菜单等面板据此让开工具栏，见 belowCandidateBar。
+        val aboveCandidateBarPx = remember { mutableIntStateOf(0) }
         Box(modifier = Modifier.fillMaxSize().then(contentModifier).onSizeChanged { size ->
             if (!barScaleFrozen && size.width > 0 && size.height > 0) {
                 candidateBarScaleState.floatValue = candidateBarScale(size.width / resizeControlDensity.density,
@@ -1355,6 +1359,8 @@ fun KeyboardView(
             }
             }
             }
+            // 量候选栏的顶边：不占地方的标记，位置就是上面各栏加起来的高度。
+            Spacer(Modifier.onPlaced { aboveCandidateBarPx.intValue = it.positionInParent().y.roundToInt() })
             // Opening a tool must not insert a row and shrink the underlying handwriting canvas.
             if (!state.handwritingExpanded || candidatePageExpanded) renderCandidateBar(page)
 
@@ -1487,6 +1493,7 @@ fun KeyboardView(
                         onToggleSingleCharFilter = {
                             onHapticFeedback?.invoke()
                             viewModel.toggleSingleCharFilter()
+                            if (viewModel.singleCharFilter.value) callbacks.onSingleCharFilterOn?.invoke()
                         }.takeIf { cs.isComposing || cs.candidates.isNotEmpty() },
                         onAssociationSelect = select@{ index ->
                             val sourceIndex = index + barAssociationCount
@@ -2085,7 +2092,8 @@ fun KeyboardView(
                 modifier = (handwritingOverlaySlot?.let { slot ->
                     Modifier.align(Alignment.BottomCenter).absoluteOffset(x = slot.offsetXDp.dp).width(slot.widthDp.dp)
                         .height((slot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue)).coerceAtLeast(0f).dp)
-                } ?: Modifier.fillMaxSize().padding(top = candidateBarHeightDp(candidateBarScaleState.floatValue).dp))
+                } ?: Modifier.fillMaxSize().belowCandidateBar(aboveCandidateBarPx,
+                    candidateBarHeightDp(candidateBarScaleState.floatValue).dp))
                     .testTag("keyboard-overlay"),
                 visibility = overlayVisibility,
                 revealState = overlayReveal,

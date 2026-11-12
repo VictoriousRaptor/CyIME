@@ -96,15 +96,18 @@ fun CommonSymbolKeyboardLayout(
     val isDarkTheme = keyTextColor == Color(0xFFE8EAED)
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    val liveKeyboardBounds = remember { LiveBounds() }
 
     fun processSwipeState(state: SwipeState, bounds: Rect) {
+        // 按键和键盘都按这一刻的位置算，见 [LiveBounds]。
+        val origin = liveKeyboardBounds.current(keyboardBounds, "keyboard")
         swipeBubble.update(
             state,
             Rect(
-                left = bounds.left - keyboardBounds.left,
-                top = bounds.top - keyboardBounds.top,
-                right = bounds.right - keyboardBounds.left,
-                bottom = bounds.bottom - keyboardBounds.top,
+                left = bounds.left - origin.left,
+                top = bounds.top - origin.top,
+                right = bounds.right - origin.left,
+                bottom = bounds.bottom - origin.top,
             )
         )
     }
@@ -117,6 +120,7 @@ fun CommonSymbolKeyboardLayout(
             .fillMaxHeight()
             .onGloballyPositioned { coordinates ->
                 keyboardBounds = coordinates.boundsInRoot()
+                liveKeyboardBounds.coordinates = coordinates
             }
             .padding(bottom = if (isFloatingMode || isLandscape) 0.dp else 0.dp),
     ) {

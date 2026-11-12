@@ -29,7 +29,11 @@ import com.kingzcheung.xime.settings.SettingsPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Three language mappings, one correction scope, and one model comparison at a time. */
+/**
+ * 每种语言一组：「说话时」用哪个模型出字，「说完后」怎么定稿（2026-11-09 重排）。
+ * 原来的「中文定稿 X-ASR」「语言 → 主模型」「二次校正」三组互相牵连，看不出谁在用、怎么切；
+ * 现在一条语言一条流程，选项只是原有存储值的组合，能做的事和默认值都不变。
+ */
 @Composable
 internal fun OfflineModelCard() {
     val context = LocalContext.current
@@ -55,109 +59,23 @@ internal fun OfflineModelCard() {
     fun download(id: String) { ModelManager.getModel(id)?.let { ModelManager.downloadModelInBackground(context, it) } }
     val senseReady = SpeechModelCatalog.SENSEVOICE in ready
     var wholeSentence by remember { mutableStateOf(SettingsPreferences.isSttWholeSentence(context)) }
-    // Every line below reads the same rule as the :asr service, so no two lines disagree about which model runs.
-    fun pipeline(language: InputLanguage) = SpeechModelSelection.pipeline(selected.getValue(language),
-        chinese = language == InputLanguage.CHINESE, wholeSentenceOn = wholeSentence, xasrReady = xasrReady)
-    // 整句定稿能用的地方（含只用 SenseVoice 的中文）都由 X-ASR 定稿：放在最上面，下载、在不在用一眼可见。
-    val chineseMode = selected.getValue(InputLanguage.CHINESE)
-    val wholeSentenceAvailable = SpeechModelSelection.wholeSentenceApplies(chineseMode, chinese = true)
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SettingsSection(title = "中文定稿") {
-            Row(Modifier.fillMaxWidth().settingsSearchAnchor("X-ASR").testTag("speech-xasr")
-                .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("X-ASR · 中英", style = MaterialTheme.typography.bodyLarge)
-                    Text(when {
-                        !xasrReady -> "说完把整句中文再认一遍，错字比 SenseVoice 少三分之一，也更快。"
-                        pipeline(InputLanguage.CHINESE).finalizer == SpeechModelCatalog.XASR -> "在用：中文说完由它定稿。"
-                        !wholeSentenceAvailable -> "未生效：中文主模型选 SenseVoice，或开启下面的中文二次校正。"
-                        else -> "未生效：打开下面的「整句定稿」。"
-                    }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (!xasrReady) ModelDownloadAction(SpeechModelCatalog.XASR, downloads) { download(SpeechModelCatalog.XASR) }
-        }
-        SettingsSection(title = "语言 → 主模型") {
-            InputLanguage.speech.forEachIndexed { index, language ->
-                val mode = selected.getValue(language)
-                val primary = SpeechModelSelection.primary(mode)
-                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-                Row(Modifier.fillMaxWidth().testTag("speech-language:${language.id}")
-                    .clickable { editing = language }.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("${language.displayName} · ${SpeechModelSelection.displayName(primary).orEmpty()}",
-                            style = MaterialTheme.typography.bodyLarge)
-                        Text(buildString {
-                            append(speechModelFacts(primary))
-                            val pipe = pipeline(language)
-                            if (pipe.finalizer == SpeechModelCatalog.XASR) append(" → X-ASR 整句定稿")
-                            else if (SpeechModelSelection.hasCorrection(mode)) append(" → SenseVoice 校正")
-                            if (pipe.wholeSentence && pipe.finalizer != SpeechModelCatalog.XASR) append(" · 整句定稿")
-                            if (primary !in ready || SpeechModelSelection.hasCorrection(mode) && !senseReady) append(" · 待下载")
-                        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "选择${language.displayName}模型")
+        InputLanguage.speech.forEachIndexed { index, language ->
+            SettingsSection(title = "${language.displayName}语音") {
+                val content = if (index == InputLanguage.speech.lastIndex) Modifier.testTag("speech-correction") else Modifier
+                Column(content.fillMaxWidth()) {
+                    SpeechPipeline(language, selected.getValue(language), ready, senseReady, xasrReady, wholeSentence,
+                        downloads, onPick = { editing = language }, onDownload = ::download,
+                        onFinish = { finish ->
+                            val (mode, whole) = SpeechModelSelection.applyFinish(selected.getValue(language),
+                                chinese = language == InputLanguage.CHINESE, finish = finish)
+                            manager.setModel(mode, language); refresh(language)
+                            whole?.let { wholeSentence = it; SettingsPreferences.setSttWholeSentence(context, it) }
+                        })
                 }
             }
         }
-        SettingsSection(title = "二次校正") {
-            // 与其他设置项一致：每种语言一行开关，两行都关即不校正。
-            Column(Modifier.fillMaxWidth().testTag("speech-correction")) {
-                listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH).forEachIndexed { index, language ->
-                    val mode = selected.getValue(language)
-                    val enabled = SpeechModelSelection.hasCorrection(mode)
-                    val canRefine = SpeechModelSelection.supportsCorrection(mode)
-                    val available = canRefine && (senseReady || enabled)
-                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(start = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Row(Modifier.fillMaxWidth().testTag("speech-correction:${language.id}")
-                        .toggleable(value = enabled, enabled = available, role = Role.Switch,
-                            onValueChange = { manager.setRefinementEnabled(it, language); refresh(language) })
-                        .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("${language.displayName} SenseVoice 二次校正", style = MaterialTheme.typography.bodyLarge)
-                            Text(when {
-                                !canRefine -> "SenseVoice 已作为主模型，无需再次校正。"
-                                !senseReady && !enabled -> "先下载 SenseVoice 模型，再为主模型启用二次校正。"
-                                enabled && pipeline(language).finalizer == SpeechModelCatalog.XASR ->
-                                    "停顿后复核主模型结果；整句定稿开着、X-ASR 已下载，现在由 X-ASR 代替 SenseVoice 定稿。"
-                                else -> "停顿后由 SenseVoice 复核主模型结果，会增加内存占用和等待时间。"
-                            }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(checked = enabled, enabled = available, onCheckedChange = null, colors = settingsSwitchColors())
-                    }
-                }
-                // 整句定稿只对中文生效：中文开着校正，或中文直接用 SenseVoice 时可用（英文的校正不受它影响）。
-                val chineseCorrection = SpeechModelSelection.hasCorrection(chineseMode)
-                val senseVoiceChinese = SpeechModelSelection.primary(chineseMode) == SpeechModelCatalog.SENSEVOICE
-                HorizontalDivider(modifier = Modifier.padding(start = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Row(Modifier.fillMaxWidth().settingsSearchAnchor("整句定稿").testTag("speech-whole-sentence")
-                    .toggleable(value = wholeSentence, enabled = wholeSentenceAvailable, role = Role.Switch,
-                        onValueChange = { wholeSentence = it; SettingsPreferences.setSttWholeSentence(context, it) })
-                    .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("整句定稿", style = MaterialTheme.typography.bodyLarge)
-                        Text(when {
-                            chineseCorrection -> "中文说完一整句(停顿约 1 秒或点结束)再统一校正一次，更准，说完要多等一会儿；关闭时每 6 秒校正一次。只对中文生效。"
-                            senseVoiceChinese -> "中文用 SenseVoice 时，说完(点结束)把整段再识别一次，更准，说完要多等一会儿。只对中文生效。"
-                            else -> "只对中文生效：先为中文开启上面的 SenseVoice 二次校正。"
-                        },
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = wholeSentence, enabled = wholeSentenceAvailable, onCheckedChange = null,
-                        colors = settingsSwitchColors())
-                }
-                if (!senseReady) {
-                    ModelDownloadAction(SpeechModelCatalog.SENSEVOICE, downloads) { download(SpeechModelCatalog.SENSEVOICE) }
-                }
-            }
-        }
-        Text("配置修改在下一次录音生效。录音中切换语言时，兼容同一模型就继续使用，否则保留已识别文字并切换模型，麦克风继续收音。",
+        Text("修改在下一次录音生效。录音中切换语言时，兼容同一模型就继续用，否则保留已识别的字并换模型，麦克风继续收音。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     editing?.let { language ->
@@ -167,11 +85,92 @@ internal fun OfflineModelCard() {
     }
 }
 
+/** 一种语言的完整流程：说话时（点开换模型）→ 说完后（单选定稿方式）。 */
+@Composable
+private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<String>, senseReady: Boolean,
+    xasrReady: Boolean, wholeSentence: Boolean, downloads: Map<String, ModelDownloadState>,
+    onPick: () -> Unit, onDownload: (String) -> Unit, onFinish: (SpeechModelSelection.Finish) -> Unit) {
+    val chinese = language == InputLanguage.CHINESE
+    val primary = SpeechModelSelection.primary(mode)
+    val senseVoiceAlone = primary == SpeechModelCatalog.SENSEVOICE
+    val divider = @Composable { HorizontalDivider(Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)) }
+    Row(Modifier.fillMaxWidth().testTag("speech-language:${language.id}").clickable(onClick = onPick)
+        .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("说话时：${SpeechModelSelection.displayName(primary).orEmpty()}", style = MaterialTheme.typography.bodyLarge)
+            Text(speechModelTiming(primary) + if (primary in ready) "" else " (未下载)",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "换${language.displayName}说话时用的模型")
+    }
+    divider()
+    val options = SpeechModelSelection.finishOptions(mode, chinese)
+    if (options.size == 1) {
+        // 没得选时也写出来，整条流程一眼看全。
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("说完后：不再校正", style = MaterialTheme.typography.bodyLarge)
+            Text(if (senseVoiceAlone) "SenseVoice 停顿出的字就是定稿" else "${language.displayName}没有二次校正",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    val current = SpeechModelSelection.finish(mode, chinese, wholeSentence)
+    Text("说完后", style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+    Column(Modifier.fillMaxWidth().selectableGroup()) {
+        options.forEach { finish ->
+            val (title, caption) = when (finish) {
+                SpeechModelSelection.Finish.NONE -> "不校正" to
+                    (if (senseVoiceAlone) "每次停顿由 SenseVoice 直接出字" else "直接用说话时出的字")
+                SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
+                    ("每次停顿 (最长 6 秒) 复核一次" + if (senseReady) "" else " (需下载 SenseVoice)")
+                SpeechModelSelection.Finish.WHOLE -> (if (xasrReady) "整句定稿 · X-ASR" else "整句定稿 · SenseVoice") to
+                    ("停顿 1 秒或点结束后整句再认一遍 (更准, 多等一会儿)" +
+                        if (xasrReady) "" else "; 下载 X-ASR 错字少三分之一")
+            }
+            val enabled = finish == current || when (finish) {
+                SpeechModelSelection.Finish.NONE -> true
+                SpeechModelSelection.Finish.SENSEVOICE -> senseReady
+                SpeechModelSelection.Finish.WHOLE -> senseVoiceAlone || senseReady
+            }
+            val anchor = if (finish == SpeechModelSelection.Finish.WHOLE) Modifier.settingsSearchAnchor("整句定稿") else Modifier
+            Row(Modifier.fillMaxWidth().then(anchor).testTag("speech-finish:${language.id}:${finish.name.lowercase()}")
+                .selectable(finish == current, enabled = enabled, role = Role.RadioButton, onClick = { onFinish(finish) })
+                .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(finish == current, onClick = null, enabled = enabled)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.bodyLarge)
+                    Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+    // 下载按钮放在用到它的语言下面：SenseVoice（中英校正、中文整句的前提），X-ASR（只有中文）。
+    val needsSense = !senseReady && SpeechModelSelection.Finish.SENSEVOICE in options
+    val needsXasr = chinese && !xasrReady && SpeechModelSelection.Finish.WHOLE in options
+    if (needsSense || needsXasr) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        if (needsSense) ModelDownloadAction(SpeechModelCatalog.SENSEVOICE, downloads) { onDownload(SpeechModelCatalog.SENSEVOICE) }
+        if (needsXasr) ModelDownloadAction(SpeechModelCatalog.XASR, downloads) { onDownload(SpeechModelCatalog.XASR) }
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
+/** 说话时出字的方式和大小，括号用 ASCII。 */
+internal fun speechModelTiming(id: String): String = when (id) {
+    SpeechModelCatalog.PARAFORMER -> "边说边出字 (226 MB)"
+    SpeechModelCatalog.SENSEVOICE -> "停顿后才出字 (228 MB)"
+    SpeechModelCatalog.ZIPFORMER -> "边说边出字 (133 MB)"
+    SpeechModelCatalog.ZIPFORMER_JA_INT8 -> "说话中先出预览 (153 MB)"
+    SpeechModelCatalog.ZIPFORMER_JA -> "说话中先出预览 (586 MB)"
+    else -> speechModelFacts(id)
+}
+
 @Composable
 internal fun SpeechModelPicker(language: InputLanguage, selected: String, ready: Set<String>,
     downloads: Map<String, ModelDownloadState>, onSelect: (String) -> Unit, onDownload: (String) -> Unit,
     onClose: () -> Unit) {
-    AlertDialog(onDismissRequest = onClose, title = { Text("${language.displayName}主模型") },
+    AlertDialog(onDismissRequest = onClose, title = { Text("${language.displayName}说话时用的模型") },
         text = {
             SpeechModelChoices(language, selected, ready, downloads, onSelect, onDownload)
         }, confirmButton = { TextButton(onClick = onClose) { Text("关闭") } })
@@ -242,13 +241,16 @@ internal fun speechModelFacts(id: String): String = when (id) {
 
 @Composable
 private fun ModelDownloadAction(id: String, downloads: Map<String, ModelDownloadState>, onDownload: () -> Unit) {
+    // 一种语言下面可能并排两个下载按钮，写明是哪个模型。
+    val name = if (id == SpeechModelCatalog.XASR) "X-ASR" else SpeechModelSelection.displayName(id).orEmpty().substringBefore(" · ")
     when (val state = downloads[id]) {
         is ModelDownloadState.Downloading -> {
             LinearProgressIndicator(progress = { state.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            Text("下载中 ${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Text("$name 下载中 ${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
         }
         else -> {
-            TextButton(onClick = onDownload) { Text(if (state is ModelDownloadState.Error) "重试下载" else "下载 ${speechModelFacts(id).substringAfterLast(" · ")}") }
+            TextButton(onClick = onDownload) { Text(if (state is ModelDownloadState.Error) "重试下载 $name"
+                else "下载 $name (${speechModelFacts(id).substringAfterLast(" · ")})") }
             if (state is ModelDownloadState.Error) Text(state.message, color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall)
         }

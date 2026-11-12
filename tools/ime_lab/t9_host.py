@@ -261,7 +261,7 @@ def run_host(args):
                 raise ValueError("Host build source inventory differs from its fingerprint")
             shutil.copyfile(source_files, output / "source-files.json")
             print("Snapshotting the existing dictionaries, configuration and scoring model.", flush=True)
-            resource_info = snapshot_resources(REPO, resources)
+            resource_info = snapshot_resources(REPO, resources, getattr(args, "t9_ngram", None))
         manifest["engine"] = dict(source="host-source-build", resource_type="resource_zip",
                                   resources_sha256=resource_info["sha256"], apk_sha256=resource_info["sha256"],
                                   libraries=libraries, build_manifest_sha256=file_digest(output / "engine-build.json"))
@@ -351,6 +351,9 @@ def add_arguments(parser):
     parser.add_argument("--user-dict", type=Path,
                         help="Rime userdb snapshot (*.userdb.txt) merged into the fresh user directory before "
                              "replay; recorded as user_state=preset_user_dict and never compared with empty-user runs")
+    parser.add_argument("--t9-ngram", type=Path,
+                        help="Word model (t9_ngram.lm) to replay instead of the one in app/build/generated/t9-ngram; "
+                             "its hash is recorded in resources.json")
     parser.add_argument("--engine-from", type=Path,
                         help="Replay the engine and resources of an earlier complete host run instead of building "
                              "the current source; used to interleave baseline and candidate runs in one timing session")

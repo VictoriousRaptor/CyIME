@@ -386,6 +386,7 @@ internal fun rememberImeKeyboardCallbacks(
                 service.refreshExpandedCandidates()
             },
             onExtendCandidateStrip = { service.extendCandidateStrip() },
+            onSingleCharFilterOn = { service.loadSingleCharacterCandidates() },
             onCursorMove = { direction ->
                 if (service.schemaController.moveJapaneseReadingCaret(direction)) {
                     service.feedbackManager.cursorStepFeedback(view)

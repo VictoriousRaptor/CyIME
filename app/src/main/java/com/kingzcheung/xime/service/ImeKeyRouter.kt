@@ -833,6 +833,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 val transformed = result?.let { service.candidateTransform.transformFor(it) }
                 withEditor {
                     if (result != null && service.rimeEngine.isCandidateRevisionCurrent(result.engineRevision)) {
+                        // 这一笔的键是成批送的，不经 sendTransformedResult：双拼打第一个键时留到出结果才清的
+                        // 上一次联想（deferAssociationClear）要在这里清，否则上屏后接着划，旧联想词还挂在候选栏。
+                        service.candidateState.value = service.candidateState.value.copy(associationCandidates = emptyList())
                         service.sessionController.updateUIWithResult(
                             transformed?.let { result.copy(candidates = it.candidates.toTypedArray()) } ?: result,
                             transformed?.actions ?: emptyList(),

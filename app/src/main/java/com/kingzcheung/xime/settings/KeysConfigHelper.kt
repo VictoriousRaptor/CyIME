@@ -1903,13 +1903,27 @@ object KeysConfigHelper {
     /** 获取某个按键的手势配置。 */
     fun getKeyGesture(key: String): KeyGestureConfig? = getKeyGesture(key, false)
 
+    /**
+     * 日语 26 键等自带角标的键盘：第一排的角标是数字（xime.yaml）。开着数字行时数字已经在上面一排，
+     * 第一排不再重复画数字（用户 11-11「开启数字行多了一堆符号」）；不是数字的角标照旧。
+     */
+    internal fun withoutNumberRowDigits(key: String, config: KeyGestureConfig): KeyGestureConfig {
+        if (!numberRowCorners || key !in QwertySwipeSymbols.numberRowUp) return config
+        fun digit(def: GestureDef?) = def != null && def.value.ifEmpty { def.label }.let { it.length == 1 && it[0] in '0'..'9' }
+        // 换成空的（不是 null）：null 时 getSwipeUpLabel 等会退回全局默认角标，又把数字画出来。
+        val empty = GestureDef(action = GestureAction.NONE)
+        return config.copy(swipeUp = if (digit(config.swipeUp)) empty else config.swipeUp,
+            swipeDown = if (digit(config.swipeDown)) empty else config.swipeDown)
+    }
+
     /** 根据输入模式获取某个按键的手势配置。 */
     fun getKeyGesture(key: String, isAsciiMode: Boolean): KeyGestureConfig? {
         val config = if (isAsciiMode) _keyGestureConfigEn.value else _keyGestureConfig.value
         val normalized = key.lowercase()
         val profile = InputProfiles.current(_activeSchemaId, isAsciiMode)
         val letters = LetterLanguage.of(profile.language)
-        if (profile.language !in setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH) && letters == null) return config[normalized]
+        if (profile.language !in setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH) && letters == null)
+            return config[normalized]?.let { withoutNumberRowDigits(normalized, it) }
         // 西班牙、德、法、俄、韩语键盘用英文键盘的角标（同一位置同一个半角符号）。
         val english = isAsciiMode || letters != null
         val custom = letterLayout(_activeSchemaId, isAsciiMode)

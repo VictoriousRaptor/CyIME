@@ -143,7 +143,8 @@ fun PluginSettingsContent(
                 plugin = (pluginInstance as? IPluginConfigurable) ?: NoSettings,
                 pluginName = pluginInfo.name,
                 onBack = onBack,
-                note = "这个插件没有设置项",
+                // 字幕、日语插件的设置由宿主画在这一页（hasHostSettings），不能再说没有设置项（11-12 平板）。
+                note = if (hasHostSettings(pluginId)) null else "这个插件没有设置项",
             )
         }
     }

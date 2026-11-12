@@ -1574,7 +1574,7 @@ internal fun FixedCandidateStrip(
     itemSpacing: androidx.compose.ui.unit.Dp = 4.dp,
     /** 分体中缝（窗口横坐标）；候选先排左侧，越过中缝接着排右侧。 */
     gapWindowX: Pair<Float, Float>? = null,
-    /** 能左右滑动看后面的候选；平时仍只显示放得下的那几个，手指一滑才露出后面的。分体中缝时不滑。 */
+    /** 能左右滑动看后面的候选；右边放不下的候选照常显示、被栏边裁掉，滑过去看全。分体中缝时不滑。 */
     scrollable: Boolean = false,
     /** 手指开始滑候选栏（展开着的话收起展开页，免得同一个候选出现两次）。 */
     onUserScroll: (() -> Unit)? = null,
@@ -1799,8 +1799,9 @@ internal fun FixedCandidateStrip(
 
 /**
  * 能左右滑的候选行：用实际排版判断文字是否放得下，[shown] 指定初始焦点窗口；
- * 手指一滑就全部露出来，可以一直滑到展开列表里的候选。长候选不截断，滑过去就能看完。
- * 松手后对齐到候选开头，停下时两边被栏边切掉一半的候选先藏起来（用户 10-31：滑动后左边的候选显示不全）；
+ * 可以一直滑到展开列表里的候选。长候选不截断，滑过去就能看完。
+ * 右边放不下的候选照常显示，被栏边裁掉一截（用户 11-11：长候选后面的候选被藏起来，要拖一下才出来）；
+ * 松手后对齐到候选开头，停下时左边被切掉一半的候选先藏起来（用户 10-31：滑动后左边的候选显示不全）；
  * 末尾补 [tailPaddingPx] 的空白，滑到最末时也能从一个完整的候选开始。
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -1839,19 +1840,16 @@ private fun ScrollableCandidateRow(
             revealed && (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= candidateCount - 4
         }.collect { if (it) currentNearEnd?.invoke() }
     }
-    // 停稳后被栏边切掉一部分的候选（滑动、对齐途中为空，全部照常显示）。比整条还宽的长候选不算，要能滑着看完。
+    // 停稳后被左边栏边切掉一部分的候选（滑动、对齐途中为空，全部照常显示）。右边放不下的照常显示、被裁掉。
+    // 比整条还宽的长候选不算，要能滑着看完。
     val labelPadding = with(LocalDensity.current) { itemPadding.roundToPx() }
-    val cutAtEdge by remember(listState, labelPadding, glossBodyWidthAt) {
+    val cutAtEdge by remember(listState, labelPadding) {
         androidx.compose.runtime.derivedStateOf {
             if (listState.isScrollInProgress) emptySet<Int>() else {
                 val info = listState.layoutInfo
                 val viewport = info.viewportEndOffset - info.viewportStartOffset
                 info.visibleItemsInfo.filter {
-                    val bodyWidth = glossBodyWidthAt?.invoke(it.index) ?: it.size
-                    // 超宽词或释义滑到中段时仍可读；新进入右端的词本身必须放全。
-                    val readingOversizedItem = it.size > viewport && (bodyWidth > viewport || it.offset < info.viewportStartOffset)
-                    !readingOversizedItem && !candidateLabelFits(it.offset, bodyWidth, labelPadding,
-                        info.viewportStartOffset, info.viewportEndOffset)
+                    it.size <= viewport && candidateLabelCutAtStart(it.offset, labelPadding, info.viewportStartOffset)
                 }.mapTo(HashSet()) { it.index }
             }
         }
@@ -1898,10 +1896,7 @@ private fun ScrollableCandidateRow(
         overscrollEffect = null,
         horizontalArrangement = Arrangement.spacedBy(itemSpacing), verticalAlignment = Alignment.CenterVertically) {
         items(all.size) { index ->
-            // A fresh list has no measured layout yet. Use the already measured candidate window
-            // for its first frame, then use actual scroll positions as soon as they are available.
-            val awaitingLayout = !listState.isScrollInProgress && listState.layoutInfo.visibleItemsInfo.isEmpty()
-            val hidden = if (awaitingLayout) index !in shown else index in cutAtEdge
+            val hidden = index in cutAtEdge
             // 栏边藏起来的候选两边不画竖线，免得竖线孤零零挂在栏边。
             val divided = showDividers && index > 0 && !hidden && (index - 1) !in cutAtEdge
             val numbered = index < candidates.size

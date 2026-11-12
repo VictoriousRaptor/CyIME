@@ -20,6 +20,8 @@ import java.util.zip.ZipOutputStream
  * - `_xime_backup/prefs/<name>.json`                其他设置文件（[SETTINGS_PREFS]）
  * - `_xime_backup/files/<path>`                     filesDir 下的设置/学习文件（[isFilesEntry]）
  * - `_xime_backup/cells/<name>`                     导入、下载的分类词库（[isCellEntry]），不论是否勾选个人数据
+ * - `_xime_backup/clipboard.json`                   剪贴板文字记录（[ClipboardExport] 的 JSON，见 [clipboardBackupItems]），
+ *   恢复时合并进剪贴板，已有的不重复；旧版恢复不认识这个条目，会跳过
  * - 包根的 rime 文件：`*.custom.yaml`、自定义布局方案、themes/ 背景图；
  *   勾选个人数据时另含 userdb（自造词与调频）、自定义短语与个人词库
  * - v1 的插件条目（plugin_configs/、plugins.xml、plugins/）仍可恢复，本地备份不再生成
@@ -75,6 +77,48 @@ object BackupManager {
         // 手写：边写边学的模板和训练页录的样本
         relative in HANDWRITING_FILES -> personal
         else -> false
+    }
+
+    /** 剪贴板记录在备份包里的条目。 */
+    internal const val CLIPBOARD_ENTRY = META_PREFIX + "clipboard.json"
+
+    /**
+     * 备份带哪些剪贴板记录（用户 11-11 转述「备份不包括剪贴板」）：固定的和分组里的总是带；普通历史只在打开
+     * 「包含剪贴板历史」时带。记下的密码（敏感）一律不带；图片不带（存在缓存目录，系统随时可能清）。
+     */
+    internal fun clipboardBackupItems(items: List<com.kingzcheung.xime.clipboard.ClipboardItem>, includeHistory: Boolean,
+        inGroup: (com.kingzcheung.xime.clipboard.ClipboardItem) -> Boolean): List<com.kingzcheung.xime.clipboard.ClipboardItem> =
+        com.kingzcheung.xime.clipboard.ClipboardExport.order(
+            items.filter { !it.sensitive && (includeHistory || it.isPinned || inGroup(it)) }, includePinned = true)
+
+    /** 本机要备份的剪贴板记录，写成 JSON；没有可带的或读不到时为 null（不影响其余备份）。 */
+    private fun clipboardBackupJson(context: Context, includeHistory: Boolean): String? = runCatching {
+        val groups = com.kingzcheung.xime.clipboard.ClipboardGroupStore.getInstance(context).state.value
+        val all = kotlinx.coroutines.runBlocking {
+            com.kingzcheung.xime.clipboard.ClipboardManager.getInstance(context).exportItems()
+        }
+        val items = clipboardBackupItems(all, includeHistory) { groups.groupOf("text:${it.id}") != null }
+        if (items.isEmpty()) return@runCatching null
+        java.io.StringWriter().also { out ->
+            com.kingzcheung.xime.clipboard.ClipboardExport.write(items,
+                com.kingzcheung.xime.clipboard.ClipboardExportFormat.JSON, out, System.currentTimeMillis()) { item ->
+                groups.groupOf("text:${item.id}")?.name
+            }
+        }.toString()
+    }.onFailure { Log.w(TAG, "clipboard backup skipped", it) }.getOrNull()
+
+    /** 备份包里的剪贴板记录；没有（旧备份）或太大时为 null。 */
+    internal fun clipboardEntry(bytes: ByteArray): String? = ZipInputStream(bytes.inputStream()).use { input ->
+        generateSequence { input.nextEntry }.firstOrNull { it.name == CLIPBOARD_ENTRY } ?: return null
+        val out = java.io.ByteArrayOutputStream()
+        val chunk = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(chunk)
+            if (read < 0) break
+            out.write(chunk, 0, read)
+            if (out.size() > com.kingzcheung.xime.clipboard.ClipboardImport.MAX_FILE_BYTES) return null
+        }
+        out.toString(Charsets.UTF_8.name())
     }
 
     /** 分类词库目录（[CellDictionaryManager.store]）。 */
@@ -141,8 +185,8 @@ object BackupManager {
         return root.toString()
     }
 
-    /** 写本地备份包到 [output]，返回写入的文件数（不含设置 JSON）。 */
-    fun writeLocalBackup(context: Context, output: OutputStream, includePersonal: Boolean): Int {
+    /** 写本地备份包到 [output]，返回写入的文件数（不含设置 JSON）。[clipboard]：剪贴板记录 JSON，null 不写。 */
+    fun writeLocalBackup(context: Context, output: OutputStream, includePersonal: Boolean, clipboard: String? = null): Int {
         val files = localBackupFiles(context.filesDir, includePersonal)
         ZipOutputStream(output).use { zos ->
             fun put(name: String, bytes: ByteArray) {
@@ -167,6 +211,7 @@ object BackupManager {
                 if (prefs.all.keys.any { it in keys })
                     put(META_PREFIX + "prefs/$name.json", keepKeys(prefsToJson(prefs), keys).toByteArray(Charsets.UTF_8))
             }
+            clipboard?.let { put(CLIPBOARD_ENTRY, it.toByteArray(Charsets.UTF_8)) }
             files.forEach { (name, file) ->
                 zos.putNextEntry(ZipEntry(name))
                 file.inputStream().use { it.copyTo(zos) }
@@ -178,9 +223,10 @@ object BackupManager {
     }
 
     /** 导出到用户选择的文档 Uri。 */
-    fun exportTo(context: Context, uri: Uri, includePersonal: Boolean): Result<Int> = runCatching {
+    fun exportTo(context: Context, uri: Uri, includePersonal: Boolean, includeClipboardHistory: Boolean = false): Result<Int> = runCatching {
+        val clipboard = clipboardBackupJson(context, includeClipboardHistory)
         val output = context.contentResolver.openOutputStream(uri, "wt") ?: error("无法写入所选位置")
-        output.use { writeLocalBackup(context, it, includePersonal) }
+        output.use { writeLocalBackup(context, it, includePersonal, clipboard) }
     }.onFailure { Log.e(TAG, "exportTo failed", it) }
 
     /** 读取用户选择的备份包；不是 CyIME 备份时拒绝，避免把任意 zip 解进 rime 目录。 */
@@ -211,6 +257,13 @@ object BackupManager {
     /** 恢复后重新部署 Rime 并刷新自定义布局缓存，使设置立即生效。 */
     suspend fun importBackup(context: Context, bytes: ByteArray): Result<Unit> {
         restoreArchive(context, bytes).onFailure { return Result.failure(it) }
+        // 剪贴板记录合并进来，已有的不重复；这一步失败不算恢复失败。
+        runCatching {
+            clipboardEntry(bytes)?.let { json ->
+                com.kingzcheung.xime.clipboard.ClipboardManager.getInstance(context)
+                    .importItems(com.kingzcheung.xime.clipboard.ClipboardImport.parse(json))
+            }
+        }.onFailure { Log.w(TAG, "restore clipboard failed", it) }
         runCatching { CustomKeyboardLayouts.load(context) }
             .onFailure { Log.w(TAG, "reload custom layouts failed", it) }
         // 自定义双拼只备份键位表，方案文件按它重新生成。

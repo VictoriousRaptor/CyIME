@@ -13,6 +13,13 @@ bool T9EnglishSlotted(const Phrase& phrase) {
   return phrase.end() - phrase.start() >= 4 ||
          std::any_of(text.begin(), text.end(), [](char c) { return static_cast<unsigned char>(c) >= 0x80; });
 }
+bool HasHan(const string& text) {
+  // A UTF-8 lead byte of U+4E00..U+9FFF (CJK unified ideographs).
+  return std::any_of(text.begin(), text.end(), [](char c) {
+    const auto b = static_cast<unsigned char>(c);
+    return b >= 0xE4 && b <= 0xE9;
+  });
+}
 class EnglishLearningTranslation : public CacheTranslation {
  public:
   EnglishLearningTranslation(an<Translation> source, double exact_quality)
@@ -20,6 +27,13 @@ class EnglishLearningTranslation : public CacheTranslation {
   an<Candidate> Peek() override {
     auto candidate = CacheTranslation::Peek();
     auto phrase = As<Phrase>(candidate);
+    // 2026-11-11「都按权重算」: a mixed word (B站, 哆啦A梦; Han characters with letters) typed in full is a whole word
+    // like an exact Chinese phrase, 1 + its weight, which comes from public-corpus counts on the Chinese scale
+    // (data/cyime_mixed_word_counts.tsv). Before, every one got exact_quality and was placed 6th, off the bar.
+    if (phrase && phrase->entry().commit_count <= 0 && phrase->type() == "table" && HasHan(phrase->text())) {
+      phrase->set_quality(1.0 + std::exp(phrase->weight()));
+      return candidate;
+    }
     if (phrase && exact_quality_ > -1e9 && phrase->entry().commit_count <= 0 &&
         (phrase->type() == "table" || phrase->type() == "user_table") && T9EnglishSlotted(*phrase)) {
       // exact_quality: a whole word not learned yet comes right after the fully spelled Chinese words, among

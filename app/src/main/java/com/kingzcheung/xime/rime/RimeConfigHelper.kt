@@ -250,11 +250,14 @@ object RimeConfigHelper {
         val installing = File(rimeDir, SchemaManager.ASSET_INSTALL_MARKER)
         installing.writeText("installing")
         copyAssetsToRimeDir(context, rimeDir)
-        com.kingzcheung.xime.settings.BundledRimeSync.install(
+        val bundledStartedAt = android.os.SystemClock.elapsedRealtime()
+        val bundledChanged = com.kingzcheung.xime.settings.BundledRimeSync.install(
             rimeDir, File(context.filesDir, "rime-upgrade-backups"),
             com.kingzcheung.xime.model.CandidateModelAssets.filterBundledManifest(context,
                 context.assets.open("rime-bundled-manifest.tsv").bufferedReader().use { it.readText() }),
         ) { context.assets.open(it) }
+        // 进共享日志：升级后第一次弹键盘慢时，看内置资源核对、替换用了多久。
+        if (bundledChanged) FileLogger.w(TAG, "Bundled assets updated in ${android.os.SystemClock.elapsedRealtime() - bundledStartedAt}ms")
         // 日语词典装不上只影响日语转换，不能连累其它输入方案启动。
         // 词典和引擎在安装包里或是「日语」插件下载的（JapanesePack）；告诉日语翻译器下载的引擎在哪。
         try {
@@ -295,7 +298,7 @@ object RimeConfigHelper {
             FileLogger.w(TAG, "Cell dictionaries not merged, previous config kept: ${e.message}")
             retryWithoutCellEnglish(context)
         }
-        // 内置资源发生替换时已失效旧编译缓存；其它配置变动仍由 ensureDeployment 增量处理。
+        // 内置资源替换后部署哈希变了，由 ensureDeployment 增量维护：librime 按源文件校验和只重编变了的词库。
 
         Pair(rimeDir.absolutePath, rimeDir.absolutePath)
     }

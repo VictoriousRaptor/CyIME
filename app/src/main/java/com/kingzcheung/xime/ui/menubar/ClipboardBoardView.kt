@@ -220,11 +220,15 @@ internal fun hideKeyboardFrom(context: Context) {
 internal const val CLIPBOARD_CARD_MAX_LINES_KEY = "card_max_lines"
 
 /**
- * 多选里「全选」选哪些（用户 11-11 转述：删除时固定的要一条条点掉）：固定的不选，想删固定的就单独点上。
- * 眼前全是固定的（比如某个分组里都固定了）时才把它们全选上，免得全选什么也选不到。
+ * 多选时每一栏自己的全选（用户 11-11：圈圈放到分栏那里）：固定栏的全选只选固定的，下面那栏只选没固定的，
+ * 互不影响。[fixed] 选哪一栏。
  */
-internal fun clipboardSelectAllKeys(cards: List<ClipboardCard>, pins: Set<String>): Set<String> =
-    cards.filterNot { it.key in pins }.ifEmpty { cards }.mapTo(mutableSetOf()) { it.key }
+internal fun clipboardSectionKeys(cards: List<ClipboardCard>, pins: Set<String>, fixed: Boolean): Set<String> =
+    cards.filter { (it.key in pins) == fixed }.mapTo(mutableSetOf()) { it.key }
+
+/** 点一栏的全选圈：这栏没全选上就补齐，已全选就只取消这一栏，另一栏选了的留着。 */
+internal fun toggleClipboardSection(selected: Set<String>, section: Set<String>): Set<String> =
+    if (section.isNotEmpty() && selected.containsAll(section)) selected - section else selected + section
 
 internal fun clipboardCardMaxLines(stored: Int): Int = if (stored in setOf(2, 4, 8)) stored else 4
 
@@ -406,14 +410,16 @@ internal fun ClipboardBoardView(
             ?: visibleCards.firstOrNull()?.key
         val showScreenshotAccess = screenshotAccess && searchQuery == null &&
             (tab as? ClipboardTab.Category)?.filter.let { it == ClipboardFilter.ALL || it == ClipboardFilter.IMAGE }
-        val gridKeys = remember(content, failure != null, full, incognito, showScreenshotAccess) {
+        val gridKeys = remember(content, failure != null, full, incognito, showScreenshotAccess, selecting) {
             buildList {
                 if (incognito) add("incognito")
                 if (full) add("full")
                 if (failure != null) add("failure")
                 if (showScreenshotAccess) add("screenshot-access")
+                if (selecting && content.pinned.isNotEmpty()) add("select-fixed")
                 addAll(content.pinned.map { it.key })
                 if (content.pinned.isNotEmpty() && content.recent.isNotEmpty()) add("pins-end")
+                if (selecting && content.recent.isNotEmpty()) add("select-recent")
                 addAll(content.recent.map { it.key })
             }
         }
@@ -502,19 +508,12 @@ internal fun ClipboardBoardView(
                         selecting = false
                         selected = emptySet()
                     }, "clipboard-exit-selection")
-                    val selectAll = clipboardSelectAllKeys(cards, pins)
-                    val allSelected = selectAll.isNotEmpty() && selected.containsAll(selectAll)
-                    CompactClipboardAction(
-                        if (allSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        if (allSelected) "取消全选" else "全选当前分类（不含固定）", {
-                            selected = if (allSelected) emptySet() else selectAll
-                            // Do not operate on invisible folded pins without making the selection inspectable.
-                            if (!allSelected && selectAll.any { it in pins }) changePinsExpansion(true)
-                        }, "clipboard-select-all", enabled = cards.isNotEmpty(),
-                        label = if (compactControls) null else "全选")
+                    // 全选圈挪到每一栏的分栏处（下面的 select-fixed / select-recent），「已选」靠后放（用户 11-11）。
+                    Spacer(Modifier.weight(1f))
                     Text("已选 ${selected.size}", color = colors.onSurface,
                         fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp)
+                            .testTag("clipboard-selected-count"))
                     val unpin = selected.isNotEmpty() && selected.all { it in pins }
                     CompactClipboardAction(if (unpin) Icons.Default.LockOpen else Icons.Default.PushPin,
                         if (unpin) "取消固定所选" else "固定所选", {
@@ -642,6 +641,26 @@ internal fun ClipboardBoardView(
                                 })
                         }
                     }
+                    // 多选时每一栏前面一行自己的全选圈（用户 11-11）。
+                    fun LazyStaggeredGridScope.sectionSelectAll(fixed: Boolean) {
+                        item(key = if (fixed) "select-fixed" else "select-recent", span = StaggeredGridItemSpan.FullLine) {
+                            val section = clipboardSectionKeys(cards, pins, fixed)
+                            val all = section.isNotEmpty() && selected.containsAll(section)
+                            ClipboardSectionSelectAll(
+                                label = when {
+                                    fixed -> "全选固定"
+                                    content.pinned.isEmpty() -> "全选"
+                                    else -> "全选未固定"
+                                } + " ${section.size}",
+                                all = all, tag = if (fixed) "clipboard-select-fixed" else "clipboard-select-recent",
+                                modifier = Modifier.animateItem(placementSpec = keyboardPanelMotion(pinsActuallyExpanded))) {
+                                selected = toggleClipboardSection(selected, section)
+                                // Folded pins: show what was selected before it can be deleted.
+                                if (fixed && !all && content.pinsCollapsible) changePinsExpansion(true)
+                            }
+                        }
+                    }
+                    if (selecting && content.pinned.isNotEmpty()) sectionSelectAll(fixed = true)
                     records(content.pinned, fixedRecords = true)
                     if (content.pinned.isNotEmpty() && content.recent.isNotEmpty()) {
                         item(key = "pins-end", span = StaggeredGridItemSpan.FullLine) {
@@ -652,6 +671,7 @@ internal fun ClipboardBoardView(
                                 colors.onSurface, motion) { changePinsExpansion(!pinsExpanded) }
                         }
                     }
+                    if (selecting && content.recent.isNotEmpty()) sectionSelectAll(fixed = false)
                     records(content.recent, fixedRecords = false)
                 }
             }
@@ -912,6 +932,19 @@ private fun CompactClipboardAction(icon: ImageVector, description: String, onCli
         Icon(icon, description, Modifier.size(16.dp), tint = color)
         if (label != null) Text(label, color = color, fontSize = 12.sp, lineHeight = 18.sp,
             maxLines = 1, modifier = Modifier.padding(start = 2.dp))
+    }
+}
+
+/** 多选时一栏的全选：圈 + 「全选固定 3」，整行可点。 */
+@Composable
+private fun ClipboardSectionSelectAll(label: String, all: Boolean, tag: String, modifier: Modifier, onClick: () -> Unit) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier.fillMaxWidth().heightIn(min = 32.dp).clip(RoundedCornerShape(6.dp))
+        .semantics { selected = all }
+        .clickable(role = Role.Checkbox, onClickLabel = if (all) "取消这一栏的全选" else "全选这一栏", onClick = onClick)
+        .testTag(tag).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (all) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, Modifier.size(18.dp), tint = color)
+        Text(label, color = color, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
     }
 }
 

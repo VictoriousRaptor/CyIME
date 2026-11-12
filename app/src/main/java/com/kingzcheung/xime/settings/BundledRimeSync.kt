@@ -57,11 +57,12 @@ internal object BundledRimeSync {
                     require(backup.canonicalPath.startsWith(backups.canonicalPath + File.separator))
                     if (!backup.exists()) { backup.parentFile?.mkdirs(); file.copyTo(backup) }
                 }
-                // Invalidate before replacement, so interrupted upgrades cannot reuse compiled old tables.
+                // Invalidate before replacement: a missing stamp makes an interrupted upgrade run again and changes the
+                // deployment hash. The compiled cache in build/ stays. librime keeps the checksum of each table's and
+                // prism's sources inside them (DictCompiler::Compile) and rebuilds only those whose sources changed;
+                // compiled configs are rebuilt when a dependency is newer. Wiping build/ here made every upgrade that
+                // touched any bundled file recompile every dictionary on the first keyboard open.
                 stamp.delete()
-                val build = File(target, "build").canonicalFile
-                require(build.path == target.canonicalPath + File.separator + "build")
-                if (!changed && build.exists()) check(build.deleteRecursively()) { "Cannot invalidate Rime build cache" }
                 Files.move(pending.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
                 changed = true
             } finally { pending.delete() }

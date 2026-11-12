@@ -40,7 +40,8 @@ class OfflineSpeechSettingsTest {
     @Test fun eachLanguageSelectsIndependentlyAndShowsOnlyCompatibleModels() = withSavedChoices { manager ->
         screen()
         val zh = InputLanguage.CHINESE; val ja = InputLanguage.JAPANESE; val en = InputLanguage.ENGLISH
-        rule.onNodeWithTag("speech-correction:ja").assertDoesNotExist()
+        rule.onNodeWithTag("speech-finish:ja:sensevoice").assertDoesNotExist()
+        rule.onNodeWithTag("speech-finish:ja:whole").assertDoesNotExist()
         rule.onNodeWithTag("speech-language:ja").performScrollTo().performClick()
         choice(ja, SpeechModelCatalog.ZIPFORMER).assertDoesNotExist()
         if (manager.selection(SpeechModelCatalog.ZIPFORMER_JA).ready) {
@@ -59,7 +60,7 @@ class OfflineSpeechSettingsTest {
         if (manager.selection(SpeechModelCatalog.PARAFORMER).ready) {
             choice(zh, SpeechModelCatalog.PARAFORMER).performScrollTo().performClick()
             if (manager.selection(SpeechModelCatalog.SENSEVOICE).ready) {
-                rule.onNodeWithTag("speech-correction:zh").performScrollTo().performClick()
+                rule.onNodeWithTag("speech-finish:zh:sensevoice").performScrollTo().performClick().assertIsSelected()
             }
         } else rule.onNode(hasText("关闭") and hasAnyAncestor(isDialog())).performClick()
         assertEquals(english, manager.getSelectedModelId(en))
@@ -78,7 +79,10 @@ class OfflineSpeechSettingsTest {
         rule.onNodeWithTag("speech-language:zh").performScrollTo().performClick()
         choice(InputLanguage.CHINESE, SpeechModelCatalog.SENSEVOICE).assertIsSelected()
         rule.onNode(hasText("关闭") and hasAnyAncestor(isDialog())).performClick()
-        rule.onNodeWithTag("speech-correction:zh").performScrollTo().assertIsOff().assertIsNotEnabled()
+        // SenseVoice 单独出字时没有「SenseVoice 校正」这一项，只能选不校正或整句定稿。
+        rule.onNodeWithTag("speech-finish:zh:sensevoice").assertDoesNotExist()
+        rule.onNodeWithTag("speech-finish:zh:none").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("speech-finish:zh:whole").performScrollTo().assertIsDisplayed()
         assertEquals(japanese, manager.getSelectedModelId(InputLanguage.JAPANESE))
     }
 }

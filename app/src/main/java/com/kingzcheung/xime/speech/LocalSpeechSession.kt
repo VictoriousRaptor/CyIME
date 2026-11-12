@@ -220,7 +220,7 @@ internal class LocalSpeechSession(
                 }
             } catch (_: java.util.concurrent.RejectedExecutionException) {
                 synchronized(outputLock) { pending.remove(id); publish(id, "", boundary) }
-                fail(if (engine.hasRefinement) "第二遍识别队列已满，请关闭 SenseVoice 二次校正后重试" else "离线识别跟不上录音，请缩短录音后重试")
+                fail(if (engine.hasRefinement) "第二遍识别队列已满，请在语音设置里把「说完后」改成「不校正」再试" else "离线识别跟不上录音，请缩短录音后重试")
             }
         }
     }

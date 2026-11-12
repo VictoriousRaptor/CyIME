@@ -38,6 +38,11 @@ class CandidateGlossaryTest {
         assertEquals(listOf("uninstall", "Download") to listOf("卸載", "下载"),
             CandidateGlossary.swapped(base, listOf("卸載", "Download"), emptyList()))
 
+        // 11-11：v12 把「明天见」注成 “food that passes…”。
+        val farewell = table("明天見" to "food that passes…", "明天见" to "food that passes…", corrections = corrections)
+        assertEquals("see you tomorrow", CandidateGlossary.gloss(farewell, "明天见"))
+        assertEquals("see you tomorrow", CandidateGlossary.gloss(farewell, "明天見"))
+
         base.overlay = table("download" to GlossTable.HIDDEN, "卸载" to "remove")
         assertNull(CandidateGlossary.gloss(base, "Download"))
         assertEquals("remove", CandidateGlossary.englishFor(base, "卸载"))

@@ -76,6 +76,9 @@ object ExpandedCandidatePager {
 
 /**
  * “筛选单字”的单字：一个 Unicode 字符，补充平面汉字（𠮷 占两个 UTF-16 单元）也算。
+ * 表情和图形符号（🐷、™ 这类 So 类字符）不算字：长编码点「单字」时它们排在词组中间，
+ * 算进来就会只剩一排表情、看不到字。
  * 候选栏、展开页、实体键盘候选窗共用，同一个候选在哪里都是同一个判断（审计 F09）。
  */
-internal fun String.isSingleCharacter(): Boolean = isNotEmpty() && codePointCount(0, length) == 1
+internal fun String.isSingleCharacter(): Boolean = isNotEmpty() && codePointCount(0, length) == 1 &&
+    Character.getType(codePointAt(0)) != Character.OTHER_SYMBOL.toInt()

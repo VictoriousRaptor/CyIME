@@ -37,7 +37,7 @@ import java.util.Collections
 /**
  * 滑行输入：英文滑行和中文滑行（全拼、双拼 26 键划一个词的编码）是两个开关，中文默认关；
  * 用户 10-31：滑行开着也照常画角标（听两个角标提示开关），开着英文滑行的老用户中文键盘不能变。
- * 用户 11-11：滑行接管的字母键下滑打不出下角标，角标只剩长按出的上角标，键上只画上角标；关掉滑行恢复。
+ * 用户 11-11：滑行接管的字母键下滑用来滑词，长按弹出上下两个角标来选（withGlideCornerMenu），所以上下角标照样都画。
  * 竖着滑不出角标符号（拖动给了滑行）；14 键不滑行。
  */
 @RunWith(AndroidJUnit4::class)
@@ -126,7 +126,7 @@ class GlideCornerHintTest {
         assertEquals(1, pullDown("q").size)
     }
 
-    @Test fun glideOwnedLettersShowOnlyTheUpperCorner() {
+    @Test fun glideOwnedLettersKeepBothCorners() {
         show(glide = false, chinese = false)
         val boards = listOf("rime_ice" to false, "double_pinyin_flypy" to false, "rime_ice" to true)
         fun snapshot() = boards.flatMap { (id, english) -> use(id, english); listOf("q", "f", "m").map { "$id/$english/$it" to hints(it) } }
@@ -134,9 +134,8 @@ class GlideCornerHintTest {
         plain.forEach { (key, shown) -> assertEquals("$key 没开滑行：上下两个角标 $shown", 2, shown.size) }
         rule.runOnIdle { prefs = prefs.copy(glideTyping = true, chineseGlideTyping = true) }
         rule.waitForIdle()
-        plain.zip(snapshot()).forEach { (before, after) ->
-            assertEquals("${before.first} 滑行时只剩上角标（长按出的那个）", before.second.take(1), after.second)
-        }
+        // 用户 11-11「关闭数字行，滑行打不出 !@#」：下角标在长按弹出的两格里选得到，键上照样画，开关滑行位置不变。
+        assertEquals("开着滑行，上下角标照样都画", plain, snapshot())
         rule.runOnIdle { prefs = prefs.copy(glideTyping = false, chineseGlideTyping = false) }
         rule.waitForIdle()
         assertEquals("关掉滑行，下角标照旧显示", plain, snapshot())
@@ -170,6 +169,63 @@ class GlideCornerHintTest {
             if (pause > 0) advanceEventTime(pause)
             if (lift) up()
         }
+    }
+
+    /**
+     * 用户 11-11「先打一个字再划…划了就没了」：快打时点字母的手指还没抬，另一根手指已经开始划。
+     * 以前看到第二根手指就整次放弃，这一划什么也不出；现在点的字母照常出，划的词接在后面。
+     * [liftTapAt] 是划到第几步时抬起点字母的手指（超出步数就等划完再抬；点按的手指按满长按时长会出长按的字，所以不拖太久）。
+     */
+    private fun tapThenGlide(tap: Char, word: String, liftTapAt: Int) {
+        val host = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        fun letter(char: Char) = rule.onNodeWithTag("qwerty-key:$char", true).fetchSemanticsNode().boundsInRoot.center - host.topLeft
+        val path = word.map(::letter)
+        rule.onRoot().performTouchInput {
+            down(0, letter(tap))
+            advanceEventTime(30)
+            down(1, path.first())
+            var step = 0
+            var tapDown = true
+            path.zipWithNext().forEach { (a, b) ->
+                for (i in 1..6) {
+                    moveTo(1, a + (b - a) * (i / 6f))
+                    if (++step == liftTapAt) { up(0); tapDown = false }
+                }
+            }
+            up(1)
+            if (tapDown) { advanceEventTime(30); up(0) }
+        }
+    }
+
+    @Test fun glideRightAfterATapWithTheOtherThumbStillGlides() {
+        show(glide = true, chinese = true)
+        for (liftTapAt in listOf(1, 4, 12)) {
+            use("rime_ice")
+            rule.runOnIdle { typed.clear(); codes.clear() }
+            tapThenGlide('w', "nihao", liftTapAt)
+            rule.waitUntil(5000) { codes.isNotEmpty() }
+            rule.waitForIdle()
+            assertEquals("中文 抬起点按的手指在第 $liftTapAt 步", listOf("nihao"), codes.toList())
+            assertEquals("中文 点的字母照常出", listOf("w"), typed.toList())
+
+            use("rime_ice", english = true)
+            rule.runOnIdle { typed.clear(); codes.clear() }
+            tapThenGlide('i', "hello", liftTapAt)
+            rule.waitUntil(5000) { codes.isNotEmpty() }
+            rule.waitForIdle()
+            assertEquals("英文 抬起点按的手指在第 $liftTapAt 步", 1, codes.size)
+            assertTrue(codes.first().startsWith("en:"))
+            assertEquals("英文 点的字母照常出", listOf("i"), typed.toList())
+        }
+    }
+
+    @Test fun glideRightAfterATapAlsoWorksWithLivePreview() {
+        show(glide = false, chinese = true, preview = true)
+        tapThenGlide('w', "nihao", 3)
+        rule.waitUntil(5000) { codes.isNotEmpty() }
+        rule.waitForIdle()
+        assertEquals(listOf("nihao"), codes.toList())
+        assertEquals(listOf("w"), typed.toList())
     }
 
     /** 按下期间把预览送往输入框，抬手时清除预览，再交付最终编码。 */

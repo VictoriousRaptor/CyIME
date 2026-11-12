@@ -52,6 +52,41 @@ class NgramVariantTest {
         assertFalse(isBundledCopy(manifest, "other.lm", file))
     }
 
+    @Test fun earlierBundledCopyIsReplacedButCustomFileIsKept() {
+        val bundled = "earlier bundled model"
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(bundled.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val known = mapOf("t9_ngram.lm" to listOf(hash to bundled.length.toLong()))
+        val runtime = temporary.newFolder("rime")
+        val file = File(runtime, "t9_ngram.lm").apply { writeText(bundled) }
+        assertTrue(isEarlierBundledCopy("t9_ngram.lm", file, known))
+        assertFalse(isEarlierBundledCopy("other.lm", file, known))
+        file.writeText("earlier bundled modeL") // 同样大小、内容不同：用户自己放的，不能换掉
+        assertFalse(isEarlierBundledCopy("t9_ngram.lm", file, known))
+        assertFalse(isEarlierBundledCopy("t9_ngram.lm", File(runtime, "missing.lm"), known))
+    }
+
+    @Test fun downloadReplacesTheEarlierBundledModelOnly() {
+        val bundled = "earlier bundled model"
+        val digest = { text: String -> java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+            .joinToString("") { "%02x".format(it) } }
+        val known = mapOf("t9_ngram.lm" to listOf(digest(bundled) to bundled.length.toLong()))
+        val downloaded = "downloaded model"
+        val version = ModelVersion("v1", files = listOf(
+            ModelFile("t9_ngram.lm", "", digest(downloaded), downloaded.length.toLong())))
+        val source = stored("download", downloaded)
+        val runtime = temporary.newFolder("rime")
+        val target = File(runtime, "t9_ngram.lm").apply { writeText(bundled) }
+        assertTrue(installCandidateModel(source, runtime, version) { name, file -> isEarlierBundledCopy(name, file, known) })
+        assertEquals(downloaded, target.readText())
+        target.delete(); target.writeText("my own model")
+        val kept = runCatching {
+            installCandidateModel(source, runtime, version) { name, file -> isEarlierBundledCopy(name, file, known) }
+        }
+        assertTrue(kept.isFailure)
+        assertEquals("my own model", target.readText())
+    }
+
     @Test fun failureTextTellsWhatToDoNext() {
         assertEquals("连不上下载服务器，请检查网络后点重试",
             modelFailureText(java.io.IOException("x", java.net.UnknownHostException("github.com"))))

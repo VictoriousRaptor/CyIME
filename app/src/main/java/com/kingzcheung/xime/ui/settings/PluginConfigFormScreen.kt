@@ -615,3 +615,7 @@ private fun UiNodeEditor(
         }
     }
 }
+
+/** 插件自己没有设置项、设置由宿主画在插件页里的插件（字幕的开关、日语的下载状态）。 */
+internal fun hasHostSettings(pluginId: String): Boolean =
+    pluginId == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID || pluginId == com.kingzcheung.xime.settings.JapanesePlugin.ID

@@ -42,6 +42,11 @@ class VoiceRecognitionHandler(
      * 中文语音的预览、上屏、隔空输入都按它出正体。每次出字时取，设置中途改了下一句起生效。
      */
     private val traditionalConverter: () -> ((String) -> String)? = { null },
+    /**
+     * 每次开始说话、取输入框之前调用：宿主借此定下这次写进哪个框（键盘自己的翻译栏、剪贴板搜索等，见 [VoiceTarget]），
+     * 说完前不换。
+     */
+    private val onSessionStart: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "VoiceRecognition"
@@ -137,6 +142,8 @@ class VoiceRecognitionHandler(
         mainHandler.removeCallbacks(finishTimeoutRunnable)
         suppressDuplicateFinal = false
         sessionAbandoned = false
+        // 先定下这次写进哪个框，下面的隔空输入、光标前文字都按它取。
+        onSessionStart()
         inputSession = getState().inputSessionId
         inputLanguages = languages
         requestedRecordingLanguage = language

@@ -66,6 +66,8 @@ data class KeyboardCallbacks(
     val onRequestExpandedCandidates: (() -> Unit)? = null,
     /** 收起的候选栏滑到最后几个：服务层把展开列表接到候选栏后面。 */
     val onExtendCandidateStrip: (() -> Unit)? = null,
+    /** 展开页打开了「单字」：服务层在已读候选里单字不够时接着往后读。 */
+    val onSingleCharFilterOn: (() -> Unit)? = null,
     val onRequestPinyinSyllables: ((Long, (com.kingzcheung.xime.rime.PinyinSyllableChoices?) -> Unit) -> Unit)? = null,
     val onSelectPinyinSyllable: ((com.kingzcheung.xime.rime.PinyinSyllableChoices, Int,
         (com.kingzcheung.xime.rime.PinyinSyllableChoices?) -> Unit) -> Unit)? = null,

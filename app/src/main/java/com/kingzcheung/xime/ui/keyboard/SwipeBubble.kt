@@ -340,8 +340,7 @@ internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawD
         val fullRight = fullLeft + data.pathBodyWidth
         val reveal = data.reveal.coerceIn(0f, 1f)
         val startWidth = minOf(data.bodyHeightPx, data.pathBodyWidth)
-        val startCenter = (data.pointerLeftInBox + data.keyWidthPx / 2f)
-            .coerceIn(fullLeft + startWidth / 2f, fullRight - startWidth / 2f)
+        val startCenter = bubbleRevealStartCenter(data.pointerLeftInBox + data.keyWidthPx / 2f, fullLeft, fullRight, startWidth)
         val bodyLeft = lerp(startCenter - startWidth / 2f, fullLeft, reveal)
         val bodyRight = lerp(startCenter + startWidth / 2f, fullRight, reveal)
         val radius = data.bodyHeightPx / 2f
@@ -419,6 +418,18 @@ internal fun paintSwipeBubble(canvas: android.graphics.Canvas, data: BubbleDrawD
             canvas.restore()
         }
     }
+}
+
+/**
+ * 气泡展开起点（按键上方的圆气泡）的中心，夹在整条 [fullLeft]..[fullRight] 里。
+ * 单个字的按键气泡、滑动符号气泡本身就是圆的，起点宽度等于整条，两头算出来理论上相等；
+ * 但 fullLeft 不是 0 时（最左边的 Q 键气泡被挪进屏幕边距，或按键比气泡宽）浮点舍入会让右界比左界小一点点，
+ * coerceIn 遇到这种空区间直接抛异常，画气泡时整个输入法闪退（11-11 荣耀 WIN 用户按 Q 闪退）。右界不小于左界。
+ */
+internal fun bubbleRevealStartCenter(pointerCenter: Float, fullLeft: Float, fullRight: Float, startWidth: Float): Float {
+    val lowest = fullLeft + startWidth / 2f
+    val highest = fullRight - startWidth / 2f
+    return pointerCenter.coerceIn(lowest, maxOf(lowest, highest))
 }
 
 private fun lerp(start: Float, stop: Float, fraction: Float) = if (fraction >= 1f) stop else start + (stop - start) * fraction

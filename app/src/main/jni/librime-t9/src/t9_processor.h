@@ -233,6 +233,10 @@ private:
     std::string last_rime_input_;                        // 发送去重缓存
     int undone_right_commit_count_ = 0;                  // RightCommit 撤销计数（供 Kotlin 同步）
     char manual_delimiter_ = '\'';                       // 分隔符字符（从 speller.delimiter 读入）
+    // 全拼九键（有 script_translator、不是双拼九键）：i、u、v 不能开头一个音节，拂动出的这三个字母
+    // 落在音节开头时不记字母约束，只当按了所在的数字键（见 KeepsLetterConstraint）。
+    bool full_pinyin_ = false;
+    bool KeepsLetterConstraint(int pos, char letter) const;
     std::string original_digit_sequence_;
     std::string last_commit_digit_sequence_;
     // A manually edited suffix no longer has a trustworthy whole-word digit

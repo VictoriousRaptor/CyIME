@@ -10,6 +10,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.ceil
 
@@ -75,62 +77,74 @@ internal fun Modifier.t9GlideTyping(
     if (keys == null) return this
     return pointerInput(keys, trail) {
         awaitEachGesture {
-            val down = awaitFirstDown(false, PointerEventPass.Initial)
-            val offset = origin.value()
-            val first = keys.entries.firstOrNull { it.value.contains(down.position + offset) } ?: return@awaitEachGesture
-            val editor = ticket.value() ?: return@awaitEachGesture
-            val stroke = DigitStroke(keys.toMap(), down.position + offset, first.key)
-            val path = arrayListOf(down.position)
-            val times = arrayListOf(down.uptimeMillis)
-            var moved = false
-            var claimed = false
-            try {
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (change.isConsumed) break
-                    if (event.changes.any { it.id != down.id && it.pressed }) {
-                        // Once the first button yielded to the glide, discard the whole cancelled
-                        // stroke, including the second down. Before takeover, allow normal two-thumb taps.
-                        if (claimed) {
-                            event.changes.forEach { it.consume() }
-                            while (true) {
-                                val remaining = awaitPointerEvent(PointerEventPass.Initial)
-                                remaining.changes.forEach { it.consume() }
-                                if (remaining.changes.none { it.pressed }) break
+            var next: PointerInputChange? = awaitFirstDown(false, PointerEventPass.Initial)
+            // 先点一个数字键紧接着就划（用户 11-11「先打一个字再划…划了就没了」）：点键的手指还没抬，划的手指已经按下。
+            // 以前看到第二根手指就放弃整次触摸，这一划什么都不出；现在没接管时改跟后按下的那根，前一根照常按点按算。
+            while (next != null) {
+                val down: PointerInputChange = next ?: break
+                next = null
+                val offset = origin.value()
+                val first = keys.entries.firstOrNull { it.value.contains(down.position + offset) }
+                val editor = ticket.value()
+                if (first == null || editor == null) {
+                    next = awaitNextDown(null)
+                    continue
+                }
+                val stroke = DigitStroke(keys.toMap(), down.position + offset, first.key)
+                val path = arrayListOf(down.position)
+                val times = arrayListOf(down.uptimeMillis)
+                var moved = false
+                var claimed = false
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        // 只看新按下的手指：改跟过来时前一根（点键的）多半还按着，不能因为它又放弃。
+                        val another = event.changes.firstOrNull { it.id != down.id && it.changedToDownIgnoreConsumed() }
+                        if (another != null) {
+                            // Once the first button yielded to the glide, discard the whole cancelled
+                            // stroke, including the second down. Before takeover, follow the newer finger.
+                            if (claimed) {
+                                event.changes.forEach { it.consume() }
+                                while (true) {
+                                    val remaining = awaitPointerEvent(PointerEventPass.Initial)
+                                    remaining.changes.forEach { it.consume() }
+                                    if (remaining.changes.none { it.pressed }) break
+                                }
+                            } else next = another
+                            break
+                        }
+                        if (change == null || change.isConsumed) { next = awaitNextDown(event); break }
+                        if (!moved && change.uptimeMillis - down.uptimeMillis >= holdMs.value) { next = awaitNextDown(event); break }
+                        moved = moved || (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                        for ((position, time) in change.historical.map { it.position to it.uptimeMillis } + (change.position to change.uptimeMillis)) {
+                            if (path.last() != position) {
+                                path += position
+                                times += time
+                                stroke.move(position + offset)
+                                if (stroke.cancelled) break
                             }
                         }
-                        break
-                    }
-                    if (!moved && change.uptimeMillis - down.uptimeMillis >= holdMs.value) break
-                    moved = moved || (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                    for ((position, time) in change.historical.map { it.position to it.uptimeMillis } + (change.position to change.uptimeMillis)) {
-                        if (path.last() != position) {
-                            path += position
-                            times += time
-                            stroke.move(position + offset)
-                            if (stroke.cancelled) break
+                        claimed = claimed || stroke.claimed
+                        if (claimed) change.consume() // the original button drops its tap/flick on this same event
+                        if (stroke.cancelled || origin.value() != offset || ticket.value() != editor) break
+                        if (!change.pressed) {
+                            // Root coordinates, same as the key rectangles.
+                            if (claimed) {
+                                val xs = FloatArray(path.size) { path[it].x + offset.x }
+                                val ys = FloatArray(path.size) { path[it].y + offset.y }
+                                // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
+                                if (com.kingzcheung.xime.glide.GlideSampleRecorder.listener != null)
+                                    com.kingzcheung.xime.glide.GlideSampleRecorder.record("t9", keys.mapValues { (_, r) ->
+                                        com.kingzcheung.xime.keyboard.LetterKeyRect(r.left, r.top, r.width, r.height) }, xs, ys, times.toLongArray())
+                                submit.value(xs, ys)
+                            } else next = awaitNextDown(event)
+                            break
                         }
+                        if (claimed) trail.points = path.toList()
                     }
-                    claimed = claimed || stroke.claimed
-                    if (claimed) change.consume() // the original button drops its tap/flick on this same event
-                    if (stroke.cancelled || origin.value() != offset || ticket.value() != editor) break
-                    if (!change.pressed) {
-                        // Root coordinates, same as the key rectangles.
-                        if (claimed) {
-                            val xs = FloatArray(path.size) { path[it].x + offset.x }
-                            val ys = FloatArray(path.size) { path[it].y + offset.y }
-                            // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
-                            if (com.kingzcheung.xime.glide.GlideSampleRecorder.listener != null)
-                                com.kingzcheung.xime.glide.GlideSampleRecorder.record("t9", keys.mapValues { (_, r) ->
-                                    com.kingzcheung.xime.keyboard.LetterKeyRect(r.left, r.top, r.width, r.height) }, xs, ys, times.toLongArray())
-                            submit.value(xs, ys)
-                        }
-                        break
-                    }
-                    if (claimed) trail.points = path.toList()
-                }
-            } finally { trail.points = emptyList() }
+                } finally { trail.points = emptyList() }
+            }
         }
     }
 }

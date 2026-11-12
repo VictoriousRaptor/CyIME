@@ -39,6 +39,14 @@ class ExpandedCandidatePagerTest {
         assertTrue(!"".isSingleCharacter() && !"你好".isSingleCharacter())
     }
 
+    // 11-11 群友录屏：z'z'yong'fa 点「单字」只剩一排表情。表情、图形符号不算单字，假名等文字仍算。
+    @Test
+    fun `单字过滤不把表情和图形符号算作单字`() {
+        val all = listOf(candidate("\uD83D\uDC37"), candidate("在"), candidate("\u2122"), candidate("あ"), candidate("这种"))
+        assertEquals(listOf(1, 3), ExpandedCandidatePager.filterIndices(all, singleCharOnly = true))
+        assertTrue(!"\uD83D\uDC37".isSingleCharacter() && !"\uD83E\uDEE1".isSingleCharacter())
+    }
+
     @Test
     fun `fromIndex偏移跳过候选栏已显示的候选`() {
         val all = listOf(candidate("你"), candidate("你好"), candidate("世"), candidate("们好"))

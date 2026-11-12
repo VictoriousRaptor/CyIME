@@ -79,10 +79,11 @@ internal const val CLIPBOARD_SEARCH_MIN_RESULTS = 120
 /**
  * Height the IME container must add above the keyboard while clipboard search is open: the
  * (animated) results plus the search panel. Without it the keyboard is pushed out of the window.
+ * A panel opened meanwhile (symbols, emoji, menu) keeps it: the search bar stays above the bar
+ * and the panel only covers the keys (11-10).
  */
-internal fun clipboardSearchExtraHeight(visible: Boolean, overlayPage: Boolean, resultsHeight: Int,
-    inline: Boolean = false): Int =
-    if (!visible || overlayPage) 0 else resultsHeight + clipboardSearchPanelHeight(inline)
+internal fun clipboardSearchExtraHeight(visible: Boolean, resultsHeight: Int, inline: Boolean = false): Int =
+    if (!visible) 0 else resultsHeight + clipboardSearchPanelHeight(inline)
 
 /** Use screen coordinates: resizing the IME moves the toolbar's local coordinate origin. */
 internal class ClipboardPanelDrag(
