@@ -180,7 +180,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
-      contents: read
+      contents: write
     concurrency:
       group: aosp-release-${{ github.ref }}
       cancel-in-progress: true
@@ -193,6 +193,27 @@ jobs:
           submodules: recursive
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Prepare release version
+        id: release_version
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          path = Path('app/build.gradle.kts')
+          text = path.read_text(encoding='utf-8')
+          versions = re.findall(r'versionName = "([^"]+)"', text)
+          if len(versions) != 1:
+              raise ValueError('Expected exactly one source versionName')
+          version = f'{versions[0]}-{commit[:8]}'
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+              output.write(f'base_version={versions[0]}\n')
+              output.write(f'version={version}\ntag=custom-v{version}\ncommit={commit}\n')
+          PY
 
       - name: Set up Java 21
         uses: actions/setup-java@v5
@@ -306,6 +327,25 @@ jobs:
           path: build/aosp-release/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish custom GitHub Release
+        if: github.ref == 'refs/heads/custom'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_version.outputs.tag }}
+          target_commitish: ${{ steps.release_version.outputs.commit }}
+          name: CyIME ${{ steps.release_version.outputs.version }}
+          body: |
+            ARM64 Release APK signed with the existing public AOSP testkey.
+            Source commit: ${{ steps.release_version.outputs.commit }}
+            Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Download the APK and SHA256SUMS together, then run `sha256sum -c SHA256SUMS` to verify.
+          files: |
+            build/aosp-release/CyIME-${{ steps.release_version.outputs.base_version }}-testkey-arm64-v8a.apk
+            build/aosp-release/SHA256SUMS
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
 
       - name: Upload regression reports
         if: always()
