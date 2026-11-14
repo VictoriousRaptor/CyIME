@@ -67,7 +67,9 @@ class ChineseSchemeDefaultsMigrationTest {
 
     private fun assertFreshChoices() {
         val ids = SchemaManager.getEnabledSchemas(app)
-        assertTrue(ids.toString(), ids.containsAll(CyimeInputDefaults.doublePinyin + listOf(merged, flypy14)))
+        // 新装：小鹤和 14 键默认打开；其余 5 种双拼留给「按设备推荐配置」里问了再开（10-31 走查，不先全列进方案栏）。
+        assertTrue(ids.toString(), ids.containsAll(listOf(flypy, merged, flypy14)))
+        assertTrue(ids.toString(), ids.none { it in CyimeInputDefaults.doublePinyin && it != flypy })
         val choices = ids.map { SchemaInfo(it, it, "", "", "") }
         val base = choices.first { it.schemaId == flypy }
         assertEquals(flypy14, InputProfileSelection.switchLayout(choices, base, InputLayout.MERGED14.id)?.entry?.schemaId)

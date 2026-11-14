@@ -33,12 +33,13 @@ data class ClipboardImage(val uri: String, val mimeType: String, val timestamp: 
     val source: String? = null, val sha256: String? = null)
 data class ImagePasteFailure(val image: ClipboardImage, val packageName: String)
 
-/** Copied images stay local; the optional gallery feed contains screenshots, never all photos. */
+/** Copied images stay local; the optional gallery feed contains screenshots, and the newest few photos only when asked. */
 class ClipboardImages private constructor(private val context: Context) {
     companion object {
         private const val MAX_BYTES = 32L * 1024 * 1024
         @Volatile private var instance: ClipboardImages? = null
         private const val MEDIA_SETTLE_MS = 1_000L
+        private const val KEY_RECENT_PHOTOS_ALL = "recent_photos_all"
         fun getInstance(context: Context): ClipboardImages = instance ?: synchronized(this) {
             instance ?: ClipboardImages(context.applicationContext).also { instance = it }
         }
@@ -150,6 +151,14 @@ class ClipboardImages private constructor(private val context: Context) {
     fun recentScreenshotsWanted(): Boolean = prefs.getBoolean("recent_photos", true)
 
     fun recentScreenshotsEnabled(): Boolean = recentScreenshotsWanted() && hasPhotoAccess()
+
+    /** 「也显示相册照片」：默认关；开着时最近截图之外再加相册最新的几张（[ScreenshotImageSource.RECENT_PHOTO_LIMIT]）。 */
+    fun recentPhotosWanted(): Boolean = prefs.getBoolean(KEY_RECENT_PHOTOS_ALL, false)
+
+    fun includeRecentPhotos(on: Boolean) {
+        prefs.edit().putBoolean(KEY_RECENT_PHOTOS_ALL, on).apply()
+        refresh()
+    }
 
     fun capture(uri: Uri, timestamp: Long = System.currentTimeMillis(), mimeType: String = "image/png") {
         val key = previewState.beginCopy(uri.toString(), timestamp) ?: return
@@ -318,7 +327,9 @@ class ClipboardImages private constructor(private val context: Context) {
                 else emptyList()
             // A screenshot taken in the last minute gets the same paste hint as a copied image.
             // It is read locally only; it enters clipboard history only if the user pastes it.
-            if (includeRecent) media.filter { it.uri !in hidden }.maxByOrNull { it.timestamp }
+            // Only a screenshot gets the hint; a photo just taken with the camera is not offered for pasting.
+            if (includeRecent) media.filter { it.uri !in hidden && it.label != ScreenshotImageSource.PHOTO_LABEL }
+                .maxByOrNull { it.timestamp }
                 ?.let { previewState.offerScreenshot(it, System.currentTimeMillis()) }
             val watch = recentScreenshotsEnabled() && keyboardShown
             if (watch && !observing) {
@@ -343,7 +354,7 @@ class ClipboardImages private constructor(private val context: Context) {
             putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
             putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, ScreenshotImageSource.MAX_QUERY_ROWS)
         }
-        val recent = if (includeRecent) requireNotNull(context.contentResolver.query(collection, columns, args, null)) {
+        val screenshots = if (includeRecent) requireNotNull(context.contentResolver.query(collection, columns, args, null)) {
             "MediaStore query unavailable"
         }.use { cursor ->
             buildList {
@@ -359,7 +370,9 @@ class ClipboardImages private constructor(private val context: Context) {
                 }
             }
         } else emptyList()
-        val found = recent.mapTo(mutableSetOf()) { it.uri }
+        val shown = if (includeRecent && recentPhotosWanted())
+            ScreenshotImageSource.withRecentPhotos(screenshots, queryRecentPhotos(collection, columns)) else screenshots
+        val found = shown.mapTo(mutableSetOf()) { it.uri }
         val pinned = ScreenshotImageSource.pinnedMediaImages(pinnedKeys()).filterNot { it.uri in found || it.uri in hidden }
         // A lower recent limit must never evict an explicitly fixed image. Fetch only
         // its metadata by ID, in bounded batches, even when it is older than the feed.
@@ -387,7 +400,27 @@ class ClipboardImages private constructor(private val context: Context) {
                 }
             }
         }
-        return recent + fixed
+        return shown + fixed
+    }
+
+    /** The newest few pictures in the photo library, any folder: one small sorted query, no filter. */
+    private fun queryRecentPhotos(collection: Uri, columns: Array<String>): List<ClipboardImage> {
+        val args = Bundle().apply {
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_ADDED))
+            putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, ScreenshotImageSource.RECENT_PHOTO_LIMIT)
+        }
+        return requireNotNull(context.contentResolver.query(collection, columns, args, null)) {
+            "MediaStore query unavailable"
+        }.use { cursor ->
+            buildList {
+                while (size < ScreenshotImageSource.RECENT_PHOTO_LIMIT && cursor.moveToNext()) {
+                    val mime = cursor.getString(1)?.takeIf { it.startsWith("image/") } ?: continue
+                    add(ClipboardImage(ContentUris.withAppendedId(collection, cursor.getLong(0)).toString(),
+                        mime, cursor.getLong(2) * 1000, ScreenshotImageSource.PHOTO_LABEL))
+                }
+            }
+        }
     }
 
     private fun save() {

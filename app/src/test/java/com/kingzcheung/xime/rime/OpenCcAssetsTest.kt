@@ -44,4 +44,21 @@ class OpenCcAssetsTest {
         assertEquals("計畫", forms["計劃"])
         assertEquals("了解", forms["瞭解"])
     }
+
+    // 繁体输出时用户写进「我的短语」的词（user_table）不经通用表，改走 cyime_s2tw_user.json：
+    // 余宛如这类姓「余」的名字照原样出；其余候选仍走 traditionalize，「其余」「十余年」照旧转「餘」。
+    @Test fun userPhrasesKeepSurnameForms() {
+        val user = File(opencc, "cyime_s2tw_user.json").readText()
+        assertTrue(user.indexOf("CyimeUserKeep.txt") in 0 until user.indexOf("STCharacters.ocd2"))
+        assertEquals("余\t余", File(opencc, "CyimeUserKeep.txt").readLines().first())
+        assertTrue(File(opencc, "cyime_s2tw.json").readText().contains("CyimeSurnames.txt"))
+        val schemas = listOf("t9_pinyin", "pinyin_14jian", "double_pinyin_flypy_14jian")
+        for (name in schemas) {
+            val text = File("src/main/assets/rime_chinese/$name.schema.yaml").readText()
+            assertTrue("$name 缺 traditionalize_user", text.contains("- simplifier@traditionalize_user"))
+            assertTrue("$name 应引用 cyime_s2tw_user.json", "cyime_s2tw_user.json" in configsOf(text))
+            assertTrue("$name 的 traditionalize 应排除 user_table", text.contains("excluded_types: [user_table]"))
+        }
+        assertTrue(File("build-logic/tasks-chinese.gradle.kts").readText().contains("cyime_s2tw_user.json"))
+    }
 }

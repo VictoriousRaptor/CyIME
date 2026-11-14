@@ -10,14 +10,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.twotone.Apps
 import androidx.compose.material.icons.twotone.AutoAwesome
 import androidx.compose.material.icons.twotone.Opacity
 import androidx.compose.material.icons.twotone.BlurOn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.twotone.Crop
-import androidx.compose.material.icons.twotone.Delete
 import androidx.compose.material.icons.twotone.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -243,7 +244,11 @@ private fun ThemeSettingsPage(
             }
             
             item {
-                CustomImageThemeSection(currentThemeId = uiState.colorTheme, onUseImage = { on ->
+                // 动态背景只对图片背景起作用：当前主题有背景图（我的图片、大漠流金等）时才放出来。
+                val imageTheme = (uiState.colorThemes.firstOrNull { it.id == uiState.colorTheme }
+                    ?: com.kingzcheung.xime.ui.theme.KeyboardThemes.getThemeById(uiState.colorTheme))
+                    .keyboardBackground?.type == "image"
+                CustomImageThemeSection(currentThemeId = uiState.colorTheme, imageTheme = imageTheme, onUseImage = { on ->
                     changeAppearance(context, onThemeChanged) {
                         if (on) {
                             // 打开图片：现在的配色能垫在图片下面就用它做底，否则沿用上次的底。
@@ -266,7 +271,7 @@ private fun ThemeSettingsPage(
                     if (uiState.colorTheme == com.kingzcheung.xime.ui.theme.CustomImageTheme.ID) {
                         changeAppearance(context, onThemeChanged) { viewModel.setColorTheme(baseThemeId) }
                     } else onThemeChanged()
-                }, onVeilChanged = {
+                }, onImageChanged = {
                     viewModel.refreshThemes()
                     onThemeChanged()
                 })
@@ -322,7 +327,8 @@ private fun ThemeSettingsPage(
 }
 
 /**
- * 「我的图片」上压的遮罩（浅色、深色各一条）：越高图片越淡、按键文字越清楚，0% 是原图。
+ * 「我的图片」上压的遮罩，一行一条：左边浅色／深色，中间滑条，右边百分比。越高图片越淡、按键文字越清楚，0% 是原图。
+ * 浅色、深色键盘底色不同，同一张图要淡的程度不同，所以各一条。滑条按 5% 一档吸附，不画刻度点（原来 18 个点挤成一排）。
  * 拖动时只改数字，松手才存并刷新键盘；默认 72%，与原来一样。
  */
 @Composable
@@ -330,8 +336,10 @@ private fun CustomImageVeilSlider(dark: Boolean, onChanged: () -> Unit) {
     val context = LocalContext.current
     val title = if (dark) "深色遮罩" else "浅色遮罩"
     var veil by remember { mutableStateOf(com.kingzcheung.xime.ui.theme.CustomImageTheme.veil(context, dark)) }
-    Column(Modifier.settingsSearchAnchor(title).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("$title：${kotlin.math.round(veil * 100).toInt()}%", style = MaterialTheme.typography.bodyLarge)
+    Row(Modifier.settingsSearchAnchor(title).fillMaxWidth().padding(horizontal = 16.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text(if (dark) "深色" else "浅色", style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.width(40.dp))
         androidx.compose.material3.Slider(
             value = veil,
             onValueChange = { veil = kotlin.math.round(it * 20f) / 20f },
@@ -342,25 +350,35 @@ private fun CustomImageVeilSlider(dark: Boolean, onChanged: () -> Unit) {
                 }
             },
             valueRange = 0f..com.kingzcheung.xime.ui.theme.CustomImageTheme.MAX_VEIL,
-            steps = 17,
-            modifier = Modifier.testTag(if (dark) "custom-image-veil-dark" else "custom-image-veil-light"),
+            modifier = Modifier.weight(1f).semantics { contentDescription = title }
+                .testTag(if (dark) "custom-image-veil-dark" else "custom-image-veil-light"),
         )
+        Text("${kotlin.math.round(veil * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.width(44.dp))
     }
 }
 
 /**
- * 「用自己的图片」：从相册选一张图，先在调整页拖动、缩放、贴齐边缘，确认后换成「我的图片」主题。
- * 设置过以后可以再调整或删除。
+ * 主题与外观 › 背景图片：一张卡管背景图的全部事（用户 11-13 要求按真实用途重做，设计理由见补丁的 DESIGN.md）。
+ *
+ * 1. 没有图片：「用自己的图片 >」，选一张图，进调整页，确认后换成「我的图片」。
+ * 2. 有图片：同一行变成总开关（原来另有一行「使用背景图片」），关掉时图片留着，键盘用配色方案的底色。
+ *    下面一排小图：第一张是主图（点它调整位置或换一张），后面是轮流显示的图，每张 × 删，＋ 加图。
+ *    图片开着时再给浅色、深色两条遮罩。
+ * 3. 当前主题有背景图（我的图片、大漠流金等）时接着放「动态背景」：它只对图片背景起作用，开了才轮流换图。
  */
 @Composable
-private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean) -> Unit, onSaved: () -> Unit,
-    onDeleted: (String) -> Unit, onVeilChanged: () -> Unit) {
+private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean, onUseImage: (Boolean) -> Unit,
+    onSaved: () -> Unit, onDeleted: (String) -> Unit, onImageChanged: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var hasImage by remember { mutableStateOf(com.kingzcheung.xime.ui.theme.CustomImageTheme.hasImage(context)) }
     // 调整页正在调的图片（刚选的新图或已在用的那张）与要沿用的主题。
     var editing by remember { mutableStateOf<Pair<String, String>?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val motion = com.kingzcheung.xime.ui.theme.rememberBackgroundMotionSettings()
+    val slides = remember(motion.slides) { com.kingzcheung.xime.ui.theme.CustomImageTheme.slides(context, motion.slides) }
+    val imageOn = currentThemeId == com.kingzcheung.xime.ui.theme.CustomImageTheme.ID
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val base = com.kingzcheung.xime.ui.theme.CustomImageTheme.baseFor(context, currentThemeId)
@@ -374,41 +392,72 @@ private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean
             }
         }
     }
-    // 两组：上面是「我的图片」本身（换图、调整、遮罩，删除放最后），下面是动态背景和轮播。
-    // 原来删除夹在遮罩和动态背景中间，轮播又挂在速度下面，整块看不出谁管谁（用户 11-09）。
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-    SettingsSection(title = "背景图片") {
-        SettingsItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
-            subtitle = if (hasImage) "已设置，点这里换一张"
-                else "从相册选一张图片做键盘背景，按键和文字的颜色沿用当前主题",
-            onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-            showArrow = true)
-        if (hasImage) {
-            SettingsToggleItem(icon = Icons.TwoTone.Image, title = "使用背景图片",
-                subtitle = "开着时换配色只换按键和文字的颜色，图片留着；iOS 渐变不能垫在图片下面",
-                checked = currentThemeId == com.kingzcheung.xime.ui.theme.CustomImageTheme.ID,
-                onCheckedChange = onUseImage)
-            SettingsItem(icon = Icons.TwoTone.Crop, title = "调整图片",
-                subtitle = "拖动、缩放，贴齐键盘的边，或让两边、上下留白",
-                onClick = {
-                    com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context)?.let { src ->
-                        editing = src to com.kingzcheung.xime.ui.theme.CustomImageTheme.baseFor(context,
-                            com.kingzcheung.xime.ui.theme.CustomImageTheme.ID)
-                    }
-                },
-                showArrow = true)
-            CustomImageVeilSlider(dark = false, onChanged = onVeilChanged)
-            CustomImageVeilSlider(dark = true, onChanged = onVeilChanged)
-            SettingsItem(icon = Icons.TwoTone.Delete, title = "删除图片",
-                subtitle = "连同轮播图片一起删，配色不变",
-                onClick = { confirmDelete = true })
+    val slidePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(com.kingzcheung.xime.settings.BackgroundMotionPreferences.MAX_SLIDES)) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val added = withContext(Dispatchers.IO) { com.kingzcheung.xime.ui.theme.CustomImageTheme.addSlides(context, uris) }
+            if (added < uris.size) android.widget.Toast.makeText(context,
+                if (added == 0 && slides.size >= com.kingzcheung.xime.settings.BackgroundMotionPreferences.MAX_SLIDES)
+                    "最多 ${com.kingzcheung.xime.settings.BackgroundMotionPreferences.MAX_SLIDES + 1} 张"
+                else "有 ${uris.size - added} 张没有加上", android.widget.Toast.LENGTH_LONG).show()
         }
     }
-    SettingsSection(title = "动态与轮播") {
-        // 主图换了（调整页确认后 editing 清空）或删了，这里跟着重组，轮播那排的第一张随之换。
-        BackgroundMotionSettingsItems(mainImage = if (hasImage)
-            com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context) else null)
-    }
+    fun pickOne() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    SettingsSection(title = "背景图片") {
+        // 主图换了（调整页确认后 editing 清空）、顶上来或删了，这里跟着重组，图片排的第一张随之换。
+        val main = if (hasImage) com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context) else null
+        if (main == null) {
+            SettingsItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
+                subtitle = "从相册选一张图片做键盘背景，按键和文字的颜色沿用当前主题",
+                onClick = { pickOne() }, showArrow = true)
+        } else {
+            SettingsToggleItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
+                subtitle = if (imageOn) "开着：换配色只换按键和文字的颜色，图片留着（iOS 渐变除外）"
+                    else "关着：键盘用配色方案的底色，图片留着",
+                checked = imageOn, onCheckedChange = onUseImage)
+            BackgroundImageStrip(
+                main = main, slides = slides, imageOn = imageOn, motionOn = motion.enabled,
+                onAdjust = {
+                    editing = main to com.kingzcheung.xime.ui.theme.CustomImageTheme.baseFor(context,
+                        com.kingzcheung.xime.ui.theme.CustomImageTheme.ID)
+                },
+                onReplace = { pickOne() },
+                onRemoveMain = {
+                    // 只剩这一张：先确认再整个删；后面还有图：下一张顶上来，不用确认（删的只是这一张）。
+                    if (slides.isEmpty()) confirmDelete = true
+                    else scope.launch {
+                        val promoted = withContext(Dispatchers.IO) {
+                            runCatching { com.kingzcheung.xime.ui.theme.CustomImageTheme.promoteNextSlide(context) }
+                        }
+                        promoted.onSuccess { moved ->
+                            // 刚好别处把轮播图删光了：照只剩一张处理。
+                            if (!moved) { confirmDelete = true; return@onSuccess }
+                            com.kingzcheung.xime.ui.theme.KeyboardThemes.reload(context)
+                            onImageChanged()
+                        }.onFailure {
+                            com.kingzcheung.xime.util.FileLogger.e("Appearance", "Custom background promote failed", it)
+                            android.widget.Toast.makeText(context, "没有删除成功，请重试", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
+                onAdd = { slidePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                onRemoveSlide = { src -> scope.launch(Dispatchers.IO) { com.kingzcheung.xime.ui.theme.CustomImageTheme.removeSlide(context, src) } },
+            )
+            // 遮罩只管「我的图片」：图片关着时调它看不到任何变化，不放出来。
+            if (imageOn) {
+                Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+                    Text("遮罩", style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp))
+                    Text("越高图片越淡、按键上的字越清楚；浅色、深色键盘各一条",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp))
+                    CustomImageVeilSlider(dark = false, onChanged = onImageChanged)
+                    CustomImageVeilSlider(dark = true, onChanged = onImageChanged)
+                }
+            }
+        }
+        if (imageTheme) BackgroundMotionSettingsItems()
     }
     editing?.let { (src, base) ->
         val existing = src == com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context)
@@ -443,7 +492,7 @@ private fun CustomImageThemeSection(currentThemeId: String, onUseImage: (Boolean
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("删除图片") },
-            text = { Text("删掉背景图片和轮播图片；正在用它时，键盘留下图片下面那套配色。") },
+            text = { Text("这是最后一张，删掉后没有背景图片；正在用它时，键盘留下图片下面那套配色。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

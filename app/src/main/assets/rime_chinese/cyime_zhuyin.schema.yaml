@@ -47,7 +47,13 @@ engine:
     - punct_translator
     - script_translator
   # 先按正体匹配声调，再确定输出字形；候选隐藏及去重使用最后显示的字。
+  # 时间日期、表情、符号名同 14 键（设置 › 语言与方案 › 中文输出，默认关）：表按简体词查，所以放在转正体之前，
+  # 雾凇词库出来的还是简体（开心 → 😄，时间 → 15:35）。注音原来没接，开了也不出（用户反馈 11-12）。
+  # 希腊字母、生僻字按拼音编码认，注音的大千键码对不上，不接。
   filters:
+    - cyime_datetime
+    - simplifier@emoji
+    - simplifier@cyime_symbols
     - simplifier@zh_tw
     - lua_filter@*cyime_zhuyin_tone
     - simplifier@zhuyin_simplified
@@ -132,6 +138,18 @@ zhuyin_simplified:
   option_name: zhuyin_simplified
   opencc_config: cyime_t2s.json
   tips: none
+
+# 候选里显示表情、打符号名出符号：与 14 键、26 键共用同两张表（opencc/emoji.json、opencc/cyime_symbols.json），
+# 输入法按键前按设置写 emoji、cyime_symbol_names 选项（ImeSessionController.applyCandidateOptions）。
+emoji:
+  option_name: emoji
+  opencc_config: emoji.json
+  inherit_comment: false
+
+cyime_symbols:
+  option_name: cyime_symbol_names
+  opencc_config: cyime_symbols.json
+  inherit_comment: false
 
 menu:
   page_size: 5

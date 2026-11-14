@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
 
-/** 主题与外观 › 动态与轮播的示意图：四种效果要看得出不一样，图又不能露出边。 */
+/** 主题与外观 › 背景图片 › 动态背景的示意图：四种效果要看得出不一样，图又不能露出边。 */
 class BackgroundMotionPreviewTest {
     private val shot = 3_000L
 

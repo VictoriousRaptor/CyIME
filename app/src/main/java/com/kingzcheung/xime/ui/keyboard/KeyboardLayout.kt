@@ -486,9 +486,9 @@ fun KeyboardLayout(
             var handedOff = false
             try {
             val candidates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                val keyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
-                if (chinese) com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys)
-                else com.kingzcheung.xime.glide.GlideLexicon.decoder(glideContext, keyboard).decode(xs, ys)
+                // 词表读不出来时这一笔当没认出，不闪退（用户 11-12）。
+                com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(glideContext,
+                    com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys), chinese, doublePinyin, xs, ys)
             }
             if (candidates.isEmpty()) {
                 // 很短又认不出词：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
@@ -548,7 +548,16 @@ fun KeyboardLayout(
 
 
 
+    // 键缝动效的光层（默认关，关着时是 null）；蜂窝布局没有横平竖直的键缝，不画。
+    val gapLight = rememberKeyGapLight(allowed = !honeycomb)
+    // 大小写的显示一变就扩开或收回一次；只看状态，按下、松开不会各触发一次。
+    KeyGapLightCase(gapLight, isShifted)
+    // 按住符号键当 Ctrl：键面换成快捷键时从符号键扩开，换回字母时收回；中英、语言切换时从语言键扩开（用户 11-14）。
+    KeyGapLightMode(gapLight, shiftSlideTargets.ctrlFaces, on = shiftSlideTargets.ctrlFaces)
+    KeyGapLightMode(gapLight, isAsciiMode to uiState.currentSchemaId)
+
     CompositionLocalProvider(
+        LocalKeyGapLight provides gapLight,
         LocalFourteenKeyLayout provides fourteenKey,
         LocalLongVowelOnL provides (longVowelKey == JapaneseLongVowelKey.L_KEY),
         LocalLetterGeometry provides geometry,
@@ -578,6 +587,8 @@ fun KeyboardLayout(
                 onEnd = { glidePreview.stop(); callbacks.onGlidePreviewEnd?.invoke() })
 
     ) {
+        // 最先画 = 在所有键帽底下，只从键缝里露出来。
+        KeyGapLightLayer(gapLight, Modifier.matchParentSize())
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBgColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         if (glideEnabled) GlideTrailOverlay(glideTrail,
             KeyboardThemes.getAccentColor(uiState.themeId, uiState.isDarkTheme),
@@ -597,14 +608,14 @@ fun KeyboardLayout(
                 val deleteKey: @Composable (Modifier) -> Unit = { keyModifier ->
                     SwipeableIconKeyButton(
                         icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
-                        onClick = { onKeyPress("delete") },
+                        onClick = { if (!shiftSlideTargets.ctrlBackspace()) onKeyPress("delete") },
                         backgroundColor = specialKeyBackgroundColor,
                         iconColor = specialKeyTextColor,
                         modifier = keyModifier
                             .fillMaxHeight().testTag("qwerty-delete-key").semantics { contentDescription = "删除" },
                         swipeText = "清空",
                         onSwipe = { onKeyPress("clear_composition") },
-                        onLongClick = { onKeyPress("delete") },
+                        onLongClick = { if (!shiftSlideTargets.ctrlBackspace()) onKeyPress("delete") },
                         onPress = { onKeyPressDown?.invoke("delete") },
                         onRelease = { onKeyRelease?.invoke("delete") },
                         followSymbolSwipeDirection = true,
@@ -1047,7 +1058,7 @@ fun KeyboardLayout(
                     val periodOnRight = if (customBottom) QwertyBottomKey.PERIOD in bottomPrefs.qwertyBottomRow.keys else bottomPrefs.qwertyPeriodKey
                     val punctuationFull = LocalKeyboardPunctuation.current?.full ?: !isAsciiMode
                     val (leftPunctuation, rightPunctuation) = spacePunctuationKeys(commaOnLeft, periodOnRight,
-                        punctuationFull, english = isAsciiMode,
+                        punctuationFull, english = isAsciiMode || uiState.inputProfile.language.typesLettersDirectly,
                         japanese = LocalKeyboardPunctuation.current?.japanese == true)
                     val punctuationCount = (if (commaOnLeft) 1 else 0) + (if (periodOnRight) 1 else 0)
                     val bottomSpaceWeight = bottom.space + bottom.punctuation * (1 - punctuationCount) + bottom.mode * (2 - modeCount)
@@ -1228,7 +1239,7 @@ fun KeyboardLayout(
                                 if (enterBounds != Rect.Zero) shiftSlideTargets.putEnter(enterTargetId, enterBounds, shiftEnter)
                             }
                             ActionKeyButton(
-                                text = enterKeyText,
+                                text = heldEnterText(enterKeyText, shiftSlideTargets.ctrlFaces, shiftMode == ShiftMode.HELD),
                                 onClick = {
                                     if (!shiftSlideTargets.ctrlEnter()) {
                                         if (viewModel.shiftMode.value == ShiftMode.HELD) {
@@ -1850,6 +1861,7 @@ internal fun ShiftCapsKeyButton(
     val currentPress by rememberUpdatedState(onKeyPressDown)
     val currentKey by rememberUpdatedState(onKeyPress)
     val currentTapKey by rememberUpdatedState(tapKey)
+    val currentGapLight by rememberUpdatedState(LocalKeyGapLight.current)
     var bounds by remember { mutableStateOf(Rect.Zero) }
 
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
@@ -1934,6 +1946,10 @@ internal fun ShiftCapsKeyButton(
                             if (!change.pressed) {
                                 released = true
                                 upTime = change.uptimeMillis
+                                // 键缝动效：从 Shift 拖到字母上松手，大写收到那个字母上（换成按键区里的位置）。
+                                if (dragged && target != null && targets != null && targets.keyboardBounds.contains(target.bounds.center)) {
+                                    currentGapLight?.aim(target.bounds.center - targets.keyboardBounds.topLeft)
+                                }
                                 if (dragged) target?.commit?.invoke()
                                 break
                             }
@@ -1968,6 +1984,8 @@ internal fun ShiftCapsKeyButton(
                 }
             }
             .padding(scaledKeyVisualPadding())
+            // 键缝动效：Shift 自己按下不画线，只登记位置，大写出现时从它扩开。
+            .then(keyGapLightSource(GapLightKind.NONE, caseAnchor = true))
             .then(if (honeycombEdge != null) Modifier.honeycombCap() else shadowModifier)
             .clip(keyClipShape)
             .background(colors.background).visualMaterial(VisualStyles.current, keyCornerRadius, com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED),

@@ -1139,6 +1139,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         com.kingzcheung.xime.stats.TypingStats.init(this)
         com.kingzcheung.xime.ui.keyboard.HandwritingGlassRegion.reporter = handwritingGlassRegionReporter
         com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester = cursorLineRequester
+        // 键盘开着换到九键（14 键、注音）：补读新方案的词组模型，不等头几键读盘。
+        rimeEngine.onSchemaSwitched = schemaSwitchPrefetch
         // 记录与打字速度有关的本机状态（用户词库体积、可选模型、内存余量），只记数量不记内容。
         serviceScope.launch(Dispatchers.IO) {
             delay(5_000)
@@ -1221,9 +1223,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
     
     
-    private fun getPredictionFromPlugin(contextText: String, afterWholeWord: Boolean) {
+    private fun getPredictionFromPlugin(contextText: String, afterWholeWord: Boolean, chained: Boolean = false) {
         if (!isChineseMode || !canPredictAfter(contextText)) return
-        predictionManager.getPrediction(contextText, afterWholeWord)
+        predictionManager.getPrediction(contextText, afterWholeWord, chained)
     }
 
     /** 中文输出字形：拼音、双拼、仓颉、注音都跟「繁体输出」这一个开关。 */
@@ -1267,9 +1269,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 withContext(Dispatchers.Main) {
                     val availableSchemas = rimeEngine.getAvailableSchemas()
                     val storedSchema = SettingsPreferences.getCurrentSchema(this@XimeInputMethodService)
-                    val selectableSchemas = if (storedSchema.isNotBlank() && storedSchema !in availableSchemas && storedSchema != com.kingzcheung.xime.settings.InputModes.ENGLISH &&
-                        (isHandwritingSchema(storedSchema) || SchemaManager.isSchemaCompiled(this@XimeInputMethodService, storedSchema)))
-                        availableSchemas.toList() + storedSchema else availableSchemas.toList()
+                    val selectableSchemas = selectableWithStored(storedSchema, availableSchemas.toList(),
+                        { SchemaManager.getEnabledSchemas(this@XimeInputMethodService) }, ::isHandwritingSchema,
+                        { SchemaManager.isSchemaCompiled(this@XimeInputMethodService, it) })
                     val savedSchema = com.kingzcheung.xime.settings.LanguagePreferences.nativeSchema(
                         storedSchema, selectableSchemas,
                         com.kingzcheung.xime.settings.LanguagePreferences.enabled(this@XimeInputMethodService))
@@ -1566,10 +1568,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 不替换输入框里原有的字。[startAction]：面板打开后自动点这个动作（如 `mode:translate`）。
      */
     internal fun openToolPanel(pluginId: String, sourceText: String? = null, startAction: String? = null) {
-        if (toolPanelBlocked()) {
-            Toast.makeText(this, "工具面板不支持在悬浮/横屏模式下使用", Toast.LENGTH_SHORT).show()
-            return
-        }
         closeQuickSend()
         // 翻译栏开着又点了插件按钮：已经写进输入框的译文先定下来
         if (uiState.value.toolPanelDisplay == ToolResult.LIVE.name) liveToolBar.close()
@@ -1613,6 +1611,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val pluginName = ExtensionManager.getAllInstalledPlugins()
             .firstOrNull { it.id == pluginId }?.name ?: pluginId
         if (live) liveToolBar.reset()
+        // 打开翻译栏：键盘回到打字界面，不停在菜单、符号、剪贴板这些页上。
+        if (live) {
+            // 菜单里再打开的页（菜单 → 剪贴板）一层层退回去，最多退几层，防止页面不变时死循环
+            repeat(4) {
+                if (keyboardViewModel.page.value is com.kingzcheung.xime.keyboard.KeyboardPage.Overlay) keyboardViewModel.closeOverlay()
+            }
+        }
         val epoch = uiState.value.toolPanelRequestEpoch + 1
         uiState.value = uiState.value.copy(
             toolPanelVisible = true,
@@ -1664,16 +1669,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
     }
 
-    /** 悬浮键盘、横屏下工具面板不开（面板高度按竖屏固定键盘算）。 */
-    private fun toolPanelBlocked(): Boolean = uiState.value.isFloatingMode ||
-        resources.configuration.screenWidthDp > resources.configuration.screenHeightDp
-
     /**
      * 剪贴板长按「翻译」用的插件：装着并开着的 AI 改写（它的「翻译」动作，用户自己的接口）。
-     * 没有，或者现在开不了工具面板（悬浮、横屏），就返回 null，长按菜单里不显示「翻译」。
+     * 没有就返回 null，长按菜单里不显示「翻译」。横屏、悬浮也能开（矮屏幕用一行的面板，见 toolPanelCompact）。
      */
     internal fun clipboardTranslatePluginId(): String? = CLIPBOARD_TRANSLATE_PLUGIN_ID.takeIf { id ->
-        !toolPanelBlocked() && SettingsPreferences.isPluginEnabled(this, id) &&
+        SettingsPreferences.isPluginEnabled(this, id) &&
             ExtensionManager.getAllInstalledPlugins().any { it.id == id }
     }
 
@@ -1859,6 +1860,59 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (box == null || voiceTarget.editor !== box || !(uiState.value.isVoiceMode || voiceRecordingStarted)) return
         voiceRecognitionHandler.endInputSession()
         restoreAfterVoiceFinish()
+    }
+
+    /**
+     * 翻译栏开着时打字去哪个框：true 栏里，false 应用输入框（栏留着不抢）。点栏进栏，点应用输入框回应用。
+     * 换框时没打完的拼音、联想收掉，候选上屏、编码、删除都跟着去同一个框。
+     */
+    internal fun setLiveBarFocus(focused: Boolean) {
+        val state = uiState.value
+        if (!state.toolPanelVisible || state.toolPanelDisplay != ToolResult.LIVE.name ||
+            state.toolPanelInputFocused == focused) return
+        val pending = candidateState.value
+        if (pending.isComposing || pending.inputText.isNotEmpty() || pending.pendingEnglishText.isNotEmpty() ||
+            pending.associationCandidates.isNotEmpty()) keyRouter.dropCompositionForTargetChange()
+        uiState.value = uiState.value.copy(
+            toolPanelInputFocused = focused,
+            enterKeyText = if (focused) "完成" else editorEnterKeyText(),
+        )
+        if (focused) liveToolBar.enter() else liveToolBar.leave()
+    }
+
+    /**
+     * 工具栏长按插件按钮弹出的列表：插件 ui 里 style = "quick" 的选择（翻译的目标语言）。
+     * 面板开着就用面板现在的节点，不和翻译栏的请求同时去问插件；没开才在后台问一次。
+     */
+    internal suspend fun toolPanelQuickOptions(pluginId: String): com.kingzcheung.xime.keyboard.PressMenuOptions? {
+        val state = uiState.value
+        val nodes = if (state.toolPanelVisible && state.toolPanelPluginId == pluginId) state.toolPanelUiNodes
+        else withContext(Dispatchers.IO) {
+            runCatching { (ExtensionManager.getPluginById(pluginId) as? ToolPlugin)?.getPanelState("") }.getOrNull()?.ui
+        }
+        return toolPanelQuickNode(nodes)
+    }
+
+    /** 长按列表里选了一项：翻译栏开着就直接换，没开就打开翻译栏再换。 */
+    internal fun toolPanelQuickSelect(pluginId: String, key: String, option: String) {
+        val action = toolPanelSelectAction(key, option)
+        val state = uiState.value
+        if (state.toolPanelVisible && state.toolPanelPluginId == pluginId) dispatchToolPanelAction(action)
+        else openToolPanel(pluginId, startAction = action)
+    }
+
+    /** 应用输入框里一个字都没有（读不到当作有字）。 */
+    private fun hostFieldEmpty(): Boolean = runCatching {
+        val ic = currentInputConnection ?: return@runCatching false
+        ic.getTextBeforeCursor(1, 0)?.isEmpty() == true && ic.getTextAfterCursor(1, 0)?.isEmpty() == true
+    }.getOrDefault(false)
+
+    /** 用户点了应用的输入框（框架只对会报点击的输入框调用）：翻译栏开着就把输入还给应用。 */
+    @Deprecated("Deprecated in Java")
+    override fun onViewClicked(focusChanged: Boolean) {
+        @Suppress("DEPRECATION")
+        super.onViewClicked(focusChanged)
+        setLiveBarFocus(false)
     }
 
     internal fun closeToolPanel() {
@@ -2159,7 +2213,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 val isHandwritingMode = (page.underlyingPage() as? KeyboardPage.Main)?.type == com.kingzcheung.xime.keyboard.MainType.HANDWRITING
                 val handwritingExpansion = com.kingzcheung.xime.ui.keyboard.rememberHandwritingExpansion(
                     isHandwritingMode && !state.showKeyboardResize && !state.isCompact,
-                    state.handwritingExpanded, state.inputSessionId)
+                    state.handwritingExpanded, state.inputSessionId, instant = state.handwritingRestored)
                 val handwritingExpanded = handwritingExpansion.active
                 val clipboardPanelOpen = clipboardPanelCanExpand(page, state.showKeyboardResize, state.isCompact)
                 val imagePanelExpanded = clipboardPanelOpen && state.clipboardImagesExpanded
@@ -2244,8 +2298,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         (effectiveScreenH - keyboardHeight - floatingDragBarHeight).coerceAtLeast(floatingMinY)) + floatingDragBarHeight
                 } else fixedClipboardBottomDp(activeBottomDp, visibleNavBarHeightDp) + contentBottomPaddingDp
                 // 工具面板、翻译栏开着时剪贴板照样在它们下面（见下面 toolPanelExtra），上拉的最高处给它们留出这一截。
+                // 手机横屏（悬浮时按卡片下面剩的高度）放不下完整面板：一行的面板。
+                val toolPanelCompact = com.kingzcheung.xime.ui.keyboard.toolPanelCompact(
+                    keyboardHeight, effectiveScreenH - clipboardBottomSpace)
                 val toolPanelAboveBar = com.kingzcheung.xime.ui.keyboard.toolPanelExtraHeight(
-                    state.toolPanelVisible, state.toolPanelDisplay)
+                    state.toolPanelVisible, state.toolPanelDisplay, toolPanelCompact)
                 val clipboardExpansion = rememberClipboardPanelExpansion(
                     clipboardPanelOpen, state.inputSessionId,
                     clipboardPanelBounds(keyboardHeight, effectiveScreenH, clipboardBottomSpace + toolPanelAboveBar),
@@ -2458,6 +2515,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = false, it) },
                                 avoidBoundsInWindow = hardwareToolbarBounds.value,
                                 avoidCaret = state.cursorAnchor.takeIf { state.hardwareOptions.avoidEditor },
+                                onShown = { words, count -> keyRouter.reportHardwareShown(words, count) },
                             )
                             HardwareKeyboardToolbar(
                                 frostedGlass = glass,
@@ -2502,11 +2560,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                         previousHardwareCandidate.takeUnless { hardwareCandidates.association },
                                         nextHardwareCandidate.takeUnless { hardwareCandidates.association },
                                         showNumberLabels = !hardwareEnglish,
-                                        commentsAreGlosses = hardwareGlosses && !hardwareCandidates.association)
+                                        commentsAreGlosses = hardwareGlosses && !hardwareCandidates.association,
+                                        onShown = { words, count -> keyRouter.reportHardwareShown(words, count) })
                                   }
                                 },
                                 showCandidatesWhenFloating = hardwareCandidates.association && !state.hardwareOptions.associationInWindow,
                                 candidatesPending = !hardwareEnglish && pendingPrediction != 0L,
+                                composing = !hardwareCandidates.association && hardwareCandidates.words.isNotEmpty(),
+                                candidatesRevision = cand.engineRevision,
                                 contentColor = hardwarePalette.candidateText,
                                 position = position,
                                 onPositionChange = { hardwareToolbarPosition.value = it },
@@ -2642,7 +2703,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 effectiveKeyboardHeight,
                                 // Without this key the keyboard view kept a stale results height (0) and the keys
                                 // stretched into the results.
-                                clipboardSearchResultsHeight, clipboardSearchInline,
+                                clipboardSearchResultsHeight, clipboardSearchInline, toolPanelCompact,
                                 handwritingExpanded, handwritingWidth, handwritingOffsetX,
                                 protectedSize,
                                 floatingMinY,
@@ -2721,6 +2782,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     clipboardSearchVisible = state.clipboardSearchVisible,
                                     clipboardSearchResultsHeight = clipboardSearchResultsHeight,
                                     clipboardSearchInline = clipboardSearchInline,
+                                    toolPanelCompact = toolPanelCompact,
                                     toolPanelPluginId = state.toolPanelPluginId,
                                     toolPanelTitle = state.toolPanelTitle,
                                     toolPanelPrefillText = state.toolPanelPrefillText,
@@ -2903,10 +2965,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 callbacks = callbacks,
                                 inlineSuggestions = if (settingsPreviewEditor) emptyList() else inlineSuggestionManager?.suggestions.orEmpty(),
                                 // 悬浮透明度在卡片本身处理，宿主不再强制创建键盘大小的离屏缓冲。
+                                // 固定键盘也只在半透明或挖中缝时才用离屏图：不透明时整块画进离屏图，按一个键、键帽动一帧，
+                                // 渲染线程就要把整张键盘（平板 2800×752）重画一遍（11-13 平板 84 录的 Perfetto）。
                                 modifier = if (state.isFloatingMode || state.showKeyboardResize) Modifier
                                     else Modifier.graphicsLayer {
                                         alpha = keyboardLayerOpacity
-                                        compositingStrategy = CompositingStrategy.Offscreen
+                                        compositingStrategy = com.kingzcheung.xime.ui.keyboard.dockedKeyboardCompositing(
+                                            keyboardLayerOpacity, splitKeyboardGap.cutsKeyboard)
                                     },
                                 // 非按键交互（符号/表情面板、菜单栏、候选栏按钮）的振动，
                                 // 语义与按键按下反馈完全一致（模式/时长/振幅走同一配置）
@@ -3117,7 +3182,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             fixed.keyboardBottomPaddingDp
         // 和窗口高度同一口径：开着菜单等面板时工具面板、翻译栏仍在候选栏上面。
         val toolExtra = com.kingzcheung.xime.ui.keyboard.toolPanelExtraHeight(
-            fixed.toolPanelVisible, fixed.toolPanelDisplay)
+            fixed.toolPanelVisible, fixed.toolPanelDisplay,
+            com.kingzcheung.xime.ui.keyboard.toolPanelCompact(normal.height, resources.configuration.screenHeightDp - clipboardBottom))
         val contentHeight = if (clipboardPanelCanExpand(page, false, fixed.isCompact) && fixed.clipboardImagesExpanded)
             clipboardPanelBounds(normal.height, resources.configuration.screenHeightDp, clipboardBottom + toolExtra).expanded
             else normal.height
@@ -3315,6 +3381,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 }
             }
         }
+    }
+
+    /** 引擎换方案后的回调（见 onCreate）：键盘开着时给新方案补读，活在 IO 线程做。 */
+    private val schemaSwitchPrefetch: (String) -> Unit = { schemaId ->
+        DictionaryPrefetch.onSchemaSwitched(this, serviceScope, rimeEngine, schemaId)
     }
 
     private var hardwareCursorImmediateOnly = false
@@ -3623,7 +3694,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (keyCode == KeyEvent.KEYCODE_BACK && uiState.value.handwritingExpanded) {
             if (event?.isCanceled != true) {
                 com.kingzcheung.xime.ui.keyboard.HandwritingFullscreenMemory.write(this, false)
-                uiState.value = uiState.value.copy(handwritingExpanded = false)
+                uiState.value = uiState.value.copy(handwritingExpanded = false, handwritingRestored = false)
             }
             return true
         }
@@ -3671,6 +3742,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 imm.showInputMethodPicker()
             }
             com.kingzcheung.xime.keyboard.CtrlShortcuts.ENTER_COMMAND -> ctrlEnter()
+            com.kingzcheung.xime.keyboard.CtrlShortcuts.BACKSPACE_COMMAND -> ctrlBackspace()
             com.kingzcheung.xime.keyboard.CtrlShortcuts.SHIFT_ENTER_COMMAND -> shiftEnter()
             else -> com.kingzcheung.xime.keyboard.CtrlShortcuts.letterOf(name)?.let { letter ->
                 // Ctrl+A/C/X/V 和编辑面板的全选、复制、剪切、粘贴同一路；终端里 Ctrl+C 等是终端自己的键，照旧发按键。
@@ -3705,6 +3777,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             }
             else -> schemaController.handleToolbarEditingAction("send")
         }
+    }
+
+    /**
+     * Ctrl+删除（屏幕上按住 !@# 点删除，用户 11-13）：还在打字时和删除一样删编码；否则和实体键盘一样把 Ctrl+删除交给应用
+     * （系统输入框删到上一个词的开头）。焦点在键盘自己的输入框时给那个框。
+     */
+    private fun ctrlBackspace() {
+        val composing = candidateState.value.let { it.isComposing || it.inputText.isNotEmpty() || it.preeditText.isNotEmpty() } ||
+            t9PartialSegments.isNotEmpty()
+        if (composing) {
+            keyRouter.handleKeyPress("delete", false)
+            return
+        }
+        val connection = editorConnection()
+        com.kingzcheung.xime.keyboard.CtrlShortcuts.backspaceKeyEvents(SystemClock.uptimeMillis()).forEach { connection?.sendKeyEvent(it) }
     }
 
     /**
@@ -3862,7 +3949,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         
         uiState.value = uiState.value.copy(
             inputSessionId = System.nanoTime(),
-            isAddressField = editorInputPolicy.field.isAddressField,
+            // 语言键菜单里中文指向进框前的方案：网址、邮箱框和可见密码框（代码编辑器）都先给英文、能切回中文。
+            isAddressField = editorInputPolicy.field.allowsNativeInput,
             isAsciiMode = editorPresentation.isAsciiMode,
             currentSchemaId = editorPresentation.currentSchemaId,
             clipboardImagesExpanded = false,
@@ -4000,7 +4088,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 resizing = state.showKeyboardResize,
                 settingsPreview = settingsPreviewEditor,
             )) return
-        uiState.value = state.copy(handwritingExpanded = true)
+        uiState.value = state.copy(handwritingExpanded = true, handwritingRestored = true)
     }
 
     private fun requestHardwareCursorUpdates() {
@@ -4087,6 +4175,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         schemaController.observeEditorSelection(newSelStart, newSelEnd)
         if (restored == null && caretLeftInlineComposition(newSelStart, newSelEnd, candidatesStart, candidatesEnd))
             keyRouter.finishCompositionAfterCaretLeft()
+        // 翻译栏拿着输入时用户点了应用输入框（光标变了，不是译文写出来的）：输入回到应用。
+        // 输入框被应用清空（点了发送）不算：接着在栏里打下一句。
+        if (liveToolBar.userMovedHostCaret(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd) &&
+            !(newSelStart == 0 && newSelEnd == 0 && hostFieldEmpty())) setLiveBarFocus(false)
         val hostCaret = if (newSelStart >= 0 && newSelStart == newSelEnd) newSelStart else -1
         if (hostCaret != voiceHostCaret) { voiceHostCaretBefore = voiceHostCaret; voiceHostCaret = hostCaret }
         if (restored != null || oldSelStart != newSelStart || oldSelEnd != newSelEnd) {
@@ -5071,6 +5163,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     override fun onDestroy() {
         updateCursorMagnifierVisibility(false)
         if (EnterProbe.service?.get() === this) EnterProbe.service = null
+        if (rimeEngine.onSchemaSwitched === schemaSwitchPrefetch) rimeEngine.onSchemaSwitched = null
         KeyboardPanelLaunch.previewVisible = false
         com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = false
         if (com.kingzcheung.xime.ui.keyboard.HandwritingGlassRegion.reporter === handwritingGlassRegionReporter)
@@ -5611,8 +5704,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         return result
     }
 
+    /** [chained]: [text] 是选中的联想词，接着出的联想要够有把握才出（[continuesAssociationChain]）。 */
     internal fun commitTextAndPredict(text: String, isPaste: Boolean, allowPrediction: Boolean = true,
-        caret: CommitCaret = CommitCaret.NONE): TextCommitResult {
+        caret: CommitCaret = CommitCaret.NONE, chained: Boolean = false): TextCommitResult {
         // Invalidate before delivery: a queued prediction or English completion must
         // not reappear after a paste, including rejected/internal-editor pastes.
         if (isPaste) dismissPredictionsForPaste()
@@ -5632,7 +5726,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 if (predictionAdmission != null && inputReadiness.accepts(predictionAdmission) &&
                     uiState.value.inputSessionId == predictionEditor && !uiState.value.isAsciiMode &&
                     predictionManager.requestRevision == predictionRevision) {
-                    getPredictionFromPlugin(predictionManager.lastCommittedText, endsWithWholeWord(text))
+                    getPredictionFromPlugin(predictionManager.lastCommittedText, endsWithWholeWord(text), chained)
                 }
                 predictionManager.releasePrediction(predictionRevision)
             }

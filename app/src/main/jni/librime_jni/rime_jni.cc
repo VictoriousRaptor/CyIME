@@ -876,6 +876,23 @@ public:
         return session && cyime::pins::SetPinned(session->context(), text, pinned);
     }
 
+    // 长按卡片：{固定状态（-1 不能固定、0 没固定、1 已固定）, 固定在第几位（0 排第一）, 现在排第几（0 没找到）}。
+    std::vector<int> candidatePinInfo(const std::string& text) {
+        const int state = candidatePinState(text);
+        if (state < 0) return {state, 0, 0};
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session) return {-1, 0, 0};
+        const auto code = cyime::pins::ActiveCode(session->context());
+        return {state, std::max(0, cyime::pins::PinnedPlace(code, text)), cyime::pins::MenuPlace(session->context(), text)};
+    }
+
+    // 长按「固定在第 N 位」：这个编码下锁在第 [place] 位，没固定的词照常学习、排在空出来的位置。
+    bool setCandidatePinnedAt(const std::string& text, int place) {
+        if (!rime || !session_id_ || text.empty()) return false;
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        return session && cyime::pins::SetPinnedAt(session->context(), text, place);
+    }
+
     // Erases the user dictionary records of the words `candidate` is made of (its own entry, or a
     // sentence's components), including the credit records a committed phrase leaves for its words.
     static bool forgetWords(rime::UserDictionary* userDictionary, const rime::an<rime::Candidate>& candidate) {
@@ -2199,6 +2216,50 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeSetCandidatePinned(
     JNIEnv* env, jobject, jstring text, jboolean pinned) {
     if (!text) return JNI_FALSE;
     return Rime::Instance().setCandidatePinned(CandidateUtf8(env, text), pinned == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeCandidatePinInfo(JNIEnv* env, jobject, jstring text) {
+    const auto info = text ? Rime::Instance().candidatePinInfo(CandidateUtf8(env, text)) : std::vector<int>{-1, 0, 0};
+    auto result = env->NewIntArray(static_cast<jsize>(info.size()));
+    if (!result) return nullptr;
+    std::vector<jint> values(info.begin(), info.end());
+    env->SetIntArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeSetCandidatePinnedAt(JNIEnv* env, jobject, jstring text, jint place) {
+    if (!text) return JNI_FALSE;
+    return Rime::Instance().setCandidatePinnedAt(CandidateUtf8(env, text), place) ? JNI_TRUE : JNI_FALSE;
+}
+
+// 设置页（我的短语）：按编码固定或取消固定，不需要正在组词。place 0 排第一，1… 第几位。
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativePinCode(JNIEnv* env, jobject, jstring code, jstring text, jint place) {
+    if (!code || !text) return JNI_FALSE;
+    return cyime::pins::PinCode(CandidateUtf8(env, code), CandidateUtf8(env, text), place) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeUnpinCode(JNIEnv* env, jobject, jstring code, jstring text) {
+    if (!code || !text) return JNI_FALSE;
+    return cyime::pins::UnpinCode(CandidateUtf8(env, code), CandidateUtf8(env, text)) ? JNI_TRUE : JNI_FALSE;
+}
+
+// 所有固定，一条一行："编码<TAB>词<TAB>第几位（0 排第一）"。
+JNIEXPORT jobjectArray JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeListPins(JNIEnv* env, jobject) {
+    const auto pins = cyime::pins::All();
+    auto strings = env->FindClass("java/lang/String");
+    auto result = env->NewObjectArray(pins.size(), strings, nullptr);
+    for (size_t i = 0; i < pins.size(); ++i) {
+        auto line = CandidateString(env, pins[i].code + "\t" + pins[i].text + "\t" + std::to_string(pins[i].place));
+        env->SetObjectArrayElement(result, i, line);
+        env->DeleteLocalRef(line);
+    }
+    env->DeleteLocalRef(strings);
+    return result;
 }
 
 // 旧版本 26 键长按“屏蔽”的候选（cyime-hidden-candidates.txt），只供设置页恢复。

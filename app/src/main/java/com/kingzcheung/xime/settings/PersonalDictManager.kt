@@ -324,6 +324,20 @@ object PersonalDictManager {
         }
     }
 
+    /**
+     * 我的短语「固定在第几位」按编码存（cyime_pins.txt）：一条短语编码在每个开着的键盘上实际打出的编码，
+     * 和各键盘短语副本用同一套换算（九键数字、14 键合并码、双拼码），再加上原编码本身。
+     */
+    internal fun phraseTypedCodes(context: Context, code: String): List<String> {
+        val typed = linkedSetOf(code.trim().filterNot { it == ' ' || it == '\'' })
+        for (schemaId in SchemaManager.getEnabledSchemas(context)) {
+            val doublePinyin = DoublePinyinSchemes.find(schemaId) ?: if (DoublePinyinSchemes.isGenerated(schemaId))
+                DoublePinyinSchemes.load(context).let { DoublePinyinSchemes.find(schemaId) } else null
+            keyedPhrases(schemaId, doublePinyin)?.codes?.invoke(code.trim())?.let(typed::addAll)
+        }
+        return typed.filter { it.isNotEmpty() }
+    }
+
     private val PINYIN_SYLLABLES by lazy { DoublePinyinScheme.SYLLABLES.toSet() }
 
     /**

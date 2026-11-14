@@ -58,6 +58,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kingzcheung.xime.viewmodel.CustomPhraseUiState
 import com.kingzcheung.xime.viewmodel.CustomPhraseViewModel
+import com.kingzcheung.xime.viewmodel.MAX_PHRASE_PLACE
+import com.kingzcheung.xime.viewmodel.phrasePlace
 
 /**
  * 词库：我的短语（打编码出固定短语）、导入词库（下载/导入、开关、删除）、删掉的候选（旧版本藏起来的词）、
@@ -176,6 +178,22 @@ private fun CustomPhraseTabContent(
                 }
             }
         }
+        // 固定的词：长按候选「固定」「固定在第 N 位」的，和短语填了第几位的。同一份 cyime_pins.txt，在这里能取消。
+        val pins = uiState.pins.filter { pin ->
+            uiState.searchQuery.isEmpty() || pin.word.contains(uiState.searchQuery) ||
+                pin.code.contains(uiState.searchQuery, ignoreCase = true)
+        }
+        if (!uiState.isLoading && pins.isNotEmpty()) {
+            item(key = "pins_title") { SettingsGroupTitle("固定的词", Modifier.padding(top = 12.dp)) }
+            itemsIndexed(pins, key = { _, pin -> "pin_${pin.code}_${pin.word}" }) { row, pin ->
+                SettingsGroupRow(row, pins.size) {
+                    SettingsListRow(com.kingzcheung.xime.settings.PhraseLineBreaks.shown(pin.word),
+                        "编码 ${pin.code} · " + if (pin.place == 0) "排第一" else "第 ${pin.place} 位") {
+                        TextButton(onClick = { viewModel.unpin(pin) }) { Text("取消固定") }
+                    }
+                }
+            }
+        }
     }
 
     if (uiState.showAddDialog) {
@@ -184,10 +202,13 @@ private fun CustomPhraseTabContent(
             word = uiState.editWord,
             code = uiState.editCode,
             weight = uiState.editWeight,
+            place = uiState.editPlace,
             onWordChange = viewModel::setEditWord,
             onCodeChange = viewModel::setEditCode,
             onWeightChange = viewModel::setEditWeight,
-            onConfirm = { viewModel.addEntry(uiState.editWord, uiState.editCode, uiState.editWeight.toIntOrNull()); viewModel.hideAddDialog() },
+            onPlaceChange = viewModel::setEditPlace,
+            onConfirm = { viewModel.addEntry(uiState.editWord, uiState.editCode, uiState.editWeight.toIntOrNull(),
+                phrasePlace(uiState.editPlace)); viewModel.hideAddDialog() },
             onDismiss = viewModel::hideAddDialog,
         )
     }
@@ -197,10 +218,13 @@ private fun CustomPhraseTabContent(
             word = uiState.editWord,
             code = uiState.editCode,
             weight = uiState.editWeight,
+            place = uiState.editPlace,
             onWordChange = viewModel::setEditWord,
             onCodeChange = viewModel::setEditCode,
             onWeightChange = viewModel::setEditWeight,
-            onConfirm = { viewModel.updateEntry(uiState.editIndex, uiState.editWord, uiState.editCode, uiState.editWeight.toIntOrNull()); viewModel.hideEditDialog() },
+            onPlaceChange = viewModel::setEditPlace,
+            onConfirm = { viewModel.updateEntry(uiState.editIndex, uiState.editWord, uiState.editCode,
+                uiState.editWeight.toIntOrNull(), phrasePlace(uiState.editPlace)); viewModel.hideEditDialog() },
             onDismiss = viewModel::hideEditDialog,
         )
     }
@@ -213,9 +237,11 @@ private fun PhraseEditDialog(
     word: String,
     code: String,
     weight: String,
+    place: String,
     onWordChange: (String) -> Unit,
     onCodeChange: (String) -> Unit,
     onWeightChange: (String) -> Unit,
+    onPlaceChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -234,6 +260,12 @@ private fun PhraseEditDialog(
                 label = { Text("编码，例如 dz") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = weight, onValueChange = onWeightChange,
                 label = { Text("排序(可不填，数字大的在前)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            // 搜狗「zm,1=」那样指定第几位：锁在这个位置，别的词照常学习；各键盘按自己打出的编码固定。
+            OutlinedTextField(value = place, onValueChange = onPlaceChange,
+                label = { Text("固定在第几位(可不填，1–$MAX_PHRASE_PLACE)") }, singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth())
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("取消") }
                 Spacer(Modifier.width(8.dp))

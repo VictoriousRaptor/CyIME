@@ -181,7 +181,8 @@ fun JapaneseKanaKeyboardLayout(
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 SwipeableIconKeyButton(icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
-                    onClick = { onKeyPress("delete") }, onLongClick = { onKeyPress("delete") }, distanceDelete = true,
+                    onClick = { if (!ctrlTargets.ctrlBackspace()) onKeyPress("delete") },
+                    onLongClick = { if (!ctrlTargets.ctrlBackspace()) onKeyPress("delete") }, distanceDelete = true,
                     // 清空、撤回同九键删除键（11-05「部分页面的删除键功能缺失」）。
                     followSymbolSwipeDirection = true,
                     upFeedback = KeyFlickFeedback.DELETE, swipeUpLabel = "上滑清空",
@@ -202,7 +203,7 @@ fun JapaneseKanaKeyboardLayout(
                 var enterBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
                 DisposableEffect(ctrlTargets) { onDispose { ctrlTargets.remove(enterTargetId) } }
                 SideEffect { if (enterBounds != androidx.compose.ui.geometry.Rect.Zero) ctrlTargets.putEnter(enterTargetId, enterBounds) }
-                ActionKeyButton(text = enterKeyText, onClick = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") },
+                ActionKeyButton(text = heldEnterText(enterKeyText, ctrlTargets.ctrlFaces), onClick = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") },
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
                     modifier = Modifier.weight(1f).testTag("kana-enter").onGloballyPositioned {
                         enterBounds = dragSpace.bounds(it)

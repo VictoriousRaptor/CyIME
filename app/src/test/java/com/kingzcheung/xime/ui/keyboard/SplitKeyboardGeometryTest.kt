@@ -199,4 +199,19 @@ class SplitKeyboardGeometryTest {
         gap.updateFilled(false)
         assertTrue(gap.hole(300f) != null)
     }
+
+    /** 外层要不要离屏图跟着「这一刻挖不挖缝」走：填满、被面板盖住、没有分体时都不挖。 */
+    @Test fun cutsKeyboardOnlyWhileAHoleIsCut() {
+        val gap = SplitKeyboardGap()
+        assertEquals(false, gap.cutsKeyboard)
+        gap.reportRow(0, androidx.compose.ui.geometry.Rect(400f, 100f, 600f, 160f))
+        assertEquals(true, gap.cutsKeyboard)
+        assertEquals(gap.hole(300f) != null, gap.cutsKeyboard)
+        gap.updateFilled(true)
+        assertEquals(false, gap.cutsKeyboard)
+        gap.updateFilled(false)
+        gap.updateExposed(false)
+        assertEquals(false, gap.cutsKeyboard)
+        assertEquals(null, gap.hole(300f))
+    }
 }

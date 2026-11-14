@@ -501,13 +501,21 @@ class ClipboardManager private constructor(private val context: Context) {
 
     private fun searchKey(text: String) = ClipboardSearch.key(text, AndroidPinyinInitials::initialOf)
 
-    /** False (and the board says full) when this record does not fit in the room left. */
-    private fun hasRoomFor(text: String, key: String): Boolean {
-        val room = _room.value
-        if (ClipboardCapacity.accepts(room.storedBytes, ClipboardCapacity.recordBytes(text, key), room.capacityBytes)) return true
-        _room.value = room.copy(refused = true)
-        return false
+    /**
+     * Room for [adding] more bytes: the oldest history makes way (user 11-12: 「不限」 yet 「剪贴板已满」).
+     * False (and the board says full) when fixed and grouped records alone leave no room; a copy too
+     * large to push out history is left out quietly when it does not fit.
+     */
+    private suspend fun makeRoom(adding: Long, keep: Long = -1): Boolean {
+        val capacity = ClipboardCapacity.capacity(context.filesDir.usableSpace)
+        val made = runCatching { dao.makeRoom(adding, capacity, keep) }
+            .onFailure { Log.e(TAG, "Could not make room in the clipboard", it) }.getOrDefault(false)
+        if (made) _room.value = _room.value.copy(refused = false)
+        else if (ClipboardCapacity.pushesOut(adding, capacity)) _room.value = _room.value.copy(refused = true)
+        return made
     }
+
+    private suspend fun hasRoomFor(text: String, key: String): Boolean = makeRoom(ClipboardCapacity.recordBytes(text, key))
 
     private val _recentItems = MutableStateFlow<List<ClipboardItem>>(emptyList())
     val recentItems: StateFlow<List<ClipboardItem>> = _recentItems.asStateFlow()
@@ -737,7 +745,7 @@ class ClipboardManager private constructor(private val context: Context) {
                 // Received copies keep their own room and never push out or block this phone's own.
                 dao.addReceived(text, now, key, ClipboardCapacity.DEVICE_COUNT, ClipboardCapacity.DEVICE_BYTES)
             } else {
-                // A copy already in history only moves up and needs no room; a full history saves nothing new.
+                // A copy already in history only moves up and needs no room; a new one may push out the oldest history.
                 // A received record copied again here becomes this phone's own and needs room like a new one.
                 val same = dao.findSameText(text)
                 val needsRoom = same == null || (same.fromDevice && !same.isPinned)
@@ -850,11 +858,8 @@ class ClipboardManager private constructor(private val context: Context) {
             // A search result may lie outside the loaded page; the database decides whether it exists.
             val old = dao.findById(id) ?: return@launch
             val key = searchKey(newText)
-            val room = _room.value
             val growth = ClipboardCapacity.recordBytes(newText, key) - ClipboardCapacity.recordBytes(old.text, old.searchKey)
-            if (growth > 0 && !ClipboardCapacity.accepts(room.storedBytes, growth, room.capacityBytes)) {
-                _room.value = room.copy(refused = true); return@launch
-            }
+            if (growth > 0 && !makeRoom(growth, keep = id)) return@launch
             dao.updateClipboardItem(id, newText, newCode?.trim(), System.currentTimeMillis())
             dao.setSearchKey(id, key)
             // Edited into text another history record already holds: keep only the edited one.

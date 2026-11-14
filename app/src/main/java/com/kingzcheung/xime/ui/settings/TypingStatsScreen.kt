@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 打字统计（设置首页最上面一行进来）：今天、每天、时段、效率、纠错、趣味换算。
+ * 打字统计（设置首页「智能」组或标题栏右边的小字进来）：今天、每天、时段、效率、纠错、趣味换算。
  * 只读本机计数，不联网、不记文字；卡片用 [SettingsSection]，跟着主题和玻璃走。
  */
 @OptIn(ExperimentalMaterial3Api::class)

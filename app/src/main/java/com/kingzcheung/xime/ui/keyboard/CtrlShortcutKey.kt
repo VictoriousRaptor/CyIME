@@ -148,7 +148,8 @@ internal fun CtrlSymbolKeyButton(
 ) {
     var pressed by remember { mutableStateOf(false) }
     KeyButton(
-        text = text,
+        // 按满时限、字母键换成快捷键键面时，这个键自己也写 Ctrl（用户 11-13：按住时就是真正的 Ctrl）；点一下开符号不变。
+        text = if (targets.ctrlFaces) "Ctrl" else text,
         fontSize = 16.sp,
         onClick = {},
         backgroundColor = backgroundColor,

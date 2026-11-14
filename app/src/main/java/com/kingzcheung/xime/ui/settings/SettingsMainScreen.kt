@@ -362,6 +362,12 @@ fun SettingsMainContent(
                         onClick = { onNavigateToRoute(SettingsRoutes.Handwriting) },
                         showArrow = true
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    TypingStatsSmartRow { onNavigateToRoute(SettingsRoutes.TypingStats) }
                 })
             }
 
@@ -446,13 +452,47 @@ internal fun readMainEntryStatus(context: android.content.Context): MainEntrySta
 /** 下载提示里的大小：和模型管理里写的 MB 一样按 1024 × 1024 字节算，取整。 */
 internal fun formatModelMegabytes(bytes: Long): String = "${(bytes + 524_288) / 1_048_576} MB"
 
+/**
+ * 智能组里的打字统计：开关一直在。标题栏那行小字关掉统计后就不显示了，原来关了只能靠搜索找回
+ * （搜索又写着在「智能」里，智能里却没有，用户 11-13）。点行进统计页，点开关直接开关，同语音转文本那一行。
+ */
+/** 首页上直接开关统计时让标题栏的小字跟着出现、消失（它平时只在回到前台时重读）。 */
+private val typingStatsSwitched = androidx.compose.runtime.mutableIntStateOf(0)
+
+@androidx.compose.runtime.Composable
+private fun TypingStatsSmartRow(onClick: () -> Unit) {
+    val context = LocalContext.current
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var enabled by remember { mutableStateOf(com.kingzcheung.xime.stats.TypingStats.isEnabled(context)) }
+    LaunchedEffect(lifecycle) {
+        // 在统计页里开关后回到首页要跟着变。
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            enabled = com.kingzcheung.xime.stats.TypingStats.isEnabled(context)
+        }
+    }
+    SettingsToggleItem(
+        icon = Icons.TwoTone.QueryStats,
+        title = "打字统计", searchKey = "打字统计",
+        subtitle = "只在本机记字数、速度和码长，不记内容",
+        checked = enabled,
+        showArrow = true,
+        onClick = onClick,
+        onCheckedChange = {
+            enabled = it
+            com.kingzcheung.xime.stats.TypingStats.setEnabled(context, it)
+            typingStatsSwitched.intValue++
+        },
+        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TYPING_STATS,
+    )
+}
+
 /** 标题栏右边一行小字：今天打了多少字，点进打字统计（11-02「标题栏右侧一个小字显示…不占空间」）。关掉统计后不显示。 */
 @androidx.compose.runtime.Composable
 private fun TypingStatsTitleEntry(onClick: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     var summary by remember { mutableStateOf<com.kingzcheung.xime.stats.TypingStatsData?>(null) }
-    LaunchedEffect(lifecycle) {
+    LaunchedEffect(lifecycle, typingStatsSwitched.intValue) {
         // 从统计页关掉后回到首页要跟着变，所以每次回到前台都重读一次。
         lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
             summary = if (!com.kingzcheung.xime.stats.TypingStats.isEnabled(context)) null

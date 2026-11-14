@@ -103,6 +103,10 @@ internal fun HardwareKeyboardToolbar(
     bottomCandidateContent: (@Composable () -> Unit)? = null,
     showCandidatesWhenFloating: Boolean = false,
     candidatesPending: Boolean = false,
+    /** 候选是正在打的字（不是上屏后的联想）：这时表情、剪贴板、语音收进「更多」，位置让给候选。 */
+    composing: Boolean = false,
+    /** 候选换了（又打了字）就收起「更多」，回到候选。 */
+    candidatesRevision: Long = 0L,
     languageLabel: String = "中",
     frostedGlass: com.kingzcheung.xime.settings.FrostedGlassConfig = com.kingzcheung.xime.settings.FrostedGlassConfig(),
     selectedTextColor: Color = contentColor,
@@ -160,10 +164,15 @@ internal fun HardwareKeyboardToolbar(
         SideEffect { reservedCandidateSpace = showCandidateStrip }
         val candidateRowHeight = hardwareCandidateRowHeight()
         // 手机竖屏等窄条：只留展开键盘和语言键，表情/剪贴板/语音收进「更多」，宽度让给候选。
-        val compactStrip = showCandidateStrip && hardwareCandidateStripIsCompact(minOf(720.dp, usableWidth).value)
-        var moreExpanded by remember { mutableStateOf(false) }
+        // 正在打字时宽条也这样收：五个图标占掉近 250dp，候选只剩四五个的位置（用户 11-13：打字时图标太多，候选显示不全）。
+        // 上屏后的联想照旧（图标都在），不打字时也照旧。
         val hasCandidates = bottomCandidateContent != null
-        LaunchedEffect(compactStrip, hasCandidates) { if (!compactStrip || hasCandidates) moreExpanded = false }
+        val compactStrip = showCandidateStrip &&
+            ((composing && hasCandidates) || hardwareCandidateStripIsCompact(minOf(720.dp, usableWidth).value))
+        var moreExpanded by remember { mutableStateOf(false) }
+        LaunchedEffect(compactStrip, hasCandidates, candidatesRevision) {
+            if (!compactStrip || hasCandidates) moreExpanded = false
+        }
         val samsung = samsungBottomBar && bottomDocked
         val targetWidth = if (samsung) maxWidth
             else if (showCandidateStrip) minOf(720.dp, usableWidth) else if (vertical) 56.dp else horizontalWidth

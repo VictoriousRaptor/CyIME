@@ -58,6 +58,13 @@ data class KeyboardCallbacks(
     val candidatePinState: (String) -> Boolean? = { null },
     /** 固定（true）或取消固定（false）当前编码下的这个词。 */
     val onCandidatePin: ((String, Boolean) -> Unit)? = null,
+    /**
+     * 长按卡片的位置：[固定在第几位（-1 没固定、0 排第一、N 第 N 位）, 现在排第几（0 没找到）]；
+     * null＝不能固定。
+     */
+    val candidatePinPlaces: (String) -> IntArray? = { null },
+    /** 固定在第 N 位：当前编码下这个词锁在这个位置，没固定的词照常学习。 */
+    val onCandidatePinAt: ((String, Int) -> Unit)? = null,
     /** 长按首选时拆出的词：首选是引擎组出来的整句（两个词以上）才有，否则 null。 */
     val sentenceWords: (String) -> List<String>? = { null },
     /** 长按卡片里点了整句的第几个词：只重选这个词，前后的字不动。 */
@@ -135,6 +142,10 @@ data class KeyboardCallbacks(
      * passive 纯展示面板的 action 节点点击（InfoPanel）：通知插件 actionId 并刷新面板数据。
      */
     val onToolPanelAction: ((actionId: String) -> Unit)? = null,
+    /** 工具栏长按插件按钮：取插件给的长按列表（翻译的目标语言）；没有就是 null。 */
+    val onToolPanelQuickOptions: (suspend (pluginId: String) -> com.kingzcheung.xime.keyboard.PressMenuOptions?)? = null,
+    /** 长按列表里选了一项：翻译栏开着就换，没开就打开再换。 */
+    val onToolPanelQuickSelect: ((pluginId: String, key: String, option: String) -> Unit)? = null,
     /**
      * 通用工具面板输入框焦点变化。
      */

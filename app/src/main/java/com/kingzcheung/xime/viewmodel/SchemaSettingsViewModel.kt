@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.kingzcheung.xime.plugin.core.runtime.PluginManager
 import com.kingzcheung.xime.rime.RimeConfigHelper
 import com.kingzcheung.xime.rime.RimeEngine
+import com.kingzcheung.xime.rime.SchemaChangeApplier
 import com.kingzcheung.xime.settings.ImportManager
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.PersonalDictManager
@@ -32,6 +33,8 @@ data class SchemaUiState(
     val enabledSchemas: List<String> = emptyList(),
     val currentSchema: String = "t9_pinyin",
     val isDeploying: Boolean = false,
+    /** 启停、导入后正在自动应用（#340）。 */
+    val isApplying: Boolean = false,
     val toastMessage: String? = null,
     /** 部署没过或有方案没编译出来时的说明，页面弹窗显示（Toast 在 Android 12 以后最多两行，放不下方案名和原因）。 */
     val deployReport: String? = null,
@@ -50,6 +53,23 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
 
     init {
         refresh()
+        viewModelScope.launch {
+            SchemaChangeApplier.applying.collect { applying -> _uiState.update { it.copy(isApplying = applying) } }
+        }
+        viewModelScope.launch {
+            // 同一条编译问题这一页只弹一次：以后每次启停都会自动应用，不能每点一下开关就弹一遍。
+            var shownProblem = ""
+            SchemaChangeApplier.finished.collect { usable ->
+                val problem = withContext(Dispatchers.IO) { RimeConfigHelper.deploymentProblem(context) }
+                when {
+                    problem.isNotEmpty() && problem != shownProblem -> _uiState.update { it.copy(deployReport = problem) }
+                    problem.isEmpty() && !usable ->
+                        _uiState.update { it.copy(deployReport = "方案没有应用成功，原因见「关于 › 日志查看器」。可点列表底部「重新部署(修复)」再试。") }
+                }
+                shownProblem = problem
+                refresh()
+            }
+        }
     }
 
     fun refresh() {
@@ -97,12 +117,16 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
         }
         val turnedOn = schema.schemaId in enabled
         viewModelScope.launch {
-            val persisted = withContext(Dispatchers.IO) {
+            val (persisted, current) = withContext(Dispatchers.IO) {
                 SchemaManager.setEnabledSchemas(context, enabled)
                 if (turnedOn) com.kingzcheung.xime.settings.LanguagePreferences.enableForSchema(context, schema.schemaId)
-                SchemaManager.getEnabledSchemas(context)
+                // 关掉的正是当前方案：马上换到同语言还开着的方案（#340），不然键盘一直用着它、布局栏画不出来。
+                else RimeConfigHelper.moveOffDisabledSchema(context)
+                SchemaManager.getEnabledSchemas(context) to SettingsPreferences.getCurrentSchema(context)
             }
-            _uiState.update { it.copy(enabledSchemas = persisted) }
+            _uiState.update { it.copy(enabledSchemas = persisted, currentSchema = current) }
+            // 不用再点「应用方案更改」：停手后自动增量部署（#340）。
+            SchemaChangeApplier.request(context)
         }
     }
 
@@ -128,7 +152,9 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
                 }
             } else {
                 rollbackSchemaSelection(previous)
-                showToast("请先点「应用方案更改」")
+                // 刚启用、导入的方案还没编译进去：自动应用完就能选（#340）。
+                if (!_uiState.value.isApplying) SchemaChangeApplier.request(context)
+                showToast("正在应用方案更改，稍等再选")
             }
         } else {
             com.kingzcheung.xime.settings.InputModes.selectProfile(context, schema.toSchemaInfo())

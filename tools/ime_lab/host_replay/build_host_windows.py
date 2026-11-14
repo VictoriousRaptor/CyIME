@@ -183,7 +183,10 @@ def build(args):
     for name in adapter_names:
         target = adapters / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(HERE / name, target)
+        # Copy only when changed: a fresh mtime makes ninja relink, the DLL hash changes, and every earlier
+        # run built in this directory can no longer be used with --engine-from.
+        if not target.is_file() or target.read_bytes() != (HERE / name).read_bytes():
+            shutil.copyfile(HERE / name, target)
     linux.save(directory / "source-files.json", files)
     posix = lambda p: str(p).replace("\\", "/")
     configure = [cmake, "-S", source, "-B", directory, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",

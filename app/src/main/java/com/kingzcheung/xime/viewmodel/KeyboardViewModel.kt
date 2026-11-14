@@ -122,6 +122,8 @@ data class KeyboardUiState(
     val clipboardSearchResultsHeight: Int = 0,
     /** Search bar on one row and results without their category row (short screens). */
     val clipboardSearchInline: Boolean = false,
+    /** AI 工具面板放不下两行（手机横屏）：一行的面板，见 toolPanelCompact。 */
+    val toolPanelCompact: Boolean = false,
     val toolPanelPluginId: String = "",
     val toolPanelTitle: String = "",
     val toolPanelPrefillText: String = "",

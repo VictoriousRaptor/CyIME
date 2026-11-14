@@ -209,6 +209,8 @@ class SchemaMarketViewModel(application: Application) : AndroidViewModel(applica
                     else st.sha256Status,
                 )
             }
+            // 装好的方案自动编译进去（#340），不用再去「已安装的方案」点「应用方案更改」。
+            if (install?.success == true) com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
             val toast = when {
                 !result.success && result.sha256Status == false ->
                     "sha256 校验不通过，文件可能不完整，请重新下载"
@@ -216,7 +218,7 @@ class SchemaMarketViewModel(application: Application) : AndroidViewModel(applica
                 install?.success != true ->
                     "已下载「${item.scheme.name}」但没装上：${install?.failureReason ?: "未知原因"}。可到「已安装的方案」页重新安装"
                 else -> buildString {
-                    append("已安装「${item.scheme.name}」，到「已安装的方案」点「应用方案更改」生效")
+                    append("已安装「${item.scheme.name}」，正在应用，稍等就能在键盘上用")
                     val deps = install?.unresolvedDeps.orEmpty()
                     if (deps.isNotEmpty()) append("\n依赖未完整：${deps.joinToString("、")}")
                 }
@@ -273,6 +275,8 @@ class SchemaMarketViewModel(application: Application) : AndroidViewModel(applica
                 withContext(Dispatchers.IO) {
                     MarketVersionStore.setSchemeVersion(context, item.scheme.id, newVersion)
                 }
+                // 更新后的方案文件同样自动编译进去（#340）。
+                com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
                 _uiState.update { st ->
                     st.copy(
                         downloadedVersions = st.downloadedVersions + (item.scheme.id to newVersion),

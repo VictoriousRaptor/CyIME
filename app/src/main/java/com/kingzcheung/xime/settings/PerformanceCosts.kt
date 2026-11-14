@@ -49,6 +49,25 @@ object PerformanceCosts {
         GLASS("glass", "玻璃效果"),
         KEY_ANIMATION("key_animation", "按键动效"),
         KEY_GLOW("key_glow", "键内炫光"),
+        // 键缝动效的总开关：键帽底下多一层，每个键登记自己的位置、旁观按下；这一项只算这些，画的开销按种类记在下面几项。
+        KEY_GAP_LIGHT("key_gap_light", "键缝动效"),
+        // 键缝动效按种类分开登记（用户 11-11「性能一定要分的细一点」），id 就是各自分项开关的设置键。
+        // 开着 = 总开关和这一种都开；单开一种会连总开关一起开（同液态玻璃），实测值要减去总开关那一项再写进表。
+        // 测量脚本是打字母测的，只打得到「打字」和「长按进度」，其余几种不按每键算，写在 note 里。
+        // 脚本一次开一项时，别的几种只要设置里开着就一起在：要单测一种，先在设置里把别的几种关掉再跑。
+        // 打字：按一下算一次最短路（几十个节点），之后约 200 ms 每帧重画这一层，键本身不重画。
+        KEY_GAP_LIGHT_TYPING("key_gap_light_typing", "键缝动效：打字"),
+        KEY_GAP_LIGHT_DELETE("key_gap_light_delete", "键缝动效：删除"),
+        // 点空格、回车时一块色带从键帽底下经过；键帽半透明时要先裁出键缝再画（每帧多一次裁剪）。
+        KEY_GAP_LIGHT_COMMIT("key_gap_light_commit", "键缝动效：上屏和发送"),
+        // 大写出现、取消时色带扫过整块键盘，同样从键帽底下经过。
+        KEY_GAP_LIGHT_SWITCH("key_gap_light_switch", "键缝动效：切换大小写"),
+        // 按住有长按的键时每帧画一圈线，到长按生效为止；普通点按也会画头几帧。
+        KEY_GAP_LIGHT_HOLD("key_gap_light_hold", "键缝动效：长按进度"),
+        // 手指动了才重画，停着不出帧。
+        KEY_GAP_LIGHT_SPACE("key_gap_light_space", "键缝动效：空格移光标"),
+        // 听写时音量每 80 ms 报一次（VoiceRecognitionHandler），量化后的级数变了才重画一次，不走帧钟；没声音时不画。
+        KEY_GAP_LIGHT_VOICE("key_gap_light_voice", "键缝动效：语音音量"),
         // 只换长按语言键弹出的东西，打字不经过它；照规矩登记，实测后才显示代价。
         LANGUAGE_KEY_IME_PICKER("language_key_ime_picker", "长按语言键切换输入法"),
         // 剪贴板读相册里的截图；只在有相册权限时算开着。测它的设备要先授权，否则 perf_cost_bench --skip recent_screenshots。
@@ -119,10 +138,14 @@ object PerformanceCosts {
     private fun t9FuzzyOf(item: Item): SpellingPatches.Fuzzy? =
         SpellingPatches.Fuzzy.entries.firstOrNull { T9_PREFIX + "fuzzy_" + it.id == item.id }
 
+    /** 键缝动效的分项：返回它的设置键（和 id 相同）；不是分项返回 null。 */
+    private fun gapLightEventOf(item: Item): String? = item.id.takeIf { it in KeyGapLightPreferences.eventKeys }
+
     fun isOn(context: Context, item: Item): Boolean {
         fuzzyOf(item)?.let { return it in SpellingPatches.fuzzy(context) }
         t9FuzzyOf(item)?.let { return SpellingPatches.fuzzyT9Digits(context) && it in SpellingPatches.fuzzy(context) }
         val prefs = SettingsPreferences.getPrefsPublic(context)
+        gapLightEventOf(item)?.let { return KeyGapLightPreferences.eventEnabled(prefs, it) }
         val input by lazy { KeyboardInputPreferences.read(context) }
         return when (item) {
             Item.NEIGHBOR_CORRECTION -> input.neighborCorrection
@@ -144,6 +167,7 @@ object PerformanceCosts {
             Item.GLASS -> FrostedGlassPreferences.readProfiles(context).dark.enabled
             Item.KEY_ANIMATION -> KeyEffectPreferences.animationEnabled(prefs)
             Item.KEY_GLOW -> KeyEffectPreferences.glowEnabled(prefs)
+            Item.KEY_GAP_LIGHT -> KeyGapLightPreferences.enabled(prefs)
             Item.LANGUAGE_KEY_IME_PICKER -> input.languageKeyImePicker
             Item.RECENT_SCREENSHOTS -> com.kingzcheung.xime.clipboard.ClipboardImages.getInstance(context).recentScreenshotsEnabled()
             Item.HIDE_FUNCTION_KEY_HINTS -> input.hideFunctionKeyHints
@@ -177,6 +201,8 @@ object PerformanceCosts {
             return
         }
         val prefs = SettingsPreferences.getPrefsPublic(context)
+        // 同液态玻璃：开一种时总开关没开就一起开；关只关这一种，总开关留给 KEY_GAP_LIGHT 那一项管。
+        gapLightEventOf(item)?.let { KeyGapLightPreferences.setEvent(prefs, it, on); return }
         val input = KeyboardInputPreferences.read(context)
         when (item) {
             Item.NEIGHBOR_CORRECTION -> input.copy(neighborCorrection = on).save(context)
@@ -205,6 +231,7 @@ object PerformanceCosts {
             Item.GLASS -> FrostedGlassPreferences.saveProfiles(context, FrostedGlassPreferences.readProfiles(context).withEnabled(on))
             Item.KEY_ANIMATION -> KeyEffectPreferences.setAnimationEnabled(prefs, on)
             Item.KEY_GLOW -> KeyEffectPreferences.setGlowEnabled(prefs, on)
+            Item.KEY_GAP_LIGHT -> KeyGapLightPreferences.setEnabled(prefs, on)
             Item.LANGUAGE_KEY_IME_PICKER -> input.copy(languageKeyImePicker = on).save(context)
             Item.RECENT_SCREENSHOTS -> com.kingzcheung.xime.clipboard.ClipboardImages.getInstance(context).enableRecentScreenshots(on)
             Item.HIDE_FUNCTION_KEY_HINTS -> input.copy(hideFunctionKeyHints = on).save(context)
@@ -542,7 +569,7 @@ object PerformanceCosts {
 
     // ---- 档位 ----
 
-    /** 「性能与省电」档位管的开关在表里的 id（前两项每档都写，后四项只关不开，见 [PerformanceProfile.turnsOff]）。 */
+    /** 「性能与省电」档位管的开关在表里的 id（前两项每档都写，后面几项只关不开，见 [PerformanceProfile.turnsOff]）。 */
     private val tierItems = mapOf(
         Item.KEY_ANIMATION.id to { s: PerformanceSettings -> s.keyAnimation },
         Item.KEY_GLOW.id to { s: PerformanceSettings -> s.keyGlow },
@@ -550,13 +577,19 @@ object PerformanceCosts {
         Item.PRESS_BUBBLE.id to { s: PerformanceSettings -> s.pressBubble },
         Item.GLIDE_PREVIEW.id to { s: PerformanceSettings -> s.glidePreview },
         Item.HANDWRITING_LIVE.id to { s: PerformanceSettings -> s.handwritingLive },
+        Item.KEY_GAP_LIGHT.id to { s: PerformanceSettings -> s.keyGapLight },
     )
 
-    /** 当前开着的 [on] 换成 [settings] 这组档位值之后哪些开着；液态玻璃要玻璃也开着才算。别的开关原样不动。 */
-    fun projected(on: Set<String>, settings: PerformanceSettings): Set<String> =
-        (on - tierItems.keys) + tierItems.filter { (id, value) ->
+    /**
+     * 当前开着的 [on] 换成 [settings] 这组档位值之后哪些开着；液态玻璃要玻璃也开着才算，
+     * 键缝动效的各种分项要总开关开着才算。别的开关原样不动。
+     */
+    fun projected(on: Set<String>, settings: PerformanceSettings): Set<String> {
+        val next = (on - tierItems.keys) + tierItems.filter { (id, value) ->
             value(settings) && (id != Item.LIQUID_GLASS.id || Item.GLASS.id in on)
         }.keys
+        return if (Item.KEY_GAP_LIGHT.id in next) next else next - KeyGapLightPreferences.eventKeys
+    }
 
     /** 一组开关加上常驻语音、九键模型、导入词库之后的总开销。 */
     data class Load(val keyMs: Double, val keyP95Ms: Double, val memoryMb: Double)

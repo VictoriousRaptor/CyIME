@@ -285,6 +285,42 @@ object CustomKeyboardLayouts {
         notifyChanged(context)
     }
 
+    /**
+     * The schema a layout should have now. Layout schemas are copies of 中文26键 (rime_ice) with their own ID,
+     * name and key order, so they are generated again from the current rime_ice instead of staying a snapshot of
+     * the version they were made from. A saved layout uses its rows; a built-in arrangement nobody adjusted keeps
+     * the ID and name its file has. Null when rime_ice is not CyIME's own (a market version stays its own).
+     */
+    internal fun refreshedSchema(base: String, current: String, saved: CustomKeyboardLayout?): String? {
+        if (!base.contains("schema_id: rime_ice") || !base.contains("cyime_neighbor_correction: true")) return null
+        val text = saved?.takeIf { it.valid() }?.schema(base) ?: run {
+            if (saved != null || !base.contains("name: 雾凇拼音")) return null
+            val id = Regex("(?m)^  schema_id: (\\S+)").find(current)?.groupValues?.get(1) ?: return null
+            val name = Regex("(?m)^  name: (.+)$").find(current)?.groupValues?.get(1) ?: return null
+            base.replace("schema_id: rime_ice", "schema_id: $id").replace("name: 雾凇拼音", "name: $name")
+        }
+        return EnglishCandidatePolicy.install(text)
+    }
+
+    /** Bring every layout schema up to the current rime_ice; the previous file is backed up once. */
+    fun followBaseSchema(context: Context) {
+        synchronized(this) {
+            val dir = SchemaManager.getRimeDir(context)
+            val base = File(dir, "rime_ice.schema.yaml").takeIf { it.isFile }?.readText() ?: return
+            val saved = load(context).associateBy { it.id }
+            for (id in BuiltinLetterLayouts.ids + saved.keys) {
+                val file = File(dir, "$id.schema.yaml")
+                if (!file.isFile) continue
+                val old = file.readText()
+                val updated = refreshedSchema(base, old, saved[id]) ?: continue
+                if (updated == old) continue
+                val backup = File(context.filesDir, "rime-upgrade-backups/layout-base/${file.name}")
+                if (!backup.exists()) { backup.parentFile!!.mkdirs(); writeAtomically(backup, old) }
+                writeAtomically(file, updated)
+            }
+        }
+    }
+
     /** Upgrade translator flags and the shared candidate policy; keep user key order and dictionaries. */
     fun enableMeasuredCorrection(context: Context) = synchronized(this) {
         val dir = SchemaManager.getRimeDir(context)

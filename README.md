@@ -132,9 +132,15 @@ CyIME 输入法是我空闲时间制作的一款输入法, 遵循GPL协议, 所�
 
 如果它帮到了你, 愿意的话可以请我喝杯咖啡, 用来支付agent开销 模型训练和个人测试的时间开销, 感谢支持, 不打赏也完全没关系, 欢迎反馈问题, 同样是很大的支持
 
-我的[爱发电](https://afdian.com/a/cyletix)账号目前尚未通过认证。想支持我的话，也可以用支付宝扫描下方的个人收款码。
+我的[爱发电](https://afdian.com/a/cyletix)账号已通过认证。你可以在爱发电支持我，也可以用支付宝或微信扫描对应的个人收款码。
+
+支付宝
 
 <img src="docs/images/alipay.jpg" alt="作者的支付宝个人收款码" width="240">
+
+微信支付
+
+<img src="docs/images/wechat-pay.png" alt="微信支付" width="240">
 
 海外也可以通过 [Ko-fi](https://ko-fi.com/cyletix) 支持我。
 

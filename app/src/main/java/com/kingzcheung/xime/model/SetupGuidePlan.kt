@@ -2,6 +2,7 @@ package com.kingzcheung.xime.model
 
 import com.kingzcheung.xime.runtime.adaptation.PerformanceTier
 import com.kingzcheung.xime.speech.SpeechModelCatalog
+import kotlin.math.roundToInt
 
 /** 语音输入打算怎么用：向导里的三个选项，说法面向不懂模型名的人。 */
 enum class VoiceUse { OFTEN, SOMETIMES, NEVER }
@@ -31,6 +32,12 @@ enum class FuzzyHabit(val title: String, val example: String, val fuzzyIds: List
 data class DoublePinyinChoice(val id: String, val name: String, val example: String, val builtin: Boolean = true,
     /** 只有 26 键（ing 在分号键上的微软双拼）：14 键、九键没有分号键，不生成这两个版本。 */
     val lettersOnly: Boolean = false)
+
+/**
+ * 「有内存焦虑」时还能关掉的一项（用户 11-12：选项太少）。[id] 是「性能与省电」代价表的键（PerformanceCosts.Item），
+ * 关的时候和设置页写同一个值；[memoryMb] 取同一张表，没有就不写数。只列现在开着的。
+ */
+data class MemoryExtra(val id: String, val title: String, val loss: String, val memoryMb: Double? = null)
 
 /** 一台设备在向导眼里的样子；大小都是字节，读不到的为 null。 */
 data class SetupFacts(
@@ -88,6 +95,8 @@ data class SetupFacts(
     val doublePinyinChoices: List<DoublePinyinChoice> = emptyList(),
     /** 五笔86 已经装在手机上。 */
     val wubiInstalled: Boolean = false,
+    /** 五笔98 已经装在手机上。 */
+    val wubi98Installed: Boolean = false,
     /** 「双拼键位提示」已经开着。 */
     val doublePinyinKeyHints: Boolean = false,
     /** 当前角标设置允许额外显示双拼键位提示。 */
@@ -100,6 +109,8 @@ data class SetupFacts(
     val availMemoryBytes: Long? = null,
     /** 上次在引导里答了“有内存焦虑”；没答过为 false，所以默认推荐不变。 */
     val memorySaver: Boolean = false,
+    /** 现在开着、关掉能省内存的功能（[SetupGuidePlanner.memoryExtras] 里列的）。 */
+    val memoryExtras: List<MemoryExtra> = emptyList(),
 )
 
 data class SetupAnswers(
@@ -115,6 +126,10 @@ data class SetupAnswers(
     val keyboard: KeyboardWay = KeyboardWay.QWERTY,
     /** 有内存焦虑（用户 11-04）：只留必需的模型、九键用精简版、语音空闲很快卸掉。 */
     val memorySaver: Boolean = false,
+    /** 选五笔时用 86 还是 98（[SetupGuidePlanner.WUBI]、[SetupGuidePlanner.WUBI98]）；默认 86。 */
+    val wubi: String = SetupGuidePlanner.WUBI,
+    /** 有内存焦虑时另外选了要关掉的功能（[MemoryExtra.id]）；默认一个不选，点了才关。 */
+    val memoryOff: Set<String> = emptySet(),
 ) {
     companion object { const val FLYPY = "double_pinyin_flypy" }
 }
@@ -135,6 +150,8 @@ data class InputPlan(
     /** 打字方式选了五笔：没装就下载，没在方案栏就打开。 */
     val useWubi: Boolean = false,
     val downloadWubi: Boolean = false,
+    /** 用哪一份五笔：86 或 98。 */
+    val wubiId: String = SetupGuidePlanner.WUBI,
     val fuzzyOn: Set<String> = emptySet(),
     val fuzzyOff: Set<String> = emptySet(),
     /** 从别的打法改成双拼时可打开键位提示，前提是不会挤掉现有角标。 */
@@ -171,6 +188,8 @@ data class SetupPlan(
     val input: InputPlan = InputPlan(),
     /** 语音模型空闲多少分钟后全部卸掉（二次校正同时）；null 不改。 */
     val voiceIdleMinutes: Int? = null,
+    /** 有内存焦虑时要关掉的功能；没答“有”时为空。 */
+    val turnOff: List<MemoryExtra> = emptyList(),
 ) {
     val downloadBytes: Long get() = keep.filter { it.source == SetupSource.DOWNLOAD }.sumOf { it.bytes }
     val freedBytes: Long get() = remove.filter { it.source == SetupSource.ON_PHONE }.sumOf { it.bytes }
@@ -231,8 +250,31 @@ object SetupGuidePlanner {
     /** 有内存焦虑时语音模型空闲多久卸掉：和低配档一样 1 分钟。 */
     const val SAVER_VOICE_IDLE_MINUTES = 1
 
+    /**
+     * 有内存焦虑时还能关的功能，按省得多少排（数取「性能与省电」代价表，作者平板，大多是估算）：
+     * id 是 PerformanceCosts.Item 的 id，后面是给人看的名字和关掉后少了什么。
+     * 不列智能联想：关了就没有联想词，影响打字；表里 60 MB 是联想表压缩（11-10，电脑上 38.6 → 6.9 MB）以前的估算。
+     */
+    val memoryExtras: List<Triple<String, String, String>> = listOf(
+        Triple("glass", "玻璃效果", "键盘不再半透明"),
+        Triple("glide_typing", "英文滑行", "英文只能一个键一个键点"),
+        Triple("rare_characters", "生僻字", "候选里不再出生僻字"),
+        Triple("chinese_glide", "中文滑行", "中文只能一个键一个键点"),
+        Triple("t9_glide_typing", "九键滑行", "九键只能一个键一个键点"),
+        Triple("traditional_output", "繁体输出", "打出来的是简体字"),
+        Triple("candidate_emoji", "候选里显示表情", "候选里不再夹着表情，表情面板照常用"),
+        Triple("key_glow", "键内炫光", "按键时键里不再亮一下"),
+        Triple("handwriting_recognize_while_writing", "手写边写边识别", "写完停一下才出字"),
+        Triple("press_bubble", "点按弹出气泡", "点字母键时上方不再弹出放大的字母"),
+        Triple("background_motion", "动态背景", "图片背景不再缓慢平移、缩放"),
+    )
+
     /** 五笔86 的方案 id（「扩展 › 方案」里审过的那份，约 2 MB）。 */
     const val WUBI = "wubi86"
+    /** 五笔98（「扩展 › 方案」里的那份，约 1 MB）。用户 11-12：五笔默认 86，也能选 98。 */
+    const val WUBI98 = "wubi98"
+    val wubiIds = listOf(WUBI, WUBI98)
+    fun wubiName(id: String) = if (id == WUBI98) "五笔98" else "五笔86"
     const val FULL_PINYIN = "rime_ice"
     const val K14 = "pinyin_14jian"
     const val T9 = "t9_pinyin"
@@ -278,10 +320,11 @@ object SetupGuidePlanner {
         val typing = answers.typing
         val choice = facts.doublePinyinChoices.firstOrNull { it.id == answers.doublePinyin }
         val keyboard = keyboardOf(facts, answers)
+        val wubiId = answers.wubi.takeIf { it in wubiIds } ?: WUBI
         val name = when (typing) {
             TypingWay.FULL_PINYIN -> "全拼"
             TypingWay.DOUBLE_PINYIN -> choice?.name ?: "双拼"
-            TypingWay.WUBI -> "五笔86"
+            TypingWay.WUBI -> wubiName(wubiId)
             TypingWay.KEEP -> facts.typingName
         }
         // 打法、哪一种双拼、键盘都和现在一样就不切：自己的字母排列（QWJRTK 等）、自定义布局不会被换掉。
@@ -290,22 +333,22 @@ object SetupGuidePlanner {
             (typing != TypingWay.WUBI && keyboard != KeyboardWay.KEEP && keyboard != facts.keyboard))
         // 已经显示着时再打开一次什么也不改（DoublePinyinSchemes.setEnabled 内容没变不写）。
         val showDoublePinyin = answers.doublePinyin.takeIf { typing == TypingWay.DOUBLE_PINYIN }
-        // 已经在用五笔（86、98 或五笔拼音）就不动；从别的方式改成五笔才装、才打开五笔86。
+        // 已经在用五笔（86、98 或五笔拼音）就不动；从别的方式改成五笔才装、才打开选的那份（默认 86）。
         val useWubi = typing == TypingWay.WUBI && facts.typing != TypingWay.WUBI
-        val downloadWubi = useWubi && !facts.wubiInstalled
-        if (downloadWubi) lines += "下载五笔86方案(约 2 MB，要联网)，装好后在方案栏里打开。"
+        val downloadWubi = useWubi && !(if (wubiId == WUBI98) facts.wubi98Installed else facts.wubiInstalled)
+        if (downloadWubi) lines += "下载${name}方案(约 ${if (wubiId == WUBI98) 1 else 2} MB，要联网)，装好后在方案栏里打开。"
         // 五笔只有 26 键：在 26 键上才替人切过去，九键、14 键、手写不动。全拼、双拼按回答的键盘切。
         val switchTo = if (!changed) null
-            else if (typing == TypingWay.WUBI) WUBI.takeIf { facts.keyboard == KeyboardWay.QWERTY }
+            else if (typing == TypingWay.WUBI) wubiId.takeIf { facts.keyboard == KeyboardWay.QWERTY }
             else schemaFor(typing, answers.doublePinyin, keyboard)
         // 要用的布局不在方案栏里就打开：中文14键（双拼的 14 键版本也靠它）、九键、双拼的九键版本。
         val enable = buildList {
             if (switchTo == null) return@buildList
             if (keyboard == KeyboardWay.K14) add(K14)
-            if (switchTo != showDoublePinyin && switchTo != WUBI && !switchTo.endsWith(K14_SUFFIX) && switchTo !in this) add(switchTo)
+            if (switchTo != showDoublePinyin && switchTo !in wubiIds && !switchTo.endsWith(K14_SUFFIX) && switchTo !in this) add(switchTo)
         }
         when {
-            switchTo != null && keyboard == KeyboardWay.QWERTY || switchTo == WUBI -> lines += "中文 26 键改用$name。"
+            switchTo != null && keyboard == KeyboardWay.QWERTY || switchTo in wubiIds -> lines += "中文 26 键改用$name。"
             switchTo != null -> lines += "中文换成${if (keyboard == KeyboardWay.K14) " " else ""}${keyboard.title}，用${name}打。"
             // 全拼（雾凇）一直在方案栏里，不切时没有要改的。
             changed && typing != TypingWay.FULL_PINYIN -> lines += "方案栏里打开$name，在键盘上切到中文 26 键就能用；现在的键盘不变。"
@@ -341,7 +384,7 @@ object SetupGuidePlanner {
             false -> lines += "桌面上的「字幕」图标关掉(变灰后可长按移除)。"
             null -> {}
         }
-        return InputPlan(switchTo, enable, showDoublePinyin, hide, useWubi, downloadWubi, fuzzyOn, fuzzyOff,
+        return InputPlan(switchTo, enable, showDoublePinyin, hide, useWubi, downloadWubi, wubiId, fuzzyOn, fuzzyOff,
             keyHintsOn, captionIcon, lines, hideLine)
     }
 
@@ -351,6 +394,7 @@ object SetupGuidePlanner {
         val veryTight = free != null && free < VERY_TIGHT_FREE
         val light = facts.tier == DeviceModelTier.LIGHT
         val saver = answers.memorySaver
+        val turnOff = if (!saver) emptyList() else facts.memoryExtras.filter { it.id in answers.memoryOff }
         val notes = mutableListOf<String>()
         fun available(id: String) = id in facts.installed || id in facts.inPackage
 
@@ -449,8 +493,11 @@ object SetupGuidePlanner {
         // 有内存焦虑：语音空闲 1 分钟就从内存卸掉（性能与省电里同一项）。不用语音、也不用字幕时没有模型可卸，不改。
         val voiceIdle = SAVER_VOICE_IDLE_MINUTES.takeIf { saver && voiceNeeded }
         if (voiceIdle != null) notes += "语音空闲 $voiceIdle 分钟后从内存卸掉，之后第一次说话要多等一两秒。在 性能与省电 里可以改。"
+        if (turnOff.isNotEmpty()) notes += "关掉${turnOff.joinToString("、") { it.title }}" +
+            (turnOff.mapNotNull { it.memoryMb }.sum().takeIf { it >= 1 }?.let { "，按「性能与省电」里的表约省 ${it.roundToInt()} MB 内存" } ?: "") +
+            "。以后想开，在设置里各自的开关打开。"
         return SetupPlan(answers, answers.voice != VoiceUse.NEVER, voiceMode, t9Model, keep, remove, notes,
-            inputPlan(facts, answers), voiceIdle)
+            inputPlan(facts, answers), voiceIdle, turnOff)
     }
 
     private fun keepReason(id: String, facts: SetupFacts, answers: SetupAnswers, streaming: Boolean): String = when (id) {

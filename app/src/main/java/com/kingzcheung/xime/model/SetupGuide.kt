@@ -18,6 +18,7 @@ import com.kingzcheung.xime.settings.InputScheme
 import com.kingzcheung.xime.settings.InputProfiles
 import com.kingzcheung.xime.settings.LanguagePreferences
 import com.kingzcheung.xime.settings.LayoutKind
+import com.kingzcheung.xime.settings.PerformanceCosts
 import com.kingzcheung.xime.settings.PerformanceProfile
 import com.kingzcheung.xime.settings.SchemaManager
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -128,6 +129,7 @@ object SetupGuide {
             doublePinyinChoices = doublePinyins.map { DoublePinyinChoice(it.id, it.name, it.preview(), !DoublePinyinSchemes.isCustom(it.id),
                 lettersOnly = it.usesSemicolon) },
             wubiInstalled = File(SchemaManager.getRimeDir(context), "${SetupGuidePlanner.WUBI}.schema.yaml").isFile,
+            wubi98Installed = File(SchemaManager.getRimeDir(context), "${SetupGuidePlanner.WUBI98}.schema.yaml").isFile,
             doublePinyinKeyHints = keys.doublePinyinKeyHints,
             canEnableDoublePinyinKeyHints = canEnableKeyHints(keys),
             fuzzy = SpellingPatches.fuzzy(context).mapTo(linkedSetOf()) { it.id },
@@ -136,7 +138,18 @@ object SetupGuide {
                 android.app.ActivityManager.MemoryInfo().also { context.getSystemService(android.app.ActivityManager::class.java)!!.getMemoryInfo(it) }.availMem
             }.getOrNull()?.takeIf { it > 0 },
             memorySaver = SettingsPreferences.getPrefsPublic(context).getBoolean(KEY_MEMORY_SAVER, false),
+            memoryExtras = memoryExtras(context),
         )
+    }
+
+    /** 现在开着、关掉能省内存的功能；开没开和省多少都问「性能与省电」那张代价表，两页说同一个数。 */
+    private fun memoryExtras(context: Context): List<MemoryExtra> {
+        val table = runCatching { PerformanceCosts.source(context)?.device?.items }.getOrNull().orEmpty()
+        return SetupGuidePlanner.memoryExtras.mapNotNull { (id, title, loss) ->
+            val item = PerformanceCosts.Item.byId(id) ?: return@mapNotNull null
+            if (!runCatching { PerformanceCosts.isOn(context, item) }.getOrDefault(false)) return@mapNotNull null
+            MemoryExtra(id, title, loss, table[id]?.memoryMb?.takeIf { it >= 1 })
+        }
     }
 
     private fun socName(): String? {
@@ -213,14 +226,19 @@ object SetupGuide {
             if (now.speechEngineIdleMinutes != minutes || now.speechRefinerIdleMinutes != minutes)
                 PerformanceProfile.applyCustom(app, now.copy(speechRefinerIdleMinutes = minutes, speechEngineIdleMinutes = minutes))
         }
+        // 另外选了要关的功能：和设置页、「性能与省电」写同一个值（PerformanceCosts.set）。
+        plan.turnOff.forEach { extra ->
+            PerformanceCosts.Item.byId(extra.id)?.let { runCatching { PerformanceCosts.set(app, it, false) } }
+        }
         val inputFailed = applyInput(app, plan.input, hideDoublePinyin, facts.online)
-        val inputDone = (plan.input.lines + listOfNotNull(plan.input.hideLine?.takeIf { hideDoublePinyin }))
+        val inputDone = (plan.input.lines + listOfNotNull(plan.input.hideLine?.takeIf { hideDoublePinyin },
+            plan.turnOff.takeIf { it.isNotEmpty() }?.let { off -> "为省内存关掉了：${off.joinToString("、") { it.title }}。" }))
             .filterNot { it.startsWith("打字方式还是") }
             .filterNot { line -> "五笔" in line && inputFailed.any { "五笔" in it } }
         markShown(app)
         FileLogger.i("SetupGuide", "按推荐设置：语音=${plan.voiceMode} 九键=${plan.t9Model} " +
             "删除=${removing.map { it.id }} 取回=${fromPackage.map { it.id }} 下载=${fromNetwork.map { it.id }} 打字=${plan.input} " +
-            "省内存=${plan.answers.memorySaver} 语音卸载=${plan.voiceIdleMinutes}")
+            "省内存=${plan.answers.memorySaver} 语音卸载=${plan.voiceIdleMinutes} 关掉=${plan.turnOff.map { it.id }}")
         return Result(removing.count { it.source == SetupSource.ON_PHONE } - failed.size, freed, fromNetwork.sumOf { it.bytes }, waiting, failed,
             inputDone, inputFailed, fromNetwork.map { it.id }, fromPackage.map { it.id })
     }
@@ -238,6 +256,16 @@ object SetupGuide {
                 feedback = SetupMore.feedbackOf(SettingsPreferences.isSoundEnabled(context), SettingsPreferences.isVibrationEnabled(context)),
                 glass = glass,
                 autoPunctuation = SettingsPreferences.isSttAutoPunctuation(context),
+                // 存着的角标方式，不管滑行：开着滑行时键盘按长按处理，关了滑行就回到这里存的方式（见 SetupMore.effectiveCorner）。
+                corner = when {
+                    keys.symbolInputMode == com.kingzcheung.xime.ui.keyboard.SymbolInputMode.LONG_PRESS ->
+                        com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS
+                    keys.letterLongPressMenu -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE
+                    else -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE
+                },
+                reverseSwipe = keys.reverseSymbolSwipe,
+                glide = GlideChoice.of(keys.glideTyping, keys.chineseGlideTyping),
+                cancelButton = SettingsPreferences.shouldShowCandidateCancelButton(context),
             ),
             sttEnabled = SettingsPreferences.isSttEnabled(context),
             predictionEnabled = SettingsPreferences.isSmartPredictionEnabled(context),
@@ -248,17 +276,34 @@ object SetupGuide {
                 com.kingzcheung.xime.settings.PerformanceCosts.let { costs -> costs.source(context)?.let { costs.note(it,
                     com.kingzcheung.xime.settings.PerformanceCosts.Item.GLASS.id) } }
             }.getOrNull(),
+            reverseDeleteSwipe = keys.reverseDeleteSwipe,
+            glideLock = glideLock(keys),
         )
     }
+
+    /** 滑行被「键盘面板滑动光标」锁住时的说明，同设置页「滑行输入」；现在开着滑行的不算锁。 */
+    private fun glideLock(keys: KeyboardInputPreferences): String? =
+        InputGestureLocks.lockFor(keys, InputGestureLock.Option.GLIDE_TYPING, true)
+            ?.takeIf { !keys.glideTyping && !keys.chineseGlideTyping }?.message
 
     /**
      * 照「更多配置」改设置：只改 [from] 到 [to] 变了的项，每项都走设置页同一个写法（长按空格连带键盘滑动光标、
      * 振动关了再开恢复原来的模式），输入法监听这些设置，马上生效。返回改了的项，白话。
      */
-    fun applyMore(context: Context, from: SetupMoreChoices, to: SetupMoreChoices): List<String> {
+    fun applyMore(context: Context, from: SetupMoreChoices, wanted: SetupMoreChoices): List<String> {
         val app = context.applicationContext
-        if (to.spaceHold != from.spaceHold)
-            com.kingzcheung.xime.ui.keyboard.CursorChoices.withSpaceHold(KeyboardInputPreferences.read(app), to.spaceHold).save(app)
+        if (wanted.spaceHold != from.spaceHold)
+            com.kingzcheung.xime.ui.keyboard.CursorChoices.withSpaceHold(KeyboardInputPreferences.read(app), wanted.spaceHold).save(app)
+        // 长按空格选了「移动光标」会关掉键盘面板滑动光标、解开滑行的锁；改完还锁着就不开滑行（设置页同一把锁）。
+        val to = if (wanted.glide != from.glide && wanted.glide != GlideChoice.OFF &&
+            glideLock(KeyboardInputPreferences.read(app)) != null) wanted.copy(glide = from.glide) else wanted
+        if (to.glide != from.glide)
+            KeyboardInputPreferences.read(app).copy(glideTyping = to.glide.english, chineseGlideTyping = to.glide.chinese).save(app)
+        // 和设置页三张卡同一个写法（选长按顺带打开九键拂动）。
+        if (to.corner != from.corner) to.corner.applyTo(KeyboardInputPreferences.read(app)).save(app)
+        if (to.reverseSwipe != from.reverseSwipe)
+            KeyboardInputPreferences.read(app).copy(reverseSymbolSwipe = to.reverseSwipe).save(app)
+        if (to.cancelButton != from.cancelButton) SettingsPreferences.setShowCandidateCancelButton(app, to.cancelButton)
         if (to.deleteSkipsAssociation != from.deleteSkipsAssociation)
             SettingsPreferences.setDeleteSkipsAssociation(app, to.deleteSkipsAssociation)
         if (to.clearBeforeCursorOnly != from.clearBeforeCursorOnly)
@@ -296,9 +341,11 @@ object SetupGuide {
 
         var wubiReady = !input.useWubi
         var redeploy = false
+        val wubi = input.wubiId
+        val wubiName = SetupGuidePlanner.wubiName(wubi)
         if (input.useWubi) {
             if (input.downloadWubi) {
-                val scheme = com.kingzcheung.xime.settings.CuratedRimeSchemes.merge(emptyList()).first { it.id == SetupGuidePlanner.WUBI }
+                val scheme = com.kingzcheung.xime.settings.CuratedRimeSchemes.merge(emptyList()).first { it.id == wubi }
                 val download = if (online) com.kingzcheung.xime.settings.XimeIndexSource.downloadScheme(app, scheme) else null
                 val install = if (download?.success == true) com.kingzcheung.xime.settings.XimeIndexSource.installFromMarket(app, scheme) else null
                 if (install?.success == true) {
@@ -306,15 +353,15 @@ object SetupGuide {
                     wubiReady = true
                     redeploy = true
                 } else failed += when {
-                    !online -> "五笔86方案没下载：现在没联网。可以连上网后再来这页，或在 扩展 → 方案 里获取。"
-                    else -> "五笔86方案没装上(${install?.failureReason ?: download?.failureReason ?: "下载失败"})，可以在 扩展 → 方案 里再获取。"
+                    !online -> "${wubiName}方案没下载：现在没联网。可以连上网后再来这页，或在 扩展 → 方案 里获取。"
+                    else -> "${wubiName}方案没装上(${install?.failureReason ?: download?.failureReason ?: "下载失败"})，可以在 扩展 → 方案 里再获取。"
                 }
             } else wubiReady = true
             // 装过但从方案栏关掉了：打开它。
             val enabled = SchemaManager.getEnabledSchemas(app)
-            if (wubiReady && SetupGuidePlanner.WUBI !in enabled) {
-                SchemaManager.setEnabledSchemas(app, enabled + SetupGuidePlanner.WUBI)
-                LanguagePreferences.enableForSchema(app, SetupGuidePlanner.WUBI)
+            if (wubiReady && wubi !in enabled) {
+                SchemaManager.setEnabledSchemas(app, enabled + wubi)
+                LanguagePreferences.enableForSchema(app, wubi)
                 redeploy = true
             }
         }
@@ -323,7 +370,7 @@ object SetupGuide {
         if (hideDoublePinyin) input.hideDoublePinyin.forEach { id ->
             runCatching { DoublePinyinSchemes.setEnabled(app, id, false) }
         }
-        val switchTo = input.switchTo?.takeIf { it != SetupGuidePlanner.WUBI || wubiReady }
+        val switchTo = input.switchTo?.takeIf { it != wubi || wubiReady }
         switchTo?.let { id ->
             // 要用的布局不在方案栏里（如 14 键没开过、全拼被关掉过）：先打开，双拼由下面那一步打开。
             // 双拼的九键版本走双拼页同一个开关（排在九键后面）；双拼的 14 键版本随双拼和中文14键自动出现。
@@ -349,13 +396,13 @@ object SetupGuide {
                 .putBoolean(KeyboardInputPreferences.DOUBLE_PINYIN_KEY_HINTS_KEY, true).apply()
         }
         if (redeploy) {
-            // 与「已安装的方案」里「应用方案更改」同一步。
+            // 与「已安装的方案」里「重新部署(修复)」同一步。
             val deployed = runCatching {
                 com.kingzcheung.xime.settings.KeysConfigHelper.loadConfig(app)
                 com.kingzcheung.xime.ui.theme.KeyboardThemes.reload(app)
                 com.kingzcheung.xime.rime.RimeConfigHelper.redeploy(app)
             }.getOrDefault(false)
-            if (!deployed) failed += "方案没部署成功；到 设置 → 已安装的方案 点「应用方案更改」。"
+            if (!deployed) failed += "方案没部署成功；到 设置 → 已安装的方案 点「重新部署(修复)」。"
         }
         // 方案已经部署好时直接切过去；还没部署的，输入法部署完按当前方案切。
         if (switchTo != null && com.kingzcheung.xime.rime.RimeEngine.isInitialized()) runCatching {

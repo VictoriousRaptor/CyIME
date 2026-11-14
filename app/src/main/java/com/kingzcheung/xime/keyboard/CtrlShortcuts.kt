@@ -19,11 +19,12 @@ object CtrlShortcuts {
 
     /**
      * 九键按住 !@# 当 Ctrl（用户 11-03）：数字键按这张表发 Ctrl+字母，键面写这个字母的用途。
-     * 1 关闭 2 刷新 3 重做 / 4 全选 5 保存 6 剪切 / 7 撤销 8 复制 9 粘贴；0 键不算。
+     * 1 关闭 2 刷新 3 重做 / 4 全选 5 剪切 6 查找 / 7 撤销 8 复制 9 粘贴；0 键不算。
+     * 用户 11-14：剪切挪到 5（复制 8 正上方、挨着全选 4），6 改成查找；手机上很少用保存。
      */
     private val t9Letters = mapOf(
         '1' to 'w', '2' to 'r', '3' to 'y',
-        '4' to 'a', '5' to 's', '6' to 'x',
+        '4' to 'a', '5' to 'x', '6' to 'f',
         '7' to 'z', '8' to 'c', '9' to 'v',
     )
 
@@ -76,6 +77,23 @@ object CtrlShortcuts {
         )
     }
 
+    /**
+     * Ctrl+删除：按住 !@# 点删除键（用户 11-13：按住时就是真正的 Ctrl）。应用自己处理，系统输入框是删到上一个词的开头，
+     * 和实体键盘一样；不认 Ctrl 的应用当普通删除。
+     */
+    fun backspaceKeyEvents(now: Long): List<KeyEvent> {
+        val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+        val flags = KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
+        fun event(action: Int, keyCode: Int, metaState: Int) =
+            KeyEvent(now, now, action, keyCode, 0, metaState, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, flags)
+        return listOf(
+            event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_CTRL_LEFT, meta),
+            event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, meta),
+            event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL, meta),
+            event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_CTRL_LEFT, 0),
+        )
+    }
+
     /** 终端里的 Shift+回车：Shift 按下、回车按下抬起都带 Shift、Shift 抬起，由终端自己处理。 */
     fun shiftEnterKeyEvents(now: Long): List<KeyEvent> {
         val meta = KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
@@ -93,11 +111,18 @@ object CtrlShortcuts {
     /** 按住符号键点回车、拖到回车上松手：Ctrl+回车，发送（用户 11-03）。 */
     const val ENTER = '\n'
     const val ENTER_COMMAND = "ctrl:enter"
+    /** 按住符号键点删除键：Ctrl+删除（用户 11-13）。 */
+    const val BACKSPACE = '\b'
+    const val BACKSPACE_COMMAND = "ctrl:backspace"
     /** 按住 Shift 点回车、从 Shift 拖到回车上松手：Shift+回车，换行（用户 11-04）。 */
     const val SHIFT_ENTER_COMMAND = "shift:enter"
 
     /** 键盘层经 [GestureAction.COMMAND] 传给服务的命令名。 */
-    fun command(letter: Char): String = if (letter == ENTER) ENTER_COMMAND else "ctrl:${letter.lowercaseChar()}"
+    fun command(letter: Char): String = when (letter) {
+        ENTER -> ENTER_COMMAND
+        BACKSPACE -> BACKSPACE_COMMAND
+        else -> "ctrl:${letter.lowercaseChar()}"
+    }
     fun letterOf(command: String): Char? =
         command.removePrefix("ctrl:").takeIf { command.startsWith("ctrl:") && it.length == 1 && it[0] in 'a'..'z' }?.get(0)
 }

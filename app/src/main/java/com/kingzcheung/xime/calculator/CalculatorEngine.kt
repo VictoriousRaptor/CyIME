@@ -13,6 +13,51 @@ import java.math.RoundingMode
  */
 class CalculatorEngine {
 
+    companion object {
+        /**
+         * 运算符的写法（用户 11-13：× 不算，只认 *）：× ✕ ＊ 当乘，÷ ／ 当除，全角加减和减号 − 也认。
+         * 上屏的仍是按的那个字；算的时候换成 + - * /。
+         */
+        fun operatorOf(c: Char): Char? = when (c) {
+            '+', '＋' -> '+'
+            '-', '－', '−' -> '-'
+            '*', '＊', '×', '✕', '✖' -> '*'
+            '/', '／', '÷' -> '/'
+            else -> null
+        }
+
+        /** 数字和小数点，全角的也认（日文数字面板全角时上屏的是 １２．５）。 */
+        fun digitOf(c: Char): Char? = when (c) {
+            in '0'..'9', '.' -> c
+            in '０'..'９' -> '0' + (c - '０')
+            '．' -> '.'
+            else -> null
+        }
+
+        /** 一个按键是不是算式里的字：数字、小数点或运算符。 */
+        fun isCalculatorKey(key: String): Boolean =
+            key.length == 1 && (digitOf(key[0]) != null || operatorOf(key[0]) != null)
+
+        /** 换成 exp4j 认的写法。 */
+        fun normalized(expression: String): String =
+            expression.map { digitOf(it) ?: operatorOf(it) ?: it }.joinToString("")
+
+        /**
+         * 光标前最后一段算式（用户 11-13：算式断一会再接着打，要能和前面的接上）。
+         * 从末尾往前取数字、小数点、运算符，去掉开头的运算符；紧挨着字母、@、下划线、冒号的不算
+         * （abc12、v1.2、10:30）。取不到返回空串。
+         */
+        fun trailingExpression(before: String): String {
+            var start = before.length
+            while (start > 0 && before[start - 1].let { digitOf(it) != null || operatorOf(it) != null }) start--
+            val prev = before.getOrNull(start - 1)
+            if (prev != null && (prev.isLetter() && prev.code < 0x2E80 || prev in "@_:＠＿：")) return ""
+            var tail = before.substring(start)
+            tail = tail.dropWhile { operatorOf(it) != null }
+            return if (tail.any { digitOf(it).let { d -> d != null && d != '.' } }) tail else ""
+        }
+    }
+
     private var leftOperand = ""
     private var operator_ = ""
     private var rightOperand = ""
@@ -52,7 +97,9 @@ class CalculatorEngine {
         rawInput = ""
     }
 
-    fun handleDigit(input: String): Boolean {
+    fun handleDigit(key: String): Boolean {
+        // 全角数字照原样记进 rawInput（和屏幕上的对得上），算的时候换成半角。
+        val input = key.singleOrNull()?.let { digitOf(it) }?.toString() ?: key
         if (operator_.isEmpty()) {
             if (input == ".") {
                 if (leftOperand.contains(".")) return false
@@ -61,7 +108,7 @@ class CalculatorEngine {
             } else {
                 leftOperand += input
             }
-            rawInput += input
+            rawInput += key
             return false
         } else {
             if (input == ".") {
@@ -71,14 +118,14 @@ class CalculatorEngine {
             } else {
                 rightOperand += input
             }
-            rawInput += input
+            rawInput += key
             return true
         }
     }
 
     fun handleOperator(op: String): Boolean {
         if (leftOperand.isEmpty()) return false
-        operator_ = op
+        operator_ = op.singleOrNull()?.let { operatorOf(it) }?.toString() ?: op
         rightOperand = ""
         rawInput += op
         return false
@@ -143,9 +190,25 @@ class CalculatorEngine {
         }
     }
 
-    /** 用 exp4j 评估完整原始输入，尊重运算符优先级。 */
+    /** 用 exp4j 评估完整原始输入，尊重运算符优先级；× ÷、全角数字先换成半角写法。 */
     private fun computeResult(): String? =
-        evaluate(rawInput)
+        evaluate(normalized(rawInput))
+
+    /**
+     * 按屏幕上光标前的算式 [text] 重新开始（[trailingExpression] 取出来的），接着打的数字、运算符接在它后面算。
+     * 逐字按原样重放，重放出来和 [text] 对不上（如 1.2.3）就清空，不给点了也换不掉的候选。
+     */
+    fun resume(text: String): Boolean {
+        clear()
+        for (c in text) {
+            if (digitOf(c) != null) handleDigit(c.toString()) else handleOperator(c.toString())
+        }
+        if (rawInput != text) {
+            clear()
+            return false
+        }
+        return true
+    }
 
     /** 格式化：整数去 .0，小数最多 10 位。 */
     private fun formatBigDecimal(value: BigDecimal): String {

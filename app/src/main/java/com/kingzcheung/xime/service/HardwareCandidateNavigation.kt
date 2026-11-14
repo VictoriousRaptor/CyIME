@@ -17,9 +17,11 @@ internal data class HardwareCandidateSnapshot(
     val singleCharOnly: Boolean = false,
     /** First engine-page index shown by the toolbar (see [HardwareCandidatePresentation.window]). */
     val windowStart: Int = 0,
+    /** How many of these the candidate row shows in full; paging moves by this many (see [HardwareCandidateNavigation.step]). */
+    val windowStep: Int = HARDWARE_PAGE_SIZE,
 ) {
     private val basePresentation = hardwareCandidatePresentation(state, english, predictionPending, associationLimit)
-        .let { if (expanded) it else it.window(windowStart) }
+        .let { if (expanded) it else it.window(windowStart, windowStep) }
     private val waitingForPrediction = predictionPending && !english && basePresentation.association
     /** Expanded UI indices refer to a filtered view; commits need the original global index. */
     val expandedGlobalIndices: List<Int>? = if (expanded && state.expandedCandidatesLoaded && !basePresentation.association) {
@@ -76,7 +78,8 @@ internal data class HardwareCandidateSnapshot(
 
 internal sealed interface HardwareCandidateDecision {
     data class Highlight(val index: Int) : HardwareCandidateDecision
-    data class Page(val direction: Int) : HardwareCandidateDecision
+    /** [wholeWindow]: the highlight walked off the end of the numbered words, so skip all of them. */
+    data class Page(val direction: Int, val wholeWindow: Boolean = false) : HardwareCandidateDecision
     data class Confirm(val index: Int, val association: Boolean) : HardwareCandidateDecision
     data object Cancel : HardwareCandidateDecision
     data object Consume : HardwareCandidateDecision
@@ -148,10 +151,34 @@ internal class HardwareCandidateNavigation {
 
     // Toolbar window over the engine page (HardwareCandidatePresentation.window). A page turned
     // backwards is a full engine page and opens at its last window, as paging forward would end.
-    private data class Window(val revision: Long, val candidates: List<String>, val start: Int)
+    private data class Window(val revision: Long, val candidates: List<String>, val start: Int,
+        val previousStarts: List<Int> = emptyList())
     private data class BackwardPage(val revision: Long, val input: String)
     @Volatile private var window: Window? = null
     @Volatile private var backwardPage: BackwardPage? = null
+
+    // 候选行实际完整显示了几个（工具条窄、图标多时放不下 10 个）。翻页按这个数走，
+    // 否则 +/- 和上下键一次跳 10 个，被栏边裁掉的那几个永远翻不到（用户 11-13，平板接物理键盘）。
+    private data class Shown(val words: List<String>, val count: Int)
+    @Volatile private var shown: Shown? = null
+
+    /** The row drew [words] and [count] of them fit completely. Called from composition. */
+    fun reportShown(words: List<String>, count: Int) {
+        if (words.isEmpty() || count <= 0) return
+        val next = Shown(words.take(HARDWARE_PAGE_SIZE), count.coerceAtMost(words.size))
+        if (shown != next) shown = next
+    }
+
+    /** Latest row's count, for windows not measured yet (paging back into the previous page). */
+    private fun estimate(): Int = shown?.count?.coerceIn(1, HARDWARE_PAGE_SIZE) ?: HARDWARE_PAGE_SIZE
+
+    /** Paging stride for the window starting at [start]: what the row shows of it, else the numbered ten. */
+    fun step(state: CandidateState, start: Int = windowStart(state)): Int {
+        val current = shown ?: return HARDWARE_PAGE_SIZE
+        val words = state.candidates.drop(start).take(HARDWARE_PAGE_SIZE)
+        return if (current.words.size <= words.size && current.words == words.take(current.words.size))
+            current.count.coerceIn(1, HARDWARE_PAGE_SIZE) else HARDWARE_PAGE_SIZE
+    }
 
     fun clear() { focus = null }
 
@@ -161,16 +188,29 @@ internal class HardwareCandidateNavigation {
         if (back.revision == state.engineRevision) return 0
         backwardPage = null
         if (back.input != state.inputText || state.candidates.isEmpty()) return 0
-        val start = (state.candidates.size - 1) / HARDWARE_PAGE_SIZE * HARDWARE_PAGE_SIZE
+        // 新的一页还没量过：按刚才那页显示得下的个数估一个，从末尾往前开；再往前翻每次退同样多，不会漏掉。
+        val start = (state.candidates.size - estimate()).coerceAtLeast(0)
         window = Window(state.engineRevision, state.candidates, start)
         return start
     }
 
-    /** Moves within the engine page; false when the engine itself has to page. */
-    fun moveWindow(state: CandidateState, direction: Int): Boolean {
-        val next = windowStart(state) + direction * HARDWARE_PAGE_SIZE
+    /**
+     * Moves within the engine page; false when the engine itself has to page. Forward moves by what the
+     * row shows ([step]), or by [stride]; backward returns to the window it came from.
+     */
+    fun moveWindow(state: CandidateState, direction: Int, stride: Int? = null): Boolean {
+        val current = windowStart(state)
+        val history = window?.takeIf { it.revision == state.engineRevision && it.candidates == state.candidates }
+            ?.previousStarts.orEmpty()
+        val (next, previous) = when {
+            direction > 0 -> current + (stride ?: step(state, current)).coerceAtLeast(1) to history + current
+            history.isNotEmpty() -> history.last() to history.dropLast(1)
+            // 没走过的窗口（从下一页翻回来）：前面那几个还没量过，按最近一行的个数往前退。
+            current > 0 -> (current - (stride ?: estimate())).coerceAtLeast(0) to emptyList()
+            else -> -1 to emptyList()
+        }
         if (next < 0 || next >= state.candidates.size) return false
-        window = Window(state.engineRevision, state.candidates, next)
+        window = Window(state.engineRevision, state.candidates, next, previous)
         backwardPage = null
         focus = null
         return true
@@ -250,7 +290,8 @@ internal class HardwareCandidateNavigation {
                 ((direction < 0 && (index ?: 0) == 0 && snapshot.presentation.hasPreviousPage) ||
                     (direction > 0 && (index ?: 0) == snapshot.words.lastIndex && snapshot.presentation.hasNextPage))) {
                 clear()
-                return HardwareCandidateDecision.Page(direction)
+                // Tab 和触摸箭头是逐个走的：走到这组最后一个时，这组都已经看过，翻过整组。
+                return HardwareCandidateDecision.Page(direction, wholeWindow = direction > 0)
             }
             val next = ((index ?: 0) + direction).coerceIn(snapshot.words.indices)
             focus = Focus(snapshot, next)

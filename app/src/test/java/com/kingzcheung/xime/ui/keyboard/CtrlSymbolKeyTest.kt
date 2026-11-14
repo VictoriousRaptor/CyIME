@@ -204,6 +204,38 @@ class CtrlSymbolKeyTest {
         assertEquals("不打回车也不开符号", emptyList<String>(), keys)
     }
 
+    /** 用户 11-13：按住 !@#，另一根手指点删除：Ctrl+删除，不发普通删除，松开 !@# 也不开符号；松开后删除照常。 */
+    @Test fun secondFingerTapOnDeleteSendsCtrlBackspace() {
+        show()
+        val symbol = bounds("mode-slot-1").center
+        val delete = bounds("qwerty-delete-key").center
+        rule.onRoot().performTouchInput { down(0, symbol) }
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { down(1, delete); up(1) }
+        rule.waitForIdle()
+        rule.onRoot().performTouchInput { up(0) }
+        rule.waitForIdle()
+        assertEquals(listOf(CtrlShortcuts.BACKSPACE_COMMAND), commands)
+        assertEquals("不删字也不开符号", emptyList<String>(), keys)
+        rule.onNodeWithTag("qwerty-delete-key", true).performTouchInput { down(center); up() }
+        rule.waitForIdle()
+        assertEquals(listOf("delete"), keys)
+    }
+
+    /** 用户 11-13：按满时限 !@# 写成 Ctrl，松手换回。 */
+    @Test fun heldSymbolKeyReadsCtrl() {
+        show()
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(0, bounds("mode-slot-1").center) }
+        rule.mainClock.advanceTimeBy(1000L + CTRL_FACE_FADE_MS + 50L)
+        assertTrue("按住写 Ctrl", labelShown("Ctrl"))
+        rule.onRoot().performTouchInput { up(0) }
+        rule.mainClock.advanceTimeBy(100L)
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertTrue("松手换回 !@#", !labelShown("Ctrl") && labelShown("!@#"))
+    }
+
     /** 一根手指按住 !@#，另一根手指点字母：和按住 Shift 再点一样，发 Ctrl+字母、不打字，松开 !@# 也不开符号。 */
     private fun tapEachLetterWhileHolding(letters: List<Char>, waitForFaces: Boolean = true) {
         val symbol = bounds("mode-slot-1").center
@@ -297,5 +329,11 @@ class CtrlSymbolKeyTest {
         assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP, KeyEvent.ACTION_UP), events.map { it.action })
         assertTrue("字母带 Ctrl", events[1].isCtrlPressed && events[2].isCtrlPressed)
         assertEquals(KeyEvent.KEYCODE_Z, CtrlShortcuts.keyEvents('z', 0L)[1].keyCode)
+        // 用户 11-13：按住 !@# 点删除同实体键盘 Ctrl+删除。
+        val delete = CtrlShortcuts.backspaceKeyEvents(5L)
+        assertEquals(listOf(KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_CTRL_LEFT),
+            delete.map { it.keyCode })
+        assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP, KeyEvent.ACTION_UP), delete.map { it.action })
+        assertTrue("删除带 Ctrl", delete[1].isCtrlPressed && delete[2].isCtrlPressed)
     }
 }

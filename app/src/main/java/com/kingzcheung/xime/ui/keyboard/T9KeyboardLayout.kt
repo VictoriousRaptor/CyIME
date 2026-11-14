@@ -100,7 +100,7 @@ import kotlinx.coroutines.launch
  *   第2行：GHI(4) | JKL(5) | MNO(6) | 重输
  *   第3行：PQRS(7) | TUV(8) | WXYZ(9) | 0
  *   第4行：符 | 123 | 空格(显示方案名) | 中/En(地球图标) | 发送
- * - 按住左下角 !@# 当 Ctrl（同 26 键，用户 11-03）：1 关闭 2 刷新 3 重做 4 全选 5 保存 6 剪切 7 撤销 8 复制 9 粘贴，
+ * - 按住左下角 !@# 当 Ctrl（同 26 键，用户 11-03）：1 关闭 2 刷新 3 重做 4 全选 5 剪切 6 查找 7 撤销 8 复制 9 粘贴，
  *   回车 = Ctrl+回车（发送）。数字键对应的字母见 [com.kingzcheung.xime.keyboard.CtrlShortcuts.t9Letter]。
  */
 @Composable
@@ -261,7 +261,14 @@ private fun T9KeyboardSwipeOverlay(
     val ctrlTargets = remember(controller, uiState.inputProfile) { ShiftSlideTargets() }
 
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalT9GlideKeys provides glideKeys) {
+    // 键缝动效的光层（默认关，关着时是 null）。
+    val gapLight = rememberKeyGapLight()
+    // 按住 !@# 当 Ctrl、中英或语言切换：和 26 键一样从按的那个键扩开（用户 11-14）。
+    KeyGapLightMode(gapLight, ctrlTargets.ctrlFaces, on = ctrlTargets.ctrlFaces)
+    KeyGapLightMode(gapLight, uiState.isAsciiMode to uiState.inputProfile)
+
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalT9GlideKeys provides glideKeys,
+        LocalKeyGapLight provides gapLight) {
     Box(
         modifier = modifier
             // 键位与轨迹原点同用键盘卡片坐标：旋转的悬浮键盘滑行落在手指下的键（未旋转时与 boundsInRoot 相同）。
@@ -296,6 +303,8 @@ private fun T9KeyboardSwipeOverlay(
                 dragArea = dragSpace.bounds(coordinates)
             }
             .padding(bottom = if (isFloatingMode || isLandscape) 0.dp else 0.dp)) {
+        // 最先画 = 在所有键帽底下，只从键缝里露出来。
+        KeyGapLightLayer(gapLight, Modifier.matchParentSize())
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBackgroundColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         if (isLandscape) {
             // 横屏：去除原左侧候选大面板（候选已在顶部候选栏展示），
@@ -497,12 +506,17 @@ private fun T9KeyboardContent(
                     .fillMaxHeight()
                     .weight(3f)
                     .padding(scaledKeyVisualPadding())
+                    // 键缝动效：左边这块面板不是键，按它不画；登记位置是为了线能绕着它走、半透明时光不从它底下透出来。
+                    .then(keyGapLightSource(GapLightKind.NONE))
                     .then(candidateShadowModifier)
                     .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
                     .background(frostedKeyColor(keyBackgroundColor, keyTextColor, frostedGlass))
             ) {
                 val showCandidates = controller.leftPanelState != T9InputController.LeftPanelState.IDLE
-                val highlightedSyllable = candidateState.value.highlightedT9Syllable(uiState.inputProfile)
+                // 左栏只关心高亮候选的第一个音节：只读这一项，候选换了但音节没变（多数按键）时左栏不跟着重组。
+                val highlightedSyllable by remember(candidateState, uiState.inputProfile) {
+                    androidx.compose.runtime.derivedStateOf { candidateState.value.highlightedT9Syllable(uiState.inputProfile) }
+                }
                 val currentFirstOptions = controller.firstOptions
                 // 空闲态符号列表来自 xime.yaml keyboard.t9.side_symbols（可自定义，>4 滚动）
                 val configVersion by KeysConfigHelper.configVersion.collectAsState()
@@ -510,7 +524,8 @@ private fun T9KeyboardContent(
                 val t9SideSymbols = customSymbols
                     ?: remember(configVersion) { KeysConfigHelper.getT9SideSymbols() }
                 val displayItems: List<String> = if (showCandidates) {
-                    currentFirstOptions.map { if (it.near) "≈" + it.pinyin else it.pinyin }
+                    // 相近读音不再加 ≈，改下划线和浅色（T9CandidateItem.approximate，用户 11-13）。
+                    currentFirstOptions.map { it.pinyin }
                 } else {
                     t9SideSymbols
                 }
@@ -555,8 +570,11 @@ private fun T9KeyboardContent(
                             textColor = keyTextColor,
                             backgroundColor = keyBackgroundColor,
                             accentColor = accentColor,
-                            fontSize = candidateFontSize.sp,
+                            // 读音用大一号的字，每个各自缩到放得下；符号列表照旧。
+                            fontSize = (if (option != null) metrics.pinyinFontSizeSp else candidateFontSize).sp,
                             isSelected = isSelected,
+                            approximate = option?.near == true,
+                            fitWidth = option != null,
                             modifier = Modifier.fillMaxWidth().height(metrics.rowHeightDp.dp)
                                 .testTag("t9-pinyin-option:$index")
                         )
@@ -744,10 +762,15 @@ private fun T9KeyboardContent(
                 .fillMaxHeight()
                 .weight(0.8f).testTag("t9-right-rail"),
         ) {
+            // 按住 !@# 点删除：Ctrl+删除（用户 11-13）；还在打字时照常删编码，九键的删除要先经过它自己的选音节撤回。
+            val ctrlDelete: () -> Unit = {
+                val composing = candidateState.value.let { it.isComposing || it.inputText.isNotEmpty() || it.preeditText.isNotEmpty() }
+                if (composing || !ctrlTargets.ctrlBackspace()) onDelete()
+            }
             SwipeableIconKeyButton(
                 icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
-                onClick = { onDelete() },
-                onLongClick = { onDelete() },
+                onClick = ctrlDelete,
+                onLongClick = ctrlDelete,
                 backgroundColor = specialKeyBackgroundColor,
                 iconColor = specialKeyTextColor,
                 modifier = Modifier.weight(1f).testTag("t9-delete-key").semantics { contentDescription = "删除" },
@@ -841,7 +864,7 @@ private fun T9KeyboardContent(
                 if (enterBounds != Rect.Zero) ctrlTargets.putEnter(enterTargetId, enterBounds)
             }
             ActionKeyButton(
-                text = uiState.enterKeyText,
+                text = heldEnterText(uiState.enterKeyText, ctrlTargets.ctrlFaces),
                 onClick = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") },
                 backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor,
@@ -969,6 +992,10 @@ internal fun T9CandidateItem(
     fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
     isSelected: Boolean = false,
     preserveWidth: Boolean = false,
+    /** 相近读音（模糊音、纠错）：下划线、颜色浅一些，不再在前面加 ≈（用户 11-13）。 */
+    approximate: Boolean = false,
+    /** 字太宽时缩到放得下（读音一律缩，保证完整显示）；符号列表不缩，照旧。 */
+    fitWidth: Boolean = false,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
@@ -990,43 +1017,62 @@ internal fun T9CandidateItem(
             },
         contentAlignment = Alignment.Center
     ) {
-        val fittedFontSize = if (text.startsWith("≈")) {
-            val measured = rememberTextMeasurer().measure(text, style = TextStyle(fontSize = fontSize,
-                fontFamily = AppFonts.candidateFontFamily, fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal)).size.width
-            val usable = with(LocalDensity.current) { (maxWidth - 6.dp).toPx() }.coerceAtLeast(1f)
-            fontSize * minOf(1f, usable / measured.coerceAtLeast(1))
-        } else fontSize
+        val shown = if (preserveWidth) text else punctuationKeyLabel(text)
+        val available = maxWidth - if (isSelected) 12.dp else 6.dp
+        val modifierWithMeaning = if (approximate) Modifier.semantics { contentDescription = "相近读音 $text" } else Modifier
         if (isSelected) {
             Box(
-                modifier = Modifier
+                modifier = modifierWithMeaning
                     .clip(RoundedCornerShape(5.dp))
                     .background(accentColor.copy(alpha = 0.2f))
                     .padding(horizontal = 3.dp, vertical = 1.dp)
             ) {
-                Text(
-                    text = if (preserveWidth) text else punctuationKeyLabel(text),
-                    color = accentColor,
-                    fontSize = fittedFontSize,
-                    lineHeight = fittedFontSize * 1.2f,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    fontFamily = AppFonts.candidateFontFamily
-                )
+                FittedRailText(shown, accentColor, fontSize, FontWeight.Medium, approximate,
+                    if (fitWidth) available else null)
             }
         } else {
-            Text(
-                text = if (preserveWidth) text else punctuationKeyLabel(text),
-                color = textColor,
-                fontSize = fittedFontSize,
-                    lineHeight = fittedFontSize * 1.2f,
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                fontFamily = AppFonts.candidateFontFamily
-            )
+            FittedRailText(shown, if (approximate) approximateRailColor(textColor) else textColor, fontSize,
+                FontWeight.Normal, approximate, if (fitWidth) available else null, modifierWithMeaning)
         }
     }
+}
+
+/** 相近读音的字色：同一字色淡一些，配下划线；选中时仍用强调色。 */
+internal fun approximateRailColor(textColor: Color): Color = textColor.copy(alpha = textColor.alpha * 0.62f)
+
+/**
+ * 左栏一行字：给了 [maxWidth] 时按实际字体量宽，放不下就缩小字号直到整行放得下（长读音 zhuang 也完整显示，
+ * 用户 11-13）；相近读音加下划线。
+ */
+@Composable
+internal fun FittedRailText(
+    text: String,
+    color: Color,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight,
+    approximate: Boolean,
+    maxWidth: Dp?,
+    modifier: Modifier = Modifier,
+) {
+    val style = TextStyle(fontSize = fontSize, fontFamily = AppFonts.candidateFontFamily, fontWeight = fontWeight)
+    val fitted = if (maxWidth == null) fontSize else {
+        val measured = rememberTextMeasurer().measure(text, style = style, maxLines = 1, softWrap = false).size.width
+        val usable = with(LocalDensity.current) { maxWidth.toPx() }.coerceAtLeast(1f)
+        fontSize * minOf(1f, usable / measured.coerceAtLeast(1))
+    }
+    Text(
+        text = text,
+        modifier = modifier,
+        color = color,
+        fontSize = fitted,
+        lineHeight = fitted * 1.2f,
+        fontWeight = fontWeight,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        softWrap = false,
+        fontFamily = AppFonts.candidateFontFamily,
+        textDecoration = if (approximate) androidx.compose.ui.text.style.TextDecoration.Underline else null,
+    )
 }
 
 /** 0 键「下一项」箭头的基准尺寸。 */

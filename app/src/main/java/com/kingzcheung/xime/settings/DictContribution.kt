@@ -58,6 +58,24 @@ object DictContribution {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("consent", true).apply()
     }
 
+    /**
+     * 用户在贡献页删掉的词（「词<TAB>拼音」）：以后不再列出，也不会分享或上传。只记在本页，不动用户词库。
+     */
+    fun excluded(context: Context): Set<String> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet("excluded", null)?.toSet().orEmpty()
+
+    fun exclude(context: Context, word: DictContributionRules.Word): Set<String> {
+        val next = excluded(context) + excludedKey(word)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet("excluded", next).apply()
+        return next
+    }
+
+    fun clearExcluded(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("excluded").apply()
+    }
+
+    fun excludedKey(word: DictContributionRules.Word) = word.text + "\t" + word.pinyin
+
     data class Loaded(val schema: String, val selection: DictContributionRules.Selection)
 
     /** 读当前方案的用户词库并挑词。在 IO 线程调用；键盘引擎还没起来时抛异常。 */

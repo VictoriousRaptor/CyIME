@@ -37,6 +37,8 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
     private var blocked = false
     /** 这次开栏已经提示过的错误（同一句不重复弹）。 */
     private var lastError: String? = null
+    /** 最近一次往应用输入框写译文的时间：紧跟着的光标回执是自己写出来的，不当作用户点了输入框。 */
+    private var lastWriteAt = 0L
 
     /** 新开栏。 */
     fun reset() {
@@ -46,6 +48,8 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         doneFor = null
         blocked = false
         lastError = null
+        // 开栏时收掉应用输入框里没打完的拼音也会报一次光标，不能当成用户点了输入框
+        lastWriteAt = SystemClock.uptimeMillis()
     }
 
     /** 栏里的字变了（打字、退格、清空）。 */
@@ -68,7 +72,7 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
 
     /** 插件设置变了（栏左边的圆钮换了目标语言）：栏里的字重新生成。 */
     fun retranslate() {
-        if (!isOpen()) return
+        if (!isOpen() || !focused()) return
         cancel()
         doneFor = null
         if (source.isNotBlank()) run(source, seq, finish = false)
@@ -88,6 +92,43 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         run(text, seq, finish = true)
     }
 
+    /**
+     * 用户点了应用输入框，打字回到应用：栏留着。这句已经译完的，译文定下来、栏清空；
+     * 还没译完的，半截译文撤掉，栏里的字留着，点回栏里再接着译（见 [enter]）。
+     */
+    fun leave() {
+        if (!isOpen()) return
+        val text = ToolPanelEditTextHolder.editText?.text?.toString() ?: source
+        val done = text.isNotBlank() && doneFor == text && runJob?.isActive != true
+        cancel()
+        setLoading(false)
+        val ic = service.currentInputConnection
+        if (written.isNotEmpty() && !done) ic?.setComposingText("", 1)
+        if (written.isNotEmpty()) ic?.finishComposingText()
+        written = ""
+        doneFor = null
+        source = ""
+        if (done) ToolPanelEditTextHolder.editText?.setText("")
+    }
+
+    /** 点回栏里：栏里还有没译的字就接着译，译文写在应用输入框现在的光标处。 */
+    fun enter() {
+        if (!isOpen()) return
+        // 进栏时收掉应用输入框里没打完的拼音，同样会报一次光标
+        lastWriteAt = SystemClock.uptimeMillis()
+        val text = ToolPanelEditTextHolder.editText?.text?.toString().orEmpty()
+        if (text.isNotBlank()) onTextChanged(text)
+    }
+
+    /**
+     * 应用输入框的光标回执是不是用户自己点了输入框：栏正拿着输入、光标变了，
+     * 又不是刚写译文带出来的。
+     */
+    fun userMovedHostCaret(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
+        candidatesStart: Int, candidatesEnd: Int): Boolean =
+        isOpen() && focused() && liveBarCaretMovedByUser(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
+            candidatesStart, candidatesEnd, written.isNotEmpty(), SystemClock.uptimeMillis() - lastWriteAt)
+
     /** 关栏：写进去的留下，没出来的不再写。 */
     fun close() {
         cancel()
@@ -104,6 +145,8 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         runJob = null
         seq++
     }
+
+    private fun focused(): Boolean = service.uiState.value.toolPanelInputFocused
 
     private fun isOpen(): Boolean {
         val state = service.uiState.value
@@ -126,7 +169,7 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         }
         val epoch = service.uiState.value.toolPanelRequestEpoch
         val startedAt = System.currentTimeMillis()
-        fun current() = mine == seq && isOpen() && service.uiState.value.toolPanelRequestEpoch == epoch
+        fun current() = mine == seq && isOpen() && focused() && service.uiState.value.toolPanelRequestEpoch == epoch
         setLoading(true)
         runJob = service.serviceScope.launch {
             val plugin = ExtensionManager.getPluginById(pluginId) as? ToolPlugin
@@ -197,14 +240,41 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
             return
         }
         val ic = service.currentInputConnection ?: return
+        lastWriteAt = SystemClock.uptimeMillis()
         ic.setComposingText(text, 1)
         written = text
     }
 
     companion object {
+        /** 写完译文后这么久之内的光标回执算自己写出来的。 */
+        const val OWN_WRITE_MS = 500L
         /** 停手多久开始生成。 */
         const val PAUSE_MS = 600L
         private const val POLL_MS = 150L
         private const val TIMEOUT_MS = 30_000L
     }
+}
+
+/**
+ * 翻译栏拿着输入时，应用输入框报来的光标变化是不是用户点了输入框（要把输入还给应用）。
+ * 刚写过译文（[LiveToolBar.OWN_WRITE_MS] 之内）的回执是自己写的；光标正好停在自己写的组合区末尾也是。
+ */
+internal fun liveBarCaretMovedByUser(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
+    candidatesStart: Int, candidatesEnd: Int, wroteComposing: Boolean, sinceLastWriteMs: Long): Boolean {
+    if (oldSelStart == newSelStart && oldSelEnd == newSelEnd) return false
+    if (sinceLastWriteMs in 0 until LiveToolBar.OWN_WRITE_MS) return false
+    if (wroteComposing && candidatesStart >= 0 && newSelStart == newSelEnd && newSelEnd == candidatesEnd) return false
+    return true
+}
+
+/** 插件面板里选择项选了一个值时交给插件的动作：`select:<设置名>:<值>`。 */
+internal fun toolPanelSelectAction(key: String, option: String): String = "select:$key:$option"
+
+/** 插件 ui 里给工具栏长按列表用的选择（style = "quick"，有选项）。 */
+internal fun toolPanelQuickNode(nodes: List<com.kingzcheung.xime.plugin.core.config.UiNode>?): com.kingzcheung.xime.keyboard.PressMenuOptions? {
+    val node = nodes?.firstOrNull {
+        it.type == com.kingzcheung.xime.plugin.core.config.UiNodeType.SELECT && it.style == "quick" &&
+            !it.key.isNullOrBlank() && it.options.isNotEmpty()
+    } ?: return null
+    return com.kingzcheung.xime.keyboard.PressMenuOptions(node.key!!, node.label.orEmpty(), node.options, node.value)
 }

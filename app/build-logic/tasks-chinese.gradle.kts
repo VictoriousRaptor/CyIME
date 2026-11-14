@@ -94,9 +94,13 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("idleSpellingEdits", 3)
     inputs.property("candidatePolicy", 4)
     inputs.property("learnedMixedWords", 2)
+    inputs.property("sentenceMixedWords", 3)
     // 中英混合词按公开语料词频排（2026-11-11「都按权重算」），不再全是 1000。
     val mixedWordCounts = file("data/cyime_mixed_word_counts.tsv")
     inputs.file(mixedWordCounts)
+    // cn_en 没有的混合词（AI漫剧、PPT、PDF），2026-11-13。
+    val extraMixedWords = file("data/cyime_mixed_words.tsv")
+    inputs.file(extraMixedWords)
     inputs.property("particleShortcuts", 2)
     inputs.property("pinyinFinalNe", 1)
     inputs.property("pinyin26WordModel", 5)
@@ -127,6 +131,8 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(userFixes)
     val removedWords = file("data/cyime_removed_words.txt.gz")
     inputs.file(removedWords)
+    val removedNames = file("data/cyime_removed_names.txt")
+    inputs.file(removedNames)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
     inputs.file(acronymFilter)
     val englishMemory = file("data/cyime_en_memory.lua")
@@ -228,14 +234,46 @@ val prepareChineseDictionaries by tasks.registering {
                 }
             }
         }
-        val domainTexts = domainFloors.keys.associateBy { it.substringBefore('\t') }
-        val domainPresent = mutableSetOf<String>()
         // Web phrases that never occur in the subtitle, chat or wiki corpora (2026-10-30: 173,590, mostly from
         // tencent.dict: 玻璃打砂机, 未满十八岁勿进, 训练家) are dropped: nine-key 600 fresh SMS clauses 397 → 399 right,
         // 26-key unchanged. List built by D:/CyIME-Data/eval/junk-sweep-20261030 (count_all.py, remove-A.txt).
         val removed = java.util.zip.GZIPInputStream(removedWords.inputStream()).bufferedReader().useLines { lines ->
             lines.filter { it.isNotBlank() }.toHashSet()
         }
+        // Names of people nobody knows (2026-11-14: guohaol showed 郭昊伦, tencent weight 50, and kept 过好了 from
+        // being made). How the list was chosen is in its header: three-character ext/tencent words that start with a
+        // common surname, appear whole in a public list of Chinese personal names, and are not famous (base.dict, the
+        // chat and subtitle word model, or weight 150 and up keep them).
+        removedNames.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // 那 before 哪 (his rule: 那个 ahead of 哪个; ime5 2026-11-11 那几家 came after 哪几家). Where 那X and 哪X are both
+        // words and X starts with a measure word or 几/些/一 (那几家, 那一种, 那些人), 那X gets at least 哪X's weight + 1.
+        // A 那 form under 5% of its 哪 form is a misspelling, not a word of its own (那怕, 那一), and is left alone.
+        val demonstrativeNext = (measureWords.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") } +
+            listOf("几", "些", "一")).toSet()
+        val naWeights = mutableMapOf<String, Pair<String, Int>>()
+        for (name in listOf("base", "ext", "tencent")) {
+            var body = false
+            for (line in File(root, "cn_dicts/$name.dict.yaml").readLines()) {
+                if (line.trim() == "...") { body = true; continue }
+                val fields = line.split('\t')
+                if (!body || fields.size !in 2..3 || !fields[0].contains('哪') && !fields[0].contains('那')) continue
+                val weight = fields.last().toIntOrNull() ?: continue
+                val code = if (fields.size == 3) fields[1] else ""
+                val known = naWeights[fields[0]]
+                if (known == null || known.second < weight) naWeights[fields[0]] = (code.ifEmpty { known?.first ?: "" }) to weight
+            }
+        }
+        for ((text, which) in naWeights) {
+            val at = text.indexOf('哪')
+            if (at < 0 || at + 1 >= text.length || text.substring(at + 1, at + 2) !in demonstrativeNext) continue
+            val that = text.substring(0, at) + "那" + text.substring(at + 1)
+            val other = naWeights[that] ?: continue
+            val code = which.first.ifEmpty { other.first }
+            if (code.isEmpty() || that in removed || other.second * 20 < which.second || other.second > which.second) continue
+            domainFloors.merge(that + "\t" + code, which.second + 1, ::maxOf)
+        }
+        val domainTexts = domainFloors.keys.associateBy { it.substringBefore('\t') }
+        val domainPresent = mutableSetOf<String>()
         for (name in listOf("base", "ext", "tencent")) {
             val dict = File(root, "cn_dicts/$name.dict.yaml")
             var header = true
@@ -380,10 +418,22 @@ val prepareChineseDictionaries by tasks.registering {
             }
         }
         check((mixedWeights["B站"] ?: 0) > 1000) { "Mixed word counts missing or rescaled" }
-        fun mixedWeight(word: String) = mixedWeights[word] ?: 1L
+        // Words upstream's cn_en lacks (data/cyime_mixed_words.tsv: text, code as in cn_en.txt, least weight). The
+        // public corpora predate them or seldom talk office software (AI漫剧 0 times in LCCC), so a floor as in
+        // cyime_domain_terms.tsv keeps them typable; a larger corpus count still wins.
+        val extraMixed: List<List<String>> = extraMixedWords.readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split('\t') }
+        check(extraMixed.all { it.size == 3 && it[1].all { c -> c in 'a'..'z' } && it[2].toLong() > 0 }) {
+            "Bad row in data/cyime_mixed_words.tsv"
+        }
+        val mixedFloors = extraMixed.associate { it[0] to it[2].toLong() }
+        fun mixedWeight(word: String) = maxOf(mixedWeights[word] ?: 1L, mixedFloors[word] ?: 1L)
+        // cn_en.txt's lines, then the words it lacks, as "text<TAB>code".
+        fun mixedSourceLines(): List<String> =
+            File(root, "en_dicts/cn_en.txt").readLines() + extraMixed.map { it[0] + "\t" + it[1] }
         // Mixed Latin + Chinese words (B站, T恤, A股, 卡拉OK) from upstream's 26-key cn_en table (letters + full pinyin),
         // encoded the same way, so 九键 and 14 键 type them like English words and learn them the same way.
-        File(root, "en_dicts/cn_en.txt").useLines { lines ->
+        mixedSourceLines().let { lines ->
             lines.forEach { line ->
                 if (line.startsWith("#")) return@forEach
                 val fields = line.split('\t')
@@ -402,7 +452,7 @@ val prepareChineseDictionaries by tasks.registering {
         // the cyime_cn_en table with a user dictionary, compiled by its own dependency schema like cyime_t9_english;
         // weights from data/cyime_mixed_word_counts.tsv (above); a picked word gains weight like any learned word.
         val cnEnWords = linkedSetOf<String>()
-        File(root, "en_dicts/cn_en.txt").useLines { lines ->
+        mixedSourceLines().let { lines ->
             lines.forEach { line ->
                 if (line.startsWith("#")) return@forEach
                 val fields = line.split('\t')
@@ -412,6 +462,69 @@ val prepareChineseDictionaries by tasks.registering {
             }
         }
         check(cnEnWords.any { it.startsWith("B站\tbzhan\t") }) { "Upstream cn_en table changed" }
+        // Mixed words inside a sentence (2026-11-13 group chat: 「B站上面的视频很好看」「我C盘红了」): the cn_en table
+        // matches only on its own, so the sentence maker never had B站 and read bzhan… as 不站…. Its acronym words
+        // (capital letters and Chinese: B站, X光片, AD钙奶) also go into the pinyin dictionary with the same weights.
+        // Capitals join the syllable after them (B站 = Bzhan, AD钙奶 = ADgai nai), or the one before when they end the
+        // word; such a syllable is typed as its lowercase letters, spelled as an abbreviation (rime_ice speller
+        // below): input of initials keeps the same syllable graph (bzd, xgp), and B站 against 霸占 for bzhan is
+        // decided by weight. librime's stray-initial check counts such a long abbreviation as typed in full.
+        val hanReadings = HashMap<Int, MutableSet<String>>()
+        run {
+            var body = false
+            File(root, "cn_dicts/8105.dict.yaml").forEachLine { line ->
+                if (line.trim() == "...") { body = true; return@forEachLine }
+                val f = line.split('\t')
+                if (body && f.size >= 2 && f[0].codePointCount(0, f[0].length) == 1 && f[1].matches(Regex("[a-z]+")))
+                    hanReadings.getOrPut(f[0].codePointAt(0)) { linkedSetOf() }.add(f[1])
+            }
+        }
+        fun capitalSyllables(text: String, code: String): String? {
+            val points = text.codePoints().toArray()
+            // Each character's piece of the code: a capital its own letter, a Chinese character one of its readings.
+            fun walk(i: Int, at: Int): List<String>? {
+                if (i == points.size) return if (at == code.length) emptyList() else null
+                val c = points[i]
+                if (c in 'A'.code..'Z'.code) {
+                    if (at >= code.length || code[at] != c.toChar().lowercaseChar()) return null
+                    return walk(i + 1, at + 1)?.let { listOf(c.toChar().toString()) + it }
+                }
+                for (s in hanReadings[c].orEmpty())
+                    if (code.startsWith(s, at)) walk(i + 1, at + s.length)?.let { return listOf(s) + it }
+                return null
+            }
+            val pieces = walk(0, 0) ?: return null
+            val syllables = mutableListOf<String>()
+            var capitals = ""
+            for (piece in pieces) {
+                if (piece[0] in 'A'..'Z') capitals += piece
+                else { syllables += capitals + piece; capitals = "" }
+            }
+            if (capitals.isNotEmpty()) { if (syllables.isEmpty()) syllables += capitals else syllables[syllables.lastIndex] += capitals }
+            return syllables.joinToString(" ")
+        }
+        val sentenceMixedWords = cnEnWords.mapNotNull { row ->
+            val (text, code, weight) = row.split('\t')
+            // Capitals and Chinese (B站), or an acronym of capitals only (PPT), which no pinyin spells.
+            val acronym = text.length >= 2 && text.all { it in 'A'..'Z' }
+            if (code != code.lowercase(java.util.Locale.ROOT) || text.none { it in 'A'..'Z' } ||
+                (!acronym && text.none { Character.isIdeographic(it.code) })) return@mapNotNull null
+            // Only words that start with capitals, each capital at the start of its syllable (B站 = Bzhan, AI漫剧 =
+            // AIman ju): nine keys share this dictionary, and such a syllable has no spelling in digits or a digit
+            // prefix, so nine-key lookups never reach it. 维生素C (wei sheng suC) or 阿Q精神 (a Qjing shen) would
+            // hang under wei/a, and 维C (weiC, nine keys 934C) completes 934: both lengthened every nine-key lookup
+            // (table_edges +0.69%). They stay whole words in cyime_cn_en, typed on their own as before.
+            capitalSyllables(text, code)?.takeIf { s ->
+                s[0] in 'A'..'Z' && s.split(' ').all { syllable -> syllable[0] in 'A'..'Z' || syllable.none { it in 'A'..'Z' } }
+            }?.let { "$text\t$it\t$weight" }
+        }.distinct()
+        check(sentenceMixedWords.any { it.startsWith("B站\tBzhan\t") } && sentenceMixedWords.size > 150) {
+            "Mixed words for sentences missing"
+        }
+        File(root, "cyime_mixed.dict.yaml").writeText(
+            "# Generated from bundled rime-ice en_dicts/cn_en.txt; licenses retained alongside sources.\n" +
+            "---\nname: cyime_mixed\nversion: \"1\"\nsort: by_weight\n...\n" +
+            sentenceMixedWords.joinToString("\n", postfix = "\n"))
         File(root, "cyime_cn_en.dict.yaml").writeText(
             "# Generated from bundled rime-ice en_dicts/cn_en.txt; licenses retained alongside sources.\n" +
             "---\nname: cyime_cn_en\nversion: \"1\"\nsort: by_weight\n...\n" +
@@ -470,6 +583,23 @@ val prepareChineseDictionaries by tasks.registering {
         fun withGreekLetters(schema: String) = schema.replace("\n    - simplifier@traditionalize",
             "\n    - lua_filter@*cyime_greek_letters\n    - simplifier@traditionalize")
             .also { check(it.split("\n    - lua_filter@*cyime_greek_letters\n").size == 2) { "Upstream traditionalize filter changed" } }
+        // 我的短语（user_table）里写的「余」照写的出（余宛如，用户 11-12）：traditionalize 跳过短语，
+        // traditionalize_user 用 cyime_s2tw_user.json 转它们（没有词组管着的「余」不改）；别的候选照旧只转一次。
+        // Same block in the nine-key and 14-key schemas (assets/rime_chinese); after the other filters wrap traditionalize.
+        fun withUserPhraseForms(schema: String): String {
+            val block = Regex("(?m)^traditionalize:\\n((?:  .*\\n)+)").find(schema)
+                ?: error("Upstream traditionalize block changed")
+            check(!block.value.contains("excluded_types")) { "Upstream traditionalize now excludes types" }
+            // rime-ice writes the filter with a trailing comment (`- simplifier@traditionalize   # 简繁切换`).
+            val filter = Regex("(?m)^    - simplifier@traditionalize(?![\\w_])[^\\n]*\\n")
+            check(filter.findAll(schema).count() == 1 && schema.split("\ntraditionalize:\n").size == 2) {
+                "Upstream traditionalize filter changed" }
+            val tags = block.groupValues[1].lineSequence().firstOrNull { it.startsWith("  tags:") }
+            return schema.replace(filter) { it.value + "    - simplifier@traditionalize_user\n" }
+                .replace("\ntraditionalize:\n", "\ntraditionalize:\n  excluded_types: [user_table]\n") +
+                "\ntraditionalize_user:\n  option_name: traditionalization\n  opencc_config: cyime_s2tw_user.json\n" +
+                "  tips: none\n  excluded_types: [simplified]\n" + (tags?.let { "$it\n" } ?: "")
+        }
         fun taiwanForms(schema: String) = schema.replace("  opencc_config: s2t.json ", "  opencc_config: cyime_s2tw.json ")
             .also { check(it.contains("  opencc_config: cyime_s2tw.json ")) { "Upstream traditionalize config changed" } }
         val vuRule = "    - derive/^([jqxy])v/\$1u/\n"
@@ -498,13 +628,34 @@ val prepareChineseDictionaries by tasks.registering {
             // neighbour corrections read them in full (zhen'zheng): such an initial weighs as a slip and the corrected
             // sentence comes first; long input is corrected from its start (docs/development/typo-correction-20261021.md).
             "  cyime_stray_initial_correction: true\n" +
+            // The final g left off (yianzhuan 已安装, xiwan 希望; 600 of the 1500 most common words end in ng): the
+            // letters that end the input on -n are also read as the -ng syllable, as a correction. Such a word is
+            // listed among the typed words by weight (0.01 like any correction: yijin 一斤 一进 已经) and leads a typed
+            // word only when 2000 times as common, as other corrections do; against a typed sentence see
+            // t9/final_g_word_margin below. 2026-11-12 cloud engine, the 600 words with the g left off: first 112 -> 306,
+            // first three 115 -> 533, first five 116 -> 580; 3000 correctly typed words ending in -n all kept first.
+            "  cyime_final_g_correction: true\n" +
             "  sentence_char_homophones: 4\n  sentence_position_penalty: -2.0\n" +
             "  sentence_position_final_only: [${particles.joinToString(", ")}]\n" +
             // 把/被 open a verb phrase and never end a sentence: shuoshuobei is 说说呗, not 说说被.
             "  sentence_position_initial_only: [把, 被]\n" +
             // Four sentences for t9/sentence_rescore to choose from (the menu still shows one); the cutoff
             // keeps Rime from dropping alternatives whose weight is a word penalty away.
-            "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n")
+            "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n" +
+            // Sentences of short input (four syllables at most) choose from two words per span, not one: liangkuaile
+            // could only be 两块 + 了, 凉快 never reached a sentence. And after the four n-best, four more whose words
+            // before the last differ (the n-best is often one word with four last characters: 语言过 语言国 语言果
+            // 语言锅, no 预言过). 2026-11-12 cloud engine, 68843 two- to four-character phrases of 51 patterns typed in
+            // full: first choice 48351 -> 50613 (2500 gained, 238 lost); long input keeps one word per span (with two,
+            // 我用纸折成了一个纸船 became 我用指着成了一个只穿).
+            "  sentence_word_homophones: 2\n  sentence_word_max_syllables: 4\n  sentence_other_prefixes: 4\n" +
+            // Short input (the same four syllables) also gets eight sentences to choose from, not four, and long
+            // input goes without the other-prefix sentences. Of the short phrases still wrong with four, the right
+            // one was not among the sentences 1469 times in 1555 (shazhushi: 杀猪是 刹住是 啥注释 啥主食, no 杀猪时).
+            // 68843 short phrases: first choice 50613 -> 50927 (348 gained, 34 lost; of the 36 the two-word change had
+            // made clearly worse, all are right again). Sixteen sentences cost 8% on the per-key p95 of short input,
+            // eight 2%; for all lengths eight cost 5% on long input (cloud engine, rough).
+            "  sentence_short_max_sentences: 8\n")
             .lineSequence().filterNot { it.contains("- lua_filter@*long_word_filter") }
             .flatMap { if (it.contains("- lua_filter@*autocap_filter")) sequenceOf(it, "    - lua_filter@*cyime_shortcut_order", "    - lua_filter@*cyime_acronym_filter",
                 "    - lua_filter@*cyime_single_syllable", "    - lua_filter@*cyime_en_memory")
@@ -515,9 +666,11 @@ val prepareChineseDictionaries by tasks.registering {
             // ü typed as u (nusheng 女生, luxing 旅行, meinu 美女): nü and lü also read nu and lu as a fuzzy spelling
             // at half weight, so 路 努 keep lu and nu where they make the word (lushang 路上, nuli 努力). nu alone now
             // shows 女 first (was 怒). 2026-11-01 host bench: ü-as-u 1/12 -> 11/12, nothing else changed.
-            .replace(vuRule, vuRule + "    - fuzz/^([nl])v\$/\$1u/\n")
+            .replace(vuRule, vuRule + "    - fuzz/^([nl])v\$/\$1u/\n" +
+                // A mixed word's syllable (B站 = Bzhan, cyime_mixed above) is typed in lowercase.
+                "    - abbrev/^(.*[A-Z].*)\$/\\L\$1/\n")
             .also { check(it.split(vuRule).size == 2) { "Upstream v/u spelling rules changed" } }
-            .let { withGreekLetters(withSymbolNames(withDatetimeHints(it))) } +
+            .let { withUserPhraseForms(withGreekLetters(withSymbolNames(withDatetimeHints(it)))) } +
             "\ncyime:\n  candidate_policy: true\n" +
             // 26-key ranking by the nine-key word n-gram model (docs/development/pinyin26-word-model-20261018.md):
             // same decoder and model file; initials are not penalized (a letter names its initial, unlike a
@@ -539,6 +692,35 @@ val prepareChineseDictionaries by tasks.registering {
             // rescore_rime_weight: share of Rime's own sentence weight added to the word model's score (0 = model alone).
             // 0.3: 11-10 sweep fixed 又发现一个问题; B站 and SMS together +3, homophone set +37, 26-key must-pass none lost.
             "  ngram_sentence_start: false\n  rescore_rime_weight: 0.3\n  ngram_eos_weight: 0\n  ngram_user_weight: 0.3\n" +
+            // tail_correction_margin: a slip in the last syllable (nihso 你好, jintisn 今天, xiexir 谢谢) leads the typed
+            // abbreviations when the corrected sentence beats them by this margin (ln units; ln 20 like the other typo gates).
+            // 11-11 tablet: the typed readings 你受 / 近体是你 / 歇息人 came first. To be swept on the computer (0 = off).
+            "  tail_correction_margin: 3.0\n" +
+            // slip_correction_margin: a corrected sentence leads a typed one that reads in full when the word model finds
+            // it more likely by this margin for every corrected syllable (ln 10000, like correction_penalty above). One
+            // neighbour-key slip in a sentence nearly always still reads as something (nichifanoema: 你吃饭哦饿吗 led
+            // 你吃饭了吗). 2026-11-13 cloud engine, this rule alone on main: 120 held-out everyday clauses, one slip at
+            // five places each, first choice 382 -> 527 of 600; 4000 short phrases with one slip 2030 -> 2392. Of 68843
+            // correctly typed short phrases 91 changed their first choice, 2 of them right before (nengzhaidao 能摘到 ->
+            // 能找到, tuolaile 拖来了 -> 过来了). Swept on the short-sentence patches: ln 2000 broke 7 of them
+            // (zaipushang 再铺上 -> 在路上) for 528 clauses, ln 100000 none for 509. 0 = off.
+            "  slip_correction_margin: 9.2\n" +
+            // initials_choices: input typed as initials only (wmjs, xydj) kept the dictionary's order and made no sentence
+            // when a dictionary word had those initials. With a count above 0 the leading whole words and the sentences
+            // made of words are ordered by the same score as full input (word model + rescore_rime_weight of Rime's
+            // weight) and that many lead the menu; 0 keeps the dictionary order.
+            // initials_lead_margin: the dictionary's first word with these initials keeps the first place unless another
+            // candidate's score is higher by this much (ln 7.4). 2026-11-13 cloud engine, 1250 codes of 2-4 letters whose
+            // most likely text is clear in the word model: first choice 1007 -> 1137 without a margin, but 14 of 300
+            // common dictionary words lost the first place to a near tie (jyb 进一步 -> 加油吧, largest lead 1.43) and
+            // the reported zdky 这都可以 to 真的可以 (1.71). With 2.0: 1007 -> 1068, none of them moves.
+            "  initials_choices: 5\n" +
+            "  initials_lead_margin: 2.0\n" +
+            // final_g_word_margin: a dictionary word read with the final g added (cyime_final_g_correction) leads the
+            // sentence of the typed letters when the word model finds it more likely by this margin (ln 100, the
+            // weight of a correction): 已安装 -14.8 against 一按转 -22.2. Of 68843 correctly typed short phrases 12
+            // changed (很聪敏 -> 很聪明, 灭完 -> 灭亡); at ln 20 it was 23. 0 = off.
+            "  final_g_word_margin: 4.6\n" +
             "  ngram_dictionary_prior: 0.02\n  ngram_merge_segmentations: false\n" +
             // CyLM (CyIME-Windows tools/cylm) puts its best sentence first when its files are in the Rime user
             // directory. Only the 装到我的设备 package carries them; without them the open fails once and Rime's
@@ -667,7 +849,7 @@ val prepareChineseDictionaries by tasks.registering {
             "  sentence_position_initial_only: [把, 被]\n" +
             "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n")
             .replace("  filters:\n", "  filters:\n    - cyime_candidate_policy\n")
-            .let { withGreekLetters(withSymbolNames(withDatetimeHints(it))) }
+            .let { withUserPhraseForms(withGreekLetters(withSymbolNames(withDatetimeHints(it)))) }
             // 生僻字 also for double pinyin (GitHub #72, same default-off switch): the Lua translator maps the two keys
             // through this scheme's preedit_format; DoublePinyinScheme copies both lines into every generated scheme.
             .let { schema ->
@@ -685,6 +867,9 @@ val prepareChineseDictionaries by tasks.registering {
                 .replace("name: 雾凇拼音", "name: $name"))
         }
 
+        // 用户 11-11（B 站）说打不出的字：8105 里没有，原来只在默认关着的生僻字开关里（读音取 rime-ice 41448）。
+        // 直接进主词库，单字权重 1 排在同音字最后，不抢常用字；生僻字表不再重复带它们。雫 8105 只有 xia，补上 na。
+        val directRareChars = linkedMapOf("吔" to "ye", "蚵" to "ke", "槻" to "gui", "榎" to "jia", "塁" to "lei")
         // Same IME vocabulary as CyIME-Windows data/rime/cyime_terms.dict.yaml; imported after upstream
         // tables so upstream weights win on duplicates.
         File(root, "cyime_terms.dict.yaml").writeText(
@@ -700,7 +885,9 @@ val prepareChineseDictionaries by tasks.registering {
                 "收起键\tshou qi jian\t5000", "全选键\tquan xuan jian\t5000", "撤销键\tche xiao jian\t5000",
                 "拼音键\tpin yin jian\t5000", "手写键\tshou xie jian\t5000", "地球键\tdi qiu jian\t5000",
                 "搜索键\tsou suo jian\t5000", "十四键\tshi si jian\t5000", "悬浮键盘\txuan fu jian pan\t5000",
-                "单手键盘\tdan shou jian pan\t5000", "键盘高度\tjian pan gao du\t5000").joinToString("\n", postfix = "\n") +
+                "单手键盘\tdan shou jian pan\t5000", "键盘高度\tjian pan gao du\t5000",
+                "雫\tna\t1", "吔屎\tye shi\t10", "蚵仔煎\tke zai jian\t50").joinToString("\n", postfix = "\n") +
+            directRareChars.entries.joinToString("\n", postfix = "\n") { (text, code) -> "$text\t$code\t1" } +
             // Only words rime-ice lacks: a second copy of an existing entry is just more to look up.
             (domainFloors.keys - domainPresent).joinToString("\n", postfix = "\n") { it + "\t" + domainFloors.getValue(it) })
         // rime-ice reads the adverbial 地 in 慢慢地/默默地 only as de; many people type it as di (manmandi), which
@@ -742,6 +929,7 @@ val prepareChineseDictionaries by tasks.registering {
             val text = fields[0]
             !line.startsWith("#") && fields.size == 2 && text.codePointCount(0, text.length) == 1 &&
                 text.codePointAt(0) < 0x10000 && Character.isIdeographic(text.codePointAt(0)) && text !in common &&
+                text !in directRareChars &&
                 fields[1] in commonCodes
         }
         check(rare.any { it == "瀺\tchan" } && rare.size > 15000) { "Upstream 41448.dict.yaml changed" }
@@ -752,7 +940,7 @@ val prepareChineseDictionaries by tasks.registering {
         val iceDict = File(root, "rime_ice.dict.yaml")
         val othersImport = "  - cn_dicts/others   # 一些杂项\n"
         check(iceDict.readText().split(othersImport).size == 2) { "Upstream rime_ice import list changed" }
-        iceDict.writeText(iceDict.readText().replace(othersImport, othersImport + "  - cyime_terms\n  - cyime_di\n"))
+        iceDict.writeText(iceDict.readText().replace(othersImport, othersImport + "  - cyime_terms\n  - cyime_di\n  - cyime_mixed\n"))
         // Minority readings for the joint decoder (t9/reading_table), same rule as tools/ime_lab/reading_table.py:
         // ln(count / count of the text's main reading) when below -1. The word model scores words, not readings,
         // so 的 (also di, as in 目的) took momodi from 默默地. The first imported table wins, as in Rime;

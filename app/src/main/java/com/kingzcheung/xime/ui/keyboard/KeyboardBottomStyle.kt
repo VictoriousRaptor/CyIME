@@ -21,6 +21,10 @@ internal fun rememberGlassSoftTopEdge(): Boolean =
     rememberBooleanChoice(SettingsPreferences.KEY_GLASS_SOFT_TOP_EDGE, SettingsPreferences::glassSoftTopEdge)
 
 @Composable
+internal fun rememberInlineQuickActionEditing(): Boolean =
+    rememberBooleanChoice(SettingsPreferences.KEY_INLINE_QUICK_ACTION_EDITING, SettingsPreferences::inlineQuickActionEditing)
+
+@Composable
 internal fun rememberFloatingGeometryLocked(): Boolean =
     rememberBooleanChoice(SettingsPreferences.KEY_FLOATING_GEOMETRY_LOCKED, SettingsPreferences::floatingGeometryLocked)
 

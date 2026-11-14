@@ -7,6 +7,19 @@ internal object ScreenshotImageSource {
     // Keep the previous 60-image feed's metadata budget, before applying the shared
     // 16-item recent limit. The provider and the local cursor both enforce this bound.
     const val MAX_QUERY_ROWS = 60
+
+    /**
+     * 「也显示相册照片」（用户 11-14：不只截图，相册最近几张也要）：相册里最新的这么多张，不管在哪个文件夹。
+     * 和截图一样只在键盘弹出、打开剪贴板时查一次（按时间倒序取前几行，走系统的索引），不常驻扫描。
+     */
+    const val RECENT_PHOTO_LIMIT = 12
+    const val PHOTO_LABEL = "照片"
+
+    /** Screenshots first (they keep their label and paste hint), then the recent photos not already among them. */
+    fun withRecentPhotos(screenshots: List<ClipboardImage>, photos: List<ClipboardImage>): List<ClipboardImage> {
+        val seen = screenshots.mapTo(mutableSetOf()) { it.uri }
+        return screenshots + photos.filter { seen.add(it.uri) }.take(RECENT_PHOTO_LIMIT)
+    }
     data class PinnedMediaImage(val id: Long, val uri: String)
     private val pinnedMediaUri = Regex("^content://media/(?:external|external_primary)/images/media/([1-9][0-9]*)$")
 

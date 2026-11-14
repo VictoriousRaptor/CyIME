@@ -59,6 +59,7 @@ enum class PlatformFeature(val minSdk: Int, val label: String) {
     PER_APP_LANGUAGE(Build.VERSION_CODES.TIRAMISU, "应用内单独选界面语言"),
     BATCH_COMPONENT_STATE(Build.VERSION_CODES.TIRAMISU, "一次切换多个启动图标"),
     TILE_PENDING_INTENT(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "快捷开关用 PendingIntent 打开页面"),
+    INSTALL_SOURCE(Build.VERSION_CODES.R, "读安装来源（F-Droid 装的不在应用里更新）"),
 
     // —— 调试测量（只在调试工具里用） ——
     ASYNC_TRACE(Build.VERSION_CODES.Q, "异步 Trace 段"),
@@ -189,6 +190,8 @@ object AndroidPlatform {
     val batchComponentState: Boolean = has(PlatformFeature.BATCH_COMPONENT_STATE)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     val tilePendingIntent: Boolean = has(PlatformFeature.TILE_PENDING_INTENT)
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
+    val installSource: Boolean = has(PlatformFeature.INSTALL_SOURCE)
 
     // —— 调试测量 ——
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)

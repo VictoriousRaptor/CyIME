@@ -1,7 +1,5 @@
 package com.kingzcheung.xime.calculator
 
-private val calculatorKeyPattern = Regex("[0-9]")
-private val calculatorKeys = listOf("+", "-", "*", "/", ".")
 
 /**
  * 计算器模式按键路由的结果。
@@ -36,8 +34,9 @@ fun routeCalculatorKey(
     }
 
     if (isNumberKeyboard) {
-        if (key.matches(calculatorKeyPattern) || key in calculatorKeys) {
-            if (key.matches(calculatorKeyPattern) || key == ".") {
+        // × ÷、全角数字和运算符也算（用户 11-13：× 不出计算候选）。
+        if (CalculatorEngine.isCalculatorKey(key)) {
+            if (CalculatorEngine.digitOf(key[0]) != null) {
                 calculatorEngine.handleDigit(key)
             } else {
                 calculatorEngine.handleOperator(key)

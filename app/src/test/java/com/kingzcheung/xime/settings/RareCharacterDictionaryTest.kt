@@ -42,7 +42,8 @@ class RareCharacterDictionaryTest {
         val commonCodes = common.map { it[1] }.toSet()
         val rare = File(root, "cyime_rare.txt").readLines().filter { it.isNotEmpty() }.map { it.split('\t') }
         assertTrue(listOf("瀺", "chan") in rare)
-        assertTrue(listOf("槻", "gui") in rare)
+        // 槻 went into the main dictionary 2026-11-12 with 吔、蚵、榎、塁; the rare list no longer repeats them.
+        listOf("槻", "吔", "蚵", "榎", "塁").forEach { ch -> assertFalse(ch, rare.any { it[0] == ch }) }
         rare.forEach { row ->
             assertEquals(row.toString(), 2, row.size)
             assertEquals(row.toString(), 1, row[0].length)

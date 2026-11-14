@@ -186,7 +186,8 @@ class HardwareCandidateNavigationTest {
         val source = snapshot(composition.copy(candidates = (0..15).map { "词$it" }, hasNextPage = true, hasPrevPage = true))
         repeat(20) { navigation.decide(HardwareCandidateKey.RIGHT, source, true) }
         assertEquals(9, navigation.selectedIndex(source))
-        assertEquals(HardwareCandidateDecision.Page(1), navigation.decide(HardwareCandidateKey.RIGHT, source, true, pageAtBoundary = true))
+        assertEquals(HardwareCandidateDecision.Page(1, wholeWindow = true),
+            navigation.decide(HardwareCandidateKey.RIGHT, source, true, pageAtBoundary = true))
         assertEquals(HardwareCandidateDecision.Page(-1), navigation.decide(HardwareCandidateKey.LEFT, source, true, pageAtBoundary = true))
     }
 
@@ -429,6 +430,72 @@ class HardwareCandidateNavigationTest {
         assertEquals(0, navigation.windowStart(typedOn))
         navigation.enginePaged(previousPage, 1)
         assertEquals(0, navigation.windowStart(previousPage.copy(engineRevision = 10L)))
+    }
+
+    // 用户 11-13：平板接物理键盘，工具条只放得下前几个候选，+/- 和上下键一次跳 10 个，后面几个选不到。
+    private val tenOnOnePage = CandidateState(inputText = "shi", isComposing = true,
+        candidates = (1..10).map { "候选$it" }, engineRevision = 11L)
+
+    @Test fun pagingMovesByWhatTheRowShowsSoNoCandidateIsSkipped() {
+        val navigation = HardwareCandidateNavigation()
+        navigation.reportShown(tenOnOnePage.candidates, 4)
+        assertEquals(4, navigation.step(tenOnOnePage))
+        val first = HardwareCandidateSnapshot(1, pinyin26, tenOnOnePage, false, windowStep = navigation.step(tenOnOnePage))
+        // The engine has no next page, yet six candidates are still hidden: Down pages instead of doing nothing.
+        assertTrue(first.presentation.hasNextPage)
+        assertEquals(HardwareCandidateDecision.Page(1), navigation.decide(HardwareCandidateKey.DOWN, first, true))
+        assertTrue(navigation.moveWindow(tenOnOnePage, 1))
+        assertEquals(4, navigation.windowStart(tenOnOnePage))
+        val second = HardwareCandidateSnapshot(1, pinyin26, tenOnOnePage, false, windowStart = 4)
+        assertEquals("候选5", second.words[0])
+        // The row now draws 候选5… and fits three of them.
+        navigation.reportShown(second.words, 3)
+        assertTrue(navigation.moveWindow(tenOnOnePage, 1))
+        assertEquals(7, navigation.windowStart(tenOnOnePage))
+        navigation.reportShown(tenOnOnePage.candidates.drop(7), 3)
+        val last = HardwareCandidateSnapshot(1, pinyin26, tenOnOnePage, false, windowStart = 7,
+            windowStep = navigation.step(tenOnOnePage))
+        assertFalse(last.presentation.hasNextPage)
+        assertFalse(navigation.moveWindow(tenOnOnePage, 1))
+        // Back returns through the same windows, not by a fixed stride.
+        assertTrue(navigation.moveWindow(tenOnOnePage, -1))
+        assertEquals(4, navigation.windowStart(tenOnOnePage))
+        assertTrue(navigation.moveWindow(tenOnOnePage, -1))
+        assertEquals(0, navigation.windowStart(tenOnOnePage))
+        assertFalse(navigation.moveWindow(tenOnOnePage, -1))
+    }
+
+    @Test fun anUnmeasuredRowKeepsTheNumberedTen() {
+        val navigation = HardwareCandidateNavigation()
+        assertEquals(HARDWARE_PAGE_SIZE, navigation.step(twentyCandidates))
+        // A count measured for other words (the previous keystroke) does not apply.
+        navigation.reportShown(listOf("别的", "词"), 1)
+        assertEquals(HARDWARE_PAGE_SIZE, navigation.step(twentyCandidates))
+        navigation.reportShown(twentyCandidates.candidates.take(9), 5)  // the Samsung-style bar draws nine
+        assertEquals(5, navigation.step(twentyCandidates))
+        val whole = HardwareCandidateSnapshot(1, pinyin26, tenOnOnePage, false)
+        assertFalse(whole.presentation.hasNextPage)
+        assertEquals(tenOnOnePage.candidates, whole.words)
+    }
+
+    @Test fun walkingOffTheLastNumberedWordSkipsTheWholeWindow() {
+        val navigation = HardwareCandidateNavigation()
+        navigation.reportShown(twentyCandidates.candidates, 4)
+        assertTrue(navigation.moveWindow(twentyCandidates, 1, stride = 10))
+        assertEquals(10, navigation.windowStart(twentyCandidates))
+        assertTrue(navigation.moveWindow(twentyCandidates, -1))
+        assertEquals(0, navigation.windowStart(twentyCandidates))
+    }
+
+    @Test fun pagingBackToAPageOfShortRowsOpensAtItsTail() {
+        val navigation = HardwareCandidateNavigation()
+        navigation.reportShown(twentyCandidates.candidates, 4)
+        navigation.enginePaged(twentyCandidates, -1)
+        val previousPage = twentyCandidates.copy(candidates = (21..40).map { "候选$it" }, engineRevision = 8L)
+        assertEquals(16, navigation.windowStart(previousPage))
+        // Earlier windows are still reached, four at a time.
+        assertTrue(navigation.moveWindow(previousPage, -1))
+        assertEquals(12, navigation.windowStart(previousPage))
     }
 
     @Test fun windowedSelectionMapsVisiblePositionsToTheEnginePage() {

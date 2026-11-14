@@ -21,6 +21,28 @@ class ClipboardGroupsTest {
         assertEquals("全部 stays", "ALL", keys.first())
     }
 
+    @Test fun aGroupKeepsTheOrderItsRecordsWereDraggedTo() {
+        val grouped = state.assigned(listOf("text:2", "text:3", "text:4"), "g1")
+        // Never sorted: newest first, as before.
+        val shown = listOf(text(4, "d"), text(3, "c"), text(2, "b"), text(1, "a"))
+        assertEquals(shown, grouped.inRecordOrder("g1", shown))
+        val sorted = grouped.withRecordOrder("g1", listOf("text:1", "text:3", "text:2", "text:4", "image:content://a"))
+        // Another group's record is not kept in this group's order.
+        assertEquals(listOf("text:1", "text:3", "text:2", "text:4"), sorted.recordOrder["g1"])
+        assertEquals(listOf("text:1", "text:3", "text:2", "text:4"), sorted.inRecordOrder("g1", shown).map { it.key })
+        // A record put in since comes first; one taken out leaves the order.
+        val later = sorted.assigned(listOf("text:5"), "g1").assigned(listOf("text:3"), null)
+        assertEquals(listOf("text:1", "text:2", "text:4"), later.recordOrder["g1"])
+        assertEquals(listOf("text:5", "text:1", "text:2", "text:4"),
+            later.inRecordOrder("g1", listOf(text(5, "e"), text(4, "d"), text(2, "b"), text(1, "a"))).map { it.key })
+        // Deleting the group drops its order; the order survives a save and reload.
+        assertNull(later.withoutGroup("g1").recordOrder["g1"])
+        val saved = ClipboardGroupCodec.encodeRecordOrder(later.recordOrder)
+        assertEquals(later.recordOrder, ClipboardGroupCodec.decodeRecordOrder(saved, listOf(phrases, work)))
+        assertTrue(ClipboardGroupCodec.decodeRecordOrder(saved, listOf(work)).isEmpty())
+        assertTrue(ClipboardGroupCodec.decodeRecordOrder(null, listOf(phrases)).isEmpty())
+    }
+
     @Test fun aGroupTabShowsOnlyItsRecords() {
         val tab = ClipboardTab.Group(phrases)
         assertTrue(clipboardMatches(text(1, "好的"), tab, state))

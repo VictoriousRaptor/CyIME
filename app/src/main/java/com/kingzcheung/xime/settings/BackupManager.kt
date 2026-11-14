@@ -43,8 +43,8 @@ object BackupManager {
     /** 除 kime_settings 外随备份保存的设置文件（字幕显示、手写公式模式、模型下载源）。 */
     internal val SETTINGS_PREFS = listOf("caption_mode", "handwriting", "model_download_source")
 
-    /** 只带其中几个键的设置文件：clipboard_board 里还存着固定条目（pins），备份只带卡片行数和图片高度。 */
-    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height"))
+    /** 只带其中几个键的设置文件：clipboard_board 里还存着固定条目（pins），备份只带卡片行数、图片高度和平铺/列表。 */
+    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height", "list_layout"))
 
     /** 只留 [keys] 里的键（[prefsToJson] 格式）。 */
     internal fun keepKeys(json: String, keys: Set<String>): String {
@@ -149,7 +149,7 @@ object BackupManager {
         if (relative.contains('/')) return false
         return relative.endsWith(".userdb.txt") ||
             (relative.startsWith("custom_phrase") && relative.endsWith(".txt")) ||
-            relative == EnglishWordMemory.FILE_NAME ||
+            relative == EnglishWordMemory.FILE_NAME || relative == EnglishWordMemory.DEMOTED_FILE_NAME ||
             // 补充词库生成的 user_cyime_cells_* 由补充词库设置重建，不算个人词库
             (relative.startsWith("user_") && !relative.startsWith("user_cyime_cells_") && relative.endsWith(".dict.yaml"))
     }

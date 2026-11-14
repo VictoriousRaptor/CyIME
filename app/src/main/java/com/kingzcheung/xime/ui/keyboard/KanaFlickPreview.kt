@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -62,19 +63,23 @@ internal fun DirectionDiscPreview(labels: Map<KanaFlickDirection, String>, direc
     val scale = contentScale.coerceIn(1f, 1.5f)
     val density = LocalDensity.current
     val margin = with(density) { 6.dp.roundToPx() }
-    val position = remember(margin) {
+    val anchorView = LocalView.current
+    val placement = remember(anchorView) { PopupWindowPlacement(anchorView) }
+    val correction = PopupWindowCorrection.offsetFor(placement.origin)
+    val position = remember(margin, correction) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
-                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = IntOffset(
+                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = placement.place(IntOffset(
                 (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(margin,
                     (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)),
                 (anchorBounds.top - popupContentSize.height - margin).coerceIn(margin,
                     (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin)),
-            )
+            ))
         }
     }
     // 方向盘悬在上一排键上：只显示不接触摸，另一只手快速点上一排的键不被它吃掉。
     Popup(popupPositionProvider = position, properties = DisplayOnlyPopupProperties) {
+        VerifyPopupWindowPlacement(placement)
         Box(Modifier.size((112f * scale).dp).testTag("$tagPrefix-flick-preview")
             .semantics { stateDescription = labels[direction] ?: "无字符" }, contentAlignment = Alignment.Center) {
             Box(Modifier.size((100f * scale).dp).testTag("$tagPrefix-preview-bubble")

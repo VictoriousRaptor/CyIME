@@ -3,6 +3,18 @@ package com.kingzcheung.xime.service
 internal fun canPredictAfter(text: String): Boolean = text.lastOrNull()?.isLetter() == true
 
 /**
+ * 连续联想什么时候停：选了联想词之后，下一批里最有把握的那个够不够可能是接下来要打的。
+ * 分数是联想表的 P(下一个词 | 前文)（乘 0.7，再加个人学习），句末语气词后、词拼不成句时都很低。
+ * 不够就这一批不出，等用户自己打字（打了字照常出联想）。只看分数，不数选了几次：
+ * 离线模拟（公开短信 1500 条 + 两套日常语料，前 5 个里有下一个词才算选中），首选分数低于 0.03 的那批只有 7% 接得上，
+ * 四成多是一句已经说完了；同样少出约 490 批，「只连两次」少选中 60 个词，按分数只少 34 个。
+ */
+internal const val ASSOCIATION_CHAIN_MIN_SCORE = 0.03f
+
+internal fun continuesAssociationChain(candidates: List<com.kingzcheung.xime.association.AssociationCandidate>): Boolean =
+    (candidates.maxOfOrNull { it.score } ?: 0f) >= ASSOCIATION_CHAIN_MIN_SCORE
+
+/**
  * 这次上屏的以两个以上汉字结尾（整句、词、语音）：最后一个字已是一个词的末尾，联想只接下一个词，
  * 不再把它补成以它开头的长词（「你在吃饭莫」后不出“莫名其妙”）。单个字上屏照旧，可以补成词（我→们）。
  */

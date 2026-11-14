@@ -137,7 +137,10 @@ fun NumberKeyboardLayout(
         )
     }
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius,
+    // 键缝动效的光层（默认关，关着时是 null）。
+    val gapLight = rememberKeyGapLight()
+
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight,
         LocalKeyboardPunctuation provides LocalKeyboardPunctuation.current?.copy(numberPanel = true)) {
     Box(
         modifier = bodyModifier
@@ -146,6 +149,8 @@ fun NumberKeyboardLayout(
                 liveKeyboardBounds.coordinates = coordinates
             }
     ) {
+        // 键缝动效的光层：最先画 = 在所有键帽底下，只从键缝里露出来。
+        KeyGapLightLayer(gapLight, Modifier.matchParentSize())
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBackgroundColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         run {
             CompositionLocalProvider(
@@ -211,7 +216,9 @@ private fun NumberRows(
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor, fontSize = symFontSize,
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                 modifier = Modifier.weight(0.8f).fillMaxHeight().testTag("number-operators")
-                    .padding(scaledKeyVisualPadding()))
+                    .padding(scaledKeyVisualPadding())
+                    // 键缝动效：左栏不是键，按它不画；登记位置是为了线能绕着它走。
+                    .then(keyGapLightSource(GapLightKind.NONE)))
             Column(Modifier.weight(3.4f).fillMaxHeight()) {
                 listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) {

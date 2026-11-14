@@ -55,8 +55,28 @@ object AppUpdater {
     /** 下载前至少留出的余量，免得把存储塞满。 */
     private const val SPACE_MARGIN = 64L * 1024 * 1024
 
-    /** 老人版是单独打的包，换成公开包会丢掉老人版的界面，不给更新入口。 */
-    val supported: Boolean get() = !BuildConfig.ELDER
+    /**
+     * 老人版是单独打的包，换成公开包会丢掉老人版的界面，不给更新入口。
+     * 从 F-Droid 装的也不给：更新走商店（[storeManaged]）。
+     */
+    val supported: Boolean get() = !BuildConfig.ELDER && !storeManaged
+
+    /** 由 F-Droid 一类商店安装，见 [AppUpdateCatalog.isStoreInstaller]；进程启动时由 [init] 读一次。 */
+    @Volatile
+    var storeManaged: Boolean = false
+        private set
+
+    fun init(context: Context) {
+        storeManaged = AppUpdateCatalog.isStoreInstaller(installerOf(context))
+    }
+
+    private fun installerOf(context: Context): String? = try {
+        val pm = context.packageManager
+        if (com.kingzcheung.xime.platform.AndroidPlatform.installSource) pm.getInstallSourceInfo(context.packageName).installingPackageName
+        else @Suppress("DEPRECATION") pm.getInstallerPackageName(context.packageName)
+    } catch (_: Exception) {
+        null
+    }
 
     /** 自用版：只查不装，见 [fetchLatest]。 */
     val privateBuild: Boolean get() = BuildConfig.DEV_TOOLS

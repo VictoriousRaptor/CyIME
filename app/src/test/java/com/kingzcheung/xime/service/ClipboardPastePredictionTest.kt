@@ -32,7 +32,7 @@ class ClipboardPastePredictionTest {
             whenever(service.isChineseMode).thenReturn(true)
             whenever(service.commitTextSilently(any(), any(), any(), any())).thenReturn(result)
             doCallRealMethod().whenever(service).dismissPredictionsForPaste()
-            doCallRealMethod().whenever(service).commitTextAndPredict(any(), any(), any(), any())
+            doCallRealMethod().whenever(service).commitTextAndPredict(any(), any(), any(), any(), any())
             doCallRealMethod().whenever(service).commitPastedText(any())
         }
     }

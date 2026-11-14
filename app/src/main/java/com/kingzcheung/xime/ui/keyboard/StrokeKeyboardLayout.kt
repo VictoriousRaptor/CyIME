@@ -169,7 +169,10 @@ onKeyPressDown: ((String) -> Unit)?,
         )
     }
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius) {
+    // 键缝动效的光层（默认关，关着时是 null）。
+    val gapLight = rememberKeyGapLight()
+
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight) {
     Box(
         modifier = modifier
             .onGloballyPositioned { coordinates ->
@@ -178,6 +181,8 @@ onKeyPressDown: ((String) -> Unit)?,
             }
             .padding(bottom = if (isFloatingMode || isLandscape) 0.dp else 0.dp),
     ) {
+        // 键缝动效的光层：最先画 = 在所有键帽底下，只从键缝里露出来。
+        KeyGapLightLayer(gapLight, Modifier.matchParentSize())
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBackgroundColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         if (isLandscape) {
             // 横屏：去除原左侧符号面板（符号走符号键盘），
@@ -378,6 +383,8 @@ private fun StrokeKeyboardContent(
                     .fillMaxHeight()
                     .weight(3f)
                     .padding(scaledKeyVisualPadding())
+                    // 键缝动效：左栏不是键，按它不画；登记位置是为了线能绕着它走。
+                    .then(keyGapLightSource(GapLightKind.NONE))
                     .then(symbolPanelShadowModifier)
                     .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
                     .background(frostedKeyColor(keyBackgroundColor, keyTextColor, frostedGlass))

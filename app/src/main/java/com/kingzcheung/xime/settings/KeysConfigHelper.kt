@@ -1918,14 +1918,16 @@ object KeysConfigHelper {
 
     /** 根据输入模式获取某个按键的手势配置。 */
     fun getKeyGesture(key: String, isAsciiMode: Boolean): KeyGestureConfig? {
-        val config = if (isAsciiMode) _keyGestureConfigEn.value else _keyGestureConfig.value
         val normalized = key.lowercase()
         val profile = InputProfiles.current(_activeSchemaId, isAsciiMode)
+        // 英文单词方案（cyime_english）不开 ascii 也是英文键盘：用英文的按键和角标，不套中文符号（11-12 反馈）。
+        val englishKeyboard = isAsciiMode || profile.language == InputLanguage.ENGLISH
+        val config = if (englishKeyboard) _keyGestureConfigEn.value else _keyGestureConfig.value
         val letters = LetterLanguage.of(profile.language)
         if (profile.language !in setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH) && letters == null)
             return config[normalized]?.let { withoutNumberRowDigits(normalized, it) }
         // 西班牙、德、法、俄、韩语键盘用英文键盘的角标（同一位置同一个半角符号）。
-        val english = isAsciiMode || letters != null
+        val english = englishKeyboard || letters != null
         val custom = letterLayout(_activeSchemaId, isAsciiMode)
         // 所有字母布局的角标都由下面两条规则出，不再各布局各配一套（用户 10-30：模式太多难免疏忽，统一）。
         return when (profile.layout.kind) {

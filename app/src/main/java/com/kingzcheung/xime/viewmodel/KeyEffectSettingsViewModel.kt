@@ -14,6 +14,7 @@ data class KeyEffectUiState(
     val soundEnabled: Boolean = true,
     val keyGlowEnabled: Boolean = false,
     val keyAnimationEnabled: Boolean = false,
+    val gapLight: com.kingzcheung.xime.settings.KeyGapLightConfig = com.kingzcheung.xime.settings.KeyGapLightConfig(),
     val soundVolume: Int = 50,
     val hapticMode: String = "following_system",
     val hapticOnKeyUp: Boolean = false,
@@ -33,6 +34,7 @@ class KeyEffectSettingsViewModel(application: Application) : AndroidViewModel(ap
         soundEnabled = SettingsPreferences.isSoundEnabled(context),
         keyGlowEnabled = KeyEffectPreferences.glowEnabled(SettingsPreferences.getPrefsPublic(context)),
         keyAnimationEnabled = KeyEffectPreferences.animationEnabled(SettingsPreferences.getPrefsPublic(context)),
+        gapLight = com.kingzcheung.xime.settings.KeyGapLightPreferences.read(SettingsPreferences.getPrefsPublic(context)),
         soundVolume = SettingsPreferences.getSoundVolume(context),
         hapticMode = SettingsPreferences.getHapticMode(context),
         hapticOnKeyUp = SettingsPreferences.isHapticOnKeyUp(context),
@@ -70,6 +72,17 @@ class KeyEffectSettingsViewModel(application: Application) : AndroidViewModel(ap
     fun setKeyAnimationEnabled(enabled: Boolean) {
         KeyEffectPreferences.setAnimationEnabled(SettingsPreferences.getPrefsPublic(context), enabled)
         _uiState.update { it.copy(keyAnimationEnabled = enabled) }
+    }
+
+    fun setGapLightEnabled(enabled: Boolean) {
+        com.kingzcheung.xime.settings.KeyGapLightPreferences.setEnabled(SettingsPreferences.getPrefsPublic(context), enabled)
+        _uiState.update { it.copy(gapLight = it.gapLight.copy(enabled = enabled)) }
+    }
+
+    /** 键缝动效的细调项（样式、滑条、分项开关）。 */
+    fun setGapLight(config: com.kingzcheung.xime.settings.KeyGapLightConfig) {
+        com.kingzcheung.xime.settings.KeyGapLightPreferences.save(SettingsPreferences.getPrefsPublic(context), config)
+        _uiState.update { it.copy(gapLight = config) }
     }
 
     fun setSoundEnabled(enabled: Boolean) {

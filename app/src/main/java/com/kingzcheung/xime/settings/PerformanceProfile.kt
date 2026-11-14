@@ -7,7 +7,7 @@ import com.kingzcheung.xime.runtime.adaptation.PerformanceTiers
 
 /**
  * 性能预设页管的几项。都是已有设置，预设只是一组值，不另存一份。
- * 前四项每档都写；后四项（11-03 用户「档位要更强」加的）只关不开：中配、低配把它们关掉，高配不动，
+ * 前四项每档都写；后面几项（11-03 用户「档位要更强」加的，11-11 加键缝动效）只关不开：中配、低配把它们关掉，高配不动，
  * 所以选高配不会替用户打开没开过的效果（见 [PerformanceProfile.turnsOff]）。
  */
 data class PerformanceSettings(
@@ -25,6 +25,8 @@ data class PerformanceSettings(
     val glidePreview: Boolean = false,
     /** 手写边写边识别。 */
     val handwritingLive: Boolean = false,
+    /** 键缝动效的总开关（按键效果）；默认关，只有低配档会把它关掉。 */
+    val keyGapLight: Boolean = false,
 )
 
 /**
@@ -49,7 +51,7 @@ object PerformanceProfile {
     )
 
     /** 档位只关不开的几项（见 [PerformanceSettings]）：高配不动，中配关液态玻璃，低配全关。 */
-    enum class Extra { LIQUID_GLASS, PRESS_BUBBLE, GLIDE_PREVIEW, HANDWRITING_LIVE }
+    enum class Extra { LIQUID_GLASS, PRESS_BUBBLE, GLIDE_PREVIEW, HANDWRITING_LIVE, KEY_GAP_LIGHT }
 
     val turnsOff: Map<PerformanceTier, Set<Extra>> = mapOf(
         PerformanceTier.HIGH to emptySet(),
@@ -62,6 +64,7 @@ object PerformanceProfile {
         Extra.PRESS_BUBBLE -> pressBubble
         Extra.GLIDE_PREVIEW -> glidePreview
         Extra.HANDWRITING_LIVE -> handwritingLive
+        Extra.KEY_GAP_LIGHT -> keyGapLight
     }
 
     private fun PerformanceSettings.core() = PerformanceSettings(keyAnimation, keyGlow, speechRefinerIdleMinutes, speechEngineIdleMinutes)
@@ -75,6 +78,7 @@ object PerformanceProfile {
             pressBubble = current.pressBubble && Extra.PRESS_BUBBLE !in off,
             glidePreview = current.glidePreview && Extra.GLIDE_PREVIEW !in off,
             handwritingLive = current.handwritingLive && Extra.HANDWRITING_LIVE !in off,
+            keyGapLight = current.keyGapLight && Extra.KEY_GAP_LIGHT !in off,
         )
     }
 
@@ -87,7 +91,8 @@ object PerformanceProfile {
             liquidGlass = FrostedGlassPreferences.readProfiles(context).dark.enabled && SettingsPreferences.glassLiquid(context),
             pressBubble = SettingsPreferences.shouldShowPressBubble(context),
             glidePreview = input.glidePreview,
-            handwritingLive = input.handwritingRecognizeWhileWriting)
+            handwritingLive = input.handwritingRecognizeWhileWriting,
+            keyGapLight = KeyGapLightPreferences.enabled(prefs))
     }
 
     /** 空闲释放时间的几个档：1、5、10、30、60 分钟和“永不”（0）。明细滑条和 [score] 共用。 */
@@ -112,7 +117,7 @@ object PerformanceProfile {
         return Math.round(points).toInt().coerceIn(0, 100)
     }
 
-    /** 当前值对应的档位；null = 自定义。前四项要和这档一样，这档要关的几项要关着；高配不管后四项。 */
+    /** 当前值对应的档位；null = 自定义。前四项要和这档一样，这档要关的几项要关着；高配不管后面几项。 */
     fun matching(settings: PerformanceSettings): PerformanceTier? =
         presets.entries.firstOrNull { (tier, preset) ->
             preset.core() == settings.core() && turnsOff.getValue(tier).none { settings.isOn(it) }
@@ -231,6 +236,8 @@ object PerformanceProfile {
                 Extra.PRESS_BUBBLE -> PerformanceCosts.Item.PRESS_BUBBLE
                 Extra.GLIDE_PREVIEW -> PerformanceCosts.Item.GLIDE_PREVIEW
                 Extra.HANDWRITING_LIVE -> PerformanceCosts.Item.HANDWRITING_LIVE
+                // 只关总开关，各种动效的分项和细调项留着，再打开时还是原来那样。
+                Extra.KEY_GAP_LIGHT -> PerformanceCosts.Item.KEY_GAP_LIGHT
             }, false)
         }
     }

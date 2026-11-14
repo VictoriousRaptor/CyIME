@@ -123,9 +123,11 @@ class SchemaLocalViewModel(application: Application) : AndroidViewModel(applicat
                 InstallFromDirResult(false, failureReason = "安装异常: ${e.message}")
             }
             _uiState.update { it.copy(installingId = null, conflictingFiles = emptyList(), conflictingSchemeIds = emptyList()) }
+            // 装好的方案自动编译进去（#340），不用再点「应用方案更改」。
+            if (result.success) com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
             when {
                 result.success -> showToast(buildString {
-                    append("已安装「${item.displayName}」，点「应用方案更改」生效")
+                    append("已安装「${item.displayName}」，正在应用，稍等就能在键盘上用")
                     if (result.parseFailures.isNotEmpty()) append("\n" + result.parseFailures.joinToString("\n"))
                     if (result.unresolvedDeps.isNotEmpty())
                         append("\n请补齐方案引用的文件：" + result.unresolvedDeps.joinToString("、"))
@@ -172,6 +174,8 @@ class SchemaLocalViewModel(application: Application) : AndroidViewModel(applicat
         if (item.packageId == "builtin") { showToast("内置方案不可卸载"); return }
         viewModelScope.launch {
             val result = SchemaManager.uninstallPackage(context, item.packageId)
+            // 卸载的方案从键盘上拿掉、当前方案换走，同样自动应用（#340）。
+            if (result.success) com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
             showToast(result.message)
             loadLocalPackages()
         }

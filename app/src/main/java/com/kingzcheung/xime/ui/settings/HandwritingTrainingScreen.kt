@@ -104,6 +104,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import com.kingzcheung.xime.BuildConfig
+import com.kingzcheung.xime.handwriting.training.ContributePromptDeck
 import com.kingzcheung.xime.handwriting.training.BuiltinTrainingPrompts
 import com.kingzcheung.xime.handwriting.training.FormulaGenerator
 import com.kingzcheung.xime.handwriting.training.HandwritingContribution
@@ -181,6 +182,8 @@ data class TrainingUiState(
     /** 贡献样本：已上传的条数（样本文件前这么多行），正在上传时不能再点。 */
     val uploaded: Int = 0,
     val uploading: Boolean = false,
+    /** 贡献样本写什么：随机、只写某一类，或者自己输入的字词。 */
+    val choice: ContributePromptDeck.Choice = ContributePromptDeck.Choice.Random,
 ) {
     val current: TrainingPrompt? get() = custom ?: prompts.getOrNull(index)
     val totalSamples: Int get() = counts.values.sum()
@@ -199,7 +202,7 @@ sealed class TrainingEvent {
 
 /**
  * 训练模式：只做数据收集，按题库顺序出题，样本逐条写入 app 私有目录。
- * [contribute] 为 true 时是公开版的「贡献手写样本」：只出固定题目，样本另存一处，可分享或上传。
+ * [contribute] 为 true 时是公开版的「贡献手写样本」：题目每人随机，也可以只写某一类或自己输入（[selectChoice]），样本另存一处，可分享或上传。
  */
 class HandwritingTrainingViewModel @JvmOverloads constructor(
     app: android.app.Application,
@@ -207,6 +210,8 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
 ) : AndroidViewModel(app) {
 
     private val store = if (contribute) TrainingSampleStore(app, HandwritingContribution.STORE_NAME) else TrainingSampleStore(app)
+    /** 贡献页写什么，见 [selectChoice]。 */
+    private var choice = if (contribute) HandwritingContribution.choice(app) else ContributePromptDeck.Choice.Random
     private val contributePrompts by lazy {
         runCatching { HandwritingContribution.prompts(app) }
             .getOrElse { e -> Log.w(TRAINING_TAG, "load contribute prompts failed", e); emptyList() }
@@ -271,11 +276,31 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
         TrainingBank.Missed -> misses.map { it.prompt.copy(hint = "认错 ${it.misses} 次，上次认成「${it.lastWrong}」") }
         TrainingBank.RandomFormula -> randomFormulas
         TrainingBank.ImportedFormula -> formulaBank
-        TrainingBank.Contribute -> contributePrompts
+        TrainingBank.Contribute -> contributeChoicePrompts()
         TrainingBank.Text -> textPrompts(store.textBank)
     }
 
     private val randomFormulas by lazy { FormulaGenerator.prompts() }
+
+    /** 贡献页按「写什么」出题：中文几类从这个人的随机题里挑，字母、假名等用内置题按这个人打乱，一段话和自己输入用填的内容。 */
+    private fun contributeChoicePrompts(): List<TrainingPrompt> {
+        val app = getApplication<android.app.Application>()
+        val seed by lazy { ContributePromptDeck.seedOf(HandwritingContribution.writerId(app), choice.name) }
+        return when (choice) {
+            ContributePromptDeck.Choice.Own -> ContributePromptDeck.ownHandwriting(HandwritingContribution.ownText(app)).prompts
+            ContributePromptDeck.Choice.Paragraph -> ContributePromptDeck.paragraph(HandwritingContribution.paragraphText(app))
+            ContributePromptDeck.Choice.Latin ->
+                ContributePromptDeck.fromBuiltin(BuiltinTrainingPrompts.prompts(TrainingPromptType.Latin), "latin", seed)
+            ContributePromptDeck.Choice.Kana ->
+                ContributePromptDeck.fromBuiltin(BuiltinTrainingPrompts.prompts(TrainingPromptType.Kana), "kana", seed)
+            ContributePromptDeck.Choice.Symbol ->
+                ContributePromptDeck.fromBuiltin(BuiltinTrainingPrompts.prompts(TrainingPromptType.Symbol), "symbol", seed)
+            ContributePromptDeck.Choice.Formula -> ContributePromptDeck.fromBuiltin(randomFormulas, "formula", seed)
+            ContributePromptDeck.Choice.Japanese ->
+                ContributePromptDeck.japanese(com.kingzcheung.xime.handwriting.JapaneseKanji.tableFor(app)?.rank.orEmpty(), seed)
+            else -> ContributePromptDeck.filter(contributePrompts, choice)
+        }
+    }
 
     /** 自己导入的公式穿插进真实公式里：每 4 题出 1 道导入题，导入题出完后全是题库里的。 */
     private fun mixImported(math: List<TrainingPrompt>, imported: List<TrainingPrompt>): List<TrainingPrompt> {
@@ -309,8 +334,74 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
             return
         }
         val prompts = promptsFor(bank)
-        val index = store.position(bank).coerceIn(0, (prompts.size - 1).coerceAtLeast(0))
-        _state.update { it.copy(bank = bank, prompts = prompts, index = index, custom = null, loading = false, check = null) }
+        val saved = positionOf(bank).coerceIn(0, (prompts.size - 1).coerceAtLeast(0))
+        // 贡献题每人随机、几千道：接着上次的位置，跳过已经写过的（自己输入的不跳）
+        val index = if (skipsWritten(bank)) {
+            val counts = _state.value.counts
+            ContributePromptDeck.firstUnwritten(prompts, saved) { (counts[it] ?: 0) > 0 }
+        } else saved
+        _state.update {
+            it.copy(bank = bank, prompts = prompts, index = index, custom = null, loading = false, check = null, choice = choice)
+        }
+    }
+
+    private fun skipsWritten(bank: TrainingBank) = bank == TrainingBank.Contribute && !choice.typed
+
+    /** 贡献题按「写什么」分开记位置；随机沿用原来那份。 */
+    private fun positionOf(bank: TrainingBank): Int =
+        if (bank == TrainingBank.Contribute && choice != ContributePromptDeck.Choice.Random)
+            HandwritingContribution.position(getApplication<android.app.Application>(), choice)
+        else store.position(bank)
+
+    private fun savePosition(bank: TrainingBank, index: Int) {
+        if (bank == TrainingBank.Contribute && choice != ContributePromptDeck.Choice.Random)
+            HandwritingContribution.setPosition(getApplication<android.app.Application>(), choice, index)
+        else store.setPosition(bank, index)
+    }
+
+    /** 贡献页换「写什么」：随机、常用字、少用字、词语、自己输入。 */
+    fun selectChoice(value: ContributePromptDeck.Choice) {
+        if (!contribute) return
+        choice = value
+        HandwritingContribution.setChoice(getApplication<android.app.Application>(), value)
+        selectBank(TrainingBank.Contribute)
+    }
+
+    /** 「自己输入」：换成这些字词，从第一个写起。 */
+    fun setOwn(text: String) {
+        val own = ContributePromptDeck.ownHandwriting(text)
+        if (own.prompts.isEmpty()) {
+            _events.tryEmit(TrainingEvent.Message(
+                if (own.tooLong > 0) "每个最多 ${ContributePromptDeck.MAX_OWN_CHARS} 个字，用空格分开" else "先输入想写的字或词"))
+            return
+        }
+        val app = getApplication<android.app.Application>()
+        HandwritingContribution.setOwnText(app, text.trim())
+        HandwritingContribution.setPosition(app, ContributePromptDeck.Choice.Own, 0)
+        selectBank(TrainingBank.Contribute)
+        if (own.tooLong > 0) _events.tryEmit(TrainingEvent.Message(
+            "${own.tooLong} 个超过 ${ContributePromptDeck.MAX_OWN_CHARS} 个字，没有出题"))
+    }
+
+    /** 「一段话」：换成这段话，从第一个字写起。 */
+    fun setParagraph(text: String) {
+        if (ContributePromptDeck.paragraph(text).isEmpty()) {
+            _events.tryEmit(TrainingEvent.Message("先粘贴或输入一段话"))
+            return
+        }
+        val app = getApplication<android.app.Application>()
+        HandwritingContribution.setParagraphText(app, text.trim())
+        HandwritingContribution.setPosition(app, ContributePromptDeck.Choice.Paragraph, 0)
+        selectBank(TrainingBank.Contribute)
+    }
+
+    /** 「自己输入」「一段话」：清掉，重新填（已写的样本不删）。 */
+    fun clearOwn() {
+        val app = getApplication<android.app.Application>()
+        if (choice == ContributePromptDeck.Choice.Paragraph) HandwritingContribution.setParagraphText(app, "")
+        else HandwritingContribution.setOwnText(app, "")
+        HandwritingContribution.setPosition(app, choice, 0)
+        selectBank(TrainingBank.Contribute)
     }
 
     /** 能做识别检查时返回内置模型的前 5 个候选；不是单个字、模型不认识这个字或模型不可用时返回 null。 */
@@ -483,7 +574,7 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
         }
         val s = _state.value
         if (s.index <= 0) return
-        store.setPosition(s.bank, s.index - 1)
+        savePosition(s.bank, s.index - 1)
         _state.update { it.copy(index = s.index - 1) }
     }
 
@@ -497,11 +588,16 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
         if (s.prompts.isEmpty()) return
         val next = s.index + 1
         val wrapped = next >= s.prompts.size
-        val index = if (wrapped) 0 else next
-        store.setPosition(s.bank, index)
+        val index = if (skipsWritten(s.bank)) {
+            ContributePromptDeck.firstUnwritten(s.prompts, if (wrapped) 0 else next) { (s.counts[it] ?: 0) > 0 }
+        } else if (wrapped) 0 else next
+        savePosition(s.bank, index)
         _state.update { it.copy(index = index) }
-        if (wrapped) _events.tryEmit(TrainingEvent.Message(
-            if (contribute) "全部写完了，点上方「上传」交给作者" else "这一组写完一轮了，从头再来"))
+        if (wrapped) _events.tryEmit(TrainingEvent.Message(when {
+            !contribute -> "这一组写完一轮了，从头再来"
+            choice.typed -> "填的内容写完一轮了，可以上传，或者点「换一批」"
+            else -> "全部写完了，点上方「上传」交给作者"
+        }))
     }
 
     fun importFormulaCsv(uri: Uri) {
@@ -870,7 +966,7 @@ private fun HandwritingTrainingBody(
                 Spacer(Modifier.weight(1f))
                 Text(
                     // 贡献题的条数写在下面那一行，这里只留第几题
-                    text = if (contribute && state.prompts.isNotEmpty()) "${state.index + 1}/${state.prompts.size}"
+                    text = if (contribute && state.prompts.isNotEmpty()) "第 ${state.index + 1} 题"
                     else if (state.prompts.isEmpty()) "已存 ${state.totalSamples}"
                     else "${state.index + 1}/${state.prompts.size} · 已存 ${state.totalSamples}",
                     fontSize = 13.sp,
@@ -951,6 +1047,12 @@ private fun HandwritingTrainingBody(
                 onUpload = { withConsent { viewModel.upload() } },
                 onShare = { withConsent { viewModel.export(share = true) } },
             )
+            if (contribute) ContributeChoiceRow(
+                choice = state.choice,
+                canClearOwn = state.choice.typed && state.prompts.isNotEmpty(),
+                onChoose = viewModel::selectChoice,
+                onClearOwn = { textDraft = ""; viewModel.clearOwn() },
+            )
 
             // 题目区：长题（推导、长句）加高；提示在题目下方单独一行，不压到画板
             val prompt = state.current
@@ -989,6 +1091,28 @@ private fun HandwritingTrainingBody(
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    prompt == null && contribute && state.choice.typed -> Row(
+                        verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        val paragraph = state.choice == ContributePromptDeck.Choice.Paragraph
+                        OutlinedTextField(
+                            value = textDraft,
+                            onValueChange = { textDraft = it },
+                            modifier = Modifier.weight(1f).testTag("contribute-own-input"),
+                            label = { Text(if (paragraph) "粘贴或输入一段话" else "想写的字或词，空格隔开") },
+                            singleLine = !paragraph,
+                            maxLines = if (paragraph) 3 else 1,
+                        )
+                        // 从剪贴板导入
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+                            // 空剪贴板时 pasteCustom 只提示「剪贴板里没有文字」
+                            if (text.isNullOrBlank()) viewModel.pasteCustom(null) else textDraft = text
+                        }, modifier = Modifier.testTag("contribute-own-paste")) { Text("粘贴") }
+                        Button(onClick = { if (paragraph) viewModel.setParagraph(textDraft) else viewModel.setOwn(textDraft) },
+                            enabled = textDraft.isNotBlank()) { Text("开始") }
+                    }
                     prompt == null && state.bank == TrainingBank.Text -> Row(
                         verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -1399,6 +1523,39 @@ private fun katexHtml(latex: String, color: String): String {
           if(document.fonts)document.fonts.ready.then(fit);
         </script></body></html>
     """.trimIndent()
+}
+
+/**
+ * 贡献题「写什么」：随机（全部穿插）、常用字、少用字、词语、自己输入（用户 11-12：要能自己选写什么）。
+ * 自己输入且已经出题时，右边有「换一批」重新填。
+ */
+@Composable
+private fun ContributeChoiceRow(
+    choice: ContributePromptDeck.Choice,
+    canClearOwn: Boolean,
+    onChoose: (ContributePromptDeck.Choice) -> Unit,
+    onClearOwn: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp)) {
+        Text("写什么", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            TextButton(onClick = { open = true }, modifier = Modifier.testTag("contribute-choice")) {
+                Text(choice.title)
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择写什么")
+            }
+            CompactDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (c in ContributePromptDeck.Choice.entries) CompactMenuRow(
+                    label = c.title,
+                    selected = c == choice,
+                    supportingText = c.note,
+                    onClick = { open = false; if (c != choice) onChoose(c) },
+                )
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (canClearOwn) TextButton(onClick = onClearOwn, modifier = Modifier.testTag("contribute-own-clear")) { Text("换一批") }
+    }
 }
 
 /**

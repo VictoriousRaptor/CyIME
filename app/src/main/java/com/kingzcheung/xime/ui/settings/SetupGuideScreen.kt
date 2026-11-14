@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kingzcheung.xime.ui.theme.CyMotion
 import com.kingzcheung.xime.model.BuiltinModelCatalog
 import com.kingzcheung.xime.model.FuzzyHabit
@@ -60,6 +62,7 @@ import com.kingzcheung.xime.model.SetupSource
 import com.kingzcheung.xime.model.TypingWay
 import com.kingzcheung.xime.model.VoiceUse
 import kotlinx.coroutines.Dispatchers
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -77,12 +80,15 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
     onOpenRoute: ((String) -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var facts by remember { mutableStateOf<SetupFacts?>(null) }
-    var answers by remember { mutableStateOf<SetupAnswers?>(null) }
+    // 从这页点进「性能与省电」等页面再返回时，这个界面会重新组合，remember 的回答全没了（用户 11-12）。
+    // 回答、要删的模型、开关和完成页存在跟着这一页走的 ViewModel 里，回来照原样接着显示。
+    val draft: SetupGuideDraft = viewModel()
+    var facts by remember { mutableStateOf(draft.facts) }
+    var answers by remember { mutableStateOf(draft.answers) }
     var applying by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<SetupGuide.Result?>(null) }
-    var allowMetered by remember { mutableStateOf(false) }
-    var hideDoublePinyin by remember { mutableStateOf(SetupGuidePlanner.HIDE_OTHER_DOUBLE_PINYIN_BY_DEFAULT) }
+    var result by remember { mutableStateOf(draft.result) }
+    var allowMetered by remember { mutableStateOf(draft.allowMetered) }
+    var hideDoublePinyin by remember { mutableStateOf(draft.hideDoublePinyin) }
     // 「更多配置」：从跳转页回来仍停在这一页；回答每次打开都从现在的设置读起。
     var showMore by rememberSaveable { mutableStateOf(false) }
     var moreFacts by remember { mutableStateOf<SetupMoreFacts?>(null) }
@@ -98,14 +104,24 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
     LaunchedEffect(Unit) {
         val read = withContext(Dispatchers.IO) { SetupGuide.readFacts(context) }
         facts = read
-        answers = SetupGuidePlanner.suggest(read)
+        // 回来时设备情况重新读（期间可能下好了模型），已经选过的回答不换成推荐值。
+        if (answers == null) answers = SetupGuidePlanner.suggest(read)
     }
     val plan = remember(facts, answers) {
         val f = facts; val a = answers
         if (f != null && a != null) SetupGuidePlanner.plan(f, a) else null
     }
-    // 默认全部勾上“删掉”；换了回答，方案变了就重新全选。
-    var removeIds by remember(plan) { mutableStateOf(plan?.remove?.map { it.id }?.toSet().orEmpty()) }
+    // 默认全部勾上“删掉”；换了回答，可删的那几项变了就重新全选；没变（如从别的页面回来）留着原来的勾选。
+    val removable = plan?.remove?.map { it.id }?.toSet().orEmpty()
+    var removeIds by remember(removable) { mutableStateOf(draft.removeIdsFor(removable) ?: removable) }
+    SideEffect {
+        draft.facts = facts
+        draft.answers = answers
+        draft.result = result
+        draft.allowMetered = allowMetered
+        draft.hideDoublePinyin = hideDoublePinyin
+        draft.keepRemoveIds(removable, removeIds)
+    }
     if (showMore) {
         BackHandler { showMore = false }
         // 改了的先存下，再去别的页面，回来不丢。
@@ -158,6 +174,27 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
         // 没按推荐设置就直接去「更多配置」，也算看过这一页，下次不再自动弹出。
         onOpenMore = { SetupGuide.markShown(context); showMore = true },
     )
+}
+
+/**
+ * 推荐配置页上已经选了的东西：在设置里跟着这一页的返回栈项，在首次设置里跟着 Activity。
+ * 去「性能与省电」「更多配置」里的跳转页再回来不丢；关掉这一页（返回栈弹出）才清掉，下次进来照推荐重新选。
+ */
+class SetupGuideDraft : ViewModel() {
+    var facts: SetupFacts? = null
+    var answers: SetupAnswers? = null
+    var result: SetupGuide.Result? = null
+    var allowMetered: Boolean = false
+    var hideDoublePinyin: Boolean = SetupGuidePlanner.HIDE_OTHER_DOUBLE_PINYIN_BY_DEFAULT
+    private var removable: Set<String>? = null
+    private var removeIds: Set<String> = emptySet()
+
+    /** 可删的还是同一批时返回上次的勾选。 */
+    fun removeIdsFor(removable: Set<String>): Set<String>? = removeIds.takeIf { this.removable == removable }
+    fun keepRemoveIds(removable: Set<String>, removeIds: Set<String>) {
+        this.removable = removable
+        this.removeIds = removeIds
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -378,10 +415,24 @@ private fun AnswerSection(facts: SetupFacts, answers: SetupAnswers, onAnswers: (
     GuideQuestion("打中文用哪种方式？", listOfNotNull(
         Triple(TypingWay.FULL_PINYIN, "全拼", "拼音全部打出来，如“中国”打 zhongguo；不用记键位"),
         Triple(TypingWay.DOUBLE_PINYIN, "双拼", "每个字只按两个键，如小鹤双拼“中国”打 vsgo；打得快，要先记键位"),
-        Triple(TypingWay.WUBI, "五笔", "按字形拆成字根打，不看读音；" +
-            if (facts.wubiInstalled || facts.typing == TypingWay.WUBI) "五笔方案已在${facts.device}上" else "要下载五笔86方案，约 2 MB"),
+        Triple(TypingWay.WUBI, "五笔", "按字形拆成字根打，不看读音；" + when {
+            facts.typing == TypingWay.WUBI -> "现在就在用五笔"
+            facts.wubiInstalled && facts.wubi98Installed -> "五笔86、98 都已在${facts.device}上"
+            facts.wubiInstalled -> "五笔86 已在${facts.device}上"
+            facts.wubi98Installed -> "五笔98 已在${facts.device}上"
+            else -> "要下载五笔方案，1～2 MB"
+        }),
         Triple(TypingWay.KEEP, "保持现在的${facts.typingName}", "不改打字方式").takeIf { facts.typing == TypingWay.KEEP },
     ), answers.typing, "setup-typing") { onAnswers(answers.copy(typing = it)) }
+    // 从别的打法改五笔才问哪一种（默认 86，用户 11-12）；已经在用五笔的不动。五笔只有 26 键，不问键盘，写一句为什么。
+    if (answers.typing == TypingWay.WUBI && facts.typing != TypingWay.WUBI) {
+        fun where(installed: Boolean, mb: Int) = if (installed) "已在${facts.device}上" else "要下载，约 $mb MB"
+        GuideQuestion("用哪一种五笔？", listOf(
+            Triple(SetupGuidePlanner.WUBI, "五笔86", "用的人最多的一版；" + where(facts.wubiInstalled, 2)),
+            Triple(SetupGuidePlanner.WUBI98, "五笔98", "另一版字根，方案带繁体字；" + where(facts.wubi98Installed, 1)),
+        ), answers.wubi, "setup-wubi",
+            note = "五笔只用 26 键打：14 键、九键一个键上有几组字根，打不了五笔。") { onAnswers(answers.copy(wubi = it)) }
+    }
     if (answers.typing == TypingWay.DOUBLE_PINYIN && facts.doublePinyinChoices.isNotEmpty()) {
         GuideQuestion("用哪一种双拼？", facts.doublePinyinChoices.map { choice ->
             Triple(choice.id, choice.name, "“双拼”两个字打 ${choice.example}" + if (choice.builtin) "" else "(你自己建的)")
@@ -450,6 +501,23 @@ private fun AnswerSection(facts: SetupFacts, answers: SetupAnswers, onAnswers: (
         Triple(true, "有，能省就省", "只留必需的模型，九键用精简版(首选略差)，语音空闲 ${SetupGuidePlanner.SAVER_VOICE_IDLE_MINUTES} 分钟就从内存卸掉"),
         Triple(false, "没有", "按这台${facts.device}的情况推荐"),
     ), answers.memorySaver, "setup-memory-saver") { onAnswers(answers.copy(memorySaver = it)) }
+    // 用户 11-12：选项太少。答“有”时再列现在开着、关掉能省内存的功能，多选，默认一个不选，点了才关。
+    if (answers.memorySaver && facts.memoryExtras.isNotEmpty()) {
+        Text("还可以关掉这些(现在都开着，点一下选上，按推荐设置时关掉)：",
+            style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            facts.memoryExtras.forEach { extra ->
+                val selected = extra.id in answers.memoryOff
+                GuideOption(selected, "关掉${extra.title}",
+                    extra.loss + (extra.memoryMb?.let { "；内存 +${it.roundToInt()} MB" } ?: ""),
+                    "setup-memory-off:${extra.id}", multi = true) {
+                    onAnswers(answers.copy(memoryOff = if (selected) answers.memoryOff - extra.id else answers.memoryOff + extra.id))
+                }
+            }
+        }
+    }
+    if (answers.memorySaver) Text("实际占了多少，可以在 设置 → 关于 → 存储空间 最上面的「运行内存」看。",
+        style = GuideText.note(), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** 打字方式这一块要改的：每项一句；只有主动打开开关才收起其他双拼。 */
@@ -584,7 +652,8 @@ private fun MoreEntry(onClick: () -> Unit) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("更多配置", style = GuideText.optionTitle(), color = MaterialTheme.colorScheme.primary)
-                Text("长按空格、删除键、字大小、声音振动、玻璃效果、语音标点。可以不设", style = GuideText.body(),
+                Text("滑行输入、角标滑动还是长按、上下滑方向、候选栏取消按钮、长按空格、删除键、字大小、声音振动等。可以不设",
+                    style = GuideText.body(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(12.dp))
@@ -684,6 +753,47 @@ internal fun SetupMoreContent(
 
 @Composable
 private fun MoreQuestions(facts: SetupMoreFacts, answers: SetupMoreChoices, onAnswers: (SetupMoreChoices) -> Unit) {
+    // 用户 11-12：滑行、角标滑动还是长按、上下滑方向、候选栏取消按钮问的人最多，放最前面。
+    // 滑行先问：开了滑行，字母键的滑动都用来滑词，角标只能长按，下面那题跟着变。
+    val glideLocked = facts.glideLock != null && answers.spaceHold != com.kingzcheung.xime.ui.keyboard.SpaceHoldAction.CURSOR
+    if (glideLocked) {
+        GuideHeading("要滑行输入吗？")
+        Text("${facts.glideLock}：手指在键盘上拖动已经用来移动光标。下面「长按空格」选「移动光标」，或在 设置 → 输入 → 按键与手势 里关掉它，才能开滑行。",
+            style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else GuideQuestion("要滑行输入吗？", SetupMore.glideChoices(facts.current.glide).map { choice ->
+        Triple(choice, choice.title, when (choice) {
+            com.kingzcheung.xime.model.GlideChoice.OFF -> "一个键一个键点着打"
+            com.kingzcheung.xime.model.GlideChoice.ENGLISH -> "英文 26 键手指划过字母出整词"
+            com.kingzcheung.xime.model.GlideChoice.CHINESE -> "中文全拼、双拼 26 键划一个词的拼音"
+            com.kingzcheung.xime.model.GlideChoice.BOTH -> "英文划出整词，中文全拼、双拼 26 键划一个词的拼音"
+        } + if (choice != com.kingzcheung.xime.model.GlideChoice.OFF) "；字母键的滑动都用来滑词，角标改成长按输入" else "")
+    }, answers.glide, "setup-more-glide") { onAnswers(answers.copy(glide = it)) }
+
+    val upper = if (answers.reverseSwipe) "上滑" else "下滑"
+    val lower = if (answers.reverseSwipe) "下滑" else "上滑"
+    if (SetupMore.cornerLockedByGlide(answers.glide)) {
+        GuideHeading("按键角标的符号和数字")
+        Text("开着滑行，字母键的滑动都用来滑词：按住字母键输入上方角标，下方角标不再显示。",
+            style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else GuideQuestion("按键角标的符号和数字怎么输入？", com.kingzcheung.xime.ui.keyboard.CornerInputChoice.entries.map { choice ->
+        Triple(choice, choice.label, when (choice) {
+            com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE -> "${upper}出上角标，${lower}出下角标；长按没有反应"
+            com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE -> "${upper}出上角标，${lower}出下角标；长按弹出这个字母的大写和带声调的写法"
+            com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS -> "按住一下出上角标，${lower}出下角标；九键长按出数字"
+        })
+    }, answers.corner, "setup-more-corner") { onAnswers(answers.copy(corner = it)) }
+
+    GuideQuestion("上下滑的方向", listOf(
+        Triple(false, "下滑出上角标", "上滑出下角标；删除键" + if (facts.reverseDeleteSwipe) "上滑清空、下滑撤回" else "下滑清空、上滑撤回"),
+        Triple(true, "上滑出上角标", "下滑出下角标；删除键" + if (facts.reverseDeleteSwipe) "下滑清空、上滑撤回" else "上滑清空、下滑撤回"),
+    ), answers.reverseSwipe, "setup-more-reverse",
+        note = "就是设置里的「反转上下滑方向」。") { onAnswers(answers.copy(reverseSwipe = it)) }
+
+    GuideQuestion("候选栏左边要取消按钮吗？", listOf(
+        Triple(true, "要", "打字时候选栏最左边有个左箭头，点它取消当前输入"),
+        Triple(false, "不要", "候选词从最左边开始，能多放一个词"),
+    ), answers.cancelButton, "setup-more-cancel") { onAnswers(answers.copy(cancelButton = it)) }
+
     GuideQuestion("长按空格做什么？", com.kingzcheung.xime.ui.keyboard.CursorChoices.spaceHoldChoices.map { action ->
         Triple(action, action.label, when (action) {
             com.kingzcheung.xime.ui.keyboard.SpaceHoldAction.CURSOR -> "按住空格左右滑，光标跟着走"
@@ -699,8 +809,10 @@ private fun MoreQuestions(facts: SetupMoreFacts, answers: SetupMoreChoices, onAn
         Triple(true, "退格直接删字", "第一下就删字"),
     ), answers.deleteSkipsAssociation, "setup-more-delete") { onAnswers(answers.copy(deleteSkipsAssociation = it)) }
 
-    val clear = if (facts.reverseSwipe) "上滑" else "下滑"
-    val undo = if (facts.reverseSwipe) "下滑" else "上滑"
+    // 跟着上面「上下滑的方向」那题走；删除键单独反向开着时再反过来。
+    val deleteReversed = answers.reverseSwipe != facts.reverseDeleteSwipe
+    val clear = if (deleteReversed) "上滑" else "下滑"
+    val undo = if (deleteReversed) "下滑" else "上滑"
     GuideQuestion("删除键${clear}清空时", listOf(
         Triple(false, "清空整个输入框", "光标前后的字都清；清完立刻${undo}能撤回"),
         Triple(true, "只清空光标前的内容", "光标后面的字留着"),

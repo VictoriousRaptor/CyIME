@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kingzcheung.xime.handwriting.training.ContributePromptDeck
 import com.kingzcheung.xime.handwriting.training.HandwritingContribution
 import com.kingzcheung.xime.handwriting.training.TrainingPoint
 import com.kingzcheung.xime.handwriting.training.TrainingPromptType
@@ -72,6 +73,64 @@ class HandwritingTrainingMergeTest {
         rule.onNodeWithTag("contribute-status").assertExists()
         rule.onNodeWithText("照着上面的字写在框里", substring = true).assertExists()
         rule.onNodeWithTag("contribute-upload").assertIsNotEnabled()
+    }
+
+    /** 用户 11-12：贡献样本要能自己选写什么——随机、只写某一类，或者自己输入的字词。 */
+    @Test fun contributeLetsWriterChooseWhatToWrite() {
+        HandwritingContribution.setConsented(context)
+        rule.setContent { MaterialTheme { HandwritingTrainingScreen(onBack = {}, contribute = true, devTools = false) } }
+        rule.waitForIdle()
+        rule.onNodeWithTag("contribute-choice").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("自己输入").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("contribute-own-input").performTextInput("龘 你好")
+        rule.onNodeWithText("开始").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("龘").assertExists()
+        rule.onNodeWithText("第 1 题").assertExists()
+        rule.onNodeWithText("自己选的").assertExists()
+        assertEquals(ContributePromptDeck.Choice.Own, HandwritingContribution.choice(context))
+        assertEquals("龘 你好", HandwritingContribution.ownText(context))
+        // 换一批：回到填词
+        rule.onNodeWithTag("contribute-own-clear").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("contribute-own-input").assertExists()
+        // 只写词语
+        rule.onNodeWithTag("contribute-choice").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("词语").performClick()
+        rule.waitForIdle()
+        assertEquals(ContributePromptDeck.Choice.Words, HandwritingContribution.choice(context))
+        rule.onNodeWithText("像平时手写输入那样写").assertExists()
+    }
+
+    /** 用户 11-13：字母、假名、日语、一段话、公式也能选；一段话可以从剪贴板导入。 */
+    @Test fun contributeOffersOtherScriptsAndParagraphFromClipboard() {
+        HandwritingContribution.setConsented(context)
+        rule.setContent { MaterialTheme { HandwritingTrainingScreen(onBack = {}, contribute = true, devTools = false) } }
+        rule.waitForIdle()
+        for (title in listOf("假名", "英文字母", "日文汉字", "数学符号", "公式")) {
+            rule.onNodeWithTag("contribute-choice").performClick()
+            rule.waitForIdle()
+            rule.onNodeWithText(title).performClick()
+            rule.waitForIdle()
+            assertEquals(title, HandwritingContribution.choice(context).title)
+            rule.onNodeWithText("第 1 题").assertExists()
+            rule.onNodeWithTag("contribute-own-input").assertDoesNotExist()
+        }
+        rule.onNodeWithTag("contribute-choice").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("一段话").performClick()
+        rule.waitForIdle()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("t", "鑫淼 あい"))
+        rule.onNodeWithTag("contribute-own-paste").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("开始").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("鑫").assertExists()
+        assertEquals("鑫淼 あい", HandwritingContribution.paragraphText(context))
     }
 
     /**

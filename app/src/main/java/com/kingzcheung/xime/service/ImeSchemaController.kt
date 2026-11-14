@@ -235,7 +235,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                     prefs.edit().putString(com.kingzcheung.xime.settings.CustomKeyboardLayouts.STATUS, "布局已应用，可从中文输入模式选择").apply()
                 }
             } catch (e: Exception) {
-                prefs.edit().putString(com.kingzcheung.xime.settings.CustomKeyboardLayouts.STATUS, "已保存，但应用失败：${e.message}；可在「已安装的方案」点「应用方案更改」重试").apply()
+                prefs.edit().putString(com.kingzcheung.xime.settings.CustomKeyboardLayouts.STATUS, "已保存，但应用失败：${e.message}；可在「已安装的方案」点「重新部署(修复)」重试").apply()
             }
         }
     }
@@ -310,7 +310,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 FileLogger.e(XimeInputMethodService.TAG, "Failed to reload config", e)
                 if (RimeConfigHelper.deploymentProblem(service).isEmpty()) RimeConfigHelper.recordFailure(service, e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(service, "方案部署失败，到「已安装的方案」点「应用方案更改」可看原因", Toast.LENGTH_LONG).show()
+                    Toast.makeText(service, "方案部署失败，到「已安装的方案」点「重新部署(修复)」可看原因", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -732,7 +732,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 if (!service.rimeEngine.switchSchema(schemaId)) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(service, if (service.rimeEngine.isMaintaining())
-                            "词库部署中，请稍后再切换方案" else "方案未部署，请在「已安装的方案」点「应用方案更改」后再试", Toast.LENGTH_SHORT).show()
+                            "词库部署中，请稍后再切换方案" else "方案还没应用好，请稍等再试；一直不行到「已安装的方案」点「重新部署(修复)」", Toast.LENGTH_SHORT).show()
                     }
                     return@postRimeJob
                 }
@@ -779,7 +779,9 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
             
             withContext(Dispatchers.Main) {
                 if (success) {
-                    Toast.makeText(service, "$schemaId 下载成功，请在「已安装的方案」点「应用方案更改」", Toast.LENGTH_LONG).show()
+                    // 下载好的方案自动编译进去（#340），不用再去设置里点。
+                    com.kingzcheung.xime.rime.SchemaChangeApplier.request(service)
+                    Toast.makeText(service, "$schemaId 下载成功，正在应用", Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(service, "$schemaId 下载失败", Toast.LENGTH_SHORT).show()
                 }

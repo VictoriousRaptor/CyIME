@@ -64,3 +64,12 @@
 从东到西	cong dong dao xi	2000
 从西到东	cong xi dao dong	2000
 从粗到细	cong cu dao xi	2000
+# ime5 (2026-11-11), sentences 豆包 typed right and CyIME did not; the full model's lexicon (万象, cut to 500k) dropped
+# 艳门照 and 天之蓝, and rime-ice lacks 艳门照 and 积食. 积食 goes on the first page of jishi (after 技师), not first.
+艳门照	yan men zhao	500
+天之蓝	tian zhi lan	500
+积食	ji shi	7000
+收个尾	shou ge wei	500
+只见上不见下	zhi jian shang bu jian xia	300
+# 翻来覆去 sank to 4567 in the chat blend; the full model then wrote 翻来复去. Back to its rime-ice count.
+翻来覆去	fan lai fu qu	15765

@@ -17,7 +17,7 @@ class KeyTipsTest {
         assertTrue(t.contains("按住 !@#"))
         assertTrue(t.contains("按住 !@# 点回车|发送消息"))
         assertTrue(t.contains("按住 !@# 长按空格拖动|选中文字"))
-        assertTrue(t.contains("按住 !@# 拖到数字键上松手|1 关闭、2 刷新、3 重做、4 全选、5 保存、6 剪切、7 撤销、8 复制、9 粘贴"))
+        assertTrue(t.contains("按住 !@# 拖到数字键上松手|1 关闭、2 刷新、3 重做、4 全选、5 剪切、6 查找、7 撤销、8 复制、9 粘贴"))
         assertTrue(t.contains("1.0 秒内"))
         assertTrue(t.contains("下拉字母键|输入键上方的角标；上拉输入下方的角标。"))
         assertTrue(t.contains("删除键下拉|"))

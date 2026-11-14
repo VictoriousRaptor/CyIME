@@ -102,4 +102,20 @@ class PerformanceProfileTest {
         assertEquals(high, PerformanceProfile.applied(PerformanceSettings(false, false, 1, 1), PerformanceTier.HIGH))
         PerformanceTier.entries.forEach { assertEquals(it, PerformanceProfile.matching(PerformanceProfile.applied(everything, it))) }
     }
+
+    @Test fun onlyTheLowTierTurnsTheKeyGapLightOff() {
+        // 键缝动效默认关，档位只关不开：低配关掉，中配、高配照原样，哪一档都不会替用户打开。
+        val lit = PerformanceSettings(true, true, 0, 0, keyGapLight = true)
+        assertFalse(PerformanceProfile.applied(lit, PerformanceTier.LOW).keyGapLight)
+        assertTrue(PerformanceProfile.applied(lit, PerformanceTier.MEDIUM).keyGapLight)
+        assertTrue(PerformanceProfile.applied(lit, PerformanceTier.HIGH).keyGapLight)
+        PerformanceTier.entries.forEach {
+            assertFalse(PerformanceProfile.applied(lit.copy(keyGapLight = false), it).keyGapLight)
+            assertEquals(it, PerformanceProfile.matching(PerformanceProfile.applied(lit, it)))
+        }
+        // 低配档上自己把它打开了，就不再是低配。
+        assertNull(PerformanceProfile.matching(PerformanceProfile.presets.getValue(PerformanceTier.LOW).copy(keyGapLight = true)))
+        assertEquals(PerformanceTier.MEDIUM,
+            PerformanceProfile.matching(PerformanceProfile.presets.getValue(PerformanceTier.MEDIUM).copy(keyGapLight = true)))
+    }
 }

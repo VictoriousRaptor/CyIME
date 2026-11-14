@@ -20,6 +20,8 @@ data class InputUIState(
     val themeId: String = SettingsPreferences.defaultKeyboardTheme,
     val isSttEnabled: Boolean = false,
     val handwritingExpanded: Boolean = false,
+    /** 这次全屏是按记忆恢复的（不是点「全屏手写」）：直接全屏，不播展开动画。 */
+    val handwritingRestored: Boolean = false,
     val clipboardImagesExpanded: Boolean = false,
     val keyboardHeightDp: Int = 0,
     val keyboardBottomPaddingDp: Int = 0,

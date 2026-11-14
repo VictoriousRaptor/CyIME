@@ -24,8 +24,8 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
             // 横竖屏分开记布局：这个方向记的条目（横屏 26 键、竖屏九键），关着时就是 saved。
             val stored = if (service.editorInputPolicy.scoped) saved
                 else OrientationLayouts.prepared(service, saved, InputModes.available(service.uiState.value.schemas))
-            val selectable = if (stored.isNotBlank() && stored !in available && stored != InputModes.ENGLISH &&
-                (isHandwritingSchema(stored) || SchemaManager.isSchemaCompiled(service, stored))) available + stored else available
+            val selectable = selectableWithStored(stored, available, { SchemaManager.getEnabledSchemas(service) },
+                ::isHandwritingSchema) { SchemaManager.isSchemaCompiled(service, it) }
             val policy = service.editorInputPolicy
             var target = policy.schemaOverride ?: LanguagePreferences.nativeSchema(stored, selectable, LanguagePreferences.enabled(service))
             if (policy.directInput && isHandwritingSchema(target)) {

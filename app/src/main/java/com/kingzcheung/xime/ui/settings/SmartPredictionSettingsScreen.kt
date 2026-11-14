@@ -177,7 +177,7 @@ fun SmartPredictionSettingsContent(
                         )
                         AssociationModeRow(
                             title = "连续联想",
-                            subtitle = "选了联想词后接着出下一批联想词",
+                            subtitle = "选了联想词后接着出下一批，接不上时自动停",
                             isSelected = !singleMode,
                             onClick = {
                                 singleMode = false

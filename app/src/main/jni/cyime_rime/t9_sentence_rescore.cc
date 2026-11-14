@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -14,8 +15,61 @@
 
 namespace rime {
 
+namespace {
+// Whether the typed letters read in full syllables without any correction, the last syllable included
+// (aniu reads a'niu, so the corrected 按钮 never leads 阿牛). Abbreviated or unreadable letters do not count,
+// except a mixed word's syllable typed whole (bzhan for B站), which is spelled as an abbreviation.
+bool TypedReadsInFull(const SyllableGraph& graph) {
+  const size_t end = graph.interpreted_length;
+  if (end == 0) return false;
+  std::set<size_t> reached{0};
+  for (const auto& from : graph.edges) {
+    if (!reached.count(from.first)) continue;
+    for (const auto& to : from.second)
+      for (const auto& spelling : to.second)
+        if (!spelling.second.is_correction &&
+            (spelling.second.type <= kFuzzySpelling ||
+             spelling.second.cyime_whole_mixed)) {
+          reached.insert(to.first);
+          break;
+        }
+  }
+  return reached.count(end) > 0;
+}
+
+// Whether the sentence's only corrections lie in its last word and that word spans at least three letters
+// (nihso: 你好 through hso -> hao; jintisn: 今天; xiexir: 谢谢). A one- or two-letter tail is still being typed
+// and a correction there only makes particles (henhaok -> 很好哦), so it never counts.
+bool CorrectedOnlyAtTail(const T9ScriptQuery& q, const Sentence& sentence) {
+  const auto& words = sentence.components();
+  const auto& lengths = sentence.word_lengths();
+  if (words.empty() || lengths.size() != words.size()) return false;
+  const size_t end = sentence.end() - q.start;
+  const size_t last_length = lengths.back();
+  if (last_length < 3 || last_length > end) return false;
+  const size_t last_start = end - last_length;
+  if (!q.IsCorrection(words.back().code, end, last_start)) return false;
+  if (last_start == 0) return true;
+  const Code& code = sentence.code();
+  const size_t last_syllables = words.back().code.size();
+  if (last_syllables > code.size()) return false;
+  Code prefix;
+  prefix.assign(code.begin(), code.end() - static_cast<std::ptrdiff_t>(last_syllables));
+  return !q.IsCorrection(prefix, last_start);
+}
+}  // namespace
+
+bool T9InitialsOnly(const string& input) {
+  if (input.size() < 2) return false;
+  for (char ch : input)
+    if (ch < 'a' || ch > 'z' || std::strchr("aeiouv", ch)) return false;
+  return true;
+}
+
 void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool ngram_sentence_start,
-                        size_t keys_per_syllable, double rime_weight, Poet* poet,
+                        size_t keys_per_syllable, double rime_weight, double tail_correction_margin,
+                        double slip_margin, int initials_choices, double initials_margin,
+                        const string& initials_first, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences) {
@@ -42,8 +96,10 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     groups = keys / keys_per_syllable;
     consonants_only = false;
   }
-  // Initials and short abbreviations (zjqa, zdky) keep Rime's dictionary order.
-  if (ngram && !consonants_only && groups >= 2) {
+  // Initials and short abbreviations (zjqa, zdky) keep Rime's dictionary order, unless t9/initials_choices asks for
+  // the computed score there too.
+  const bool initials = consonants_only && !keys_per_syllable && initials_choices > 0 && T9InitialsOnly(in);
+  if (ngram && (initials || (!consonants_only && groups >= 2))) {
     // Substring -> model word id, kept across keys (consecutive n-bests share most substrings).
     thread_local std::unordered_map<string, int32_t> ids;
     thread_local const T9NgramModel* ids_model = nullptr;
@@ -70,6 +126,34 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         at.push_back(std::min(i, text.size()));
       }
       const size_t n = at.size() - 1;
+      // The word model has no Latin letters, so a mixed word (B站, C盘, AI) would be scored as an unseen
+      // letter and the sentence lose to any Han reading (不站上面的视频). Such a word is scored once whole, by
+      // its dictionary weight (ln of its frequency, as Rime weighs it) brought to the model's scale, besides the
+      // splits of its text. The two scales differ by about this much: over the 305,851 base.dict words (weight
+      // ≥ 20) the model has, ln P(word) − Rime's ln(weight / 1e8) has median −3.75 (p25 −4.67, p75 −2.41).
+      // That is a word's frequency alone; the Han words around it are scored after the words before them, which
+      // in chat raises a word by about kInContext over its frequency (ln P(word | the two words before) − ln P(word)
+      // over the fixture chat texts and sentences, 393 words: median 2.10, mean 2.25). Without it a mixed word lost
+      // to readings the model knows only as pieces (我上班站看了 over 我上B站看了, 帮我拍一下这张图 over 帮我P一下这张图).
+      constexpr double kInContext = 2.1;
+      constexpr double kDictionaryToModel = -3.75 + kInContext;
+      struct Whole { size_t start, end; double weight; };
+      vector<Whole> wholes;
+      {
+        size_t byte = 0;
+        for (const auto& word : sentence.components()) {
+          const size_t from = byte;
+          byte += word.text.size();
+          if (std::none_of(word.text.begin(), word.text.end(),
+                           [](char ch) { return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); }))
+            continue;
+          const auto first = std::lower_bound(at.begin(), at.end(), from);
+          const auto last = std::lower_bound(at.begin(), at.end(), byte);
+          if (first == at.end() || last == at.end() || *first != from || *last != byte) continue;
+          wholes.push_back({static_cast<size_t>(first - at.begin()), static_cast<size_t>(last - at.begin()),
+                            word.weight + kDictionaryToModel});
+        }
+      }
       struct State { double value; int32_t prev2, prev1; bool started; };
       constexpr size_t kStates = 4;
       auto log_add = [](double a, double b) {
@@ -85,9 +169,12 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         for (size_t start = end > 8 ? end - 8 : 0; start < end; ++start) {
           if (states[start].empty()) continue;
           const int32_t id = word_id(text.substr(at[start], at[end] - at[start]));
-          if (id == ::T9NgramModel::kUnseen && end - start > 1) continue;
+          const auto whole = id == ::T9NgramModel::kUnseen
+              ? std::find_if(wholes.begin(), wholes.end(), [&](const Whole& w) { return w.start == start && w.end == end; })
+              : wholes.end();
+          if (id == ::T9NgramModel::kUnseen && end - start > 1 && whole == wholes.end()) continue;
           for (const State& from : states[start]) {
-            const double value = from.value + (from.started
+            const double value = from.value + (whole != wholes.end() ? whole->weight : from.started
                 ? ngram->LogProb3(from.prev2, from.prev1, id) : ngram->Start(id, ngram_sentence_start));
             const State next{value, from.started ? from.prev1 : root, id, true};
             // One state per last word (it decides the next transition), the best kStates kept.
@@ -114,6 +201,38 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       }
       return total;
     };
+    if (initials) {
+      // Initials only (2026-11-13): whole dictionary words and sentences made of words are ordered by the same
+      // computed score as full input, so a common combination (wmjs 我们就是, xydj 需要多久) leads a rarer dictionary
+      // word (文明建设, 需要大家) by its frequency and nothing else. The translator added the leading whole words as
+      // one-word sentences. Corrected readings stay out, as for full input.
+      deque<an<Sentence>> pool;
+      std::set<string> seen;
+      for (const auto& sentence : *sentences)
+        if (!corrected(sentence) && seen.insert(sentence->text()).second) pool.push_back(sentence);
+      vector<std::pair<double, an<Sentence>>> ranked;
+      for (const auto& sentence : pool)
+        ranked.emplace_back(score(*sentence) + rime_weight * sentence->weight(), sentence);
+      if (ranked.empty()) { sentences->clear(); sentences->push_back(chosen); return; }
+      // The first choice of the old order (the dictionary's first word, or Rime's first sentence when no word has
+      // these initials) keeps its place unless another candidate's score is higher by the margin: near a tie the
+      // dictionary count and the word model disagree both ways (jyb 进一步 / 加油吧), and a word that was right
+      // must not move for that.
+      const string kept = initials_first.empty() ? ranked.front().second->text() : initials_first;
+      std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      if (initials_margin > 0 && ranked.front().second->text() != kept) {
+        const auto first = std::find_if(ranked.begin(), ranked.end(),
+                                        [&](const auto& item) { return item.second->text() == kept; });
+        if (first != ranked.end() && ranked.front().first - first->first < initials_margin)
+          std::rotate(ranked.begin(), first, first + 1);
+      }
+      sentences->clear();
+      for (const auto& item : ranked) {
+        if (sentences->size() >= static_cast<size_t>(initials_choices)) break;
+        sentences->push_back(item.second);
+      }
+      return;
+    }
     // A typo correction never wins on the word model alone. Corrected sentences would also take
     // n-best places from typed readings (qunawanle lost 你去哪玩了 to 你去哪完了 once swapped letters
     // were corrections), so the choice is among sentences made from the same graph without
@@ -162,6 +281,49 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence)) continue;
         const double value = score(*sentence) + rime_weight * sentence->weight();
+        if (value > fixed_score) { fixed_score = value; fixed = sentence; }
+      }
+      if (fixed) {
+        sentences->clear();
+        sentences->push_back(fixed);
+        sentences->push_back(chosen);
+        return;
+      }
+    }
+    // A slip in the last syllable (nihso, jintisn, xiexir, nihap): the typed letters only read as abbreviations
+    // (你受, 近体是你, 歇息人), which MarkStrayInitials leaves alone because the last syllable may still be typed.
+    // The corrected sentence leads when the typed letters cannot be read in full, its corrections are all in a
+    // last word of three letters or more, and it beats the typed choice by `tail_correction_margin`
+    // (t9/tail_correction_margin, ln units; 0 keeps the typed reading first as before). The typed choice follows.
+    if (tail_correction_margin > 0 && q.enable_correction && std::isfinite(chosen_score) && !corrected(chosen) &&
+        !TypedReadsInFull(q.syllables)) {
+      an<Sentence> tail;
+      double tail_score = -std::numeric_limits<double>::infinity();
+      for (const auto& sentence : *sentences) {
+        if (!corrected(sentence) || !CorrectedOnlyAtTail(q, *sentence)) continue;
+        const double value = score(*sentence) + rime_weight * sentence->weight();
+        if (value > tail_score) { tail_score = value; tail = sentence; }
+      }
+      if (tail && tail_score > chosen_score + tail_correction_margin) {
+        sentences->clear();
+        sentences->push_back(tail);
+        sentences->push_back(chosen);
+        return;
+      }
+    }
+    // A slip anywhere in a sentence (2026-11-13, nichifanoema: 你吃饭哦饿吗 led 你吃饭了吗). Pinyin is dense, so the
+    // letters of a slip nearly always still read as something and the typed reading kept the first place whatever it
+    // said. A corrected sentence among Rime's n-best now leads when the word model finds it more likely than the
+    // typed choice by `slip_margin` for every corrected syllable (t9/slip_correction_margin, ln units; 0: off).
+    // The typed choice follows.
+    if (slip_margin > 0 && q.enable_correction && std::isfinite(chosen_score) && !corrected(chosen)) {
+      an<Sentence> fixed;
+      double fixed_score = chosen_score;
+      for (const auto& sentence : *sentences) {
+        if (!corrected(sentence)) continue;
+        const string marks = sentence->correction_marks();
+        const auto slips = std::max<std::ptrdiff_t>(1, std::count(marks.begin(), marks.end(), '='));
+        const double value = score(*sentence) + rime_weight * sentence->weight() - slip_margin * slips;
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
       if (fixed) {

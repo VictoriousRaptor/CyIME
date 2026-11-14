@@ -45,8 +45,13 @@ object ImportManager {
     fun isPluginFile(name: String): Boolean =
         name.endsWith(".xipk", ignoreCase = true)
 
-    /** 从 URI 导入（文件选择器、分享等）。按文件名自动路由。 */
-    suspend fun import(context: Context, uri: Uri): ImportResult = withContext(Dispatchers.IO) {
+    /** 从 URI 导入（文件选择器、分享等）。按文件名自动路由；方案、词库装好后自动应用（#340），不用再点「应用方案更改」。 */
+    suspend fun import(context: Context, uri: Uri): ImportResult = route(context, uri).also { result ->
+        if (result is ImportResult.Content && result.success && result.installedDirect)
+            com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
+    }
+
+    private suspend fun route(context: Context, uri: Uri): ImportResult = withContext(Dispatchers.IO) {
         val displayName = queryDisplayName(context, uri)
             ?: return@withContext ImportResult.Failed("无法识别文件名")
         val name = SchemaManager.sanitizeDisplayName(displayName)
@@ -84,7 +89,7 @@ object ImportManager {
                 val packageId = r.packageId
                 if (r.success && packageId != null) installArchive(context, packageId, archiveTitle(name))
                 else ImportResult.Content(r.success, r.installedDirect,
-                    message = if (r.success && r.installedDirect) "已导入，点「应用方案更改」生效" else if (r.success) "导入成功" else "导入失败")
+                    message = if (r.success && r.installedDirect) "已导入，正在应用" else if (r.success) "导入成功" else "导入失败")
             }
         }
     }
@@ -98,7 +103,7 @@ object ImportManager {
                     append("已导入词库「$title」，由引用它的方案在部署时加载")
                 else if (install.resourcesOnly)
                     append("「$title」只含配套文件，没有可启用的 .schema.yaml 方案")
-                else append("已安装「$title」，点「应用方案更改」生效")
+                else append("已安装「$title」，正在应用，稍等就能在键盘上用")
                 if (install.parseFailures.isNotEmpty()) append("\n" + install.parseFailures.joinToString("\n"))
                 if (install.unresolvedDeps.isNotEmpty())
                     append("\n请补齐方案引用的文件：" + install.unresolvedDeps.joinToString("、"))

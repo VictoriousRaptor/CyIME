@@ -48,6 +48,10 @@ internal fun ReorderableToolbar(
     val edge = with(LocalDensity.current) { 24.dp.toPx() }
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val inlineEditor = LocalInlineQuickActionEditor.current
+    // The inline editor already owns the draft order; render it in the same frame so
+    // placement animations see the old and new slots as one change.
+    val displayedOrder = if (inlineEditor?.active == true || dragged == null) ids else order
     LaunchedEffect(ids) { if (dragged == null) order = ids }
     fun moveToPointer() {
         val source = dragged ?: return
@@ -65,6 +69,21 @@ internal fun ReorderableToolbar(
             delay(30)
         }
     }
+    LaunchedEffect(inlineEditor?.dragging) {
+        while (inlineEditor?.dragging != null) {
+            val point = inlineEditor.pointer
+            val delta = if (point.y !in rowBounds.top..rowBounds.bottom) 0f else when {
+                point.x < rowBounds.left + edge -> -8f
+                point.x > rowBounds.right - edge -> 8f
+                else -> 0f
+            }
+            if (delta != 0f && scroll.scrollBy(delta) != 0f) {
+                withFrameNanos { }
+                inlineEditor.refreshHover()
+            }
+            delay(30)
+        }
+    }
     BoxWithConstraints(modifier.testTag("toolbar-order-row").onGloballyPositioned { rowBounds = it.boundsInRoot() }
         .pointerInput(onReorder != null) {
             if (save != null) awaitEachGesture {
@@ -73,6 +92,8 @@ internal fun ReorderableToolbar(
                 var completed = false
                 val timer = scope.launch {
                     delay(2000L)
+                    // 按着的是带长按列表的按钮、列表正开着：手指在选语言，不拖走按钮
+                    if (ToolbarPressMenuGate.open) return@launch
                     pointer = rowBounds.topLeft + down.position
                     dragged = order.firstOrNull { bounds[it]?.contains(pointer) == true }
                     if (dragged != null) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -98,10 +119,10 @@ internal fun ReorderableToolbar(
             }
         }) {
         // 每个图标占等宽一格，整格可点；放不下时按最小格宽横向滚动。
-        val slotWidth = maxOf(maxWidth / order.size.coerceAtLeast(1), 36.dp)
-        Row(Modifier.horizontalScroll(scroll).widthIn(min = maxWidth),
+        val slotWidth = maxOf(maxWidth / displayedOrder.size.coerceAtLeast(1), 36.dp)
+        Row(Modifier.horizontalScroll(scroll, enabled = inlineEditor?.dragging == null).widthIn(min = maxWidth),
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            order.forEach { id ->
+            displayedOrder.forEach { id ->
                 val action = actions.firstOrNull { it.item.id == id } ?: return@forEach
                 key(id) {
                     Box(Modifier.width(slotWidth).testTag("toolbar-slot")

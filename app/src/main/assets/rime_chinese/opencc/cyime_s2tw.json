@@ -21,6 +21,10 @@
         {
           "type": "ocd2",
           "file": "STPhrases_GeneratedFromRegionalPhrases.ocd2"
+        },
+        {
+          "type": "text",
+          "file": "CyimeSurnames.txt"
         }
       ]
     }
@@ -42,6 +46,10 @@
               {
                 "type": "ocd2",
                 "file": "STPhrases_GeneratedFromRegionalPhrases.ocd2"
+              },
+              {
+                "type": "text",
+                "file": "CyimeSurnames.txt"
               }
             ]
           },

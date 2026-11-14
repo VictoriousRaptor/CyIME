@@ -21,11 +21,17 @@ class EditorSessionInputPolicyTest {
         assertTrue(EditorInfoClassifier.isTerminalEditor(shell))
         assertTrue(EditorInfoClassifier.isSecretEditor(shell))
         assertTrue(com.kingzcheung.xime.settings.IncognitoState.isSensitiveEditor(shell))
-        for (password in listOf(field(termius, 0x81, 0x50000001), field(termius, 0x91, EditorInfo.IME_ACTION_DONE),
-            field("other.editor", 0x91, 0x50000001), field(termius, 0x12, 0x50000001))) {
+        for (password in listOf(field(termius, 0x81, 0x50000001), field(termius, 0x12, 0x50000001))) {
             assertFalse(EditorInfoClassifier.isTerminalEditor(password))
             assertTrue(session.begin(password, false, false, "rime_ice").isAsciiMode)
             assertFalse(session.choose(false))
+        }
+        // 可见密码框（Termius 登录页、别的应用的代码编辑器）先给英文，可以切回中文，仍按密码框不学词。
+        for (visible in listOf(field(termius, 0x91, EditorInfo.IME_ACTION_DONE), field("other.editor", 0x91, 0x50000001))) {
+            assertFalse(EditorInfoClassifier.isTerminalEditor(visible))
+            assertTrue(EditorInfoClassifier.isSecretEditor(visible))
+            assertTrue(session.begin(visible, false, false, "rime_ice").isAsciiMode)
+            assertTrue(session.choose(false))
         }
     }
     private fun editor(type: Int, id: Int = 1) = EditorInfo().apply {
@@ -37,7 +43,6 @@ class EditorSessionInputPolicyTest {
     @Test fun allPasswordVariationsLockDirectAsciiWithoutSavingLanguage() {
         val types = listOf(
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD,
         )
@@ -59,6 +64,71 @@ class EditorSessionInputPolicyTest {
             session.completePreparation(restored.isAsciiMode, restored.currentSchemaId)
             assertNull(session.engineAsciiOverride())
         }
+    }
+
+    /** 用户 11-13：写代码的软件（关联想用 VISIBLE_PASSWORD）被锁成英文，切不回中文。 */
+    @Test fun visiblePasswordCodeEditorsStartEnglishButCanSwitchToChineseForThisFieldOnly() {
+        val code = editor(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
+            InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+        val session = EditorSessionInputPolicy()
+        assertTrue(session.begin(code, false, false, "rime_ice").isAsciiMode)
+        assertEquals(EditorFieldPolicy.Kind.VISIBLE_PASSWORD, session.field.kind)
+        assertTrue(session.directInput)
+        assertFalse(session.locksNativeInput)
+        assertTrue(session.field.allowsNativeInput)
+        assertTrue(session.choose(false, "rime_ice"))
+        assertFalse(session.directInput)
+        // 同一个框重启连接（编辑器刷新）不丢中文。
+        assertFalse(session.begin(code, true, false, "rime_ice").isAsciiMode)
+        // 离开后原来的语言照旧，下一个可见密码框又先给英文。
+        assertFalse(session.begin(editor(InputType.TYPE_CLASS_TEXT, 2), false, false, "rime_ice").isAsciiMode)
+        assertTrue(session.begin(editor(code.inputType, 3), false, false, "rime_ice").isAsciiMode)
+        // 英文时照密码框直接上屏：只收半角可见字符。
+        assertEquals("a", session.field.typedLiteral("a"))
+        assertTrue(session.field.typedLiteral("中").isEmpty())
+    }
+
+    /** 用户 11-13（Cxxdroid）：代码编辑器、终端、命令行一类的输入框都不能锁成只能打英文。 */
+    @Test fun codeEditorsAndTerminalsNeverLockOutChinese() {
+        val session = EditorSessionInputPolicy()
+        // 终端（TYPE_NULL、Termux 不带类别的可见密码）：不改语言，中文照常（编码显示在候选栏，上屏走 commitText）。
+        for (type in listOf(InputType.TYPE_NULL,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)) {
+            val terminal = editor(type)
+            assertTrue(EditorInfoClassifier.isTerminalEditor(terminal))
+            assertFalse(session.begin(terminal, false, false, "rime_ice").isAsciiMode)
+            assertFalse(session.scoped)
+            assertFalse(session.locksNativeInput)
+            assertFalse(session.directInput)
+        }
+        // 关联想、多行的普通文本框：不受限。
+        for (type in listOf(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+                InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE)) {
+            assertFalse(session.begin(editor(type, 2), false, false, "rime_ice").isAsciiMode)
+            assertFalse(session.scoped)
+        }
+        // 借密码类型的多行编辑器：先给英文，能切中文；可见密码同样。
+        for (variation in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)) {
+            val code = editor(InputType.TYPE_CLASS_TEXT or variation or InputType.TYPE_TEXT_FLAG_MULTI_LINE, 3)
+            assertTrue(session.begin(code, false, false, "rime_ice").isAsciiMode)
+            assertFalse(session.locksNativeInput)
+            assertTrue(session.choose(false, "rime_ice"))
+            assertFalse(session.directInput)
+        }
+        // 网址框（有的编辑器用它关联想）：先给英文也能切中文。
+        val uri = editor(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_MULTI_LINE, 4)
+        session.begin(uri, false, false, "rime_ice")
+        assertFalse(session.locksNativeInput)
+        // 真正的密码框（单行）照旧锁英文。
+        for (variation in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) {
+            val password = editor(InputType.TYPE_CLASS_TEXT or variation, 5)
+            assertTrue(session.begin(password, false, false, "rime_ice").isAsciiMode)
+            assertTrue(session.locksNativeInput)
+            assertFalse(session.choose(false, "rime_ice"))
+        }
+        assertTrue(EditorFieldPolicy.fromInputType(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD).locksNativeInput)
     }
 
     @Test fun numberPasswordIsDigitsEvenWhenSignedAndDecimalFlagsArePresent() {

@@ -61,6 +61,15 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
         return true
     }
 
+    /** 按住符号键时另一根手指点删除键：Ctrl+删除（用户 11-13）。不在按住符号键时返回 false，删除照常。 */
+    fun ctrlBackspace(): Boolean {
+        if (!ctrl) return false
+        val send = ctrlShortcut ?: return false
+        ctrlUsed = true
+        send(com.kingzcheung.xime.keyboard.CtrlShortcuts.BACKSPACE)
+        return true
+    }
+
     /** 长按空格移光标时按住符号键：和按住 Shift 一样扩选；算用过 Ctrl，松手不开符号（用户 11-03）。 */
     fun ctrlSelect(): Boolean {
         if (!ctrl) return false
@@ -107,6 +116,43 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
         targets.remove(id)
         ctrlOnly -= id
     }
+
+    /**
+     * 滑到哪个键按哪个键（用户 11-14，像三星键盘）：滑行输入和「上下滑输入符号」都关着时，
+     * 手指按下后在键盘上滑，滑到的键显示按下，松手按这个键。这里记所有能这样按的键的位置和点按。
+     */
+    private val slideTaps = mutableMapOf<Any, Target>()
+    /** 手指现在滑到的那个键（[putSlideTap] 的 id）；没在滑时 null。键据此画按下的样子。 */
+    var slideHovered by mutableStateOf<Any?>(null)
+        private set
+    /** 有手指正滑离按下的键：按下的那个键不再画按下的样子，除非手指又回到它上面。 */
+    var sliding by mutableStateOf(false)
+        private set
+    fun putSlideTap(id: Any, bounds: Rect, tap: () -> Unit) {
+        slideTaps[id] = Target(SLIDE_KEY, bounds, tap)
+    }
+    fun removeSlideTap(id: Any) {
+        slideTaps.remove(id)
+        if (slideHovered === id) slideHovered = null
+    }
+    /** 手指滑到 [point]（和 [keyboardBounds] 同一坐标）：记下手指下的键，滑出所有键时为 null。 */
+    fun slideOver(point: Offset) {
+        val id = slideTaps.entries.firstOrNull { it.value.bounds.contains(point) }?.key
+        if (slideHovered !== id) slideHovered = id
+        if (!sliding) sliding = true
+    }
+    /** 松手：按手指下的那个键；手指不在任何键上时什么都不按，返回 false。 */
+    fun slideRelease(): Boolean {
+        val target = slideHovered?.let(slideTaps::get)
+        slideHovered = null
+        sliding = false
+        target?.commit?.invoke() ?: return false
+        return true
+    }
+    fun slideCancel() {
+        slideHovered = null
+        sliding = false
+    }
     fun at(point: Offset): Target? = if (!keyboardBounds.contains(point)) candidateAt(point)?.takeUnless { ctrl }
         else targets.entries.asSequence().filter { (id, _) -> ctrl || id !in ctrlOnly }.flatMap { (_, cells) -> cells.asSequence() }
             .firstOrNull { it.bounds.contains(point) }
@@ -118,6 +164,8 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
     companion object {
         /** 候选目标的 key；不是字母，键帽高亮不会匹配到它。 */
         const val CANDIDATE_KEY = "candidate"
+        /** 滑到哪个键按哪个键的目标名；不是字母，Shift 拖动的高亮不会匹配到它。 */
+        const val SLIDE_KEY = "slide"
         /** 回车目标的 key：一个字符，符号键松手时按 Ctrl+这个字符发出（[com.kingzcheung.xime.keyboard.CtrlShortcuts.ENTER]）。 */
         val ENTER_KEY = com.kingzcheung.xime.keyboard.CtrlShortcuts.ENTER.toString()
     }

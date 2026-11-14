@@ -69,7 +69,7 @@ class HardwareKeyboardToolbarTest {
 
     private fun show(width: Int = 360, height: Int = 400, docking: Boolean = false, languageLabel: String = "中",
         suggestions: Boolean = false, layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-        languageMenu: Boolean = false, fontScale: Float = 1f) {
+        languageMenu: Boolean = false, fontScale: Float = 1f, composing: Boolean = false) {
         activeLanguage.value = languageLabel
         floatingSuggestions.value = suggestions
         candidateWords.value = if (suggestions) listOf("hello", "world", "again") else listOf("测试", "侧视")
@@ -97,6 +97,7 @@ class HardwareKeyboardToolbarTest {
                         },
                         showCandidatesWhenFloating = floatingSuggestions.value,
                         candidatesPending = candidatesPending.value,
+                        composing = composing,
                         languageLabel = activeLanguage.value,
                         languageActions = if (languageMenu) KeyboardInputActions(
                             schemas = listOf(SchemaInfo("first", "中文", "", "", "")),
@@ -292,6 +293,21 @@ class HardwareKeyboardToolbarTest {
         assertHorizontalActionsEndWithLanguage()
         rule.onNodeWithTag("hardware-toolbar-keyboard").performClick()
         rule.runOnIdle { assertEquals(1, keyboard); assertEquals(1, clipboard) }
+    }
+
+    // 用户 11-13：接物理键盘打字时底部条图标太多，候选只放得下四五个。打字时表情、剪贴板收进「更多」。
+    @Test fun composingBottomStripGivesTheIconRoomToCandidates() {
+        show(width = 800, height = 600, docking = true, composing = true)
+        rule.onNodeWithTag("hardware-keyboard-toolbar").assertWidthIsEqualTo(720.dp)
+        rule.onNodeWithTag("hardware-toolbar-emoji").assertDoesNotExist()
+        rule.onNodeWithTag("hardware-toolbar-clipboard").assertDoesNotExist()
+        rule.onNodeWithTag("hardware-toolbar-keyboard").assertIsDisplayed()
+        rule.onNodeWithTag("hardware-toolbar-language").assertIsDisplayed()
+        val candidates = rule.onNodeWithTag("hardware-docked-candidates").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("candidates take the icons' room: $candidates", candidates.width >= 720f - 8f - 3 * 48f - .5f)
+        rule.onNodeWithTag("hardware-toolbar-more").assertIsDisplayed().performClick()
+        rule.onNodeWithTag("hardware-toolbar-clipboard").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(1, clipboard) }
     }
 
     @Test fun suggestionsStayInOneRowWhenDraggedUpAndHideOnlyInTheSideToolbar() {

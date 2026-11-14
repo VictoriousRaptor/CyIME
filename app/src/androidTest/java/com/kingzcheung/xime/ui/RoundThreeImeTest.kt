@@ -344,7 +344,7 @@ class RoundThreeImeTest {
             engine.clearComposition()
             rule.runOnUiThread { imm.restartInput(editor); imm.showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT) }
             rule.waitForIdle()
-            rule.onNodeWithContentDescription("CyIME Logo").performClick()
+            rule.onNodeWithContentDescription("展开菜单").performClick()
             rule.onNodeWithContentDescription("键盘调节").performClick()
             val reset = rule.onNodeWithContentDescription("重置").fetchSemanticsNode().boundsInRoot
             val floating = rule.onNodeWithContentDescription("悬浮键盘").fetchSemanticsNode().boundsInRoot
@@ -437,10 +437,10 @@ class RoundThreeImeTest {
             SettingsPreferences.setKeyboardOpacity(context, 1f)
             rule.runOnUiThread { imm.restartInput(editor); imm.showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT) }
             rule.waitForIdle()
-            rule.onNodeWithContentDescription("CyIME Logo").performClick()
+            rule.onNodeWithContentDescription("展开菜单").performClick()
             rule.onAllNodesWithContentDescription("返回").assertCountEquals(1)
             rule.onNodeWithContentDescription("关闭菜单").assertDoesNotExist()
-            rule.onNodeWithContentDescription("CyIME Logo").assertDoesNotExist()
+            rule.onNodeWithContentDescription("展开菜单").assertDoesNotExist()
             rule.onNodeWithTag("menu-item:表情").assertIsDisplayed()
             Thread.sleep(2200) // 等高度调整Toast退场，截图完整显示两排菜单。
             screenshot("menu-compact-grid")

@@ -179,4 +179,58 @@ class LuaTranslatePluginTest {
         assertEquals("400: Invalid model kimi-k9 for ***", adapter.getPanelState("").ui!!.first { it.type == UiNodeType.TEXT }.value)
         assertEquals("不是 temperature 的问题就不重发", 1, sse.bodies.size)
     }
+
+    @Test
+    fun `栏里给出源语言、目标语言两个选择和对调箭头，圆钮标成旧宿主用`() {
+        val (adapter, _, _) = setup()
+        val ui = adapter.getPanelState("").ui!!
+        val chip = ui.first { it.type == UiNodeType.BUTTON }
+        assertEquals("旧宿主只看第一个按钮：还是换语言的圆钮", "lang", chip.key)
+        assertEquals("fallback", chip.style)
+        val selects = ui.filter { it.type == UiNodeType.SELECT }
+        assertEquals(listOf("sourceLang", "targetLang"), selects.map { it.key })
+        assertEquals("默认自动检测", "自动检测", selects[0].value)
+        assertEquals("默认译成英文", "英文", selects[1].value)
+        assertEquals("自动检测", selects[0].options.first())
+        assertFalse("目标语言里没有自动检测", "自动检测" in selects[1].options)
+        assertEquals("长按工具栏弹出的是目标语言", "quick", selects[1].style)
+        assertEquals("swap", ui.single { it.style == "swap" }.key)
+    }
+
+    @Test
+    fun `选源语言和目标语言：存进设置，提示词带原文语言`() {
+        val (adapter, sse, store) = setup()
+        adapter.onPanelAction("select:targetLang:日文")
+        adapter.onPanelAction("select:sourceLang:简体中文")
+        assertEquals("日文", store.get("targetLang"))
+        assertEquals("简体中文", store.get("sourceLang"))
+        adapter.onPanelInput("谢谢")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段简体中文翻译成日文"))
+        adapter.onPanelAction("select:sourceLang:自动检测")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段话翻译成日文"))
+    }
+
+    @Test
+    fun `对调：自动检测时源语言变成原来的目标，目标换成中英里的另一个`() {
+        val (adapter, _, store) = setup()
+        adapter.onPanelAction("swap")
+        assertEquals("英文", store.get("sourceLang"))
+        assertEquals("简体中文", store.get("targetLang"))
+        adapter.onPanelAction("swap")
+        assertEquals("简体中文", store.get("sourceLang"))
+        assertEquals("英文", store.get("targetLang"))
+    }
+
+    @Test
+    fun `目标选成和源语言一样：两边对调，不会出现英文译成英文`() {
+        val (adapter, _, store) = setup()
+        adapter.onPanelAction("select:sourceLang:简体中文")
+        adapter.onPanelAction("select:targetLang:简体中文")
+        assertEquals("简体中文", store.get("targetLang"))
+        assertEquals("英文", store.get("sourceLang"))
+        adapter.onPanelAction("select:sourceLang:简体中文")
+        assertEquals("英文", store.get("targetLang"))
+    }
 }

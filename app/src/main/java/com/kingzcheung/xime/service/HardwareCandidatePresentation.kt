@@ -21,13 +21,16 @@ internal data class HardwareCandidatePresentation(
     /**
      * The physical-keyboard toolbar numbers at most [HARDWARE_PAGE_SIZE] candidates. A longer engine
      * page is shown as consecutive windows; paging moves through them before turning the engine page.
+     * [step] is how many of them the row actually shows in full: the rest of the page still lies ahead.
      */
-    fun window(start: Int): HardwareCandidatePresentation =
-        if (association || (start == 0 && words.size <= HARDWARE_PAGE_SIZE)) this
+    fun window(start: Int, step: Int = HARDWARE_PAGE_SIZE): HardwareCandidatePresentation {
+        val stride = step.coerceIn(1, HARDWARE_PAGE_SIZE)
+        return if (association || (start == 0 && words.size <= stride)) this
         else copy(words = words.drop(start).take(HARDWARE_PAGE_SIZE),
             comments = comments.drop(start).take(HARDWARE_PAGE_SIZE),
             hasPreviousPage = start > 0 || hasPreviousPage,
-            hasNextPage = start + HARDWARE_PAGE_SIZE < words.size || hasNextPage)
+            hasNextPage = start + stride < words.size || hasNextPage)
+    }
 }
 
 internal const val HARDWARE_PAGE_SIZE = 10

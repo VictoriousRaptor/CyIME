@@ -55,6 +55,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -72,6 +74,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.runtime.rememberUpdatedState
@@ -100,6 +103,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -171,6 +175,8 @@ data class CandidateBarCallbacks(
     val onCandidateStripScrolled: (() -> Unit)? = null,
     /** 打字候选滑到最后几个了。 */
     val onCandidateStripNearEnd: (() -> Unit)? = null,
+    val onSaveQuickActions: (() -> Unit)? = null,
+    val onEditQuickActions: (() -> Unit)? = null,
 )
 
 /** 空间充足时均匀排布，项目溢出时保留完整触控尺寸并允许滚动。 */
@@ -534,7 +540,8 @@ fun CandidateBar(
                         } else {
                             KeyboardToolbarButton({ callbacks.onLogoClick?.invoke() }, iconButtonContainer,
                                 modifier = Modifier.testTag("toolbar-leading"), slotWidth = toolbarSlot) {
-                                Icon(painterResource(R.drawable.cyime_toolbar_mark), contentDescription = "CyIME Logo",
+                                // 图标照旧用 CyIME 标志，只把读屏说明改成它的作用「展开菜单」。
+                                Icon(painterResource(R.drawable.cyime_toolbar_mark), contentDescription = "展开菜单",
                                     tint = iconButtonTint, modifier = Modifier.size(22.dp))
                             }
                         }
@@ -705,7 +712,10 @@ fun CandidateBar(
                     // 收起按钮保留，退格回到 idle 时的状态感知不变
                     if (inlineSuggestions.isEmpty() && splitGapX != null) {
                         // 分体：图标按两侧宽度比例分到中缝左右，各自整格可点。
-                        SplitGapRow(splitGapX, Modifier.weight(1f).fillMaxHeight(), left = { leftWidth, rightWidth ->
+                        val editor = LocalInlineQuickActionEditor.current
+                        SplitGapRow(splitGapX, Modifier.weight(1f).fillMaxHeight().onGloballyPositioned {
+                            editor?.toolbarArea = it.boundsInRoot()
+                        }, left = { leftWidth, rightWidth ->
                             ToolbarHalf(toolbarActions, protectedVisuals, iconButtonTint, voiceAmplitude, voiceRecognitionState,
                                 callbacks.onReorderToolbar, leftWidth, rightWidth, rightSide = false)
                         }, right = { leftWidth, rightWidth ->
@@ -713,14 +723,35 @@ fun CandidateBar(
                                 callbacks.onReorderToolbar, leftWidth, rightWidth, rightSide = true)
                         })
                     } else if (inlineSuggestions.isEmpty()) {
+                        val editor = LocalInlineQuickActionEditor.current
                         ReorderableToolbar(toolbarActions, protectedVisuals.accentColor, callbacks.onReorderToolbar,
-                            modifier = Modifier.weight(1f)) { action ->
+                            modifier = Modifier.weight(1f).onGloballyPositioned {
+                                editor?.toolbarArea = it.boundsInRoot()
+                            }) { action ->
                             ToolbarActionButton(action, protectedVisuals, iconButtonTint, voiceAmplitude, voiceRecognitionState,
                                 modifier = Modifier.fillMaxWidth())
                         }
                     }
 
-                    if (callbacks.onHideKeyboard != null) {
+                    val editor = LocalInlineQuickActionEditor.current
+                    if (editor?.active == true && callbacks.onSaveQuickActions != null) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        KeyboardToolbarButton(callbacks.onSaveQuickActions, iconButtonContainer,
+                            modifier = Modifier.testTag("toolbar-save").onGloballyPositioned {
+                                editor.saveBounds = it.boundsInRoot()
+                            }, slotWidth = toolbarSlot) {
+                            Icon(Icons.Default.Check, contentDescription = "保存排列", tint = protectedVisuals.textColor,
+                                modifier = Modifier.size(24.dp))
+                        }
+                    } else if (page is KeyboardPage.Overlay && page.route is OverlayRoute.Menu &&
+                        callbacks.onEditQuickActions != null) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        KeyboardToolbarButton(callbacks.onEditQuickActions, iconButtonContainer,
+                            modifier = Modifier.testTag("toolbar-edit"), slotWidth = toolbarSlot) {
+                            Icon(Icons.Default.Edit, contentDescription = "编辑排列", tint = protectedVisuals.textColor,
+                                modifier = Modifier.size(22.dp))
+                        }
+                    } else if (callbacks.onHideKeyboard != null) {
                         Spacer(modifier = Modifier.width(4.dp))
                         HideKeyboardButton(callbacks.onHideKeyboard, iconButtonContainer, isVoiceSticky,
                             protectedVisuals.textColor, toolbarSlot)
@@ -815,6 +846,7 @@ internal fun ToolbarActionButton(
     source: MutableInteractionSource = remember { MutableInteractionSource() },
     modifier: Modifier = Modifier,
 ) {
+    val inlineEditor = LocalInlineQuickActionEditor.current
     val voiceActive = action.active && action.item.id == "voice"
     // 外圈（胶囊底色）固定，内圈只跟随实时音量；峰值按分贝映射，正常说话也能明显撑开。
     val voiceLevel by animateFloatAsState(
@@ -839,19 +871,31 @@ internal fun ToolbarActionButton(
     val listening = voiceActive && voiceState == RecognitionState.LISTENING
     // 液态玻璃：胶囊露出来时（开启常亮，按下随底色淡出）加按键同款细亮边；听写音量光圈不加。
     val liquidEdge = com.kingzcheung.xime.ui.theme.LiquidGlass.surfacesOn() && !listening
+    val pressMenu = action.pressMenu
+    val pressMenuState = remember { ToolbarPressMenuState() }
+    val pressMenuScope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val currentPressMenu by rememberUpdatedState(pressMenu)
+    val currentClick by rememberUpdatedState(action.onClick)
     BoxWithConstraints(
-        modifier.widthIn(min = 36.dp).height(40.dp)
+        modifier.widthIn(min = 36.dp).height(40.dp).inlineQuickActionTarget(action.item.id)
+            .graphicsLayer { alpha = if (inlineEditor?.dragging == action.item.id) 0f else 1f }
             // 音量光圈画在不裁切的外层：始终正圆、比图标大，宽格也不会被拉成胶囊。
             .then(if (listening) Modifier.microphoneLevelHalo({ voiceLevel }, visuals.accentColor) else Modifier)
             .semantics {
                 selected = action.active
                 if (voiceActive) stateDescription = if (voiceState == RecognitionState.PROCESSING) "正在转录" else "正在聆听，点击结束"
             }
-            .clickable(interactionSource = source, indication = null, onClick = action.onClick),
+            .then(if (inlineEditor?.active == true) Modifier else if (pressMenu != null) Modifier.toolbarPressMenu({ currentPressMenu }, pressMenuState, source, pressMenuScope,
+                onLongPress = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
+                onClick = { currentClick() })
+            else Modifier.clickable(interactionSource = source, indication = null, onClick = action.onClick)),
         contentAlignment = Alignment.Center,
     ) {
+    if (pressMenu != null) ToolbarPressMenuPopup(pressMenuState)
     Box(
-        Modifier.size(if (listening) androidx.compose.ui.unit.DpSize(36.dp, 36.dp) else toolbarPillSize(maxWidth))
+        Modifier.inlineQuickActionMotion(action.item.id).testTag("toolbar-visual:${action.item.id}")
+            .size(if (listening) androidx.compose.ui.unit.DpSize(36.dp, 36.dp) else toolbarPillSize(maxWidth))
             .clip(CircleShape)
             .background(if (listening) Color.Transparent else glassActiveFill ?: visuals.glassControlBackground?.let { fill ->
                 if (action.active) androidx.compose.ui.graphics.lerp(fill, visuals.accentColor, 0.18f).copy(alpha = fill.alpha)
@@ -1591,6 +1635,12 @@ internal fun FixedCandidateStrip(
     val measurer = rememberTextMeasurer()
     var stripOriginX by remember { mutableStateOf(Float.NaN) }
     val density = LocalDensity.current
+    // 排窗口只要宽度：只算固有宽度、跨按键记着（见 CandidateTextWidths）；两行排版仍用 measurer。
+    val fontFamilyResolver = androidx.compose.ui.platform.LocalFontFamilyResolver.current
+    val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val textWidths = remember(density, fontFamilyResolver, layoutDirection) {
+        candidateTextWidths(density, fontFamilyResolver, layoutDirection)
+    }
     val inheritedTextStyle = LocalTextStyle.current
     val commentsAllowed = rememberCandidateCommentsAllowed().let { commentMode ?: it }
     // 选中底色由整条统一画，换选中的候选时从旧候选滑到新候选（用户 10-21 选 1）；
@@ -1644,23 +1694,22 @@ internal fun FixedCandidateStrip(
         // 纠错和画出来的一样算进宽度，否则放不下的最后一个候选也算「显示了」，「下一项」移到它时被栏边切掉。
         val correctedCandidates = shownCorrections(LocalCorrectedCandidates.current, commentsShown)
         val fullCorrectionScheme = LocalCorrectionFullScheme.current
-        val window = remember(viewport, all, candidates.size, shownComments, commentsAreGlosses, scrollable, focused, fontSize, density, measurer, inheritedTextStyle, showNumberLabels, itemSpacing, itemPadding, constraints.maxWidth, AppFonts.candidateFontFamily, AppFonts.commentFontFamily, localGap, correctedCandidates, fullCorrectionScheme) {
+        val window = remember(viewport, all, candidates.size, shownComments, commentsAreGlosses, scrollable, focused, fontSize, density, measurer, textWidths, inheritedTextStyle, showNumberLabels, itemSpacing, itemPadding, constraints.maxWidth, AppFonts.candidateFontFamily, AppFonts.commentFontFamily, localGap, correctedCandidates, fullCorrectionScheme) {
             val bodyWidths = HashMap<Int, Int>()
             fun bodyWidth(index: Int): Int = bodyWidths.getOrPut(index) {
                 val numbered = index < candidates.size
                 val text = candidateNumberedText(all[index], index, showNumberLabels && numbered)
-                val primary = measurer.measure(AnnotatedString(text),
-                    candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily, index == focused),
-                    softWrap = false).size.width
+                val primary = textWidths.of(text,
+                    candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily, index == focused))
                 primary + with(density) { 2 * itemPadding.roundToPx() }
             }
             val fullWidths = HashMap<Int, Int>()
             fun widthAt(index: Int): Int = fullWidths.getOrPut(index) {
                 val secondaryText = candidateSecondaryText(shownComments.getOrElse(index) { "" },
                     if (index < candidates.size) correctedCandidates[all[index]].orEmpty() else "", fullCorrectionScheme)
-                val secondary = if (secondaryText.isEmpty()) 0 else measurer.measure(secondaryText,
+                val secondary = if (secondaryText.isEmpty()) 0 else textWidths.of(secondaryText,
                     inheritedTextStyle.merge(TextStyle(fontSize = (fontSize.value * 11f / 19f).sp,
-                        fontWeight = FontWeight.Normal, fontFamily = AppFonts.commentFontFamily)), softWrap = false).size.width + with(density) { 3.dp.roundToPx() }
+                        fontWeight = FontWeight.Normal, fontFamily = AppFonts.commentFontFamily))) + with(density) { 3.dp.roundToPx() }
                 bodyWidth(index) + secondary
             }
             // 纠错标记和拼音仍要完整。只有释义可以越过本段右边界。
@@ -1672,16 +1721,16 @@ internal fun FixedCandidateStrip(
                 val full = widthAt(index)
                 if (full <= constraints.maxWidth) return null
                 val text = AnnotatedString(candidateNumberedText(all[index], index, showNumberLabels && index < candidates.size))
-                val primary = measurer.measure(text, candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily,
-                    index == focused), softWrap = false).size.width
+                val primary = textWidths.of(text, candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily,
+                    index == focused))
                 val others = full - primary
                 val room = constraints.maxWidth - others
                 if (room <= 0 || primary <= 0) return null
                 // 一行：按比例缩，每级 0.5sp，不低于原字号 3/4。
                 var size = kotlin.math.floor(fontSize.value * room / primary * 2f) / 2f
                 while (size >= fontSize.value * CANDIDATE_SHRINK_FLOOR) {
-                    val width = measurer.measure(text, candidatePrimaryTextStyle(size.sp, AppFonts.candidateFontFamily,
-                        index == focused), softWrap = false).size.width
+                    val width = textWidths.of(text, candidatePrimaryTextStyle(size.sp, AppFonts.candidateFontFamily,
+                        index == focused))
                     if (width <= room) return CandidateFit(size.sp, twoLines = false, width, others + width)
                     size -= 0.5f
                 }

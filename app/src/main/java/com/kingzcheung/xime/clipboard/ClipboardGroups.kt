@@ -12,6 +12,11 @@ data class ClipboardGroupState(
     val members: Map<String, String> = emptyMap(),
     val hidden: Set<ClipboardFilter> = emptySet(),
     val tabOrder: List<String> = emptyList(),
+    /**
+     * 分组里记录的顺序（用户 11-14：自定义分组里想给条目排序）：group id → record keys in the order the
+     * user dragged them to. A group never sorted has none and keeps newest first.
+     */
+    val recordOrder: Map<String, List<String>> = emptyMap(),
 ) {
     fun groupOf(key: String): ClipboardGroup? = members[key]?.let { id -> groups.firstOrNull { it.id == id } }
     fun count(groupId: String): Int = members.values.count { it == groupId }
@@ -20,11 +25,25 @@ data class ClipboardGroupState(
     fun renamed(id: String, name: String) = copy(groups = groups.map { if (it.id == id) it.copy(name = name) else it })
     /** The records stay in the clipboard (in 全部); only the group goes. */
     fun withoutGroup(id: String) = copy(groups = groups.filterNot { it.id == id }, members = members.filterValues { it != id },
-        tabOrder = tabOrder - "group:$id")
-    /** Null [groupId] takes the records out of their group. */
-    fun assigned(keys: Collection<String>, groupId: String?) = copy(members =
-        if (groupId == null || groups.none { it.id == groupId }) members - keys.toSet()
-        else members + keys.associateWith { groupId })
+        tabOrder = tabOrder - "group:$id", recordOrder = recordOrder - id)
+    /** Null [groupId] takes the records out of their group. A record that leaves a group leaves its order too. */
+    fun assigned(keys: Collection<String>, groupId: String?): ClipboardGroupState {
+        val next = if (groupId == null || groups.none { it.id == groupId }) members - keys.toSet()
+            else members + keys.associateWith { groupId }
+        return copy(members = next, recordOrder = recordOrder.mapValues { (group, order) -> order.filter { next[it] == group } }
+            .filterValues { it.isNotEmpty() })
+    }
+    /** The order the user dragged group [groupId]'s records to; only its own records are kept. */
+    fun withRecordOrder(groupId: String, keys: List<String>): ClipboardGroupState {
+        val order = keys.distinct().filter { members[it] == groupId }
+        return copy(recordOrder = if (order.isEmpty()) recordOrder - groupId else recordOrder + (groupId to order))
+    }
+    /** Group [groupId]'s [cards] in the user's order; records put in since come first, as they were (newest first). */
+    internal fun inRecordOrder(groupId: String, cards: List<ClipboardCard>): List<ClipboardCard> {
+        val order = recordOrder[groupId]?.withIndex()?.associate { it.value to it.index } ?: return cards
+        val (added, sorted) = cards.partition { it.key !in order }
+        return added + sorted.sortedBy { order.getValue(it.key) }
+    }
     fun withHidden(filter: ClipboardFilter, hide: Boolean) = copy(hidden =
         if (filter == ClipboardFilter.ALL) hidden else if (hide) hidden + filter else hidden - filter)
 
@@ -115,6 +134,23 @@ internal object ClipboardGroupCodec {
             val tab = entry.indexOf('\t')
             if (tab <= 0 || tab == entry.lastIndex) null else (entry.substring(tab + 1) to entry.substring(0, tab))
         }.filter { it.second in ids }.toMap()
+    }
+
+    /** Record order as "groupId\trecordKey" lines, each group's records in order. */
+    fun encodeRecordOrder(order: Map<String, List<String>>): String =
+        order.flatMap { (group, keys) -> keys.map { "$group\t$it" } }.joinToString("\n")
+
+    /** Orders of groups that no longer exist are dropped. */
+    fun decodeRecordOrder(raw: String?, groups: List<ClipboardGroup>): Map<String, List<String>> {
+        val ids = groups.mapTo(mutableSetOf()) { it.id }
+        val order = linkedMapOf<String, MutableList<String>>()
+        raw.orEmpty().lineSequence().forEach { line ->
+            val tab = line.indexOf('\t')
+            if (tab <= 0 || tab == line.lastIndex) return@forEach
+            val group = line.substring(0, tab)
+            if (group in ids) order.getOrPut(group) { mutableListOf() }.add(line.substring(tab + 1))
+        }
+        return order
     }
 
     fun decodeHidden(raw: Set<String>?): Set<ClipboardFilter> = raw.orEmpty()

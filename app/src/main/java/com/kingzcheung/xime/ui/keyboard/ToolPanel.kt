@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,9 +28,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,12 +52,27 @@ internal const val CLIPBOARD_SEARCH_INLINE_PANEL_HEIGHT = 48
 /** 翻译栏（display: live）：一行，和横屏剪贴板搜索栏一样高。 */
 internal const val TOOL_PANEL_BAR_HEIGHT = 48
 
-/** 工具面板在键盘上方撑出的高度；窗口高度和面板绘制用同一个数。PASSIVE 走全屏覆盖，不撑高。 */
-internal fun toolPanelExtraHeight(visible: Boolean, display: String?): Int = when {
+/** 屏幕矮（手机横屏）时的 AI 工具面板：关闭钮和输入框一行，不显示状态行，和横屏剪贴板搜索栏一样高。 */
+internal const val TOOL_PANEL_COMPACT_HEIGHT = CLIPBOARD_SEARCH_INLINE_PANEL_HEIGHT
+
+/**
+ * 工具面板在键盘上方撑出的高度；窗口高度和面板绘制用同一个数。PASSIVE 走全屏覆盖，不撑高。
+ * [compact]：完整面板放不下（[toolPanelCompact]）时用一行的面板。
+ */
+internal fun toolPanelExtraHeight(visible: Boolean, display: String?, compact: Boolean = false): Int = when {
     !visible || display == "PASSIVE" -> 0
     display == "LIVE" -> TOOL_PANEL_BAR_HEIGHT
+    compact -> TOOL_PANEL_COMPACT_HEIGHT
     else -> TOOL_PANEL_HEIGHT
 }
+
+/**
+ * 键盘加上完整的工具面板超出能用的高度 [available]（屏幕减去底部留白、悬浮时减去卡片下面那截）：
+ * 手机横屏就是这样。以前横屏、悬浮一律不开面板（提示「不支持」），下载的翻译、AI 插件在横屏用不了（用户 11-12）；
+ * 现在改用一行的面板，窗口不超出屏幕。
+ */
+internal fun toolPanelCompact(keyboardHeight: Int, available: Int): Boolean =
+    keyboardHeight + TOOL_PANEL_HEIGHT > available
 
 /**
  * AI 工具插件输入面板（候选栏上方）。
@@ -137,6 +156,7 @@ private fun toolPanelEditText(
     isFocused: Boolean,
     onFocusChange: (Boolean) -> Unit,
     onTextChange: ((String) -> Unit)?,
+    keepFocusOnBlur: Boolean = false,
 ): android.widget.EditText = android.widget.EditText(context).apply {
     setBackgroundColor(android.graphics.Color.TRANSPARENT)
     setTextColor(textColor.hashCode())
@@ -152,7 +172,8 @@ private fun toolPanelEditText(
         EditorInfo.IME_ACTION_DONE
 
     onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
-        onFocusChange(hasFocus)
+        // 翻译栏：框在键盘窗口里丢了焦点（键盘重排之类）不算离开，离开只看用户点了应用输入框。
+        if (hasFocus || !keepFocusOnBlur) onFocusChange(hasFocus)
     }
     setOnClickListener { onFocusChange(true) }
     onTextChange?.let { change ->
@@ -196,6 +217,12 @@ fun ToolPanelBar(
     onFocusChange: (Boolean) -> Unit,
     onTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** 插件给的语言选择（源语言、目标语言）：画成「源 ⇄ 目标」，点哪边就弹哪边的列表。 */
+    selects: List<com.kingzcheung.xime.plugin.core.config.UiNode> = emptyList(),
+    /** 两个选择中间画对调箭头。 */
+    showSwap: Boolean = false,
+    onSelect: (key: String, option: String) -> Unit = { _, _ -> },
+    onSwap: () -> Unit = {},
 ) {
     // 圆钮用按键底色和按键字色，跟着键盘主题走（原来取应用主题的浅紫，深色下白字看不清）
     val circleBg = cardBgColor
@@ -226,6 +253,10 @@ fun ToolPanelBar(
             }
             Spacer(Modifier.width(8.dp))
         }
+        if (selects.isNotEmpty()) {
+            LiveBarLanguages(selects, showSwap, textColor, circleBg, onSelect, onSwap)
+            Spacer(Modifier.width(8.dp))
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -237,11 +268,14 @@ fun ToolPanelBar(
         ) {
             AndroidView(
                 factory = { context ->
-                    toolPanelEditText(context, textColor, hint, true, isFocused, onFocusChange, onTextChange)
+                    toolPanelEditText(context, textColor, hint, true, isFocused, onFocusChange, onTextChange,
+                        keepFocusOnBlur = true)
                         .apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }
                 },
                 update = { editText ->
                     syncToolPanelEditText(editText, isFocused, "")
+                    // 打字去了应用输入框：栏里不显示光标，看得出字不会进栏；点一下栏又回来。
+                    if (editText.isCursorVisible != isFocused) editText.isCursorVisible = isFocused
                     if (editText.hint?.toString() != hint) editText.hint = hint
                 },
                 modifier = Modifier.fillMaxWidth().height(36.dp),
@@ -271,6 +305,56 @@ fun ToolPanelBar(
                 tint = textColor.copy(alpha = 0.7f),
                 modifier = Modifier.size(22.dp),
             )
+        }
+    }
+}
+
+/**
+ * 翻译栏左边的「自动检测 ⇄ 英文」：点左边选原文语言，点右边选目标语言，中间箭头两边对调。
+ * 每边一个 36dp 高的胶囊，和圆钮、关闭按钮一样高。
+ */
+@Composable
+private fun LiveBarLanguages(
+    selects: List<com.kingzcheung.xime.plugin.core.config.UiNode>,
+    showSwap: Boolean,
+    textColor: Color,
+    pillColor: Color,
+    onSelect: (key: String, option: String) -> Unit,
+    onSwap: () -> Unit,
+) {
+    var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        selects.forEachIndexed { index, node ->
+            val key = node.key ?: return@forEachIndexed
+            if (index == 1 && showSwap) {
+                Box(
+                    Modifier.size(28.dp, 36.dp).testTag("live-bar-swap")
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onSwap),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("⇄", color = textColor.copy(alpha = 0.7f), fontSize = 15.sp, maxLines = 1)
+                }
+            } else if (index == 1) {
+                Spacer(Modifier.width(4.dp))
+            }
+            Box(
+                Modifier.height(36.dp).widthIn(max = 84.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(pillColor)
+                    .testTag("live-bar-lang:$key")
+                    .clickable { open = key }
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(node.value ?: node.defaultValue.orEmpty(), color = textColor, fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (open == key) {
+                    OptionMenuPopup(node.label.orEmpty(), node.options, node.value,
+                        onChoose = { option -> open = null; if (option != node.value) onSelect(key, option) },
+                        onDismiss = { open = null })
+                }
+            }
         }
     }
 }

@@ -1,11 +1,12 @@
 package com.kingzcheung.xime.model
 
+import com.kingzcheung.xime.ui.keyboard.CornerInputChoice
 import com.kingzcheung.xime.ui.keyboard.SpaceHoldAction
 import kotlin.math.abs
 
 /**
- * 「更多配置」：按设备推荐配置之后可以跳过的一页，问大家最常问的几项（长按空格、删除键、字大小、声音振动、玻璃效果、
- * 语音标点）。每题先选着现在的值，只改用户点过的项，不动默认值。读写设置在 [SetupGuide.readMore]、[SetupGuide.applyMore]。
+ * 「更多配置」：按设备推荐配置之后可以跳过的一页，问大家最常问的几项（角标滑动还是长按、上下滑方向、滑行输入、
+ * 候选栏取消按钮、长按空格、删除键、字大小、声音振动、玻璃效果、语音标点；前四项用户 11-12 加，说问的人最多）。每题先选着现在的值，只改用户点过的项，不动默认值。读写设置在 [SetupGuide.readMore]、[SetupGuide.applyMore]。
  */
 enum class TextSizeChoice(val title: String, val candidateSp: Int, val keyScale: Float) {
     STANDARD("标准", 19, 1.2f),
@@ -22,6 +23,19 @@ enum class FeedbackChoice(val title: String, val sound: Boolean, val vibration: 
     NONE("都关掉", false, false),
 }
 
+/** 26 键滑行：英文、中文两个开关（设置页「滑行输入」里的前两行）合成一题。 */
+enum class GlideChoice(val title: String, val english: Boolean, val chinese: Boolean) {
+    OFF("不用滑行", false, false),
+    ENGLISH("只英文滑行", true, false),
+    /** 只在现在就是这样时列出。 */
+    CHINESE("只中文滑行", false, true),
+    BOTH("中文、英文都滑行", true, true);
+
+    companion object {
+        fun of(english: Boolean, chinese: Boolean): GlideChoice = entries.first { it.english == english && it.chinese == chinese }
+    }
+}
+
 data class SetupMoreChoices(
     val spaceHold: SpaceHoldAction,
     val deleteSkipsAssociation: Boolean,
@@ -30,6 +44,13 @@ data class SetupMoreChoices(
     val feedback: FeedbackChoice,
     val glass: Boolean,
     val autoPunctuation: Boolean,
+    /** 按键角标：滑动、滑动＋字母气泡、长按（设置页「按键角标的符号和数字」三张卡）。 */
+    val corner: CornerInputChoice = CornerInputChoice.SWIPE,
+    /** 「反转上下滑方向」：默认关是下滑出上角标、上滑出下角标。 */
+    val reverseSwipe: Boolean = false,
+    val glide: GlideChoice = GlideChoice.OFF,
+    /** 「候选栏取消按钮」：打字时候选栏最左边的左箭头，默认开。 */
+    val cancelButton: Boolean = true,
 )
 
 /** 现在的设置，以及决定哪些题要问、怎么说的情况。 */
@@ -45,9 +66,24 @@ data class SetupMoreFacts(
     val keyScalePercent: Int = 120,
     /** 「性能与省电」里实测的玻璃效果代价；没测过为 null，不写估计值。 */
     val glassCost: String? = null,
+    /** 删除键单独反向开着：清空、撤回的方向和角标相反。 */
+    val reverseDeleteSwipe: Boolean = false,
+    /** 滑行被「键盘面板滑动光标」锁住时那句锁的说明（同设置页）；没锁为 null。 */
+    val glideLock: String? = null,
 )
 
 object SetupMore {
+    /** 滑行列哪几项：「只中文滑行」只在现在就是它时列出。 */
+    fun glideChoices(current: GlideChoice): List<GlideChoice> =
+        GlideChoice.entries.filter { it != GlideChoice.CHINESE || current == GlideChoice.CHINESE }
+
+    /** 开着 26 键滑行时字母键的滑动都给了滑行，角标只能长按（同 [com.kingzcheung.xime.ui.keyboard.InputGestureLocks.glideCornerLock]）。 */
+    fun cornerLockedByGlide(glide: GlideChoice): Boolean = glide != GlideChoice.OFF
+
+    /** 实际生效的角标方式：开了滑行就是长按，写设置时也照这个算，不另写一个和键盘行为对不上的值。 */
+    fun effectiveCorner(choices: SetupMoreChoices): CornerInputChoice =
+        if (cornerLockedByGlide(choices.glide)) CornerInputChoice.LONG_PRESS else choices.corner
+
     fun textSizeOf(candidateSp: Int, keyScale: Float): TextSizeChoice = TextSizeChoice.entries.firstOrNull {
         it != TextSizeChoice.CUSTOM && it.candidateSp == candidateSp && abs(it.keyScale - keyScale) < 0.01f
     } ?: TextSizeChoice.CUSTOM
@@ -65,6 +101,20 @@ object SetupMore {
 
     /** 从 [from] 改到 [to] 要改的项，白话一句一项；没改的不列。完成页照这个写，也只改这些。 */
     fun changes(from: SetupMoreChoices, to: SetupMoreChoices): List<String> = buildList {
+        if (to.glide != from.glide) add(when (to.glide) {
+            GlideChoice.OFF -> "关掉了滑行输入。"
+            else -> "滑行输入改成「${to.glide.title}」。"
+        })
+        val corner = effectiveCorner(to)
+        if (corner != effectiveCorner(from)) add(
+            if (cornerLockedByGlide(to.glide)) "按键角标改成「长按输入」(开着滑行，字母键的滑动用来滑词)。"
+            else "按键角标改成「${corner.label}」。")
+        if (to.reverseSwipe != from.reverseSwipe)
+            add(if (to.reverseSwipe) "打开了「反转上下滑方向」：上滑出上角标、下滑出下角标，删除键也反过来。"
+                else "关掉了「反转上下滑方向」：下滑出上角标、上滑出下角标。")
+        if (to.cancelButton != from.cancelButton)
+            add(if (to.cancelButton) "打开了「候选栏取消按钮」：打字时候选栏最左边有左箭头，点它取消输入。"
+                else "关掉了「候选栏取消按钮」：候选词从最左边开始。")
         if (to.spaceHold != from.spaceHold) add("长按空格改成「${to.spaceHold.label}」。")
         if (to.deleteSkipsAssociation != from.deleteSkipsAssociation)
             add(if (to.deleteSkipsAssociation) "打开了「退格直接删字」：有联想词时第一下删除键就删字。"

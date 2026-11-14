@@ -126,4 +126,15 @@ class AppUpdateCatalogTest {
         assertEquals(AppUpdateCatalog.MODELSCOPE_PAGE, AppUpdateCatalog.releasesPage(domestic = true))
         assertEquals(AppUpdateCatalog.RELEASES_PAGE, AppUpdateCatalog.releasesPage(domestic = false))
     }
+
+    @Test
+    fun fdroidInstallsAreStoreManaged() {
+        assertTrue(AppUpdateCatalog.isStoreInstaller("org.fdroid.fdroid"))
+        assertTrue(AppUpdateCatalog.isStoreInstaller("org.fdroid.basic"))
+        assertTrue(AppUpdateCatalog.isStoreInstaller("com.looker.droidify"))
+        // GitHub 包手动装、adb 装（没有安装来源）、谷歌商店：照旧在应用里检查更新。
+        assertFalse(AppUpdateCatalog.isStoreInstaller(null))
+        assertFalse(AppUpdateCatalog.isStoreInstaller("com.google.android.packageinstaller"))
+        assertFalse(AppUpdateCatalog.isStoreInstaller("com.android.shell"))
+    }
 }

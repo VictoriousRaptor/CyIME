@@ -137,12 +137,12 @@ class FeedbackManagerTest {
         org.junit.Assert.assertFalse(FeedbackManager.isSamsungTuned(com.kingzcheung.xime.platform.DeviceVendor.of(null)))
     }
 
-    @Test fun `samsung and huawei skip the system key haptic`() {
+    @Test fun `samsung, huawei and honor skip the system key haptic`() {
         org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("samsung")))
         org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("HUAWEI")))
         org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("huawei")))
         org.junit.Assert.assertFalse(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("Xiaomi")))
-        org.junit.Assert.assertFalse(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("HONOR")))
+        org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("HONOR")))
         org.junit.Assert.assertFalse(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("Google")))
         org.junit.Assert.assertFalse(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of(null)))
     }

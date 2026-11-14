@@ -1313,6 +1313,13 @@ object SettingsPreferences {
     // ── 悬浮键盘设置 ──
 
     private const val KEY_FLOATING_MODE = "floating_mode"
+    /** 展开菜单里直接编辑快捷入口（PR #232）；默认关，关着时菜单和以前一样，排列在「排列」面板里改。 */
+    internal const val KEY_INLINE_QUICK_ACTION_EDITING = "inline_quick_action_editing"
+    fun inlineQuickActionEditing(context: Context): Boolean = getPrefs(context).getBoolean(KEY_INLINE_QUICK_ACTION_EDITING, false)
+    fun setInlineQuickActionEditing(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_INLINE_QUICK_ACTION_EDITING, enabled).apply()
+    }
+
     internal const val KEY_FLOATING_GEOMETRY_LOCKED = "floating_geometry_locked"
     fun floatingGeometryLocked(context: Context): Boolean = getPrefs(context).getBoolean(KEY_FLOATING_GEOMETRY_LOCKED, false)
     fun setFloatingGeometryLocked(context: Context, locked: Boolean) {

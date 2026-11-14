@@ -23,6 +23,23 @@ class ClipboardBoardContentTest {
         assertEquals("Presentation must not mutate stored history", 102, cards.size)
     }
 
+    @Test fun oneRecordPerRowPutsRecentPicturesInOneRowWhereTheNewestWas() {
+        fun image(n: Int) = ClipboardCard.Image(ClipboardImage("content://media/external/images/media/$n", "image/png", n.toLong()))
+        val recent = listOf(text(9), image(8), text(7), image(6), text(5))
+        val strip = clipboardImageStrip(recent)
+        assertEquals(listOf(text(9)), strip.before)
+        assertEquals(listOf(image(8), image(6)), strip.images)
+        assertEquals(listOf(text(7), text(5)), strip.after)
+        // Keyboard focus walks the records in the order shown.
+        assertEquals(listOf(text(9), image(8), image(6), text(7), text(5)), strip.ordered)
+        assertEquals(ClipboardImageStrip(listOf(text(2), text(1)), emptyList(), emptyList()),
+            clipboardImageStrip(listOf(text(2), text(1))))
+        // A tab of nothing but pictures keeps its columns; text tabs follow the switch.
+        assertFalse(clipboardListLayout(true, listOf(image(1), image(2))))
+        assertTrue(clipboardListLayout(true, recent))
+        assertFalse(clipboardListLayout(false, recent))
+    }
+
     @Test fun pinsAreNotFoldedWhenNothingUnpinnedIsBelow() {
         // Reported case: a category whose four records are all pinned showed only one row.
         val fixed = (1L..4L).map { text(it) }

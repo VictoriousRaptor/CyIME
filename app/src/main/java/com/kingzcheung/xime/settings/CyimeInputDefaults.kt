@@ -60,6 +60,12 @@ object CyimeInputDefaults {
         return if (missing.isEmpty()) ids else ids + missing
     }
 
+    /**
+     * 第一次整理时要不要把内置双拼全补进方案栏。新装、接着会出「按设备推荐配置」的不补：那一页先问用哪种双拼，
+     * 只打开选中的那一种（10-31 走查：设置向导第 2 步还没问就列出 6 种双拼）。升级的人、老人包（没有那一页）照旧补。
+     */
+    fun addsDoublePinyinToBar(freshInstall: Boolean, guideWillAsk: Boolean): Boolean = !(freshInstall && guideWillAsk)
+
     fun withCompanions(ids: List<String>, available: Set<String>): List<String> {
         val base = ids.filterNot(::isCompanion)
         // 按双拼方案在列表里的顺序排列，结果不随已安装文件的枚举顺序变化。

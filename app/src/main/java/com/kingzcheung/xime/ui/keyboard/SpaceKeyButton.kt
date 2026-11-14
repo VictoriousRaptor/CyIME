@@ -74,6 +74,8 @@ fun SpaceKeyButton(
     val density = LocalDensity.current
     var pressed by remember { mutableStateOf(false) }
     var cursorActive by remember { mutableStateOf(false) }
+    // 键缝动效：空格真的输入了、移光标走了一格时告诉光层（关着时这些调用什么都不做）。
+    val gapLightTrigger = remember { KeyGapLightTrigger() }
     // 按住空格说话且开了「上滑取消」：键面写「上滑取消」；手指上滑过线后变成删除色、写「松手取消」。
     var voiceHolding by remember { mutableStateOf(false) }
     var voiceCancelArmed by remember { mutableStateOf(false) }
@@ -142,6 +144,7 @@ fun SpaceKeyButton(
                         when (holdAction) {
                             SpaceHoldAction.CURSOR -> {
                                 cursorActive = true
+                                gapLightTrigger.cursorAt(lastX)
                                 SpaceCursorShift.begin()
                                 CursorLineMetrics.request()
                                 onCursorMode?.invoke(true)
@@ -186,6 +189,8 @@ fun SpaceKeyButton(
                                 cursorSteps.stepPx = lineCursorStepPx(view.rootView.width / 2f, settings.cursorSwipeLines,
                                     CursorLineMetrics.charsPerLine, step, cursorUnitPx)
                                 val steps = cursorSteps.move(dx)
+                                gapLightTrigger.cursorAt(change.position.x)
+                                if (steps != 0) gapLightTrigger.cursorStep()
                                 if (steps != 0) onMove?.invoke(steps)
                                 val rows = verticalSteps.move(dy).coerceIn(-1, 1)
                                 if (rows != 0) onMoveVertical?.invoke(rows)
@@ -194,6 +199,7 @@ fun SpaceKeyButton(
                             change.consume()
                             if (!change.pressed) {
                                 if (!held && !movedBeforeHold && !guarded) {
+                                    gapLightTrigger.tap()
                                     currentClick()
                                 }
                                 break
@@ -204,6 +210,7 @@ fun SpaceKeyButton(
                             SpaceAfterCursorGuard.mark(android.os.SystemClock.uptimeMillis())
                             SpaceCursorShift.end()
                         }
+                        gapLightTrigger.cursorEnd()
                         timer.cancel()
                         if (startedVoice) {
                             if (voiceHolding && voiceCancelArmed) onVoiceHoldCancel?.invoke() else onVoiceHoldEnd?.invoke()
@@ -220,7 +227,9 @@ fun SpaceKeyButton(
             .padding(scaledKeyVisualPadding())
             .keyGlow(Modifier.then(shadow)
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
-            .background(cancelColors?.background ?: keyFill)),
+            .background(cancelColors?.background ?: keyFill),
+                // 键缝动效：空格真的输入了一下，一块光从空格往上走到顶边；按住移光标时色块跟着手指。
+                gapLight = GapLightKind.RISE, gapLightTrigger = gapLightTrigger),
         contentAlignment = Alignment.Center
     ) {
         val iconSize = keyIconSizeDp(maxWidth.value, maxHeight.value)

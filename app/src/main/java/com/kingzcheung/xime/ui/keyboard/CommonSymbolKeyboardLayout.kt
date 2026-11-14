@@ -113,7 +113,10 @@ fun CommonSymbolKeyboardLayout(
     }
 
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius) {
+    // 键缝动效的光层（默认关，关着时是 null）。
+    val gapLight = rememberKeyGapLight()
+
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight) {
     Box(
         modifier = bodyModifier
             .fillMaxWidth()
@@ -124,6 +127,8 @@ fun CommonSymbolKeyboardLayout(
             }
             .padding(bottom = if (isFloatingMode || isLandscape) 0.dp else 0.dp),
     ) {
+        // 键缝动效的光层：最先画 = 在所有键帽底下，只从键缝里露出来。
+        KeyGapLightLayer(gapLight, Modifier.matchParentSize())
         KeyboardSwipeBubbleOverlay(swipeBubble, bubbleBackgroundColor, keyTextColor, specialKeyTextColor, keyboardBounds.width)
         Column(Modifier.fillMaxSize()) {
         LocalKeyboardInputPreferences.current.symbolsFor(SideSymbolTarget.COMMON)?.let { symbols ->

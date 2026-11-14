@@ -81,6 +81,8 @@ struct T9JointFrame {
   WordGraph merged;
   map<int, size_t> system_reach, user_reach, omitted_end;
   map<size_t, vector<an<T9Line>>> states;
+  // Learned user-dictionary words from the first key on, by end (t9/ngram_user_input_weight).
+  map<int, DictEntryList> learned_whole;
 };
 struct T9JointCache {
   T9DecodeCache<vector<T9Path>> results;
@@ -93,7 +95,7 @@ struct T9JointCache {
   hash_set<string> blacklist;
   using Options = std::tuple<size_t, size_t, size_t, size_t, size_t,
                             double, double, double, string, bool, bool, bool,
-                            const void*, double, bool, double, bool, double>;
+                            const void*, double, bool, double, bool, double, double>;
   Options options;
 };
 
@@ -259,7 +261,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
         o.t9_sentence_weight_, o.t9_sentence_model_, q.translator->enable_completion(),
         q.translator->enable_word_completion(), q.translator->complete_short_prefix(),
         o.t9_ngram_.get(), o.t9_ngram_user_weight_, o.t9_ngram_sentence_start_, o.t9_ngram_eos_weight_,
-        o.t9_ngram_merge_segmentations_, o.t9_ngram_dictionary_prior_};
+        o.t9_ngram_merge_segmentations_, o.t9_ngram_dictionary_prior_, o.t9_ngram_user_input_weight_};
     if (cache->dict_checksum != prism->dict_file_checksum() ||
         cache->schema_checksum != prism->schema_file_checksum() ||
         cache->user_revision != revision || cache->user_tick != tick ||
@@ -334,6 +336,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       ? std::min(previous->total - 1, dirty.empty() ? previous->total - 1 : *dirty.begin()) : 0;
   WordGraph graph, system;
   map<int, size_t> system_reach, user_reach, omitted_end;
+  map<int, DictEntryList> learned_whole;
   vector<size_t> starts;
   for (const auto& row : syllables.edges) {
     const bool needs_evicted_edges = previous && previous->omitted_end.count(row.first) &&
@@ -344,6 +347,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       if (found != previous->merged.end()) graph[row.first] = found->second;
       system_reach[row.first] = previous->system_reach.at(row.first);
       user_reach[row.first] = previous->user_reach.at(row.first);
+      if (row.first == 0) learned_whole = previous->learned_whole;
       T9_WORK_COUNT(joint_origins_reused);
     } else { starts.push_back(row.first); system_reach[row.first] = row.first; }
   }
@@ -361,6 +365,12 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       T9LookupScope scope(&user_reach); T9OriginScope origin(start);
       T9Collect(user, user_dict->Lookup(syllables, start, 0), o.t9_source_budget_);
     }
+    // Keep what the user committed from the first key on: the merge below may keep the system entry of a
+    // learned word, and the ordering of whole-input words reads the user's own evidence from here.
+    if (start == 0 && o.t9_ngram_user_input_weight_ > 0)
+      for (const auto& end : user)
+        for (const auto& entry : end.second)
+          if (entry && entry->commit_count > 0) learned_whole[end.first].push_back(entry);
     auto merged = std::move(system[start]);
     for (const auto& end : merged) T9_WORK_ADD(system_entries, end.second.size());
     for (const auto& end : user) {
@@ -658,7 +668,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
         cache->frame_bytes -= cache->frames.front().bytes; cache->frames.pop_front();
       }
       cache->frames.push_back({syllables.edges, total, bytes, std::move(frontier),
-          std::move(system_reach), std::move(user_reach), std::move(omitted_end), states});
+          std::move(system_reach), std::move(user_reach), std::move(omitted_end), states, learned_whole});
       cache->frame_bytes += bytes;
     }
   }
@@ -675,6 +685,70 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     final.emplace_back(rank, line);
   }
   std::stable_sort(final.begin(), final.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  // Words typed as the whole input (指导 for 944326, 是要) that the user has committed lately: 26 keys order such words by
+  // the user dictionary, nine keys only through the small user layer (λ), so 指导 needed four picks to pass 知道
+  // and fell back after a few hundred other words. Among the whole-input words of two or more characters, spelled
+  // out (no initial-only syllable), P(word) = (1-κe)·P(model) + κe·share·M, where M is these words' summed
+  // probability (unchanged, so sentences, single characters and abbreviations keep their place), share is 1 for
+  // the word picked most (recency-weighted) and 0 for the others, as 26 keys order learned words by their user
+  // weight (picked 是要 once after 试验: 是要 comes back first; split between them, the model kept 试验 first),
+  // and κe = κ·E/(E0+E) with E the summed recent picks here and E0 one pick 300 commits ago. Recent picks are the user dictionary's recency term (each pick fades by e
+  // every 200 commits), without its long-run commit rate: a word picked 13 times 10,000 commits ago (食补 over
+  // 是不) is not what the user is choosing now. A pick just made gets nearly κ, an old one next to nothing; with
+  // nothing picked lately nothing changes. It reorders the finished lines only: no lookup, the beam is untouched.
+  if (o.t9_ngram_user_input_weight_ > 0 && o.t9_ngram_user_input_weight_ < 1 && learned_whole.count(total)) {
+    // librime's user dictionary: p = m + (0.5 - m)·dee/kM for dee < 20, m = commits/T·(1 - e^(-T/10000))^10 at
+    // tick T, 1/kM = 1 - e^(-0.005). The recent part 0.5·dee/kM; one pick 300 commits ago has dee = e^(-1.5).
+    const double kOldPick = 0.5 * std::exp(-300.0 / 200) * (1 - std::exp(-0.005));
+    const double present = user_dict ? static_cast<double>(user_dict->tick()) + 1 : 0;
+    auto recent = [&](const an<DictEntry>& entry) {
+      const double p = std::min(1.0, std::exp(entry->weight));
+      const double m = present > 0 ? entry->commit_count / present * std::pow(1 - std::exp(-present / 10000), 10) : 0;
+      return m < 0.5 ? 0.5 * std::max(0.0, p - m) / (0.5 - m) : 0.0;
+    };
+    const auto& learned = learned_whole.at(static_cast<int>(total));
+    auto log_add = [](double a, double b) {
+      if (!std::isfinite(a)) return b;
+      if (!std::isfinite(b)) return a;
+      return std::max(a, b) + std::log1p(std::exp(-std::fabs(a - b)));
+    };
+    auto spelled_word = [&](const an<DictEntry>& entry) {
+      return utf8::distance(entry->text.begin(), entry->text.end()) >= 2 &&
+             entry->quality_len + 1e-9 >= static_cast<double>(total);
+    };
+    // A learned word may be shown through words of the model (是要 = 是 + 要, the better segmentation of the same
+    // text and spelling), so learned words are matched by the line's text and spelling.
+    auto evidence = [&](const an<T9Line>& line) {
+      double best = 0;
+      for (const auto& entry : learned)
+        if (entry->text == line->text && entry->code == line->code && spelled_word(entry))
+          best = std::max(best, recent(entry));
+      return best;
+    };
+    auto eligible = [&](const an<T9Line>& line) {
+      return line->entry && ((!(line->previous && line->previous->entry) && spelled_word(line->entry)) ||
+                             evidence(line) > 0);
+    };
+    double mass = -std::numeric_limits<double>::infinity(), sum = 0;
+    vector<double> user(final.size(), 0);
+    for (size_t i = 0; i < final.size(); ++i) {
+      if (!eligible(final[i].second)) continue;
+      mass = log_add(mass, final[i].first);
+      user[i] = evidence(final[i].second);
+      sum += user[i];
+    }
+    if (sum > 0 && std::isfinite(mass)) {
+      const double kappa = o.t9_ngram_user_input_weight_ * sum / (kOldPick + sum);
+      const double most = *std::max_element(user.begin(), user.end());
+      const double winners = static_cast<double>(std::count(user.begin(), user.end(), most));
+      for (size_t i = 0; i < final.size(); ++i) {
+        if (!eligible(final[i].second)) continue;
+        final[i].first = log_add(std::log(1 - kappa) + final[i].first,
+            user[i] == most ? std::log(kappa / winners) + mass : -std::numeric_limits<double>::infinity());
+      }
+      std::stable_sort(final.begin(), final.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    }
+  }
   // Input that can end in a sentence-final particle (吗, 呢, 吧…: one of the first sentences ends with one) is
   // most likely typed to its end, so the end of the sentence counts there: 我们吗 over 我们那, 礼貌吗 over
   // 礼貌嘛. Other input keeps t9/ngram_eos_weight; it may still be typed on.

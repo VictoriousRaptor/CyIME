@@ -260,6 +260,16 @@ class PerformanceCostsTest {
         assertFalse("liquid_glass" in PerformanceCosts.projected(on - "glass", high))
     }
 
+    @Test fun aTierThatTurnsTheKeyGapLightOffDropsEveryEffectOfIt() {
+        val on = setOf("key_gap_light", "key_gap_light_typing", "key_gap_light_commit", "neighbor_correction")
+        val current = PerformanceSettings(true, true, 0, 0, keyGapLight = true)
+        val low = PerformanceProfile.applied(current, com.kingzcheung.xime.runtime.adaptation.PerformanceTier.LOW)
+        // 低配关总开关：各种动效的开销一起不算，别的开关照旧。
+        assertEquals(setOf("neighbor_correction"), PerformanceCosts.projected(on, low))
+        val medium = PerformanceProfile.applied(current, com.kingzcheung.xime.runtime.adaptation.PerformanceTier.MEDIUM)
+        assertEquals(on + "key_animation", PerformanceCosts.projected(on, medium))
+    }
+
     @Test fun loadCountsVoiceNineKeyModelAndScoresAgainstEverythingOn() {
         val withExtras = device.copy(voiceResident = PerformanceCosts.Cost(memoryMb = 600.0),
             t9Model = PerformanceCosts.Cost(keyMs = 0.5, keyP95Ms = 4.0, basis = PerformanceCosts.BASIS_ENGINE))

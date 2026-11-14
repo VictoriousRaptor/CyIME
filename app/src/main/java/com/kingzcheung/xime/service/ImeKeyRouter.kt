@@ -407,7 +407,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     }
 
     private val keyEventFieldKinds = setOf(EditorFieldPolicy.Kind.NUMBER_PASSWORD, EditorFieldPolicy.Kind.NUMBER,
-        EditorFieldPolicy.Kind.PHONE, EditorFieldPolicy.Kind.PASSWORD)
+        EditorFieldPolicy.Kind.PHONE, EditorFieldPolicy.Kind.PASSWORD, EditorFieldPolicy.Kind.VISIBLE_PASSWORD)
 
     /** 实体键盘打字中（有编码或候选）；按键队列外读界面状态，和 Esc 的判断一样。 */
     internal fun hardwareComposing(): Boolean {
@@ -508,7 +508,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         associationLimit = service.hardwareAssociationLimit(),
         expanded = !service.uiState.value.isCompact && service.keyboardViewModel.candidatePageExpanded.value,
         singleCharOnly = service.keyboardViewModel.singleCharFilter.value,
-        windowStart = if (service.uiState.value.isCompact) hardwareNavigation.windowStart(state) else 0)
+        windowStart = if (service.uiState.value.isCompact) hardwareNavigation.windowStart(state) else 0,
+        windowStep = if (service.uiState.value.isCompact) hardwareNavigation.step(state) else HARDWARE_PAGE_SIZE)
+
+    /** The physical-keyboard candidate row drew [words] and [count] of them fit; paging follows it. */
+    internal fun reportHardwareShown(words: List<String>, count: Int) = hardwareNavigation.reportShown(words, count)
 
     /** First engine-page index the physical-keyboard toolbar shows; read in composition, so window moves redraw it. */
     internal fun hardwareWindowStart(state: CandidateState): Int = hardwareSelectionRevision.intValue.let {
@@ -1589,7 +1593,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             if (SettingsPreferences.isSingleAssociationMode(service)) {
                                 service.predictionManager.suppressNextPredictionOnce()
                             }
-                            service.commitText(association)
+                            service.commitTextAndPredict(association, isPaste = false, chained = true)
                         }
                     } else {
                         withEditor {
@@ -1677,7 +1681,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         val emailDomain = emailSuffixesShown
                         val literal = withEditor {
                             service.textCommit.keyboardLiteral(routeResult.commitText, numberPanel = isNumberKeyboard)
-                                .also { service.commitText(it) }
+                                .also {
+                                    service.commitText(it)
+                                    if (isNumberKeyboard && com.kingzcheung.xime.calculator.CalculatorEngine.isCalculatorKey(key))
+                                        syncCalculatorWithEditor(it)
+                                }
                         }
                         if (isNumberKeyboard) updateCalculatorCandidates()
                         // 数字键盘、常用符号面板打的 @：和主键盘一样给邮箱后缀（默认开），接着打的数字、点重新筛。
@@ -2045,7 +2053,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         publishHardwareCandidateSelection()
                     }
                 } else {
-                    pageHardwareCandidates(snapshot.state, decision.direction)
+                    pageHardwareCandidates(snapshot.state, decision.direction,
+                        stride = if (decision.wholeWindow) snapshot.words.size else null)
                     withEditor {
                         publishHardwareCandidateSelection()
                         service.updateUI()
@@ -2107,8 +2116,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     }
 
     /** On the compact toolbar, page through its windows before turning the engine page. */
-    private fun pageHardwareCandidates(shown: CandidateState, direction: Int) {
-        if (service.uiState.value.isCompact && hardwareNavigation.moveWindow(shown, direction)) return
+    private fun pageHardwareCandidates(shown: CandidateState, direction: Int, stride: Int? = null) {
+        if (service.uiState.value.isCompact && hardwareNavigation.moveWindow(shown, direction, stride)) return
         val paged = if (direction < 0) service.rimeEngine.hasPrevPage() && service.rimeEngine.pageUp()
             else service.rimeEngine.hasNextPage() && service.rimeEngine.pageDown()
         if (paged) hardwareNavigation.enginePaged(shown, direction)
@@ -2231,7 +2240,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val accepted = commitAssociationSelection(state, index,
             commit = { text ->
                 service.commitTextAndPredict(text, isPaste = false,
-                    allowPrediction = !emailSuffix && !SettingsPreferences.isSingleAssociationMode(service)).accepted
+                    allowPrediction = !emailSuffix && !SettingsPreferences.isSingleAssociationMode(service),
+                    chained = true).accepted
             },
             replace = { prefix, completion ->
                 if (service.uiState.value.inputTarget.isInternal) service.replaceBeforeCursor(prefix, completion)
@@ -2807,6 +2817,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         service.rimeEngine.endQueuedComposition(isT9Schema(service.uiState.value.currentSchemaId))
 
     /**
+     * 翻译栏开着时输入从栏换到应用输入框、或反过来：没打完的拼音和联想收掉，
+     * 免得候选上屏、编码、删除一部分去旧框一部分去新框。
+     */
+    internal fun dropCompositionForTargetChange() {
+        postRimeJob("input_target_changed") { clearInputStateForKeys() }
+    }
+
+    /**
      * 拼音写在输入框里时，用户把光标点到了编码以外（11-08 红米 K70 反馈：光标挪到中间按删除，删的是末尾）。
      * 原来组词照旧，下一下删除删的是末尾编码的字母，再写回编码时光标被拉回末尾。
      * 这里结束组词：编码字母原样留在输入框里成为普通文字（不替用户删掉看得见的字），候选和引擎清空，
@@ -2859,6 +2877,28 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 )
             }
         }
+    }
+
+    /**
+     * 数字键盘上打完一个数字或运算符后，按光标前屏幕上的算式重新对一次（用户 11-13）：
+     * 断一会（收起键盘、切走、移过光标、去符号面板打了 ×）再接着打，和前面已经上屏的算式接上算；
+     * 选了「= 结果」后接着打，从结果往下算。读不到、密码框、键盘里的面板输入框不读，照原来按键记的算。
+     * 刚打的字不在光标前（编辑框没收），或算式比读到的这段还长，也不动。主线程调用。
+     */
+    private fun syncCalculatorWithEditor(literal: String) {
+        if (literal.isEmpty() || service.uiState.value.inputTarget.isInternal || service.isSecretEditor()) return
+        val ic = service.currentInputConnection ?: return
+        val before = runCatching { ic.getTextBeforeCursor(CALCULATOR_CONTEXT_LENGTH, 0)?.toString() }.getOrNull() ?: return
+        if (!before.endsWith(literal)) return
+        val tail = com.kingzcheung.xime.calculator.CalculatorEngine.trailingExpression(before)
+        val engine = service.calculatorEngine
+        if (tail.isEmpty()) {
+            // 光标前不是算式（移到了 abc 后面）：按键记下的旧算式也对不上屏幕了，不再给它的候选。
+            if (!before.endsWith(engine.getExpression())) engine.clear()
+            return
+        }
+        if (!tail.endsWith(literal) || tail.length >= CALCULATOR_CONTEXT_LENGTH) return
+        if (tail != engine.getExpression()) engine.resume(tail)
     }
 
     /**
@@ -3022,6 +3062,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 XimeInputMethodService.TAG,
                 "ForgetCandidate: text='$text' display=$displayIndex engine=$engineIndex result=$result"
             )
+            if (result == 2 && demoteEnglishWord(text)) return@postRimeJob
             if (result != 0) {
                 withEditor {
                     service.updateUI()
@@ -3164,6 +3205,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 "ImeKeyRouter",
                 "forgetCandidateGlobal: text='$text' index=$globalIndex result=$result"
             )
+            if (result == 2 && demoteEnglishWord(text)) return@postRimeJob
             if (result == 0) return@postRimeJob
             withEditor {
                 service.updateUI()
@@ -3192,6 +3234,26 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
     }
 
+    /**
+     * 长按「固定在第 N 位」：这个词在当前编码下锁在第 [place] 位，别的词照常学习、排在空出来的位置。
+     * 和「固定」存在同一个 cyime_pins.txt（第四列是位置）。
+     */
+    internal fun pinCandidateAt(text: String, place: Int) {
+        val snapshot = service.candidateState.value
+        postRimeJob {
+            if (!snapshot.hasSameSelectionSource(service.candidateState.value)) return@postRimeJob
+            val done = service.rimeEngine.setCandidatePinnedAtPlace(text, place, snapshot.engineRevision)
+            FileLogger.i(XimeInputMethodService.TAG, "PinCandidateAt: text='$text' place=$place result=$done")
+            if (done) {
+                withEditor { service.updateUI() }
+            } else {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(service, "「$text」不能固定", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     /** A remembered hand-typed English word (lua/cyime_en_memory.lua) has no Rime record: forget it from its file. */
     private suspend fun forgetEnglishWord(text: String): Boolean {
         if (!typesEnglishCapitals(service.uiState.value.currentSchemaId)) return false
@@ -3205,13 +3267,30 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     }
 
     /**
+     * 长按删除一个没有学习记录的词库英文词（中文 26 键的 melt_eng 词，没有用户词库）：以前只提示「没有学习记录」，
+     * 删不掉（2026-11-13）。现在记进 cyime_en_demoted.txt，lua/cyime_en_memory.lua 把它排到前四个候选之后；
+     * 再选它或回车打它就回到原位。只在雾凇系 26 键；英文单词方案全是英文，不放后面。
+     */
+    private suspend fun demoteEnglishWord(text: String): Boolean {
+        if (!isRimeIceCapitalSchema(service.uiState.value.currentSchemaId)) return false
+        val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service)
+        if (!com.kingzcheung.xime.settings.EnglishWordMemory.demote(rimeDir, text)) return false
+        service.rimeEngine.setInput(service.rimeEngine.getInput())
+        withEditor { service.updateUI() }
+        showForgetResult(text, 4)
+        return true
+    }
+
+    /**
      * 忘掉学习的结果提示：用户看不到词库内部状态，只有这句话说明发生了什么。
-     * result 同 forgetCandidate：1 忘掉后仍是词库里的词、2 没有学习记录、3 忘掉后不再出现（自造词）。
+     * result 同 forgetCandidate：1 忘掉后仍是词库里的词、2 没有学习记录、3 忘掉后不再出现（自造词）；
+     * 4 词库英文词排到后面（demoteEnglishWord）。
      */
     private fun showForgetResult(text: String, result: Int) {
         val message = when (result) {
             1 -> "已忘掉「$text」的学习记录，回到词库原来的位置"
             3 -> "已删除自造的「$text」，以后再用会重新记住"
+            4 -> "「$text」以后排到后面，再选它就回到原位"
             else -> "「$text」没有学习记录，不会删掉，排序不变"
         }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -3237,3 +3316,6 @@ internal fun takesOverShiftedCandidateKey(
 
 /** 按住 Shift 选中的候选要上屏的英文；null 表示照常上屏中文。两种情况都只上屏这个词本身，不附加空格。 */
 internal fun shiftSelectionEnglish(candidate: String, englishFor: (String) -> String?): String? = englishFor(candidate)
+
+/** 接算式时读光标前多少字；算式比这还长就不接（读到的只是后半截）。 */
+private const val CALCULATOR_CONTEXT_LENGTH = 256

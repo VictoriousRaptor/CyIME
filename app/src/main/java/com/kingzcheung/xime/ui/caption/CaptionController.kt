@@ -83,12 +83,14 @@ class CaptionController(context: Context) : CaptionInferenceClient.Listener {
     private val flipMemory = ReplyFlipMemory(prefs)
     /** Quick-reply card turned towards the other person; remembered across closing and restarts. */
     var replyFlipped by mutableStateOf(flipMemory.read()); private set
-    /** What the captions listen for; remembered. Switching restarts the session with that language's models. */
-    var language by mutableStateOf(CaptionLanguage.of(prefs.getString("language", null))); private set
+    /**
+     * What the captions listen for: starts as the interface language every time (user 11-14), not a
+     * remembered pick. Switching restarts the session with that language's models.
+     */
+    var language by mutableStateOf(CaptionLanguage.forInterface(context)); private set
     fun chooseLanguage(next: CaptionLanguage) {
         if (next == language || next !in CaptionLanguage.supported) return
         language = next
-        prefs.edit().putString("language", next.id).apply()
         if (status == Status.Listening || status == Status.Starting) { pause(); start() }
         // An error (e.g. the previous language's model missing) must not keep the new language from starting.
         else if (status == Status.Error) start()

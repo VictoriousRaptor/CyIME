@@ -54,7 +54,7 @@ enum class ToolbarButton(
     // 名称用于自定义列表；键盘上按当前状态显示“全角”或“半角”（见 [stateLabel]）。
     FULL_SHAPE("full_shape", "全角/半角", HalfWidthIcon),
     // 切换当前方案的输出字形；注音使用独立的简体设置。
-    // 键盘上按当前状态显示“繁体”或“简体”（见 [stateLabel]）。
+    // 键盘上按当前状态显示“繁体”或“简体”（见 [stateLabel]）；图标是「简」或「繁」字（ToolbarButtonIcon），这里的图标不显示。
     TRADITIONAL("traditional", "简繁", Icons.TwoTone.Translate),
     // 布局手势开关：只在对应布局里出现（见 LayoutGestureMenuItems.kt），其他布局自动隐藏。
     GLIDE("glide", "滑行输入", Icons.Outlined.Gesture),
@@ -100,5 +100,16 @@ data class ToolbarAction(
     val active: Boolean = false,
     /** 菜单里长按：打开这一项在设置里的对应页；没有对应设置时为 null。 */
     val onLongClick: (() -> Unit)? = null,
+    /** 工具栏上长按弹出、滑到一项松手就选它的列表（插件按钮，如「翻译」选目标语言）；null 时没有。 */
+    val pressMenu: ToolbarPressMenu? = null,
     val onClick: () -> Unit
 )
+
+/** 长按列表：[load] 在长按时才取选项（插件给的），[onChoose] 收到选中的那一项。 */
+class ToolbarPressMenu(
+    val load: suspend () -> PressMenuOptions?,
+    val onChoose: (key: String, option: String) -> Unit,
+)
+
+/** 一组选项：[key] 是插件里这一项设置的名字，[selected] 是现在选着的。 */
+data class PressMenuOptions(val key: String, val title: String, val options: List<String>, val selected: String?)

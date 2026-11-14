@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -157,7 +156,7 @@ fun SchemaSettingsContent(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "导入后直接安装并打开其中的主方案，出现在「已启用的输入组合」里；点下方「应用方案更改」后就能在键盘上用。" +
+                        "导入后直接安装并打开其中的主方案，出现在「已启用的输入组合」里，自动应用，稍等就能在键盘上用。" +
                             "和已有文件同名时会先问你，确认后备份再替换，卸载时恢复。",
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -345,7 +344,7 @@ fun SchemaSettingsContent(
                 item {
                     SettingsNote("长按可排序；语言和默认组合在「语言与方案」选择。",
                         Modifier.padding(top = 4.dp), jumps = listOf("语言与方案"))
-                    SettingsNote("安装或启停其他方案后，点「应用方案更改」生效。")
+                    SettingsNote("安装、启停方案后自动应用，不用再部署。")
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
@@ -435,20 +434,30 @@ fun SchemaSettingsContent(
                         Text("Rime 配置文件(高级)")
                     }
                 }
+                // 启停、导入已自动应用（#340）；全量重新部署只用来修坏掉的编译结果，或手动改了 Rime 文件之后。
+                item {
+                    TextButton(onClick = { viewModel.deploySchema() }, enabled = !uiState.isDeploying) {
+                        if (uiState.isDeploying) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("重新部署(修复)")
+                    }
+                }
                 item { Spacer(Modifier.height(8.dp)) }
             }
 
-            Button(
-                onClick = { viewModel.deploySchema() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                if (uiState.isDeploying) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            // 以前这里是「应用方案更改」按钮，要用户自己点（#340）；现在改动自动应用，只在应用时显示一行进度。
+            if (uiState.isApplying || uiState.isDeploying) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("schema-applying"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
+                    Text(if (uiState.isDeploying) "正在重新部署…" else "正在应用方案更改…",
+                        style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("应用方案更改")
             }
         }
     }

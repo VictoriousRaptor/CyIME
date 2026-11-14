@@ -83,6 +83,53 @@ object RimeConfigHelper {
         usable
     }
 
+    /**
+     * 启停、导入方案后自动应用（#340，由 [SchemaChangeApplier] 调）：和 [prepareEngine] 同一步，但不走「已准备好」的捷径，
+     * 新方案文件、新的启用列表要按哈希增量编译进去。当前方案已经停用就换到同语言还开着的方案。
+     * 部署能用时通知输入法重新选方案（[DEPLOYMENT_REVISION]），键盘、布局栏跟着新的方案列表走。
+     */
+    suspend fun applySchemaChanges(context: Context): Boolean {
+        val before = SettingsPreferences.getDeploymentHash(context)
+        val wasDone = SettingsPreferences.isDeploymentDone(context)
+        val usable = preparationMutex.withLock {
+            preparedInProcess = false
+            val (user, shared) = initializeRimeDataAsync(context)
+            RimeEngine.getInstance().initialize(user, shared)
+            val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context))
+            preparedInProcess = usable
+            usable
+        }
+        val moved = moveOffDisabledSchema(context) != null
+        // 什么都没变（导入的只是图片、重复点同一项）就不叫输入法重来一遍，免得键盘闪一下「正在加载」。
+        val changed = moved || !wasDone || SettingsPreferences.getDeploymentHash(context) != before
+        if (usable && changed) {
+            val prefs = SettingsPreferences.getPrefsPublic(context)
+            prefs.edit().putLong(DEPLOYMENT_REVISION, prefs.getLong(DEPLOYMENT_REVISION, 0L) + 1L).apply()
+        }
+        return usable
+    }
+
+    /** 当前方案不在启用列表里（刚被停用、卸载）：换到同语言还开着的方案，并记成该语言选中的条目。手写、英文不在列表里，不动。 */
+    fun moveOffDisabledSchema(context: Context): String? {
+        val current = SettingsPreferences.getCurrentSchema(context)
+        val enabled = SchemaManager.getEnabledSchemas(context)
+        // 键盘配置还没读进来时 isHandwritingSchema 认不出手写，再按方案本身的描述认一遍，不能把用户从手写换走。
+        val handwriting = com.kingzcheung.xime.ui.keyboard.isHandwritingSchema(current) ||
+            com.kingzcheung.xime.settings.InputProfiles.describe(current).layout.kind == com.kingzcheung.xime.settings.LayoutKind.HANDWRITING
+        val fallback = replacementForDisabled(current, enabled, handwriting) ?: return null
+        SettingsPreferences.setCurrentSchema(context, fallback)
+        com.kingzcheung.xime.settings.InputModes.selectProfile(context, fallback)
+        FileLogger.w(TAG, "Current schema $current is disabled, moved to $fallback")
+        return fallback
+    }
+
+    /** 纯判断，可单测：[current] 已停用时换成哪个方案；不用换返回 null。 */
+    internal fun replacementForDisabled(current: String, enabled: List<String>, handwriting: Boolean): String? {
+        if (current.isBlank() || handwriting || current == com.kingzcheung.xime.settings.InputModes.ENGLISH) return null
+        if (enabled.isEmpty() || current in enabled) return null
+        return fallbackSchema(current, enabled, emptySet())?.takeIf { it != current }
+    }
+
     /** Restore Chinese packs without the optional English translator. Keep the user's requested
      * setting pending so the dictionary screen can explicitly retry it after a successful startup. */
     private fun retryWithoutCellEnglish(context: Context): Boolean {
@@ -153,7 +200,7 @@ object RimeConfigHelper {
         FileLogger.w(TAG, "Deployment problems: $broken, current=$current, fallback=$fallback, " +
             "free=${context.filesDir.usableSpace / (1L shl 20)}MB")
         val message = if (usable) "这些方案没有编译成功，暂时不能用：$names。其他方案正常；" +
-            (if (broken.keys.any { isAppSchema(context, it) }) "可在「已安装的方案」点「应用方案更改」重试。" else "可在「已安装的方案」停用或卸载它们。") +
+            (if (broken.keys.any { isAppSchema(context, it) }) "可在「已安装的方案」点「重新部署(修复)」重试。" else "可在「已安装的方案」停用或卸载它们。") +
             storageHint(context)
             else "部署失败：$names。" + storageHint(context)
         return recordProblem(context, message, usable)
@@ -186,7 +233,7 @@ object RimeConfigHelper {
     /** 剩余空间太少时词库编译会写不完（部署每次都失败、有些字打不出来），提示里带上。 */
     private fun storageHint(context: Context): String {
         val freeMb = context.filesDir.usableSpace / (1L shl 20)
-        return if (freeMb < LOW_STORAGE_MB) "手机剩余空间只有 $freeMb MB，词库编译可能写不下，请先清理空间再点「应用方案更改」。" else ""
+        return if (freeMb < LOW_STORAGE_MB) "手机剩余空间只有 $freeMb MB，词库编译可能写不下，请先清理空间再到「已安装的方案」点「重新部署(修复)」。" else ""
     }
     private const val LOW_STORAGE_MB = 300L
 
@@ -273,6 +320,8 @@ object RimeConfigHelper {
         com.kingzcheung.xime.settings.ChineseSchemas.installOptionalLayoutSchemas(context, rimeDir)
         com.kingzcheung.xime.settings.DoublePinyinSchemes.install(context, rimeDir)
         check(installing.delete()) { "Cannot finish bundled asset installation" }
+        // 内置排列和自建布局是中文26键方案的副本：26 键方案随版本更新后，按当前方案重新生成，不停在旧快照。
+        com.kingzcheung.xime.settings.CustomKeyboardLayouts.followBaseSchema(context)
         com.kingzcheung.xime.settings.CustomKeyboardLayouts.enableMeasuredCorrection(context)
         // F1: assets 会用内置 default.yaml 覆盖，这里把启用方案重新写回 schema_list
         SchemaManager.applyEnabledSchemasToDefaultYaml(context)

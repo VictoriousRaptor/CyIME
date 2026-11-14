@@ -107,6 +107,8 @@ class KeyboardSurfaceConsistencyTest {
                 "inputText = liveGlide.inputText, preeditText = liveGlide.preeditText"),
             // CandidateBarState 里的 preeditText 已经是 shownPreedit 的结果。
             "CandidateBar.kt" to listOf("it.preeditText.ifEmpty { it.inputText }"),
+            // 按住 !@# 点删除：只判断是不是还在打字，不是显示。
+            "T9KeyboardLayout.kt" to listOf("it.isComposing || it.inputText.isNotEmpty() || it.preeditText.isNotEmpty()"),
         )
         val raw = Regex("""\.preeditText\b""")
         val found = (uiFiles() + File(root, "service/XimeInputMethodService.kt")).flatMap { file ->

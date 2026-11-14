@@ -962,6 +962,12 @@ class RimeEngine {
         }
     }
 
+    /**
+     * 换方案成功后通知（锁已放开，在调用 switchSchema 的线程上）。服务拿它在键盘开着换到九键时补读词组模型；
+     * 只放一个，服务创建时设、销毁时清。
+     */
+    @Volatile var onSchemaSwitched: ((String) -> Unit)? = null
+
     fun switchSchema(schemaId: String): Boolean {
         // 部署/全量编译进行中（30s+）不阻塞等待：直接返回 false，避免主线程
         // onStartInput/selectSchema 等路径 ANR。部署完成后的 initRimeEngine
@@ -970,6 +976,12 @@ class RimeEngine {
             FileLogger.w(TAG, "switchSchema($schemaId) skipped: deployment in progress")
             return false
         }
+        val switched = switchSchemaLocked(schemaId)
+        if (switched) runCatching { onSchemaSwitched?.invoke(schemaId) }
+        return switched
+    }
+
+    private fun switchSchemaLocked(schemaId: String): Boolean {
         mutateLocked {
             if (!nativeHasSession()) {
                 FileLogger.w(TAG, "switchSchema($schemaId) failed: no rime session")
@@ -1309,6 +1321,11 @@ class RimeEngine {
     private external fun nativeForgetCandidate(index: Int, global: Boolean): Int
     private external fun nativeCandidatePinState(text: String): Int
     private external fun nativeSetCandidatePinned(text: String, pinned: Boolean): Boolean
+    private external fun nativeCandidatePinInfo(text: String): IntArray?
+    private external fun nativeSetCandidatePinnedAt(text: String, place: Int): Boolean
+    private external fun nativePinCode(code: String, text: String, place: Int): Boolean
+    private external fun nativeUnpinCode(code: String, text: String): Boolean
+    private external fun nativeListPins(): Array<String>
     private external fun nativeRestoreSuppressedCandidate(text: String): Boolean
     private external fun nativeGetSuppressedCandidates(): Array<String>
     private external fun nativeGetHiddenCandidates(): Array<String>
@@ -1611,6 +1628,20 @@ class RimeEngine {
         when (nativeCandidatePinState(text)) { 1 -> true; 0 -> false; else -> null }
     }
 
+    /** 长按卡片的固定信息：已固定时 [pinnedPlace] 是固定的位置（0 排第一）；[menuPlace] 是现在排第几（0 没找到）。 */
+    internal class PinInfo(val pinned: Boolean, val pinnedPlace: Int, val menuPlace: Int)
+
+    /** 同 [candidatePinState]，再带上位置；null＝不能固定。主线程调用，拿不到锁不等待。 */
+    internal fun candidatePinInfo(text: String): PinInfo? = tryLocked(null) {
+        if (!isInitialized || !nativeHasSession() || nativeIsMaintaining()) return@tryLocked null
+        val info = nativeCandidatePinInfo(text) ?: return@tryLocked null
+        when (info.getOrNull(0)) {
+            1 -> PinInfo(true, info.getOrElse(1) { 0 }, info.getOrElse(2) { 0 })
+            0 -> PinInfo(false, 0, info.getOrElse(2) { 0 })
+            else -> null
+        }
+    }
+
     /**
      * 长按首选时拆出的词：首选是引擎组出来的整句（两个词以上）才有，否则 null。
      * 主线程调用，拿不到锁不等待。
@@ -1702,6 +1733,42 @@ class RimeEngine {
         if (!isCandidateRevisionCurrent(revision) || !isInitialized || !nativeHasSession() || nativeIsMaintaining()) return@locked false
         candidateRevision.incrementAndGet()
         nativeSetCandidatePinned(text, pinned)
+    }
+
+    /** 固定在第 [place] 位：当前编码下锁在这个位置，没固定的词照常学习。候选过期时不做。 */
+    @androidx.annotation.WorkerThread
+    internal fun setCandidatePinnedAtPlace(text: String, place: Int, revision: Long): Boolean = locked {
+        if (!isCandidateRevisionCurrent(revision) || !isInitialized || !nativeHasSession() || nativeIsMaintaining()) return@locked false
+        candidateRevision.incrementAndGet()
+        nativeSetCandidatePinnedAt(text, place)
+    }
+
+    /** 一条固定：编码（九键是数字）、词、第几位（0 排第一）。 */
+    internal data class Pin(val code: String, val text: String, val place: Int)
+
+    /** 设置页（我的短语）列出的固定。 */
+    @androidx.annotation.WorkerThread
+    internal fun listPins(): List<Pin> = locked {
+        if (!isInitialized || nativeIsMaintaining()) emptyList()
+        else nativeListPins().mapNotNull { line ->
+            val parts = line.split('\t')
+            if (parts.size < 3) null else Pin(parts[0], parts[1], parts[2].toIntOrNull() ?: 0)
+        }
+    }
+
+    /** 设置页按编码固定（[place] 0 排第一）。下次打这个编码时生效。 */
+    @androidx.annotation.WorkerThread
+    internal fun pinCode(code: String, text: String, place: Int): Boolean = locked {
+        if (!isInitialized || nativeIsMaintaining()) return@locked false
+        candidateRevision.incrementAndGet()
+        nativePinCode(code, text, place)
+    }
+
+    @androidx.annotation.WorkerThread
+    internal fun unpinCode(code: String, text: String): Boolean = locked {
+        if (!isInitialized || nativeIsMaintaining()) return@locked false
+        candidateRevision.incrementAndGet()
+        nativeUnpinCode(code, text)
     }
 
     @androidx.annotation.WorkerThread

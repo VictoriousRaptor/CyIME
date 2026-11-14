@@ -14,6 +14,18 @@ class ScreenshotImageSourceTest {
         assertEquals(60, ScreenshotImageSource.MAX_QUERY_ROWS)
     }
 
+    @Test fun recentPhotosFollowScreenshotsWithoutRepeatingThem() {
+        fun image(id: Int, label: String) = ClipboardImage("content://media/external/images/media/$id", "image/jpeg", id.toLong(), label)
+        val shots = listOf(image(9, "截图"), image(5, "截图"))
+        val photos = (20 downTo 1).map { image(it, ScreenshotImageSource.PHOTO_LABEL) } + image(9, ScreenshotImageSource.PHOTO_LABEL)
+        val shown = ScreenshotImageSource.withRecentPhotos(shots, photos)
+        // A screenshot that is also among the newest photos stays one card, labelled as a screenshot.
+        assertEquals(1, shown.count { it.uri.endsWith("/9") })
+        assertEquals("截图", shown.first { it.uri.endsWith("/9") }.label)
+        assertEquals(2 + ScreenshotImageSource.RECENT_PHOTO_LIMIT, shown.size)
+        assertEquals(shots, ScreenshotImageSource.withRecentPhotos(shots, emptyList()))
+    }
+
     @Test fun directPinnedLookupRejectsForeignOrMalformedMediaUris() {
         val sources = ScreenshotImageSource.pinnedMediaImages(setOf(
             "text:3", "image:content://other/external/images/media/3",

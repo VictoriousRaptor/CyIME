@@ -2,12 +2,15 @@ package com.kingzcheung.xime.settings
 
 import android.content.Context
 
-/** 动态背景怎么动：放大、缩小、左右平移，或三种接着来（轮换）。 */
+/**
+ * 动态背景怎么动：放大、缩小、左右平移，或三种接着来（组合）。
+ * 组合原叫「轮换」，和轮播图片放在一起像是同一件事（用户 11-13），只改显示的字，存的 id 仍是 cycle。
+ */
 enum class BackgroundMotionEffect(val id: String, val label: String) {
     ZOOM_IN("zoom_in", "放大"),
     ZOOM_OUT("zoom_out", "缩小"),
     PAN("pan", "平移"),
-    CYCLE("cycle", "轮换");
+    CYCLE("cycle", "组合");
 
     companion object {
         fun of(id: String?): BackgroundMotionEffect = entries.firstOrNull { it.id == id } ?: CYCLE

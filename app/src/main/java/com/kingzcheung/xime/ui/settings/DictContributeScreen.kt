@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -68,6 +69,7 @@ fun DictContributeScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(true) }
     var unchecked by remember { mutableStateOf(emptySet<DictContributionRules.Word>()) }
     var consentFor by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var excluded by remember { mutableStateOf(DictContribution.excluded(app)) }
 
     LaunchedEffect(app) {
         try {
@@ -80,7 +82,9 @@ fun DictContributeScreen(onBack: () -> Unit) {
         } finally { busy = false }
     }
 
-    val words = loaded?.selection?.words.orEmpty()
+    val allWords = loaded?.selection?.words.orEmpty()
+    val words = allWords.filter { DictContribution.excludedKey(it) !in excluded }
+    val deletedCount = allWords.size - words.size
     val picked = words.filter { it !in unchecked }
     fun withConsent(action: () -> Unit) {
         if (DictContribution.consented(app)) action() else consentFor = action
@@ -160,12 +164,13 @@ fun DictContributeScreen(onBack: () -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             item {
                 SettingsNote("只列出你选过 ${DictContributionRules.MIN_COUNT} 次以上的 2～${DictContributionRules.MAX_CHARS} 字词和次数。" +
-                    "整句、带数字字母的、像人名的、你自己加的短语和个人词库都不在里面。不想给的词点一下取消勾选。")
+                    "整句、带数字字母的、像人名的、你自己加的短语和个人词库都不在里面。" +
+                    "不想给的词取消勾选，或点右边删掉，以后不再列出（不会删你自己的词库）。")
             }
             if (busy && loaded == null) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 16.dp)) }
             error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 16.dp)) } }
             loaded?.let { result ->
-                if (words.isEmpty()) item { DictionaryEmptyLine("还没有可贡献的词") }
+                if (words.isEmpty()) item { DictionaryEmptyLine(if (deletedCount > 0) "剩下的词都删掉了" else "还没有可贡献的词") }
                 else item {
                     SettingsGroupTitle("已选 ${picked.size} / ${words.size} 个词，去掉 ${result.selection.dropped} 条")
                 }
@@ -177,8 +182,21 @@ fun DictContributeScreen(onBack: () -> Unit) {
                     SettingsListRow(word.text, listOf(word.pinyin, "${word.count} 次").filter { it.isNotEmpty() }.joinToString(" · "),
                         Modifier.clickable(enabled = !busy) { toggle() }) {
                         Checkbox(checked = checked, enabled = !busy, onCheckedChange = { toggle() })
+                        IconButton(enabled = !busy, onClick = {
+                            excluded = DictContribution.exclude(app, word)
+                            unchecked = unchecked - word
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "删掉${word.text}",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
+            }
+            if (deletedCount > 0) item {
+                TextButton(enabled = !busy, modifier = Modifier.padding(top = 4.dp), onClick = {
+                    DictContribution.clearExcluded(app)
+                    excluded = emptySet()
+                }) { Text("恢复删掉的 $deletedCount 个词") }
             }
         }
     }

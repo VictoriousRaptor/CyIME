@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,6 +36,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import com.kingzcheung.xime.ui.theme.CyMotion
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,6 +49,49 @@ import com.kingzcheung.xime.ui.keyboard.letterKeySpan
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 import com.kingzcheung.xime.ui.theme.liquidGlassEdge
 import kotlin.math.roundToInt
+
+/** 布局、方案两行卡片的横向位置和打开时的滑入：见 [rememberChoiceRowScroll]。 */
+internal class ChoiceRowScroll(val list: LazyListState) {
+    var userPicked = false
+        private set
+    /** 打开时的滑入进度：1 是整排往右错开一张卡片，0 是停到位。 */
+    val slide = Animatable(1f)
+
+    fun picked() { userPicked = true }
+}
+
+/**
+ * 打开时列表已经停在当前选中的那张卡片，整排卡片从右边错开一张卡片的地方往左滑进来（用户 11-11：
+ * 九键原来那一下滑动好看，三种布局都要；距离就按那一下，大约一张卡片，不从第一张滑过来，后面卡片再多也不会滑很久）。
+ * 打开后自己点了别的卡片，列表才滚到那张。
+ */
+@Composable
+internal fun rememberChoiceRowScroll(selectedIndex: Int, items: Any?): ChoiceRowScroll {
+    val list = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex.coerceAtLeast(0))
+    val scroll = remember(list) { ChoiceRowScroll(list) }
+    LaunchedEffect(scroll) { scroll.slide.animateTo(0f, CyMotion.rowSlideIn()) }
+    LaunchedEffect(selectedIndex, items) {
+        if (selectedIndex < 0) return@LaunchedEffect
+        if (scroll.userPicked) list.animateScrollToItem(selectedIndex) else list.scrollToItem(selectedIndex)
+    }
+    return scroll
+}
+
+/**
+ * 给每张卡片用：滑入时往右错开一张卡片宽（加卡片间距），列表边缘照常裁掉；只改绘制位置，
+ * 不重新布局。滑入途中点到的就是看到的那张。
+ */
+internal fun Modifier.choiceRowSlideIn(scroll: ChoiceRowScroll, spacing: Dp = ChoiceRowSpacing): Modifier =
+    graphicsLayer {
+        val progress = scroll.slide.value
+        if (progress != 0f) {
+            // 各张都按同一个距离错开（取第一张看得见的卡片宽），整排一起动，不挤不散。
+            val card = scroll.list.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.toFloat() ?: size.width
+            translationX = progress * (card + spacing.toPx())
+        }
+    }
+
+internal val ChoiceRowSpacing = 6.dp
 
 /** A view of the layout data, never a second keyboard or an engine session. */
 @Composable
@@ -62,11 +109,9 @@ internal fun LayoutPreviewChoices(
 ) {
     val revision by KeysConfigHelper.configVersion.collectAsState()
     val evenMergedKeys = rememberKeyboardInputPreferences().evenMergedKeys
-    val list = rememberLazyListState()
+    val scroll = rememberChoiceRowScroll(layouts.indexOfFirst { it.id == selectedId }, layouts)
+    val list = scroll.list
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    LaunchedEffect(selectedId, layouts) {
-        layouts.indexOfFirst { it.id == selectedId }.takeIf { it >= 0 }?.let { list.animateScrollToItem(it) }
-    }
     Row(modifier.fillMaxWidth().testTag(tag), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(if (rowHeight != null) "布\n局" else "布局",
             Modifier.then(if (rowHeight != null) Modifier.align(Alignment.CenterVertically) else Modifier.padding(top = 3.dp)),
@@ -86,15 +131,16 @@ internal fun LayoutPreviewChoices(
             val actionWidth = if (rowHeight == null) managementWidth else
                 minOf(managementWidth, (width * .72f).coerceAtLeast(minOf(92.dp * fontScale, maxWidth)))
             LazyRow(Modifier.fillMaxWidth().wheelScroll(list).testTag("$tag:list"), state = list,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                horizontalArrangement = Arrangement.spacedBy(ChoiceRowSpacing)) {
                 items(layouts, key = { it.id }) { layout ->
                     val chosen = layout.id == selectedId
                     // Custom layouts are observable; do not cache their rows across an edit.
                     val rows = previewRows(layout, language, revision)
                     val custom = CustomKeyboardLayouts.find(layout.id)?.takeIf { it.widths.isNotEmpty() }
                     val widthOf = custom?.let { l -> { key: String -> l.widthOf(key) } }
+                    Box(Modifier.choiceRowSlideIn(scroll)) {
                     PreviewChoiceCard(layout.displayName, chosen, width, previewHeight,
-                        containerColor, contentColor, accentColor, "$itemTagPrefix${layout.id}", { onSelect(layout.id) },
+                        containerColor, contentColor, accentColor, "$itemTagPrefix${layout.id}", { scroll.picked(); onSelect(layout.id) },
                         unavailable = layout.id in unavailableIds) {
                                 if (rows.isEmpty()) Icon(Icons.Outlined.Keyboard, "${layout.displayName}布局", tint = contentColor)
                                 else MiniatureKeyboard(rows, layout.kind in setOf(LayoutKind.ALPHABETIC, LayoutKind.MERGED, LayoutKind.ZHUYIN),
@@ -103,11 +149,14 @@ internal fun LayoutPreviewChoices(
                                     evenMergedKeys = evenMergedKeys && CustomKeyboardLayouts.find(layout.id) != null,
                                     qwertyStagger = qwertyPreviewStagger, widthOf = widthOf)
                     }
+                    }
                 }
                 if (onManage != null) item(key = "layout-management") {
+                    Box(Modifier.choiceRowSlideIn(scroll)) {
                     PreviewChoiceCard("布局管理", false, actionWidth, previewHeight, containerColor, contentColor,
                         accentColor, "profile-layout-management", onManage, isAction = true) {
                         Icon(Icons.Outlined.Settings, null, Modifier.size(24.dp), tint = contentColor)
+                    }
                     }
                 }
             }

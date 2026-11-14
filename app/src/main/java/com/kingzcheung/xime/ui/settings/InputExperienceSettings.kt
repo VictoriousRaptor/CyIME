@@ -71,7 +71,22 @@ internal fun InputExperienceSettings(
             @Composable fun divider() { if (!first) HorizontalDivider(); first = false }
             if (InputExperiencePart.SYMBOLS in parts) {
             divider()
-            CornerHintVisibilitySettings()
+            // 分两组（用户 11-14）：上面管手势（滑不滑得出、长按做什么、方向），下面管键上画不画。
+            // 「上下滑输入符号」关着时下面这些手势选项都没用，收起来：这时只剩三个开关。
+            Row(Modifier.settingsSearchAnchor("上下滑输入符号", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("上下滑输入符号", style = MaterialTheme.typography.titleSmall)
+                    Text(if (settings.cornerSymbolInput) "上下滑动按键输入角标里的符号和数字。键上显不显示角标由最下面两个开关管。"
+                        else if (settings.glideTyping || settings.chineseGlideTyping || settings.t9GlideTyping)
+                            "上下滑、长按都不输入角标符号。"
+                        else "上下滑、长按都不输入角标符号。按住在键盘上滑，滑到哪个键就按下哪个键，松手输入。",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = settings.cornerSymbolInput, colors = settingsSwitchColors(), modifier = Modifier.testTag("corner-symbol-input"),
+                    onCheckedChange = { settings = settings.copy(cornerSymbolInput = it); settings.save(context) })
+            }
+            if (settings.cornerSymbolInput) {
             HorizontalDivider()
             // 原「角标输入方式」两张卡和「长按弹出字母气泡」开关合成三选一（11-01）：两者互锁，管的都是长按字母键做什么。
             Column(Modifier.settingsSearchAnchor("按键角标的符号和数字", bleed = 16.dp, bleedVertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -98,9 +113,10 @@ internal fun InputExperienceSettings(
                     }
                 }
                 // 说明跟选中的方式和角标提示开关走（用户 11-08）：方向已画在卡片里，这里只补卡片表达不了的。
-                val hiddenNote = if (hints.up && hints.down) "" else "关掉提示的角标键上不显示，手势照样输入。"
+                val hiddenNote = if (hints.up && hints.down) "" else "关掉提示的角标键上不显示，照样能滑出来，滑动时气泡显示要输入的符号。"
                 Text(when (corner) {
-                    com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE -> "滑动时键内预览，松手输入。"
+                    // 空格两边的标点键长按也输入角标（用户 11-09），写出来，和执行一致（用户 11-14）。
+                    com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE -> "滑动时键内预览，松手输入。字母键长按没有反应；空格两边的标点键长按也输入角标。"
                     com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE ->
                         "长按弹出这个字母的大写和带声调的写法；滑得慢时可能先弹出气泡。"
                     com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS -> (if (glideLock != null && !t9OnlyLock)
@@ -134,6 +150,10 @@ internal fun InputExperienceSettings(
                         settings = settings.copy(reverseSymbolSwipe = it); settings.save(context)
                     })
             }
+            }
+            HorizontalDivider()
+            // 显示开关放在最下面（用户 11-14：放在选择卡上面很丑）；和上面的手势各管各的。
+            CornerHintVisibilitySettings()
             }
             if (InputExperiencePart.DELETE in parts) {
             // 删除键的几种行为放一组（11-01，B站评论找「删除跳过候选」找不到）：原来分在「角标与长按」和「智能联想」两页。

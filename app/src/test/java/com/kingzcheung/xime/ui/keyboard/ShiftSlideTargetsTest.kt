@@ -97,6 +97,20 @@ class ShiftSlideTargetsTest {
         assertFalse(targets.ctrlEnter())
     }
 
+    // 用户 11-13：按住 !@# 点删除是 Ctrl+删除；没按住时删除照常。
+    @Test fun ctrlBackspaceOnlyWhileSymbolKeyHeld() {
+        val targets = targets()
+        assertFalse(targets.ctrlBackspace())
+        val sent = mutableListOf<Char>()
+        targets.beginCtrl { sent += it }
+        assertTrue(targets.ctrlBackspace())
+        assertTrue(targets.ctrlBackspace())
+        assertTrue(targets.ctrlUsed)
+        assertEquals(listOf(com.kingzcheung.xime.keyboard.CtrlShortcuts.BACKSPACE, com.kingzcheung.xime.keyboard.CtrlShortcuts.BACKSPACE), sent)
+        targets.finish()
+        assertFalse(targets.ctrlBackspace())
+    }
+
     // 用户 11-03：九键数字键只在按住 !@# 时是目标，键名是它代表的字母；没按住时拖过去不算。
     @Test fun t9DigitTargetsOnlyWhileSymbolKeyHeld() {
         val targets = targets()

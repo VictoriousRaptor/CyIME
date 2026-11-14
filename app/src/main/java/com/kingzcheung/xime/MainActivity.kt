@@ -323,9 +323,8 @@ class MainActivity : ComponentActivity() {
             when (val result = ImportManager.import(this@MainActivity, uri)) {
                 is ImportManager.ImportResult.Content -> {
                     launch(Dispatchers.Main) {
-                        // 应用方案更改和同名文件确认都在「已安装的方案」页。
+                        // 同名文件确认在「已安装的方案」页；装好的方案由 ImportManager 自动应用（#340）。
                         val msg = if (result.pendingPackageId != null) "${result.message}：到「已安装的方案」页确认"
-                            else if (result.installedDirect) result.message.replace("点「应用方案更改」", "到「已安装的方案」点「应用方案更改」")
                             else result.message
                         Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                     }

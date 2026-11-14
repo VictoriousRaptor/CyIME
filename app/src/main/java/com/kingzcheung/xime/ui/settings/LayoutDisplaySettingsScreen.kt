@@ -305,6 +305,15 @@ private fun LayoutDisplayPage(
                         },
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.DIGIT_PHRASES)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 英文出短语（别人请求 #269，默认关）：见 service/EnglishPhrases.kt。
+                    var englishPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.EnglishPhrases.isEnabled(context)) }
+                    SettingsToggleItem(Icons.TwoTone.Dialpad, "英文出短语",
+                        "英文状态打的字母正好是「我的短语」的编码时，候选栏给出这条短语，点一下换掉这串字母。",
+                        checked = englishPhrases, onCheckedChange = {
+                            englishPhrases = it
+                            com.kingzcheung.xime.service.EnglishPhrases.setEnabled(context, it)
+                        })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     // 联想常用数字（用户 11-04 要求，默认开）：见 service/NumberHistory.kt。关掉即清空记下的数字。
                     var numberHistory by remember { mutableStateOf(com.kingzcheung.xime.service.NumberHistory.isEnabled(context)) }
                     SettingsToggleItem(Icons.TwoTone.Dialpad, "联想常用数字",

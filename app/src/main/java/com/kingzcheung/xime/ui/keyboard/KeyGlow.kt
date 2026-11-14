@@ -48,6 +48,12 @@ internal fun Modifier.keyGlow(
     glowVisibility: Float = 1f,
     /** 液态玻璃只给有键帽的按键；表情格、编辑页的无底色键不画。 */
     liquid: Boolean = true,
+    /** 键缝动效里这个键按下时画什么（见 KeyGapLight.kt）；键缝动效关着时不起作用。 */
+    gapLight: GapLightKind = GapLightKind.PRESS,
+    /** 键缝动效的长按进度：这个键按多少毫秒算长按；没有长按是 null。 */
+    gapLightHoldMillis: Long? = null,
+    /** 键缝动效：键自己报点按生效、移光标（空格、回车）。 */
+    gapLightTrigger: KeyGapLightTrigger? = null,
 ): Modifier = composed {
     val visibility by rememberUpdatedState(glowVisibility.coerceIn(0f, 1f))
     val preferences = LocalKeyboardInputPreferences.current
@@ -61,7 +67,9 @@ internal fun Modifier.keyGlow(
     }
     val glowEnabled = preferences.keyGlowEnabled
     val motionEnabled = preferences.keyAnimationEnabled && animateCap
-    if (!glowEnabled && !motionEnabled) return@composed this.then(paintedCap)
+    // 键缝动效：在键帽上登记位置、旁观按下；没开时是空的。放在键帽缩放之前，登记的是不缩放的位置。
+    val gapSource = keyGapLightSource(gapLight, holdMillis = gapLightHoldMillis, trigger = gapLightTrigger)
+    if (!glowEnabled && !motionEnabled) return@composed this.then(gapSource).then(paintedCap)
     // One coherent colour per press, as in the reference; overlapping squares
     // vary in brightness instead of mixing three unrelated theme colours.
     // 光色跟随主题强调色（相邻几种色相）；单色主题用带一点冷暖的中性光，不再是固定的七彩。
@@ -115,7 +123,7 @@ internal fun Modifier.keyGlow(
         scaleX = scale
         scaleY = scale
     } else Modifier
-    val painted = observed.then(animatedCap).then(paintedCap)
+    val painted = observed.then(gapSource).then(animatedCap).then(paintedCap)
     if (!glowEnabled) return@composed painted
     painted.drawWithCache {
         // A direction sector owns a disc-sized hit target, but its particles use one key's size.

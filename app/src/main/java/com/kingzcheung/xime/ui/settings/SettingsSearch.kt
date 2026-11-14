@@ -194,6 +194,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("合并键均匀排布", layouts, layoutIndex, "合并键 合并 14键 17键 18键 20键 自定义布局 键宽 均匀 等宽 单键 放宽 对齐 小屏 窄屏"),
         SettingsSearchEntry("数字框自动数字键盘", layouts, layoutIndex, "数字 验证码 号码 电话 数字键盘 自动弹出"),
         SettingsSearchEntry("数字出短语", layouts, layoutIndex, "数字 短语 我的短语 自定义短语 邮箱 网址 号码 数字串 数字键盘 候选"),
+        SettingsSearchEntry("英文出短语", layouts, layoutIndex, "英文 字母 短语 我的短语 自定义短语 编码 英文状态 候选"),
         SettingsSearchEntry("联想常用数字", layouts, layoutIndex, "数字 常用数字 号码 电话 联想 学习 数字键盘 候选"),
         SettingsSearchEntry("数字键盘左栏符号", layouts, layoutIndex, "数字键盘 左栏 侧栏 符号 运算符 加减乘除 + - * / 冒号 自定义 顺序 上下滑 数字侧栏"),
         SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字"),
@@ -273,13 +274,14 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("浅色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 发白 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 白天", section = "背景图片"),
         SettingsSearchEntry("深色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 黑夜 夜间", section = "背景图片"),
         SettingsSearchEntry("配色方案", theme, SettingsRoutes.Theme, "配色 颜色 主题色 皮肤 预览"),
-        SettingsSearchEntry("用自己的图片", theme, SettingsRoutes.Theme, "背景图 背景图片 自定义背景 图片 照片 相册 壁纸 我的图片 换背景 调整图片 裁剪 缩放 对齐 留白 删除图片", section = "背景图片"),
-        SettingsSearchEntry("动态背景", theme, SettingsRoutes.Theme, "动图 动态壁纸 背景动 会动 缓动 放大 缩小 推远 拉近 平移 左右移动 轮换 ken burns 背景动画", section = "动态与轮播"),
-        SettingsSearchEntry("轮播图片", theme, SettingsRoutes.Theme, "轮播 多张图片 多图 幻灯片 图片切换 换图 相册 背景图 清空轮播 删除轮播", section = "动态与轮播"),
+        SettingsSearchEntry("用自己的图片", theme, SettingsRoutes.Theme, "背景图 背景图片 自定义背景 图片 照片 相册 壁纸 我的图片 换背景 换一张 调整图片 调整位置 裁剪 缩放 对齐 留白 删除图片 使用背景图片 关掉图片", section = "背景图片"),
+        SettingsSearchEntry("动态背景", theme, SettingsRoutes.Theme, "动图 动态壁纸 背景动 会动 缓动 放大 缩小 推远 拉近 平移 左右移动 轮换 组合 速度 ken burns 背景动画", section = "背景图片"),
+        SettingsSearchEntry("轮播图片", theme, SettingsRoutes.Theme, "轮播 多张图片 多图 幻灯片 图片切换 换图 相册 背景图 加图片 清空轮播 删除轮播 删掉一张", section = "背景图片"),
         SettingsSearchEntry("视觉样式", theme, SettingsRoutes.Theme, "样式 圆角 扁平 立体 材质"),
         SettingsSearchEntry("按键形状", theme, SettingsRoutes.Theme, "形状 圆角 方形 方角 直角 方块 键帽 按键外形 iOS"),
         SettingsSearchEntry("按键字号", theme, SettingsRoutes.Theme, "字号 字体 文字大小 按键文字 字体大小"),
         SettingsSearchEntry("键帽字母大小写", theme, SettingsRoutes.Theme, "大写 小写 大小写 字母 键帽 按键文字 显示 干净 简洁 中英 中文 英文 分辨 区分 搜狗 盲打 大写QWER 字母键显示大写 中文键盘字母显示大写"),
+        SettingsSearchEntry("上下滑输入符号", gestures, gesturePage, "角标 符号 上滑 下滑 上下滑 拖动 滑动 关闭 关掉 误触 滑到哪个键 三星 滑动按键 手势"),
         SettingsSearchEntry("上方角标提示", gestures, gesturePage, "角标 提示 符号 显示 上方 干净 干净模式 简洁 隐藏"),
         SettingsSearchEntry("下方角标提示", gestures, gesturePage, "角标 提示 符号 显示 下方 干净 干净模式 简洁 隐藏"),
         SettingsSearchEntry("角标不透明度", theme, SettingsRoutes.Theme, "角标 透明度 不透明度 淡 变淡 减淡 颜色 灰 玻璃 层次 突出 主字"),
@@ -317,6 +319,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("长按振动振幅", effect, SettingsRoutes.KeyEffect, "长按 振动 震动 振幅 强度", section = "振动反馈"),
         SettingsSearchEntry("按键动效", effect, SettingsRoutes.KeyEffect, "动效 动画 缩放 回弹 键帽"),
         SettingsSearchEntry("键内炫光", effect, SettingsRoutes.KeyEffect, "炫光 发光 光效 渐变 彩虹"),
+        SettingsSearchEntry("键缝动效", effect, SettingsRoutes.KeyEffect, "键缝 动效 动画 光线 线路 流光 扩散 特效"),
         // 智能 › 词库
         page("导入的词库", dictionary, SettingsRoutes.CellDictionaries, "分类词库 细胞词库 搜狗 scel txt json 导入词库 下载词库 本地导入 删除词库 自动更新词库 词库更新 在线词库 新词"),
         SettingsSearchEntry("我的短语", dictionary, SettingsRoutes.Dictionary, "自定义短语 短语 快捷短语 常用语 编码", anchor = null),
@@ -375,6 +378,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("图片高度", clipboardPanel, SettingsRoutes.ClipboardPanel,
             "剪贴板 图片 高度 太矮 比例 长图 截图 卡片"),
         SettingsSearchEntry("最近截图", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 截图 截屏 相册 图片 照片"),
+        SettingsSearchEntry("也显示相册照片", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 相册 照片 最近 图片 不只截图"),
         SettingsSearchEntry("剪贴板数量上限", clipboardPanel, SettingsRoutes.ClipboardPanel,
             "剪贴板 条数 数量 最多 上限 保存 历史记录 不限 存文档", anchor = "数量上限", section = "历史记录"),
         SettingsSearchEntry("剪贴板保留时间", clipboardPanel, SettingsRoutes.ClipboardPanel,
@@ -412,7 +416,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         page("开源许可证", about, SettingsRoutes.Licenses, "许可 开源 license 第三方"),
         page("日志查看器", about, SettingsRoutes.LogViewer, "日志 log 崩溃 错误"),
         page("存储空间", about, SettingsRoutes.StorageSpace, "存储 空间 占用 清理 缓存 容量 内存 运行内存 RAM 释放 安装包 体积"),
-        // 入口在首页最上面一行；搜索路径归到「智能」，和用户学习数据放在一组。
+        // 入口在首页「智能」组最后一行（带开关，关了统计也在），标题栏右边的小字只在开着时显示。
         page("打字统计", smart, SettingsRoutes.TypingStats, "统计 字数 打字速度 码长 纠错 按错 首选率 称号 输入统计"),
     ).filter {
         // Developer-only tools (handwriting training, speech tuning recordings, raw Rime file manager)
@@ -423,7 +427,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         it.target != SettingsRoutes.HandwritingContribute ||
             !(com.kingzcheung.xime.BuildConfig.DEV_TOOLS || com.kingzcheung.xime.BuildConfig.DEBUG)
     }.filter {
-        // The elder package has no update entry (AppUpdater.supported).
+        // The elder package and F-Droid installs have no update entry (AppUpdater.supported).
         com.kingzcheung.xime.update.AppUpdater.supported || it.title !in setOf("检查更新", "自动检查更新", "更新后提示更新内容")
     }
 }

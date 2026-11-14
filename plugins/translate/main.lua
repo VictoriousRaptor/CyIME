@@ -11,9 +11,13 @@
 --
 -- 工具面板契约（display: live）：
 --   onPanelInput(text)       栏里的字
---   onPanelAction(actionId)  generate：翻译栏里的字（取消上一次没完的请求）；lang：换目标语言
+--   onPanelAction(actionId)  generate：翻译栏里的字（取消上一次没完的请求）；lang：换目标语言；
+--                            select:<key>:<语言>：选源语言/目标语言；swap：源语言和目标语言对调
 --   getPanelState(_)         items[1] = 译文（生成中是已收到的一段），loading = 还在收；
---                            ui 第一个按钮 = 栏左边的圆钮，第一段文字 = 输入栏提示
+--                            ui 第一个按钮 = 栏左边的圆钮，第一段文字 = 输入栏提示。
+--                            新宿主（1.15.87 起）认两个 select（源语言、目标语言）：栏左边画成「源 ⇄ 目标」，
+--                            style = "fallback" 的圆钮就不画；style = "quick" 的 select 是长按工具栏「翻译」弹出的列表；
+--                            style = "swap" 的按钮是中间的箭头。旧宿主只看第一个按钮，照旧是圆钮。
 
 local plugin = {}
 
@@ -21,6 +25,8 @@ local KEY_API_KEY = "apiKey"
 local KEY_BASE_URL = "baseUrl"
 local KEY_MODEL = "model"
 local KEY_TARGET_LANG = "targetLang"
+local KEY_SOURCE_LANG = "sourceLang"
+local AUTO = "自动检测"
 
 local DEFAULT_BASE_URL = "https://api.openai.com/v1"
 local DEFAULT_MODEL = "gpt-4o-mini"
@@ -75,6 +81,69 @@ end
 
 local function targetLang() return LANGS[langIndex()] end
 
+-- 源语言：nil = 自动检测（默认）
+local function sourceLang()
+  local name = trim(host.config.get(KEY_SOURCE_LANG) or "")
+  for _, l in ipairs(LANGS) do
+    if l.name == name then return l end
+  end
+  return nil
+end
+
+local function langByName(name)
+  for _, l in ipairs(LANGS) do
+    if l.name == name then return l end
+  end
+  return nil
+end
+
+local function langNames()
+  local names = {}
+  for i, l in ipairs(LANGS) do names[i] = l.name end
+  return names
+end
+
+local function sourceNames()
+  local names = { AUTO }
+  for _, l in ipairs(LANGS) do names[#names + 1] = l.name end
+  return names
+end
+
+-- 选目标语言：和源语言一样时两边对调（不会出现「英文 → 英文」）
+local function setTarget(name)
+  local lang = langByName(name)
+  if lang == nil then return end
+  local src = sourceLang()
+  if src ~= nil and src.name == lang.name then host.config.set(KEY_SOURCE_LANG, targetLang().name) end
+  host.config.set(KEY_TARGET_LANG, lang.name)
+end
+
+local function setSource(name)
+  if name == AUTO then
+    host.config.set(KEY_SOURCE_LANG, AUTO)
+    return
+  end
+  local lang = langByName(name)
+  if lang == nil then return end
+  if lang.name == targetLang().name then
+    -- 源语言选成了目标语言：目标换成原来的源语言，原来是自动检测就换成中英里的另一个
+    local src = sourceLang()
+    host.config.set(KEY_TARGET_LANG, src ~= nil and src.name or (lang.code == "zh" and "英文" or "简体中文"))
+  end
+  host.config.set(KEY_SOURCE_LANG, lang.name)
+end
+
+-- 对调：自动检测时，源语言变成原来的目标语言，目标换成中英里的另一个
+local function swapLangs()
+  local src, to = sourceLang(), targetLang()
+  host.config.set(KEY_SOURCE_LANG, to.name)
+  if src ~= nil then
+    host.config.set(KEY_TARGET_LANG, src.name)
+  else
+    host.config.set(KEY_TARGET_LANG, to.code == "zh" and "英文" or "简体中文")
+  end
+end
+
 local function apiKey() return trim(host.config.get(KEY_API_KEY) or "") end
 
 -- ================= 离线翻译 =================
@@ -95,12 +164,27 @@ local function hasCjk(text)
   return false
 end
 
--- 当前目标语言对应的离线方向（不看原文）：译成英文 = 中→英，译成中文 = 英→中；其他语言没有离线
+-- 当前语言对应的离线方向（不看原文）：译成英文 = 中→英，译成中文 = 英→中；其他语言没有离线。
+-- 选了源语言就按源语言，只有中英互译。
 local function offlineDirection()
   local to = targetLang().code
+  local src = sourceLang()
+  if src ~= nil then
+    if (src.code == "zh" and to == "en") or (src.code == "en" and to == "zh") then return src.code, to end
+    return nil, nil
+  end
   if to == "en" then return "zh", "en" end
   if to == "zh" then return "en", "zh" end
   return nil, nil
+end
+
+-- 离线不支持当前语言时的说明
+local function offlineUnsupportedText()
+  local src = sourceLang()
+  if src ~= nil then
+    return "离线只能中英互译，" .. src.name .. "翻成" .. targetLang().name .. "要在设置里填 API"
+  end
+  return "离线只能中英互译，翻成" .. targetLang().name .. "要在设置里填 API"
 end
 -- 去掉模型常加的外壳：代码块、整段引号、「译文：」开头
 local QUOTES = {
@@ -225,10 +309,11 @@ local function translateOffline(text)
   offlineUsed = true
   local from, to = offlineDirection()
   if from == nil then
-    fail("离线只能中英互译，翻成" .. targetLang().name .. "要在设置里填 API")
+    fail(offlineUnsupportedText())
     return
   end
-  if hasCjk(text) == (from ~= "zh") then
+  -- 自动检测时，原文已经是目标语言就原样给出；用户指定了源语言就照指定的翻
+  if sourceLang() == nil and hasCjk(text) == (from ~= "zh") then
     buffer = text
     return
   end
@@ -272,7 +357,10 @@ local function canFallBackOffline()
   return host.translate.status(from, to) == "ready"
 end
 
-local function userMessage(text, lang)
+local function userMessage(text, lang, from)
+  if from ~= nil then
+    return "把下面这段" .. from .. "翻译成" .. lang .. "。\n\n<原文>\n" .. text .. "\n</原文>"
+  end
   return "把下面这段话翻译成" .. lang .. "。\n\n<原文>\n" .. text .. "\n</原文>"
 end
 
@@ -288,7 +376,7 @@ local function requestParts(text, stream)
     model = trim(configOr(KEY_MODEL, DEFAULT_MODEL)),
     messages = {
       { role = "system", content = SYSTEM_PROMPT },
-      { role = "user", content = userMessage(text, targetLang().name) },
+      { role = "user", content = userMessage(text, targetLang().name, sourceLang() and sourceLang().name) },
     },
     stream = stream,
   }
@@ -429,8 +517,7 @@ function plugin.getSettingsSchema()
   -- 默认地址也写进配置：设置页点「保存」时宿主才会给配置里的域名联网授权
   if trim(host.config.get(KEY_BASE_URL) or "") == "" then host.config.set(KEY_BASE_URL, DEFAULT_BASE_URL) end
   if trim(host.config.get(KEY_MODEL) or "") == "" then host.config.set(KEY_MODEL, DEFAULT_MODEL) end
-  local names = {}
-  for i, l in ipairs(LANGS) do names[i] = l.name end
+  local names = langNames()
   local fields = {
     { key = KEY_API_KEY, label = "API 密钥", type = "secret", placeholder = "sk-…", required = not hasOffline(),
       section = "接口", helpText = hasOffline()
@@ -441,8 +528,10 @@ function plugin.getSettingsSchema()
     { key = KEY_MODEL, label = "模型", type = "text", defaultValue = DEFAULT_MODEL, section = "接口",
       helpText = "例：gpt-4o-mini、deepseek-chat、Qwen/Qwen2.5-7B-Instruct" },
     { key = "testConnection", label = "测试接口", type = "button", section = "接口" },
+    { key = KEY_SOURCE_LANG, label = "原文语言", type = "select", options = sourceNames(),
+      defaultValue = AUTO, section = "翻译", helpText = "翻译栏左边点「" .. AUTO .. "」也能换" },
     { key = KEY_TARGET_LANG, label = "翻译成", type = "select", options = names,
-      defaultValue = LANGS[1].name, section = "翻译", helpText = "翻译栏左边的圆钮也能换" },
+      defaultValue = LANGS[1].name, section = "翻译", helpText = "翻译栏左边、长按工具栏的「翻译」也能换" },
   }
   if hasOffline() then
     fields[#fields + 1] = { key = "downloadOffline", label = "下载离线模型", type = "button", section = "离线翻译",
@@ -482,15 +571,32 @@ end
 
 -- ================= 面板 =================
 
+-- 新宿主画成「源 ⇄ 目标」的两个选择和中间的箭头；旧宿主不认，只看第一个按钮
+local function langNodes()
+  local src = sourceLang()
+  return {
+    { type = "select", key = KEY_SOURCE_LANG, label = "原文", value = src and src.name or AUTO, options = sourceNames() },
+    { type = "button", key = "swap", label = "⇄", style = "swap" },
+    { type = "select", key = KEY_TARGET_LANG, label = "翻译成", value = targetLang().name, options = langNames(),
+      style = "quick" },
+  }
+end
+
+-- 栏的节点：圆钮 + 提示，圆钮是换语言的就标成 fallback（新宿主画「源 ⇄ 目标」代替它）
+local function withLangs(chip, hint)
+  local nodes = { chip, { type = "text", value = hint } }
+  if chip.key == "lang" then chip.style = "fallback" end
+  for _, n in ipairs(langNodes()) do nodes[#nodes + 1] = n end
+  return nodes
+end
+
 -- 没填 API 密钥时的栏：离线模型在就照常打字；没下载时圆钮是「下载」
 local function offlineUi()
   local lang = targetLang()
   local from, to = offlineDirection()
   if from == nil then
-    return {
-      { type = "button", key = "lang", label = lang.chip },
-      { type = "text", value = notice ~= "" and notice or ("离线只能中英互译，翻成" .. lang.name .. "要在设置里填 API") },
-    }
+    return withLangs({ type = "button", key = "lang", label = lang.chip },
+      notice ~= "" and notice or offlineUnsupportedText())
   end
   local state, progress, size = host.translate.status(from, to)
   if state == "unsupported" then
@@ -499,20 +605,14 @@ local function offlineUi()
       { type = "text", value = "这台手机不支持离线翻译：点左边「设置」填接口" },
     }
   elseif state == "missing" then
-    return {
-      { type = "button", key = "download", label = "下载" },
-      { type = "text", value = notice ~= "" and notice or ("离线翻译要先下载模型（约 " .. tostring(size) .. " MB）：点左边「下载」") },
-    }
+    return withLangs({ type = "button", key = "download", label = "下载" },
+      notice ~= "" and notice or ("离线翻译要先下载模型（约 " .. tostring(size) .. " MB）：点左边「下载」"))
   elseif state == "downloading" then
-    return {
-      { type = "button", key = "lang", label = lang.chip },
-      { type = "text", value = "离线模型下载中 " .. tostring(progress) .. "%，下完就能翻" },
-    }
+    return withLangs({ type = "button", key = "lang", label = lang.chip },
+      "离线模型下载中 " .. tostring(progress) .. "%，下完就能翻")
   end
-  return {
-    { type = "button", key = "lang", label = lang.chip },
-    { type = "text", value = notice ~= "" and notice or ("打字，停一下译成" .. lang.name .. "（离线）") },
-  }
+  return withLangs({ type = "button", key = "lang", label = lang.chip },
+    notice ~= "" and notice or ("打字，停一下译成" .. lang.name .. "（离线）"))
 end
 
 local function buildUi()
@@ -525,10 +625,7 @@ local function buildUi()
   end
   local lang = targetLang()
   local hint = notice ~= "" and notice or ("打字，停一下译成" .. lang.name .. (offlineUsed and "（离线）" or ""))
-  return {
-    { type = "button", key = "lang", label = lang.chip },
-    { type = "text", value = hint },
-  }
+  return withLangs({ type = "button", key = "lang", label = lang.chip }, hint)
 end
 
 function plugin.getPanelState(_)
@@ -546,9 +643,16 @@ end
 function plugin.onPanelAction(actionId)
   if actionId == "generate" then
     translate(source)
-  elseif actionId == "lang" then
-    local i = langIndex() % #LANGS + 1
-    host.config.set(KEY_TARGET_LANG, LANGS[i].name)
+  elseif actionId == "lang" or actionId == "swap" or actionId:sub(1, 7) == "select:" then
+    if actionId == "lang" then
+      setTarget(LANGS[langIndex() % #LANGS + 1].name)
+    elseif actionId == "swap" then
+      swapLangs()
+    else
+      local key, name = actionId:match("^select:([^:]+):(.+)$")
+      if key == KEY_TARGET_LANG then setTarget(name)
+      elseif key == KEY_SOURCE_LANG then setSource(name) end
+    end
     -- 宿主接着会按新语言重新 generate
     closeCurrent()
     buffer = ""

@@ -61,6 +61,13 @@ object CyMotion {
     fun <T> pop(visibilityThreshold: T? = null): SpringSpec<T> =
         spring(POP_DAMPING, POP_STIFFNESS, visibilityThreshold)
 
+    /**
+     * 卡片行打开时滑进来（布局选择）：不回弹的弹簧，约 300 ms 到位，比面板揭幕（240 ms）稍长，
+     * 下面方案那一行揭开时还看得到在滑。用户 11-11 说九键原来那一下列表滚动好看，就照它。
+     */
+    const val ROW_SLIDE_STIFFNESS = 400f
+    fun <T> rowSlideIn(): SpringSpec<T> = spring(1f, ROW_SLIDE_STIFFNESS)
+
     fun <T> enter(duration: Int = SHORT): TweenSpec<T> = tween(duration, easing = Enter)
     fun <T> exit(duration: Int = SHORT): TweenSpec<T> = tween(duration, easing = Exit)
     fun <T> panel(expanding: Boolean): TweenSpec<T> =

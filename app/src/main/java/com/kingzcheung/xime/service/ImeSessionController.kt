@@ -553,9 +553,11 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     internal fun applyPunctuationWidth(asciiMode: Boolean) {
         // 中文的全角只管标点：候选里的英文、数字和空格照候选栏显示的半角上屏（GitHub 不会变成 ＧｉｔＨｕｂ）。
         // 日文的全角英数是常用写法，仍由引擎整段转成全角。
-        val japanese = InputLanguage.forSchema(service.rimeEngine.getCurrentSchema()) == InputLanguage.JAPANESE
+        val language = InputLanguage.forSchema(service.rimeEngine.getCurrentSchema())
+        val japanese = language == InputLanguage.JAPANESE
         service.rimeEngine.setOption(FULL_SHAPE_ASCII_OPTION, japanese)
-        if (asciiMode) {
+        // 英文单词方案不开 ascii 也是英文：和英文模式一样固定半角，不随中文的全角选择。
+        if (asciiMode || language == InputLanguage.ENGLISH) {
             service.rimeEngine.setOption("full_shape", false)
             return
         }

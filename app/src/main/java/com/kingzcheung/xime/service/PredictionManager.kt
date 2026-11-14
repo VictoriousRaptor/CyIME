@@ -58,17 +58,23 @@ class PredictionManager(
     @Volatile
     private var wholeWordContext: String? = null
 
+    /** 最近一次请求的上文，当它是选了联想词之后接着联想的（见 [getPrediction] 的 chained）。 */
+    @Volatile
+    private var chainedContext: String? = null
+
     private val latest = LatestPrediction(serviceScope, predict = { text ->
         try {
             if (!SettingsPreferences.isSmartPredictionEnabled(context)) emptyList()
             else if (!AssociationManager.isInitialized() && !AssociationManager.initialize(context)) emptyList()
             else {
                 val afterWholeWord = text == wholeWordContext
+                val chained = text == chainedContext
                 val bridge = traditionalBridge()
-                if (bridge == null) AssociationManager.predict(text, MAX_ASSOCIATION_COUNT, afterWholeWord).map { it.text }
+                if (bridge == null) AssociationManager.predict(text, MAX_ASSOCIATION_COUNT, afterWholeWord)
+                    .takeIf { !chained || continuesAssociationChain(it) }.orEmpty().map { it.text }
                 else withContext(Dispatchers.Default) {
                     bridge.traditionalWords(AssociationManager.predict(bridge.toSimplified(text), MAX_ASSOCIATION_COUNT,
-                        afterWholeWord).map { it.text })
+                        afterWholeWord).takeIf { !chained || continuesAssociationChain(it) }.orEmpty().map { it.text })
                 }
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
@@ -161,8 +167,11 @@ class PredictionManager(
         }
     }
     
-    /** [afterWholeWord]: 这次上屏的是两个字以上的一段（[endsWithWholeWord]），联想不再补最后一个字开头的词。 */
-    fun getPrediction(contextText: String, afterWholeWord: Boolean = false) {
+    /**
+     * [afterWholeWord]: 这次上屏的是两个字以上的一段（[endsWithWholeWord]），联想不再补最后一个字开头的词。
+     * [chained]: 这次上屏的是选中的联想词（连续联想）：下一批只在把握够大时才出，见 [continuesAssociationChain]。
+     */
+    fun getPrediction(contextText: String, afterWholeWord: Boolean = false, chained: Boolean = false) {
         latest.invalidate()
         // 单次联想：消费抑制标志——联想上屏引发的本轮推理不执行，回调空结果清空候选栏
         if (suppressNextPrediction) {
@@ -182,6 +191,7 @@ class PredictionManager(
         }
         
         wholeWordContext = if (afterWholeWord) contextText else null
+        chainedContext = if (chained) contextText else null
         latest.submit(contextText)
     }
     
@@ -210,8 +220,13 @@ class PredictionManager(
     suspend fun getEnglishAssociations(text: String, limit: Int = MAX_ASSOCIATION_COUNT): List<String> {
         return try {
             val letters = com.kingzcheung.xime.settings.LetterLanguage.of(completionLanguage())
-            if (letters != null) com.kingzcheung.xime.association.WordCompletion.complete(context, letters, text, limit)
+            val words = if (letters != null) com.kingzcheung.xime.association.WordCompletion.complete(context, letters, text, limit)
             else AssociationService.getAssociations(context, text, true, limit)
+            // 英文出短语（默认关）：编码正好是这串字母的「我的短语」排在补全词前面，见 EnglishPhrases。
+            if (!EnglishPhrases.isEnabled(context)) words
+            else EnglishPhrases.merge(withContext(Dispatchers.IO) {
+                EnglishPhrases.matching(text, EnglishPhrases.phrases(context))
+            }, words, limit)
         } catch (e: Exception) {
             Log.e(TAG, "English association failed", e)
             emptyList()

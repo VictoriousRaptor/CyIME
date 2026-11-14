@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import com.kingzcheung.xime.clipboard.ClipboardCapacity
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -262,6 +263,31 @@ interface ClipboardDao {
         "WHERE isQuickSend = 0 AND (fromDevice = 0 OR isPinned = 1 OR grouped = 1)")
     fun observeStoredBytes(): Flow<Long>
 
+    @Query("SELECT COALESCE(SUM(length(CAST(text AS BLOB)) + length(searchKey)), 0) FROM clipboard_entries " +
+        "WHERE isQuickSend = 0 AND (fromDevice = 0 OR isPinned = 1 OR grouped = 1)")
+    suspend fun storedBytes(): Long
+
+    /** This phone's own history (not fixed, not grouped, not received), oldest first, with its size. */
+    @Query("SELECT id, length(CAST(text AS BLOB)) + length(searchKey) AS bytes FROM clipboard_entries " +
+        "WHERE isPinned = 0 AND grouped = 0 AND isQuickSend = 0 AND fromDevice = 0 AND id != :keep " +
+        "ORDER BY timestamp ASC, id ASC")
+    suspend fun ownHistorySizes(keep: Long): List<ClipboardRecordSize>
+
+    /**
+     * Room for [adding] more bytes within [capacity]: the oldest own history goes first, never fixed or
+     * grouped records, received copies (they have their own room) or record [keep]. False, with nothing
+     * removed, when fixed and grouped records alone leave no room.
+     */
+    @Transaction
+    suspend fun makeRoom(adding: Long, capacity: Long, keep: Long = -1): Boolean {
+        val stored = storedBytes()
+        if (ClipboardCapacity.accepts(stored, adding, capacity)) return true
+        val history = ownHistorySizes(keep)
+        val remove = ClipboardCapacity.oldestToRemove(history.map { it.bytes }, stored, adding, capacity) ?: return false
+        history.take(remove).map { it.id }.chunked(500).forEach { deleteClipboardByIds(it) }
+        return true
+    }
+
     suspend fun insertPinnedText(text: String, code: String, now: Long, searchKey: String = ""): Long =
         insert(ClipboardEntry(text = text, code = code, timestamp = now, isPinned = true, searchKey = searchKey))
 
@@ -338,3 +364,6 @@ data class ClipboardImportRow(val id: Long, val outcome: Int) {
 
 /** The part of a record the search-key backfill needs. */
 data class SearchKeySource(val id: Long, val text: String)
+
+/** A history record's stored size, for making room. */
+data class ClipboardRecordSize(val id: Long, val bytes: Long)

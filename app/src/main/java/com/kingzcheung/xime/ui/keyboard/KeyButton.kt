@@ -165,7 +165,8 @@ fun KeyButton(
     val view = LocalView.current
     val keyFontFamily = AppFonts.keyFontFamily
     val keyLabelFontFamily = AppFonts.keyLabelFontFamily
-    val currentActions by rememberUpdatedState(KeyGestureActions(
+    // 组合时只读这个值；rememberUpdatedState 每次都写进新对象，组合时读它会自己让自己失效、一直重组。
+    val keyActions = KeyGestureActions(
         text = text,
         onTap = onClick,
         onPress = { ownPressed = true; onPress?.invoke() },
@@ -178,7 +179,8 @@ fun KeyButton(
         onDown = onSwipeDown,
         onLongPress = onLongClick,
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
-    ))
+    )
+    val currentActions by rememberUpdatedState(keyActions)
 
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
     val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, KeyShapes.current, density, backgroundColor, frostedGlass.enabled) {
@@ -225,7 +227,10 @@ fun KeyButton(
                 pressed = isPressed, highlighted = isHighlighted,
                 opacityScale = glassFunctionKeyScale(backgroundColor),
                 functionDepth = glassFunctionKeyDepth(backgroundColor),
-            )).keyHeldHighlight(isPressed)),
+            )).keyHeldHighlight(isPressed),
+                // 键缝动效的长按进度：这个键有长按动作才画。
+                gapLightHoldMillis = keyActions.longPressDelayMillis(
+                    androidx.compose.ui.platform.LocalViewConfiguration.current.longPressTimeoutMillis)),
         contentAlignment = Alignment.Center
     ) {
         val contentScale = keyContentScale(maxWidth.value, maxHeight.value)
@@ -426,6 +431,22 @@ fun SwipeableKeyButton(
     // 九键滑行接管拖动的数字键往下滑打不出下角标：左下角不画（用户 11-11）。26 键字母滑行改成长按弹出上下两个角标
     // （[withGlideCornerMenu]），下角标打得到，照旧画（用户 11-11「关闭数字行滑行打不出 !@#」）。
     val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide && !letterGlideOwnsDrag }
+    // 「上下滑输入符号」关着时（用户 11-14：关了提示还能滑出符号，要能真关）：直接上屏的角标不接上下滑、也不接长按。
+    // 用户给字母设的上下滑动作（撤销、复制这类）和功能键的滑动不是角标，照旧。
+    val cornerSymbols = inputPreferences.cornerSymbolInput
+    val upSymbol = symbolInputText?.takeIf { it.isNotBlank() }
+    val downSymbol = symbolInputDownText?.takeIf { it.isNotBlank() }
+    val keyOnSwipe = onSwipe.takeUnless { !cornerSymbols && upSymbol != null }
+    val keyOnSwipeDown = onSwipeDown.takeUnless { !cornerSymbols && downSymbol != null }
+    // 角标提示关着时键上不画角标，滑动时改用气泡显示要输入的符号（用户 11-14：长按有气泡，上下滑没有）。
+    val upHint = swipeText?.takeIf { it.isNotEmpty() } ?: upSymbol?.takeIf { keyOnSwipe != null }
+    val downHint = swipeDownText?.takeIf { it.isNotEmpty() } ?: downSymbol?.takeIf { keyOnSwipeDown != null }
+    val cornerShown = !(swipeUpKeyLabel ?: swipeText).isNullOrEmpty() || !downCornerLabel.isNullOrEmpty()
+    // 滑到哪个键按哪个键（用户 11-14，像三星键盘）：滑行和「上下滑输入符号」都关着、整个键盘滑动移光标也关着时才有。
+    val slideTaps = !cornerSymbols && !reserveDragForGlide && !LocalLetterGlide.current && LocalT9GlideKeys.current == null &&
+        inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD && ctrlTargets != null
+    // 这个键在键盘坐标里的左上角（和 Shift 拖动用的 dragBounds 同一坐标），手指在键里的位置加上它就是键盘坐标。
+    val slideOrigin = remember { floatArrayOf(0f, 0f) }
     val gestureActions = if (flick != null) KeyGestureActions(
         // 拂动：方向固定对应字母，不随角标方向反转；数字等改为长按。
         text = text,
@@ -440,7 +461,7 @@ fun SwipeableKeyButton(
         rightText = flickAt(2), onRight = flickAction(2),
         downText = flickAt(3) ?: swipeDownText,
         downPreviewText = flickAt(3) ?: swipeDownKeyLabel?.takeIf { it.isNotEmpty() } ?: swipeDownText,
-        onDown = flickAction(3)?.let { action -> { _: String -> action() } } ?: onSwipeDown,
+        onDown = flickAction(3)?.let { action -> { _: String -> action() } } ?: keyOnSwipeDown,
         horizontalThresholdDp = flickThresholdDp,
         verticalThresholdDp = flickThresholdDp,
         reserveHorizontalSwipe = true,
@@ -459,13 +480,14 @@ fun SwipeableKeyButton(
         onRelease = { isPressed = false; onRelease?.invoke() },
         // 长按到点后（角标已输入或弹出菜单）方向盘收起，和拂动键一样只留长按气泡。
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
-        inlineVerticalPreview = true,
-        upText = swipeText,
-        downText = swipeDownText,
-        upPreviewText = swipeUpKeyLabel?.takeIf { it.isNotEmpty() } ?: swipeText,
-        downPreviewText = swipeDownKeyLabel?.takeIf { it.isNotEmpty() } ?: swipeDownText,
-        onUp = onSwipe,
-        onDown = onSwipeDown,
+        // 键上画着角标时在键内渐变预览；角标符号都没画出来时弹气泡（和长按一样）。
+        inlineVerticalPreview = cornerShown || (upSymbol == null && downSymbol == null),
+        upText = upHint,
+        downText = downHint,
+        upPreviewText = swipeUpKeyLabel?.takeIf { it.isNotEmpty() } ?: upHint,
+        downPreviewText = swipeDownKeyLabel?.takeIf { it.isNotEmpty() } ?: downHint,
+        onUp = keyOnSwipe,
+        onDown = keyOnSwipeDown,
         longPressItems = longPressItems.orEmpty(),
         onLeft = letters?.let { { onLetterSelection?.invoke(it.first); Unit } } ?: onSwipeLeft,
         // 「字母键显示大写」只改显示：方向提示跟键帽一样大写，送出的仍是 letters 原样。
@@ -485,8 +507,10 @@ fun SwipeableKeyButton(
         longPressTimeoutMillis = longPressTimeoutMillis,
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
     ).let { actions ->
+        // 「上下滑输入符号」关着：长按也不出角标（「长按输入」、滑行时的两格角标、底排标点长按都不加）。
+        if (!cornerSymbols) actions
         // 26 键滑行开着时字母键的滑动给了滑行：长按弹出上下两个角标，挪过去松手选（设置页锁在「长按输入」）。
-        if (letterGlideOwnsDrag) actions.withGlideCornerMenu(symbolInputText, symbolInputDownText, inputPreferences.symbolLongPressMs)
+        else if (letterGlideOwnsDrag) actions.withGlideCornerMenu(symbolInputText, symbolInputDownText, inputPreferences.symbolLongPressMs)
         // 底排标点固定上滑（空格两侧标点、数字键盘点键）：上滑和长按都输入角标（用户 11-09：键在底边，长按更顺手）。
         else actions.withSymbolInput(if (keepSymbolSwipeOnLongPress) SymbolInputMode.LONG_PRESS else symbolInputMode,
             symbolInputText, keepSymbolSwipeOnLongPress, inputPreferences.symbolLongPressMs)
@@ -495,9 +519,19 @@ fun SwipeableKeyButton(
     }
     val inputActions = LocalKeyboardInputActions.current
     val bindings = if (inputActions.englishLetters) inputPreferences.englishLetterSwipes else inputPreferences.chineseLetterSwipes
-    val currentActions by rememberUpdatedState(if (bindings.isEmpty() || letterSwipeLayout ||
+    val effectiveActions = if (bindings.isEmpty() || letterSwipeLayout ||
         flick != null || letterGroup?.length != 1 || inputActions.onLetterSwipeAction == null) gestureActions
-        else gestureActions.withLetterSwipes(letterGroup.lowercase(), bindings, inputActions.onLetterSwipeAction))
+        else gestureActions.withLetterSwipes(letterGroup.lowercase(), bindings, inputActions.onLetterSwipeAction)
+    val currentActions by rememberUpdatedState(effectiveActions.let { actions ->
+        // 没有任何方向手势的键：滑出去以后交给键盘找手指下的键，松手按那个键。
+        if (!slideTaps || ctrlTargets == null || actions.onUp != null || actions.onDown != null || actions.onLeft != null ||
+            actions.onRight != null || actions.freeDirection || actions.blockUpSwipe || actions.blockDownSwipe) actions
+        else actions.copy(
+            slideOver = { p -> ctrlTargets.slideOver(Offset(slideOrigin[0] + p.x, slideOrigin[1] + p.y)) },
+            slideRelease = { ctrlTargets.slideRelease() },
+            slideCancel = { ctrlTargets.slideCancel() },
+        )
+    })
 
     // 同一组文字只建一次：手指移动时圆盘不因标签“换了个对象”而整个重画。
     val discLabels = if (flick == null && letters == null && !fourteenSingle) null else gestureActions.let { actions ->
@@ -562,6 +596,19 @@ fun SwipeableKeyButton(
         } else shiftTargets?.remove(shiftToken)
     }
     val shiftHovered = (shiftLetters != null || ctrlShortcutLetter != null) && shiftTargets?.hovered?.bounds?.center?.let(dragBounds::contains) == true
+    // 滑到哪个键按哪个键：每个键都登记位置和点按；手指滑到的键画按下，按下的那个键滑走以后不再画按下。
+    val slideToken = remember { Any() }
+    androidx.compose.runtime.DisposableEffect(shiftTargets, slideToken) {
+        onDispose { shiftTargets?.removeSlideTap(slideToken) }
+    }
+    androidx.compose.runtime.SideEffect {
+        if (slideTaps && dragBounds != Rect.Zero) shiftTargets?.putSlideTap(slideToken, dragBounds) {
+            currentActions.onPress()
+            try { currentActions.onTap() } finally { currentActions.onRelease() }
+        } else shiftTargets?.removeSlideTap(slideToken)
+    }
+    val slideHovered = shiftTargets?.slideHovered === slideToken
+    val pressedLook = (isPressed && !(shiftTargets?.sliding == true && !slideHovered)) || shiftHovered || slideHovered
     // 按住符号键当 Ctrl：单字母键换成快捷键键面（用户 10-24）；按满时限才换，渐变出来，松手立刻换回（用户 10-31）。
     // 九键数字键换成它代表的字母的用途，左上角写数字（用户 11-03）。
     val ctrlLetter = (ctrlShortcutLetter ?: shiftLetters?.singleOrNull())?.takeIf { shiftTargets?.ctrlFaces == true }
@@ -622,6 +669,9 @@ fun SwipeableKeyButton(
                 buttonBounds = coordinates.boundsInRoot()
                 liveBounds.coordinates = coordinates
                 if (shiftTargets != null) dragBounds = if (dragSpace.card == null) buttonBounds else dragSpace.bounds(coordinates)
+                // 手势里的坐标从加 edgeContentPadding 之前的外框量起：减掉左、上边距才是键盘坐标的原点。
+                slideOrigin[0] = dragBounds.left - with(density) { edgeContentPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr).toPx() }
+                slideOrigin[1] = dragBounds.top - with(density) { edgeContentPadding.calculateTopPadding().toPx() }
                 // 滑行的键位与轨迹同在键盘卡片坐标里：悬浮键盘旋转后 boundsInRoot 是斜放键的外接框，滑行会落到别的键。
                 letterGeometry?.place(text, if (dragSpace.card == null) buttonBounds else dragSpace.bounds(coordinates))
             }
@@ -631,13 +681,16 @@ fun SwipeableKeyButton(
             .clip(keyClipShape)
             .background(frostedKeyColor(
                 resolvedBackground, if (frostedGlass.enabled) textColor else resolvedText, frostedGlass,
-                legacyStateColor = if (isPressed || shiftHovered) resolvedBackground.copy(alpha = 0.7f)
+                legacyStateColor = if (pressedLook) resolvedBackground.copy(alpha = 0.7f)
                 else if (isHighlighted) resolvedBackground.copy(alpha = 0.8f)
                 else resolvedBackground,
-                pressed = isPressed || shiftHovered, highlighted = isHighlighted,
+                pressed = pressedLook, highlighted = isHighlighted,
                 opacityScale = glassFunctionKeyScale(resolvedBackground),
                 functionDepth = glassFunctionKeyDepth(resolvedBackground),
-            )).keyHeldHighlight(isPressed || shiftHovered))
+            )).keyHeldHighlight(pressedLook),
+                // 键缝动效的长按进度：按这个键实际生效的那套手势算（角标长按、长按菜单、九键数字），没有长按就不画。
+                gapLightHoldMillis = effectiveActions.longPressDelayMillis(
+                    androidx.compose.ui.platform.LocalViewConfiguration.current.longPressTimeoutMillis))
             .then(if (hexagonal) Modifier.honeycombLabelArea() else Modifier),
         contentAlignment = if (layoutMode == ButtonLayout.COMPACT) Alignment.TopStart else Alignment.Center
     ) {
@@ -907,11 +960,15 @@ fun IconKeyButton(
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
     contentDescription: String? = null,
+    /** 键缝动效里这个键画什么（回车：点一下整排往上扫；删除：往里收）。 */
+    gapLight: GapLightKind = GapLightKind.PRESS,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
     val currentOnRelease by rememberUpdatedState(onRelease)
+    // 键缝动效：这个键点了一下并且生效时告诉光层（回车整排往上扫）。
+    val gapLightTrigger = remember { KeyGapLightTrigger() }
     val density = LocalDensity.current
 
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
@@ -957,6 +1014,7 @@ fun IconKeyButton(
                         currentOnRelease?.invoke()
                     },
                     onTap = {
+                        gapLightTrigger.tap()
                         currentOnClick()
                     }
                 )
@@ -972,7 +1030,8 @@ fun IconKeyButton(
                 pressed = isPressed, highlighted = isHighlighted,
                 opacityScale = glassFunctionKeyScale(backgroundColor),
                 functionDepth = glassFunctionKeyDepth(backgroundColor),
-            )), materialLevel = com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED),
+            )), materialLevel = com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED, gapLight = gapLight,
+                gapLightTrigger = gapLightTrigger),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -1138,7 +1197,8 @@ fun SwipeableIconKeyButton(
             .clip(keyClipShape)
             .background(feedbackColors.background)
             .keyHeldHighlight(isPressed && feedback == KeyFlickFeedback.NORMAL), materialLevel = com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED,
-                glowVisibility = if (feedback == KeyFlickFeedback.NORMAL) 1f else 1f - (flickPreview?.progress ?: 0f))
+                glowVisibility = if (feedback == KeyFlickFeedback.NORMAL) 1f else 1f - (flickPreview?.progress ?: 0f),
+                gapLight = if (deleteKey) GapLightKind.PULL else GapLightKind.PRESS)
             .then(if (honeycombEdge != null) Modifier.honeycombLabelArea(half = true) else Modifier),
         contentAlignment = Alignment.Center
     ) {

@@ -79,6 +79,22 @@ def taiwan_phrases(build: Path, occ_path: Path) -> dict[str, str]:
     return table
 
 
+SURNAMES = "CyimeSurnames.txt"
+USER_KEEP = "CyimeUserKeep.txt"
+
+
+def write_cyime_configs(config: dict) -> None:
+    """cyime_s2tw.json plus the surname table (余先生, 姓范, 余秋雨: tools/opencc/build_cyime_surnames.py), and
+    cyime_s2tw_user.json for the user's own phrases: same, but 余 with no phrase around it stays as written."""
+    for group in (config["segmentation"]["dict"]["dicts"], config["conversion_chain"][0]["dict"]["dicts"][0]["dicts"]):
+        group.append({"type": "text", "file": SURNAMES})
+    (OUT / "cyime_s2tw.json").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    user = json.loads(json.dumps(config))
+    user["name"] = "Simplified Chinese to Traditional Chinese (Taiwan everyday forms, CyIME, user phrases)"
+    user["conversion_chain"][0]["dict"]["dicts"].insert(1, {"type": "text", "file": USER_KEEP})
+    (OUT / "cyime_s2tw_user.json").write_text(json.dumps(user, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--build", type=Path, required=True, help="OpenCC CMake build dir with Dictionaries built")
@@ -98,7 +114,7 @@ def main() -> None:
     config = json.loads((SOURCE / "s2tw.json").read_text(encoding="utf-8"))
     config["name"] = "Simplified Chinese to Traditional Chinese (Taiwan everyday forms, CyIME)"
     config["conversion_chain"].append({"dict": {"type": "ocd2", "file": "CyimeTWPhrases.ocd2"}})
-    (OUT / "cyime_s2tw.json").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_cyime_configs(config)
     print(f"{len(table)} Taiwan forms, {len(needed) + 1} tables in {OUT}")
 
 

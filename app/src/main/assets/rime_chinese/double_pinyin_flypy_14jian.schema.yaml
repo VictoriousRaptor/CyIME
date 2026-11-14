@@ -57,6 +57,8 @@ engine:
     # 打希腊字母名出希腊字母（设置 › 语言与方案 › 中文输出，默认关）：xita 第 3 个候选是 θ Θ，见 lua/cyime_greek_letters.lua。
     - lua_filter@*cyime_greek_letters
     - simplifier@traditionalize
+    # 我的短语里写的「余」照写的出（余宛如），见 traditionalize_user。
+    - simplifier@traditionalize_user
     - uniquifier
 
 speller:
@@ -173,3 +175,13 @@ traditionalize:
   option_name: traditionalization
   opencc_config: cyime_s2tw.json
   tips: none
+  # 短语（user_table）交给 traditionalize_user。
+  excluded_types: [user_table]
+
+# 我的短语按 cyime_s2tw_user.json 转：没有词组管着的「余」照写的出（姓余，用户 11-12），别的字照常转。
+# 其他候选上面已经转过（simplified），不再转。
+traditionalize_user:
+  option_name: traditionalization
+  opencc_config: cyime_s2tw_user.json
+  tips: none
+  excluded_types: [simplified]

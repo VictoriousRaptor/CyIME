@@ -183,6 +183,10 @@ def snapshot(repo, cache):
                     files[str(target.relative_to(staging))] = digest.hexdigest()
                 elif member.issym() or member.islnk():
                     raise ValueError("Source snapshot requires regular files, not symlinks: " + member.name)
+        # tarfile stops at the end-of-archive marker, but tar still writes record padding after it;
+        # drain it, or tar blocks on the full pipe and wait() never returns.
+        while process.stdout.read(1024 * 1024):
+            pass
         if process.wait():
             raise RuntimeError("Source snapshot failed")
     finally:

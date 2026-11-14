@@ -48,7 +48,25 @@ class EnglishWordMemoryTest {
     }
 
     @Test
+    fun demoteKeepsOneLowercaseLineAndPickingBringsItBack() {
+        val dir = tempDir.root
+        val file = File(dir, EnglishWordMemory.DEMOTED_FILE_NAME)
+        assertTrue(EnglishWordMemory.demote(dir, "Nude"))
+        assertTrue(EnglishWordMemory.demote(dir, "nude"))
+        assertTrue(EnglishWordMemory.demote(dir, "same"))
+        assertEquals(listOf("nude", "same"), file.readLines())
+        assertFalse(EnglishWordMemory.demote(dir, "你好"))
+        assertFalse(EnglishWordMemory.demote(dir, "B站"))
+        // Typed again with Enter: remembered, and back in its dictionary place.
+        EnglishWordMemory.remember(dir, "Nude")
+        assertEquals(listOf("same"), file.readLines())
+        EnglishWordMemory.undemote(dir, "SAME")
+        assertEquals(emptyList<String>(), file.readLines())
+    }
+
+    @Test
     fun backupIncludesTheWordFile() {
         assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.FILE_NAME))
+        assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.DEMOTED_FILE_NAME))
     }
 }

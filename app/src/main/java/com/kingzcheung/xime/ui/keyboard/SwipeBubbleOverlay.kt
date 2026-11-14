@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import com.kingzcheung.xime.ui.theme.CyMotion
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.*
@@ -149,14 +150,18 @@ private fun RotatedSwipeBubble(data: BubbleDrawData, shadow: Float, width: Int, 
     val localY = data.boxTop - shadow
     val offsetX = localX * c - localY * s + minX
     val offsetY = localX * s + localY * c + minY
-    val provider = remember(offsetX, offsetY) {
+    val anchorView = LocalView.current
+    val placement = remember(anchorView) { PopupWindowPlacement(anchorView) }
+    val correction = PopupWindowCorrection.offsetFor(placement.origin)
+    val provider = remember(offsetX, offsetY, correction) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
-                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset =
-                IntOffset((anchorBounds.left + offsetX).roundToInt(), (anchorBounds.top + offsetY).roundToInt())
+                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = placement.place(
+                IntOffset((anchorBounds.left + offsetX).roundToInt(), (anchorBounds.top + offsetY).roundToInt()))
         }
     }
     Popup(popupPositionProvider = provider, properties = DisplayOnlyPopupProperties) {
+        VerifyPopupWindowPlacement(placement)
         Canvas(Modifier.size(with(density) { boxWidth.toDp() }, with(density) { boxHeight.toDp() })
             .then(if (live) Modifier.testTag("key-choice-popup") else Modifier)) {
             withTransform({
@@ -196,7 +201,11 @@ internal fun SwipeBubbleOverlay(data: BubbleDrawData?, live: Boolean = true,
     }
     var displacedY by remember { mutableFloatStateOf(0f) }
     val currentData by rememberUpdatedState(data)
-    val provider = remember(shadow) {
+    val anchorView = LocalView.current
+    val placement = remember(anchorView) { PopupWindowPlacement(anchorView) }
+    // 系统摆浮窗的参照和键盘窗口差了多少（见 [PopupWindowPlacement]）；变了换一个 provider，浮窗立刻重摆。
+    val correction = PopupWindowCorrection.offsetFor(placement.origin)
+    val provider = remember(shadow, correction) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
                 layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
@@ -204,11 +213,12 @@ internal fun SwipeBubbleOverlay(data: BubbleDrawData?, live: Boolean = true,
                 val position = swipeBubbleWindowPosition(anchorBounds, windowSize, popupContentSize,
                     bubble.boxLeft, bubble.boxTop, shadow)
                 displacedY = position.y + shadow - (anchorBounds.top + bubble.boxTop)
-                return position
+                return placement.place(position)
             }
         }
     }
     Popup(popupPositionProvider = provider, properties = DisplayOnlyPopupProperties) {
+        VerifyPopupWindowPlacement(placement)
         // 出现、展开、高亮滑动和淡出都画在这块画布里（见 ChoiceBubbleHost）；选择只看手指坐标，动画不影响命中。
         Canvas(Modifier.size(with(density) { width.toDp() }, with(density) { height.toDp() })
             .then(if (live) Modifier.testTag("key-choice-popup") else Modifier)) {

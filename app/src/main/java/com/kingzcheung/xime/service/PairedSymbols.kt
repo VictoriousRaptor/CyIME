@@ -58,27 +58,21 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
     } finally {
         endBatchEdit()
     }
-    if (back != 0) putCaretBackIfIgnored(text, back)
+    if (back != 0) dropClosingIfCaretIgnored(text, back)
     return true
 }
 
 /**
- * 有的编辑框（如 NotallyX 等记事本，#280）不认 newCursorPosition 0，光标落在结尾符号后面。
- * 这时光标前面正好是刚上屏的整段：按实际位置把光标往回挪 [back] 个字，读不到位置就发左方向键。
+ * 有的编辑框不认 newCursorPosition 0，光标落在补上的结尾后面（#280，NotallyX 等记事本）。
+ * 原来这里再用 setSelection／左方向键把光标挪回中间，但这类编辑框自己记的插入位置没跟着变：
+ * 接着打一个字以后光标又跳到结尾外面，拼音只剩第一个字母（11-14 用户反馈）。
+ * 这类编辑框里没法可靠地把光标放进一对符号中间，所以把刚补上的结尾去掉，只留用户点的开头，
+ * 和没开「输入成对符号」时一样；结尾由用户自己打，不会多出一个。正常的编辑框（光标前面不是整段）不受影响。
  */
-private fun InputConnection.putCaretBackIfIgnored(text: String, back: Int) {
+private fun InputConnection.dropClosingIfCaretIgnored(text: String, back: Int) {
     val before = runCatching { getTextBeforeCursor(text.length, 0)?.toString() }.getOrNull()
-    if (before != text) return
-    val extracted = runCatching { getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull()
-    if (extracted != null && extracted.selectionStart == extracted.selectionEnd && extracted.selectionStart >= back) {
-        val caret = extracted.startOffset + extracted.selectionStart - back
-        setSelection(caret, caret)
-        return
-    }
-    repeat(back) {
-        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
-        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
-    }
+    if (before != text || !getSelectedText(0).isNullOrEmpty()) return
+    deleteSurroundingText(back, 0)
 }
 
 /** 光标夹在一对空符号中间时两边一起删掉；不是这种情况返回 false，由调用方照常退格。 */

@@ -35,7 +35,7 @@ import org.robolectric.annotation.Config
 
 /**
  * 九键按住左下角 !@# 当 Ctrl（用户 11-03），和 26 键同一套：
- * 1 关闭 2 刷新 3 重做 4 全选 5 保存 6 剪切 7 撤销 8 复制 9 粘贴，回车 = Ctrl+回车（发送）。
+ * 1 关闭 2 刷新 3 重做 4 全选 5 剪切 6 查找 7 撤销 8 复制 9 粘贴，回车 = Ctrl+回车（发送）。
  * 拖到数字键上松手或另一根手指点数字键都发快捷键、不打字；按满时限数字键换成快捷键键面；点一下 !@# 照旧开符号。
  */
 @RunWith(AndroidJUnit4::class)
@@ -51,8 +51,8 @@ class T9CtrlKeyTest {
 
     /** 数字键键面上的字母，按 1..9 排。 */
     private val digitFaces = listOf("分词", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ")
-    private val shortcutLabels = listOf("关闭", "刷新", "重做", "全选", "保存", "剪切", "撤销", "复制", "粘贴")
-    private val shortcutCommands = listOf("ctrl:w", "ctrl:r", "ctrl:y", "ctrl:a", "ctrl:s", "ctrl:x", "ctrl:z", "ctrl:c", "ctrl:v")
+    private val shortcutLabels = listOf("关闭", "刷新", "重做", "全选", "剪切", "查找", "撤销", "复制", "粘贴")
+    private val shortcutCommands = listOf("ctrl:w", "ctrl:r", "ctrl:y", "ctrl:a", "ctrl:x", "ctrl:f", "ctrl:z", "ctrl:c", "ctrl:v")
 
     private fun show(cycle: Boolean = false) {
         AppFonts.initialize(rule.activity.application)

@@ -104,10 +104,11 @@ class FeedbackManager(private val context: Context) {
 
         /**
          * 不交给系统按键触感（KEYBOARD_TAP）的机型：三星按实测自己震；华为（鸿蒙 4.x）有用户反馈 10-30 改走系统触感后
-         * 打字不震（未真机确认），退回改动前的自己震（原语 / 预设 / 短脉冲）。
+         * 打字不震（未真机确认），退回改动前的自己震（原语 / 预设 / 短脉冲）。荣耀（MagicOS，和华为同一套系统底子）
+         * 11-11 有用户反馈 Magic7 Pro 没有震动（未真机确认），同样自己震。
          */
         fun bypassesSystemKeyHaptic(vendor: DeviceVendor): Boolean =
-            isSamsungTuned(vendor) || vendor == DeviceVendor.HUAWEI
+            isSamsungTuned(vendor) || vendor == DeviceVendor.HUAWEI || vendor == DeviceVendor.HONOR
 
         /**
          * 非三星机型在没自定义时长、振幅时直接用系统按键触感（View.performHapticFeedback）：

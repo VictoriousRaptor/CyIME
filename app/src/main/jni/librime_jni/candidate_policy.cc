@@ -406,6 +406,29 @@ class PolicyTranslation : public Translation {
       const auto top = As<Phrase>(Candidate::GetGenuineCandidate(head_.front()));
       if (!syllable && top && !As<Sentence>(top) && top->end() == end_ && HanCharacters(top->text()).size() >= 2 &&
           SpellingCoverage(top) >= 0.5) {
+        // A corrected whole word is first listed by its weight among the typed words (2026-11-12): the translator puts
+        // every typed word of the full length before any corrected one, so 已经 for yijin came after ten words read
+        // yi'jin, off the first page (of the 1500 most common words, 600 end in ng; with the g left off 484 were not
+        // in the first five). Its weight carries the correction penalty (0.01 per corrected syllable), so it only
+        // passes typed words at least 100 times rarer, and never takes the first place here: that is decided below.
+        // Learned words keep their places (their weights are on another scale).
+        {
+          size_t best = 0;
+          double best_weight = 0;
+          for (size_t i = 2; i < head_.size(); ++i) {
+            const auto p = As<Phrase>(Candidate::GetGenuineCandidate(head_[i]));
+            if (!p || As<Sentence>(p) || p->end() != end_ || head_[i]->start() != 0 || p->type() == "user_phrase" ||
+                corrections(p) == 0 || HanCharacters(p->text()).size() < 2) continue;
+            if (!best || p->weight() > best_weight) { best = i; best_weight = p->weight(); }
+          }
+          for (size_t i = 1; best && i < best; ++i) {
+            const auto p = As<Phrase>(Candidate::GetGenuineCandidate(head_[i]));
+            if (!p || As<Sentence>(p) || p->end() != end_ || p->type() == "user_phrase" || corrections(p) > 0 ||
+                HanCharacters(p->text()).empty() || p->weight() >= best_weight) continue;
+            std::rotate(head_.begin() + i, head_.begin() + best, head_.begin() + best + 1);
+            break;
+          }
+        }
         const auto limit = head_.begin() + std::min<size_t>(5, head_.size());
         int count = 0;
         const auto corrected = std::find_if(head_.begin() + 1, limit, [&](const auto& c) {
@@ -416,8 +439,15 @@ class PolicyTranslation : public Translation {
         static const double kPenalty = std::log(100.0), kMargin = std::log(2000.0);
         if (corrected != limit && corrections(top) == 0) {
           const auto p = As<Phrase>(Candidate::GetGenuineCandidate(*corrected));
-          if (top->type() != "user_phrase" && p->type() != "user_phrase" &&
-              p->weight() + count * kPenalty >= top->weight() + kMargin)
+          // Only the first corrected syllable's penalty is given back (2026-11-12): a word that needs two or three
+          // slips at once must be 100 times more common again for each further one. With every penalty given back,
+          // paofuchan (剖腹产 as commonly misread) gave 排土场 first once a dropped final g counted as a slip too:
+          // o for i, f for t and the g, three in one word. That entry has no count in the dictionary at all (the
+          // misreadings of others.dict), which reads as rarer than anything: a typed word counts as seen once at least
+          // (a dictionary weight is ln count - ln 1e8, Dictionary's kS).
+          static const double kOnce = -std::log(1e8);
+          if (top->type() != "user_phrase" && p->type() != "user_phrase" && count > 0 &&
+              p->weight() + kPenalty >= std::max(top->weight(), kOnce) + kMargin)
             std::rotate(head_.begin(), corrected, corrected + 1);
         }
       }

@@ -90,6 +90,8 @@ fun HardwareKeyboardCandidateBar(
     /** 「自动避开输入区域」开启时传入光标位置：浮卡盖住这一行就上下挪开。与 [cursorAnchor] 跟随无关。 */
     avoidCaret: HardwareCursorAnchor? = null,
     commentsAreGlosses: Boolean = false,
+    /** 候选行画了哪些、完整显示了几个（翻页按这个数走）。 */
+    onShown: ((List<String>, Int) -> Unit)? = null,
 ) {
     val reportBounds by rememberUpdatedState(onBoundsChanged)
     val reportPreeditBounds by rememberUpdatedState(onPreeditBoundsChanged)
@@ -209,7 +211,8 @@ fun HardwareKeyboardCandidateBar(
                     else Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) {
                             HardwareCandidateRow(candidates, comments, highlightIndex, hasPrevPage, hasNextPage,
-                                visuals, onCandidateSelect, onPrevious, onNext, showNumberLabels, commentsAreGlosses)
+                                visuals, onCandidateSelect, onPrevious, onNext, showNumberLabels, commentsAreGlosses,
+                                onShown = onShown)
                         }
                         if (candidates.size > 1) KeyboardToolbarButton({ expanded = true }, Color.Transparent,
                             modifier = Modifier.testTag("hardware-candidate-expand")) {
@@ -271,13 +274,19 @@ internal fun HardwareCandidateRow(
     onCandidateSelect: ((Int) -> Unit)?, onPrevious: (() -> Unit)?, onNext: (() -> Unit)?,
     showNumberLabels: Boolean = true,
     commentsAreGlosses: Boolean = false,
+    /** 画了哪些候选、其中前几个完整显示（窄工具条放不下 10 个时翻页按它走）。 */
+    onShown: ((List<String>, Int) -> Unit)? = null,
 ) {
     val protectedVisuals = visuals.withTextSurface(LocalFrostedTextSurface.current)
     val context = LocalContext.current
+    val shownWords = candidates.take(MAX_VISIBLE_CANDIDATES)
+    val reportShown by rememberUpdatedState(onShown)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        FixedCandidateStrip(candidates.take(MAX_VISIBLE_CANDIDATES), comments = comments,
+        FixedCandidateStrip(shownWords, comments = comments,
             visuals = protectedVisuals,
-            callbacks = CandidateBarCallbacks(onCandidateSelect = { onCandidateSelect?.invoke(it) }),
+            // 只在这一行从第一个排起时报（高亮把这一行往后挪了就是空表，不算）。
+            callbacks = CandidateBarCallbacks(onCandidateSelect = { onCandidateSelect?.invoke(it) },
+                onVisibleCandidatesChanged = { visible -> if (visible.isNotEmpty()) reportShown?.invoke(shownWords, visible.size) }),
             fontSize = SettingsPreferences.getCandidateTextSize(context).sp,
             highlightIndex = highlightIndex, showNumberLabels = showNumberLabels, itemSpacing = 8.dp,
             commentsAreGlosses = commentsAreGlosses,

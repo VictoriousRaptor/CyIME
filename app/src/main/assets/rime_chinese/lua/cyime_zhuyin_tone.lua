@@ -29,8 +29,33 @@ end
 
 -- 简体模式优先保留词库原词（计划 → 計畫），避免从台湾写法往返转换成「计画」。
 -- 若词库原词就是繁体，后续的简体滤镜会转换。声调筛选始终看正体候选。
+-- 只退回转正体那一层：表情、符号（开心 → 😄、加号 → +）也是 simplified 类型，退回去就又变成「开心」「加号」了。
+-- 转正体是一字对一字，原词是汉字的位置还是汉字；表情、符号不是。
+local function is_han(cp)
+  return (cp >= 0x3400 and cp <= 0x9FFF) or (cp >= 0xF900 and cp <= 0xFAFF) or (cp >= 0x20000 and cp <= 0x323AF)
+end
+
+local function from_zh_tw(cand, genuine)
+  if utf8.len(cand.text) ~= utf8.len(genuine.text) then return false end
+  local shown = {}
+  for _, cp in utf8.codes(cand.text) do shown[#shown + 1] = cp end
+  local i = 0
+  for _, cp in utf8.codes(genuine.text) do
+    i = i + 1
+    if is_han(cp) and not is_han(shown[i]) then return false end
+  end
+  return true
+end
+
 local function yield_source(cand)
-  yield(cand.type == "simplified" and cand:get_genuine() or cand)
+  if cand.type == "simplified" then
+    local genuine = cand:get_genuine()
+    if genuine and from_zh_tw(cand, genuine) then
+      yield(genuine)
+      return
+    end
+  end
+  yield(cand)
 end
 
 return function(input, env)

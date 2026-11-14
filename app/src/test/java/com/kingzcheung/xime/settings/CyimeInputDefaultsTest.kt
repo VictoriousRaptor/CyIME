@@ -47,6 +47,15 @@ class CyimeInputDefaultsTest {
         assertEquals(listOf("rime_ice") + dp + "t9_pinyin",
             CyimeInputDefaults.withDoublePinyin(listOf("rime_ice", "double_pinyin_flypy", "t9_pinyin"), available))
     }
+    @Test fun freshInstallLeavesDoublePinyinToTheGuideQuestion() {
+        // 新装、接着会出「按设备推荐配置」：那一页问用哪种双拼，只打开选中的；向导第 2 步不先列出 6 种。
+        assertFalse(CyimeInputDefaults.addsDoublePinyinToBar(freshInstall = true, guideWillAsk = true))
+        // 升级的人、老人包（没有那一页）照旧补进方案栏。
+        assertTrue(CyimeInputDefaults.addsDoublePinyinToBar(freshInstall = false, guideWillAsk = true))
+        assertTrue(CyimeInputDefaults.addsDoublePinyinToBar(freshInstall = true, guideWillAsk = false))
+        // 关着的内置双拼在「已安装的方案」里直接列出，跳过引导的人也找得到。
+        assertTrue(CyimeInputDefaults.listedWhenOff.containsAll(CyimeInputDefaults.doublePinyin))
+    }
     @Test fun doublePinyinWaitsUntilItsSchemasAreGeneratedAndBringsFourteenKeyCompanions() {
         val dp = CyimeInputDefaults.doublePinyin
         assertNull(CyimeInputDefaults.withDoublePinyin(listOf("rime_ice"), setOf("rime_ice", "double_pinyin_flypy")))

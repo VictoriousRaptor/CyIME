@@ -321,7 +321,7 @@ internal fun FuzzyPinyinSection() {
     val showDoublePinyinSwitch = remember { !doublePinyin }
     Column(Modifier.settingsSearchAnchor("模糊音")) {
         SettingsSection(title = "模糊音", content = {
-            Text("14 键双拼不适用。九键按数字后点左侧读音，带 ≈ 的是相近读音。" +
+            Text("14 键双拼不适用。九键按数字后点左侧读音，带下划线、颜色浅一些的是相近读音。" +
                 "改完要几秒重新部署。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))

@@ -1199,3 +1199,42 @@ user-cluo-9	9	2586	C罗	5	user	2026-11-11	同上，九键
 user-vitd-26	26	weishengsud	维生素D	5	user	2026-11-11	「维生素D」打不出来
 user-vitd-9	9	93474364783	维生素D	5	user	2026-11-11	同上，九键
 user-chu-not-agu-9	9	248	出	1	user	2026-11-11	反例：A股 的九键码 248 和 chu 相同，按权重「出」仍是首选
+ime5-yanmenzhao	26	jintianyouyouyanmenzhaole	今天又有艳门照了	1	ime5	2026-11-11	词库没有 艳门照
+ime5-tianzhilan	26	youtianzhilanmei	有天之蓝没	1	ime5	2026-11-11	天之蓝 只在腾讯词库，词频低
+ime5-zhijian	26	zhijianshangbujianxia	只见上不见下	1	ime5	2026-11-11	词库没有
+ime5-shougewei	26	wobashoulizhedianhuoershougewei	我把手里这点活儿收个尾	1	ime5	2026-11-11	收个尾 词频 81
+ime5-fanlai	26	waimaifanlaifuqujiunajijia	外卖翻来覆去就那几家	1	ime5	2026-11-11	完整版出 翻来复去；那几家 要在 哪几家 前
+ime5-najijia	26	najijia	那几家	1	ime5	2026-11-11	那 在 哪 前（他定的规矩）
+ime5-jishi	26	jishi	积食	10	ime5	2026-11-11	第一页能看到，不抢 即使/及时
+ime5-napa	26	napa	哪怕	1	反例	2026-11-11	那怕 不是词，那/哪 规则不能动它
+ime5-jishi-first	26	jishi	!积食	1	反例	2026-11-11	积食 不能排第一
+mixed-bzhan-video	26	bzhanshangmiandeshipinhenhaokan	B站上面的视频很好看	1	群聊	2026-11-13	群聊原句
+mixed-ai-manju	26	wofaxianyigeaimanjutaiyouyisile	我发现一个AI漫剧太有意思了	1	群聊	2026-11-13	群聊原句
+mixed-cpan-red	26	wocpanhongle	我C盘红了	1	群聊	2026-11-13	群聊原句
+mixed-xguang	26	zhegexguangpianzenmekan	这个X光片怎么看	1	群聊	2026-11-13	同类句
+mixed-txu	26	woxiangmaijiantxu	我想买件T恤	1	群聊	2026-11-13	同类句
+mixed-kxian	26	jintiandekxianzenmeyang	今天的K线怎么样	1	群聊	2026-11-13	同类句；K线 公开语料词频太低（399），排在 空闲 后；试过权重 2000、3000 都排第一（kx 时 K线 升到第 3），5000 时 kx 首选变 K线，等更新语料的词频再定
+mixed-ppt	26	pptzuohaole	PPT做好了	1	群聊	2026-11-13	同类句
+mixed-pdf	26	weixinfawogepdf	微信发我个PDF	1	群聊	2026-11-13	同类句
+mixed-shang-bzhan	26	woshangbzhankanle	我上B站看了	1	群聊	2026-11-13	同类句；混合词按上下文里的平均得分算后排第一（原来输给 上班站）
+mixed-agu	26	agujintiandiele	A股今天跌了	1	群聊	2026-11-13	同类句；a gu 能拼全时 A股 原来被裁掉
+mixed-cluo	26	cluojinqiule	C罗进球了	1	群聊	2026-11-13	同类句
+mixed-upan	26	woyaoqumaigeupan	我要去买个U盘	1	群聊	2026-11-13	同类句
+mixed-qbi	26	chongleyibaiqbi	充了一百Q币	1	群聊	2026-11-13	同类句；Q币 最低权重 5000 后能进句子（冲了一百Q币）；充 还读成 冲：聊天语料常把 充 写成 冲（词模型 ln P(话费|冲) −4.84、P(话费|充) −12.51），整句 冲了一百元 和 充了一百元 词模型分数打平（−26.04 对 −26.26），词频上 冲了 49707 高于 充了 13049
+mixed-pt	26	bangwopyixiazhezhangtu	帮我P一下这张图	1	群聊	2026-11-13	同类句；P一下 在组句词库里（24388），混合词按上下文里的平均得分算后排第一（原来输给 拍一下）
+mixed-ptu	26	zhezhangzhaopianyaoptu	这张照片要P图	1	群聊	2026-11-13	同类句
+mixed-bzhan-alone	26	bzhan	B站	1	群聊	2026-11-13	单独打
+mixed-cpan-alone	26	cpan	C盘	1	群聊	2026-11-13	单独打
+mixed-neg-bzd	26	bzd	不知道	1	群聊	2026-11-13	反例：首字母简拼不变
+mixed-neg-qb	26	qb	全部	1	群聊	2026-11-13	反例
+mixed-neg-bz	26	bz	不在	3	群聊	2026-11-13	反例
+mixed-neg-xgp	26	xgp	!X光片	1	群聊	2026-11-13	反例：xgp 是简拼，不是 X光片
+mixed-neg-zgrm	26	zgrm	中国人民	1	群聊	2026-11-13	反例
+mixed-neg-tx	26	tx	同学	3	群聊	2026-11-13	反例
+mixed-neg-wbzd	26	wbzd	我不知道	1	群聊	2026-11-13	反例
+mixed-neg-baozhang	26	baozhang	保障	1	群聊	2026-11-13	反例
+mixed-neg-kexiang	26	kexiang	!K线	1	群聊	2026-11-13	反例
+mixed-neg-woaini	26	woaini	我爱你	1	群聊	2026-11-13	反例：ai 不读成 AI
+name-guohaol	26	guohaol	过好了	1	用户反馈目标	2026-11-14	不知名人名 郭昊伦 从词库删掉后
+name-zhangsanl	26	zhangsanl	张三了	1	用户反馈目标	2026-11-14	张三禄 删掉后
+name-zhaoyunl	26	zhaoyunl	!赵云蕾	1	用户反馈目标	2026-11-14	赵云蕾 删掉后不再出现

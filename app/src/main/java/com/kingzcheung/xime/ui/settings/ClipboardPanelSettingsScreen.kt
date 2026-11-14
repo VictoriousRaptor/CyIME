@@ -159,6 +159,19 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
             },
             costItem = PerformanceCosts.Item.RECENT_SCREENSHOTS,
         )
+        // 用户 11-14：不只截图，相册最近几张也要。默认关：别人用键盘时不突然露出自己的照片。
+        var photosToo by remember { mutableStateOf(images.recentPhotosWanted()) }
+        SettingsToggleItem(
+            icon = Icons.TwoTone.PhotoLibrary,
+            title = "也显示相册照片",
+            subtitle = "截图之外，再显示相册里最新的 ${com.kingzcheung.xime.clipboard.ScreenshotImageSource.RECENT_PHOTO_LIMIT} 张照片",
+            checked = photosToo && screenshotsOn,
+            onCheckedChange = { on ->
+                photosToo = on
+                images.includeRecentPhotos(on)
+            },
+            lockMessage = if (screenshotsOn) null else "先打开「最近截图」",
+        )
     })
 }
 

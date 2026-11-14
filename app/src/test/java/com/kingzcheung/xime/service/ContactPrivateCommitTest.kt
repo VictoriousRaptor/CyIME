@@ -43,7 +43,7 @@ class ContactPrivateCommitTest {
         owned { service.submitPrivateText("张三") }
         // isSensitive = true：不发 text_committed、不进打字统计、不记联想（commitTextSilently 的密码框分支）。
         verify(service).commitTextSilently("张三", false, true, CommitCaret.NONE)
-        verify(service, never()).commitTextAndPredict(any(), any(), any(), any())
+        verify(service, never()).commitTextAndPredict(any(), any(), any(), any(), any())
         verify(prediction, never()).recordInput(any())
         verify(prediction, never()).recordInputPair(any(), any())
         // 联想上下文清空：下一次上屏不会和名字配成一对去学。

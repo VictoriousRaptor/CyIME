@@ -33,4 +33,16 @@ class CaptionLanguageTest {
         assertEquals(CaptionLanguage.JAPANESE, CaptionLanguage.of("ja", normal))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.of(null, normal))
     }
+
+    /** 用户 11-14：字幕一进来跟界面语言，中文界面就是中文；界面是没有字幕的语言时也是中文。 */
+    @Test fun `captions start in the interface language`() {
+        val normal = CaptionLanguage.forPackage(elder = false)
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("zh-CN", normal))
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("zh-Hant-TW", normal))
+        assertEquals(CaptionLanguage.JAPANESE, CaptionLanguage.forInterface("ja-JP", normal))
+        assertEquals(CaptionLanguage.ENGLISH, CaptionLanguage.forInterface("en-US", normal))
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("ko-KR", normal))
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface(null, normal))
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("en-US", CaptionLanguage.forPackage(elder = true)))
+    }
 }

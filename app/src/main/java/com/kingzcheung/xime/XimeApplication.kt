@@ -71,6 +71,7 @@ class XimeApplication : Application(), ImageLoaderFactory {
         com.kingzcheung.xime.settings.StorageHousekeeping.sweepAtStartup(this, applicationScope)
         com.kingzcheung.xime.model.DeviceDefaults.initialize(this)
         com.kingzcheung.xime.settings.LanguagePreferences.initialize(this)
+        com.kingzcheung.xime.update.AppUpdater.init(this)
         com.kingzcheung.xime.ui.theme.VisualStyles.current = SettingsPreferences.getVisualStyle(this)
         com.kingzcheung.xime.ui.theme.KeyShapes.current = SettingsPreferences.getKeyShape(this)
         com.kingzcheung.xime.ui.theme.IconAppearance.reload(this)

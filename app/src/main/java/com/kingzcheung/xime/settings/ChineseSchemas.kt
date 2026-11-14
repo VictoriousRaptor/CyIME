@@ -131,10 +131,18 @@ object ChineseSchemas {
     fun addOnFirstUpgrade(context: Context, enabled: List<String>): List<String> =
         addDoublePinyinDefaults(context, addChineseDefaults(context, enabled))
 
-    /** 内置双拼新装和升级都补进方案栏一次；之后在双拼方案页隐藏仍有效。 */
+    /**
+     * 内置双拼升级时补进方案栏一次；之后在双拼方案页隐藏仍有效。新装的人接着会在「按设备推荐配置」里被问用哪种双拼，
+     * 只打开选中的那一种，这里不先全补（见 [CyimeInputDefaults.addsDoublePinyinToBar]）。
+     */
     private fun addDoublePinyinDefaults(context: Context, enabled: List<String>): List<String> {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         if (prefs.getBoolean(DOUBLE_PINYIN_ADDED, false) || !prefs.getBoolean(ADDED, false)) return enabled
+        val guideWillAsk = !com.kingzcheung.xime.BuildConfig.ELDER && !com.kingzcheung.xime.model.SetupGuide.isShown(context)
+        if (!CyimeInputDefaults.addsDoublePinyinToBar(isFreshInstall(context), guideWillAsk)) {
+            prefs.edit().putBoolean(DOUBLE_PINYIN_ADDED, true).apply()
+            return enabled
+        }
         val available = SchemaManager.getRimeDir(context).listFiles().orEmpty()
             .filter { it.name.endsWith(".schema.yaml") }.map { it.name.removeSuffix(".schema.yaml") }.toSet()
         val updated = CyimeInputDefaults.withDoublePinyin(enabled, available) ?: return enabled

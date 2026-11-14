@@ -37,7 +37,8 @@ class CustomImageThemeTest {
         SettingsPreferences.getPrefsPublic(context).edit()
             .remove("custom_theme_image_src").remove("custom_theme_image_base")
             .remove("custom_theme_image_placement")
-            .remove("custom_theme_image_veil_light").remove("custom_theme_image_veil_dark").commit()
+            .remove("custom_theme_image_veil_light").remove("custom_theme_image_veil_dark")
+            .remove(com.kingzcheung.xime.settings.BackgroundMotionPreferences.KEY_SLIDES).commit()
         File(SchemaManager.getRimeDir(context), "themes").listFiles()
             ?.filter { it.name.startsWith("custom-keyboard-bg-") }?.forEach { it.delete() }
     }
@@ -98,6 +99,35 @@ class CustomImageThemeTest {
         // 调整已在用的图片后取消，不能把它删掉。
         CustomImageTheme.discard(context, "themes/custom-keyboard-bg-1.jpg")
         assertTrue(inUse.exists())
+    }
+
+    /** 删掉第一张而后面还有图：下一张顶上来，铺满居中；配色和其余的顺序不变，文件改成主图的名字。 */
+    @Test fun removingTheFirstImagePromotesTheNextOne() {
+        val old = choose("mint_green")
+        CustomImageTheme.commit(context, "themes/custom-keyboard-bg-1.jpg", "mint_green",
+            ThemeImagePlacement("fit_height", 1.4f, 0.2f, 0.5f))
+        val dir = old.parentFile!!
+        val slides = listOf("a", "b").map { name ->
+            File(dir, "custom-keyboard-bg-slide-$name.jpg").apply { writeBytes(byteArrayOf(2)) }
+            "themes/custom-keyboard-bg-slide-$name.jpg"
+        }
+        com.kingzcheung.xime.settings.BackgroundMotionPreferences.setSlides(context, slides)
+
+        assertTrue(CustomImageTheme.promoteNextSlide(context))
+        val main = CustomImageTheme.imageSource(context)!!
+        assertTrue(main, main.startsWith("themes/custom-keyboard-bg-") && !main.contains("slide-"))
+        assertFalse("旧主图删掉", old.exists())
+        assertFalse("顶上来的那张不再留着轮播文件名", File(dir, "custom-keyboard-bg-slide-a.jpg").exists())
+        assertEquals(listOf("themes/custom-keyboard-bg-slide-b.jpg"),
+            com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(context).slides)
+        assertEquals(ThemeImagePlacement.DEFAULT, CustomImageTheme.placement(context))
+        assertEquals(themes.first { it.id == "mint_green" }.keyBgLight, CustomImageTheme.build(context, themes)!!.keyBgLight)
+
+        assertTrue(CustomImageTheme.promoteNextSlide(context))
+        assertEquals(emptyList<String>(), com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(context).slides)
+        assertFalse("只剩一张时不动，由确认后的删除处理", CustomImageTheme.promoteNextSlide(context))
+        assertTrue(CustomImageTheme.hasImage(context))
+        assertEquals(1, dir.listFiles()!!.count { it.name.startsWith("custom-keyboard-bg-") })
     }
 
     @Test fun deleteRemovesTheThemeAndReturnsTheBase() {

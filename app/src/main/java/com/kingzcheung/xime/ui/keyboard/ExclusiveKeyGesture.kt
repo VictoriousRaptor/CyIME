@@ -57,6 +57,14 @@ internal data class KeyGestureActions(
      * enters nothing.
      */
     val freeDirection: Boolean = false,
+    /**
+     * 滑到哪个键按哪个键（用户 11-14）：手指滑出这个键以后，每次移动把位置（这个键里的坐标）交给它，
+     * 松手调 [slideRelease] 按手指下的键。null 时照旧：滑出键外松手不出字。
+     * 只给没有任何方向手势的键（滑行和「上下滑输入符号」都关着时的字母键等），见 SwipeableKeyButton。
+     */
+    val slideOver: ((Offset) -> Unit)? = null,
+    val slideRelease: (() -> Unit)? = null,
+    val slideCancel: () -> Unit = {},
 )
 
 internal fun KeyGestureActions.withLetterSwipes(
@@ -95,6 +103,14 @@ internal fun letterSwipeCornerLabels(key: String): Pair<String?, String?> {
 }
 
 /**
+ * 这组手势按多少毫秒算长按；没有长按时是 null。[systemTimeoutMillis] 传系统的长按时限。
+ * 手势本身和键缝动效的长按进度都用这一个数，进度走满正好是长按生效的那一刻。
+ */
+internal fun KeyGestureActions.longPressDelayMillis(systemTimeoutMillis: Long): Long? =
+    if (longPressItems.isEmpty() && onLongPress == null) null
+    else longPressTimeoutMillis ?: if (longPressItems.isNotEmpty()) 400L else systemTimeoutMillis
+
+/**
  * [reserveDragForGlide]：这个键上的拖动留给滑行（九键滑行、26 键英文/中文滑行），键自己不做上下滑、拂动。
  * 拖动后滑行没接管（没有消费这根手指）时，抬手仍按点按结算（见 [glideDriftIsTap]）。
  */
@@ -126,10 +142,13 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
         var verticalDrag: Boolean? = null
         // A free flick keeps the touch once it has left the centre, even after coming back.
         var flickClaimed = false
+        // 滑到哪个键按哪个键：手指已经滑出过这个键（[KeyGestureActions.slideOver]）。
+        var slid = false
         var selectedIndex = 0
         val items = actions.longPressItems
-        val longPressJob = if (items.isNotEmpty() || actions.onLongPress != null) gestureScope.launch {
-            delay(actions.longPressTimeoutMillis ?: if (items.isNotEmpty()) 400L else viewConfiguration.longPressTimeoutMillis)
+        val longPressDelay = actions.longPressDelayMillis(viewConfiguration.longPressTimeoutMillis)
+        val longPressJob = if (longPressDelay != null) gestureScope.launch {
+            delay(longPressDelay)
             longPressed = true
             actions.onLongPressFeedback()
             if (items.isNotEmpty()) {
@@ -158,6 +177,14 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                     // 现在接着跟这根手指：滑行接管时会消费事件，下面照常放手；没接管就在抬手时按点按算。
                 }
                 val slop = viewConfiguration.touchSlop
+                // 滑到哪个键按哪个键：一出这个键就交给键盘找手指下的键，之后回到本键也由它按（松手按本键）。
+                if (actions.slideOver != null && !longPressed && !reserveDragForGlide) {
+                    val p = change.position
+                    if (slid || p.x < 0f || p.y < 0f || p.x > size.width || p.y > size.height) {
+                        slid = true
+                        actions.slideOver.invoke(p)
+                    }
+                }
                 // Back at the key's own centre also means the centre choice, for presses that began
                 // off-centre; a fixed tolerance, so wide tablet keys still flick sideways.
                 val atKeyCentre = actions.freeDirection && moved &&
@@ -219,6 +246,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                     handover = nextDown
                     when {
                         longPressed -> items.getOrNull(selectedIndex)?.let { actions.onLongPressSelect?.invoke(it) }
+                        slid -> actions.slideRelease?.invoke()
                         up -> actions.onUp?.invoke(actions.upText.orEmpty())
                         downSwipe -> actions.onDown?.invoke(actions.downText.orEmpty())
                         left -> actions.onLeft?.invoke()
@@ -232,7 +260,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                 }
                 // Reserve paired-letter drags before the whole-keyboard cursor's
                 // activation distance, even when the user sets a longer threshold.
-                if (longPressed || crossedSwipeThreshold || verticalDrag != null || flickClaimed || actions.reserveHorizontalSwipe && !reserveDragForGlide &&
+                if (slid || longPressed || crossedSwipeThreshold || verticalDrag != null || flickClaimed || actions.reserveHorizontalSwipe && !reserveDragForGlide &&
                     abs(dx) > viewConfiguration.touchSlop && abs(dx) > abs(dy) * 1.1f) change.consume()
                 else {
                     // 父层光标/滚动手势可能在 Main 后半段消费；取消后不得补出普通字符。
@@ -243,6 +271,7 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
             }
         } finally {
             longPressJob?.cancel()
+            if (slid) actions.slideCancel()
             actions.onRelease()
             actions.onPreview(SwipeState())
         }

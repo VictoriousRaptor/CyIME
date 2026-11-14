@@ -118,9 +118,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (Chinese): open an issue first, then a mi
 
 CyIME is free and open source, built in my spare time. If it helps you, you can buy me a coffee on [Ko-fi](https://ko-fi.com/cyletix). Bug reports are just as welcome.
 
-My [Afdian](https://afdian.com/a/cyletix) account has yet to pass verification. To support me through Alipay, scan my personal payment code below.
+My [Afdian](https://afdian.com/a/cyletix) account is now verified. You can support me there or scan the corresponding code below with Alipay or WeChat Pay.
+
+Alipay
 
 <img src="docs/images/alipay.jpg" alt="Author’s personal Alipay payment code" width="240">
+
+WeChat Pay
+
+<img src="docs/images/wechat-pay.png" alt="WeChat Pay" width="240">
 
 ## Credits
 

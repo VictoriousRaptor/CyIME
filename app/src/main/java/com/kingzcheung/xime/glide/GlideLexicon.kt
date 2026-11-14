@@ -72,6 +72,30 @@ object GlideLexicon {
             syllables = { glideSyllables(pinyin(context), doublePinyin) }) { pinyinCodes(pinyin(context), doublePinyin) }
 
     /**
+     * 抬手后的整笔识别。随包词表读不出来时（1.15.82 有人遇到 glide_pinyin.txt 找不到，一滑整个输入法闪退）
+     * 不闪退：这一笔当没认出，日志只记第一次（用户 11-12）。须在后台线程调用。
+     */
+    fun decodeStroke(context: Context, keyboard: GlideKeyboard, chinese: Boolean, doublePinyin: DoublePinyinScheme?,
+        xs: FloatArray, ys: FloatArray): List<GlideCandidate> = decodeOrEmpty {
+        if (chinese) chineseDecoder(context, keyboard, doublePinyin).decode(xs, ys) else decoder(context, keyboard).decode(xs, ys)
+    }
+
+    @Volatile private var failureLogged = false
+
+    /** 识别出错（多半是词表读不出来）时返回空；协程取消照常抛出。 */
+    internal fun decodeOrEmpty(decode: () -> List<GlideCandidate>): List<GlideCandidate> = try {
+        decode()
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        if (!failureLogged) {
+            failureLogged = true
+            com.kingzcheung.xime.util.FileLogger.w("GlideLexicon", "滑行词表读取或识别失败，这一笔不处理", e)
+        }
+        emptyList()
+    }
+
+    /**
      * 九键滑行出的数字串：全拼、双拼按词表比对整条线最像哪个词的编码（[dictionary] 为真）；
      * 认不出或不是拼音方案时只取起点、拐弯和终点的键。须在后台线程调用。
      */

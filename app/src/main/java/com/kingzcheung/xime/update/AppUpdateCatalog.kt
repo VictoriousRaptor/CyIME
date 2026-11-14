@@ -54,6 +54,20 @@ object AppUpdateCatalog {
         return release.copy(asset = asset.copy(mirrors = (asset.mirrors + other).filter { it != asset.url }.distinct()))
     }
 
+    /**
+     * F-Droid 和用它仓库的客户端。从这些商店装的包由商店推送更新：F-Droid 收录规则不许应用绕过商店自己下载安装新版，
+     * 应用里就不查也不下。
+     */
+    private val STORE_INSTALLERS = setOf(
+        "org.fdroid.fdroid",
+        "org.fdroid.basic",
+        "org.fdroid.fdroid.privileged",
+        "com.looker.droidify",
+        "com.machiav3lli.fdroid",
+    )
+
+    fun isStoreInstaller(installer: String?): Boolean = installer in STORE_INSTALLERS
+
     private val androidTag = Regex("""^v?(\d+\.\d+\.\d+)$""")
     // CyIME-1.14.156-arm64-v8a.apk / CyIME-1.14.156-full-arm64-v8a.apk（1.14.72 里的完整版文件名是 1.14.73）。
     private val apkName = Regex("""^CyIME-\d+(?:\.\d+)*(-full)?-(.+)\.apk$""")

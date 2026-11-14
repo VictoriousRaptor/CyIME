@@ -217,6 +217,12 @@ internal class SplitKeyboardGap {
         return if (right - left < 1f) null else left to right
     }
 
+    /**
+     * 正在挖中缝（[cutout] 不为空）：挖法是用 Clear 清掉键盘自己画的底色，键盘外层必须是一张单独的离屏图，
+     * 否则会连窗口里垫在下面的东西一起清掉。只读状态，可在 graphicsLayer 块里读。
+     */
+    val cutsKeyboard: Boolean get() = !filled && gapX() != null
+
     fun reportAreaTop(top: Float) {
         if (areaTop == top) return
         areaTop = top

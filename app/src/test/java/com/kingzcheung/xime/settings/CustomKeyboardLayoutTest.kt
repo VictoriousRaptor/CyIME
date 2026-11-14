@@ -228,4 +228,21 @@ class CustomKeyboardLayoutTest {
             }
         }
     }
+    @Test fun layoutSchemasFollowTheCurrentChineseSchemaInsteadOfAnOldSnapshot() {
+        val root = File("build/generated/chinese-assets/rime_ice")
+        val base = File(root, "rime_ice.schema.yaml").readText()
+        val builtin = File(root, "pinyin_cyletix10.schema.yaml").readText()
+        // An untouched built-in file from an older base (here: without the candidate filters) becomes today's file.
+        val old = builtin.replace(Regex("(?m)^  filters:\\n(?:    - .*\\n)+"), "")
+        assertNotEquals(builtin, old)
+        assertEquals(builtin, CustomKeyboardLayouts.refreshedSchema(base, old, null))
+        assertEquals(builtin, CustomKeyboardLayouts.refreshedSchema(base, builtin, null))
+        // A saved layout keeps its own rows and name; refreshing the current file changes nothing.
+        val saved = CustomKeyboardLayout.fresh().copy(name = "我的布局").merge("q")
+        val current = saved.schema(base)
+        assertEquals(current, CustomKeyboardLayouts.refreshedSchema(base, old, saved))
+        assertEquals(current, CustomKeyboardLayouts.refreshedSchema(base, current, saved))
+        // A rime_ice that is not CyIME's own (market or hand-written) never overwrites layout schemas.
+        assertNull(CustomKeyboardLayouts.refreshedSchema(base.replace("cyime_neighbor_correction: true", ""), old, null))
+    }
 }

@@ -190,6 +190,24 @@ object CustomImageTheme {
         return added.size
     }
 
+    /**
+     * 去掉第一张（主图）而后面还有图：下一张顶上来做主图，按铺满居中摆放（和它轮播时显示的一样），
+     * 其余的顺序不变；沿用的配色不变。没有别的图时什么也不做，返回 false（整个删掉走 [delete]）。在 IO 线程调用。
+     */
+    fun promoteNextSlide(context: Context): Boolean {
+        val motion = com.kingzcheung.xime.settings.BackgroundMotionPreferences
+        val stored = motion.read(context).slides
+        val next = slides(context, stored).firstOrNull() ?: return false
+        val dir = themesDir(context)
+        // 改成主图的文件名：之后再换主图时 [commit] 会把它当旧主图删掉，不会留成没人管的轮播文件。
+        val name = "$FILE_PREFIX${System.currentTimeMillis()}-${(0..99999).random()}.jpg"
+        check(File(dir, next.removePrefix("themes/")).renameTo(File(dir, name))) { "无法保存图片" }
+        val base = SettingsPreferences.getPrefsPublic(context).getString(KEY_BASE, null) ?: SoftBlueTheme.ID
+        commit(context, "themes/$name", base, ThemeImagePlacement.DEFAULT)
+        motion.setSlides(context, stored.filter { it != next })
+        return true
+    }
+
     /** 清空轮播图片（主图不动）。在 IO 线程调用。 */
     fun clearSlides(context: Context) {
         com.kingzcheung.xime.settings.BackgroundMotionPreferences.setSlides(context, emptyList())

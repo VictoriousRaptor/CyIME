@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.model
 
+import com.kingzcheung.xime.ui.keyboard.CornerInputChoice
 import com.kingzcheung.xime.ui.keyboard.SpaceHoldAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -41,5 +42,35 @@ class SetupMoreTest {
         assertEquals(FeedbackChoice.NONE, SetupMore.feedbackOf(sound = false, vibration = false))
         assertTrue(FeedbackChoice.SOUND_ONLY !in SetupMore.feedbackChoices(FeedbackChoice.SOUND_AND_VIBRATION))
         assertTrue(FeedbackChoice.SOUND_ONLY in SetupMore.feedbackChoices(FeedbackChoice.SOUND_ONLY))
+    }
+
+    @Test fun newQuestionsStartFromDefaults() {
+        // 新加的四题默认值就是设置的默认值：角标滑动、不反转、不滑行、有取消按钮；不点就不改。
+        assertEquals(CornerInputChoice.SWIPE, now.corner)
+        assertEquals(false, now.reverseSwipe)
+        assertEquals(GlideChoice.OFF, now.glide)
+        assertEquals(true, now.cancelButton)
+    }
+
+    @Test fun glideMakesCornersLongPress() {
+        val glide = now.copy(glide = GlideChoice.BOTH)
+        assertEquals(CornerInputChoice.LONG_PRESS, SetupMore.effectiveCorner(glide))
+        assertEquals(listOf("滑行输入改成「中文、英文都滑行」。", "按键角标改成「长按输入」(开着滑行，字母键的滑动用来滑词)。"),
+            SetupMore.changes(now, glide))
+        // 关掉滑行回到存着的方式，不另写角标。
+        val stored = now.copy(corner = CornerInputChoice.SWIPE_BUBBLE)
+        assertEquals(CornerInputChoice.SWIPE_BUBBLE, SetupMore.effectiveCorner(stored))
+    }
+
+    @Test fun reverseAndCancelButtonAreListed() {
+        assertEquals(listOf("打开了「反转上下滑方向」：上滑出上角标、下滑出下角标，删除键也反过来。",
+            "关掉了「候选栏取消按钮」：候选词从最左边开始。"),
+            SetupMore.changes(now, now.copy(reverseSwipe = true, cancelButton = false)))
+    }
+
+    @Test fun chineseOnlyGlideAppearsOnlyWhenCurrent() {
+        assertEquals(GlideChoice.CHINESE, GlideChoice.of(english = false, chinese = true))
+        assertTrue(GlideChoice.CHINESE !in SetupMore.glideChoices(GlideChoice.OFF))
+        assertTrue(GlideChoice.CHINESE in SetupMore.glideChoices(GlideChoice.CHINESE))
     }
 }

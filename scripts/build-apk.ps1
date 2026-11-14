@@ -3,6 +3,7 @@
 param(
     [ValidateSet('Debug', 'Release')][string]$BuildType = 'Release',
     [string[]]$GradleArguments = @(),
+    [ValidateSet('arm64-v8a', 'armeabi-v7a')][string]$ReleaseAbi = 'arm64-v8a',
     [switch]$BundleModels,
     [switch]$RunLayoutGate,
     [int]$AdbPort = 5037,
@@ -52,6 +53,9 @@ try {
         }
     }
     $editionArguments = @("-PbundleModels=$($BundleModels.IsPresent.ToString().ToLowerInvariant())")
+    if ($ReleaseAbi -ne 'arm64-v8a') {
+        $editionArguments += @('-I', (Join-Path $PSScriptRoot 'phone-release-abi.gradle'), "-PcyimeReleaseAbi=$ReleaseAbi")
+    }
     $buildTasks = @(':app:assemble' + $BuildType)
     if ($RunLayoutGate) { $buildTasks += @(':app:assembleDebug', ':app:assembleDebugAndroidTest') }
     & ./gradlew.bat @buildTasks --no-daemon @editionArguments @GradleArguments
@@ -82,7 +86,7 @@ try {
     $metadata = Get-Content (Join-Path $output 'output-metadata.json') -Raw | ConvertFrom-Json
     if ($metadata.applicationId -ne 'com.cyletix.cyime') { throw 'Unexpected application ID.' }
     $deliveryElements = if ($BuildType -eq "Release") {
-        @($metadata.elements | Where-Object { @($_.filters | Where-Object { $_.filterType -eq "ABI" -and $_.value -eq "arm64-v8a" }).Count -eq 1 })
+        @($metadata.elements | Where-Object { @($_.filters | Where-Object { $_.filterType -eq "ABI" -and $_.value -eq $ReleaseAbi }).Count -eq 1 })
     } else { @($metadata.elements) }
     if ($deliveryElements.Count -eq 0) { throw "No APK matches the delivery architecture." }
     $files = foreach ($element in $deliveryElements) {
@@ -111,6 +115,7 @@ try {
     # Keep both editions when the next build replaces the shared Gradle output folder.
     $edition = if ($BundleModels) { 'full' } else { 'standard' }
     $delivery = Join-Path $apkRoot "editions/$version/$edition/$kind"
+    if ($BuildType -eq "Release" -and $ReleaseAbi -ne "arm64-v8a") { $delivery = Join-Path $delivery $ReleaseAbi }
     New-Item -ItemType Directory -Force -Path $delivery | Out-Null
     foreach ($item in $files) { Copy-Item -LiteralPath $item.path -Destination $delivery }
     $savedReceipt = Get-Content (Join-Path $output 'latest.json') -Raw | ConvertFrom-Json

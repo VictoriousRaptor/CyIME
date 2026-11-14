@@ -71,8 +71,11 @@ class PairedSymbolsTest {
         assertFalse(connection.deleteEmptyPairAroundCursor())
     }
 
-    /** #280：编辑框不认 newCursorPosition 0（光标总落在上屏文字后面）时，照样落在一对符号中间。 */
-    @Test fun editorsThatIgnoreTheCaretPositionStillEndBetweenThePair() {
+    /**
+     * 编辑框不认 newCursorPosition 0（光标总落在上屏文字后面，#280）：没法可靠地停在中间，
+     * 只上屏开头，不补结尾（11-14：挪回中间以后打一个字光标又跳出去）。接着打字留在原处，结尾自己打也不会多一个。
+     */
+    @Test fun editorsThatIgnoreTheCaretPositionGetOnlyTheOpeningHalf() {
         val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
             override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
         }
@@ -81,11 +84,20 @@ class PairedSymbolsTest {
             assertTrue(ignoring.commitTextWithCaret(text, caret))
         }
         typeInto("《")
-        assertEquals("《|》", shown())
+        assertEquals("《|", shown())
         typeInto("好")
-        assertEquals("《好|》", shown())
+        typeInto("的")
+        assertEquals("《好的|", shown())
         typeInto("》")
-        assertEquals("《好》|", shown())
+        assertEquals("《好的》|", shown())
+    }
+
+    /** 正常编辑框：括号里连着打几个字都留在里面，打结尾才跳出去，不重复加（用户 11-14）。 */
+    @Test fun typingSeveralCharactersStaysInsideUntilTheClosingHalf() {
+        type("（"); type("n"); type("i"); type("好")
+        assertEquals("（ni好|）", shown())
+        type("）")
+        assertEquals("（ni好）|", shown())
     }
 
     @Test fun aSelectionIsReplacedByThePairLikeAnyTypedSymbol() {

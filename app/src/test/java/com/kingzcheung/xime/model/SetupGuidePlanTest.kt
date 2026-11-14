@@ -89,6 +89,23 @@ class SetupGuidePlanTest {
         assertTrue(normal.notes.none { "能省就省" in it || "从内存卸掉" in it })
     }
 
+    @Test fun memoryExtrasTurnOffOnlyWhatWasPickedAndOnlyWithSaver() {
+        val extras = listOf(MemoryExtra("glass", "玻璃效果", "键盘不再半透明", 12.0),
+            MemoryExtra("rare_characters", "生僻字", "候选里不再出生僻字", 8.0))
+        val f = facts(DeviceModelTier.ENHANCED).copy(memoryExtras = extras)
+        // 默认一个不选：答了“有”也不关任何功能。
+        val picked = SetupGuidePlanner.suggest(f).copy(memorySaver = true)
+        assertTrue(picked.memoryOff.isEmpty())
+        assertTrue(SetupGuidePlanner.plan(f, picked).turnOff.isEmpty())
+        val plan = SetupGuidePlanner.plan(f, picked.copy(memoryOff = setOf("glass")))
+        assertEquals(listOf("glass"), plan.turnOff.map { it.id })
+        assertTrue(plan.notes.toString(), plan.notes.any { it.startsWith("关掉玻璃效果，") && "12 MB" in it })
+        // 改回“没有”：选过的也不关。
+        assertTrue(SetupGuidePlanner.plan(f, picked.copy(memorySaver = false, memoryOff = setOf("glass"))).turnOff.isEmpty())
+        // 只关现在开着的（列表里没有的 id 不算）。
+        assertTrue(SetupGuidePlanner.plan(f, picked.copy(memoryOff = setOf("key_glow"))).turnOff.isEmpty())
+    }
+
     @Test fun memorySaverAnswerIsRememberedAndOffByDefault() {
         assertFalse(SetupGuidePlanner.suggest(facts(DeviceModelTier.ENHANCED)).memorySaver)
         assertTrue(SetupGuidePlanner.suggest(facts(DeviceModelTier.ENHANCED).copy(memorySaver = true)).memorySaver)
@@ -241,6 +258,24 @@ class SetupGuidePlanTest {
         val same = SetupGuidePlanner.plan(wubi, SetupGuidePlanner.suggest(wubi)).input
         assertFalse(same.useWubi || same.downloadWubi)
         assertNull(same.switchTo)
+    }
+
+    @Test fun wubiDefaultsTo86AndCanPick98() {
+        val f = typingFacts()
+        // 不选就是 86（用户 11-12：五笔默认 86）。
+        assertEquals(SetupGuidePlanner.WUBI, SetupGuidePlanner.suggest(f).wubi)
+        val input = SetupGuidePlanner.plan(f, SetupGuidePlanner.suggest(f).copy(typing = TypingWay.WUBI,
+            wubi = SetupGuidePlanner.WUBI98)).input
+        assertEquals(SetupGuidePlanner.WUBI98, input.wubiId)
+        assertEquals(SetupGuidePlanner.WUBI98, input.switchTo)
+        assertTrue(input.useWubi && input.downloadWubi)
+        assertTrue(input.lines.toString(), input.lines.any { it.startsWith("下载五笔98方案") })
+        assertTrue(input.lines.toString(), "中文 26 键改用五笔98。" in input.lines)
+        // 98 已经装着：不下载，只切过去；86 装没装不影响。
+        val installed = SetupGuidePlanner.plan(f.copy(wubi98Installed = true), SetupGuidePlanner.suggest(f).copy(
+            typing = TypingWay.WUBI, wubi = SetupGuidePlanner.WUBI98)).input
+        assertFalse(installed.downloadWubi)
+        assertEquals(SetupGuidePlanner.WUBI98, installed.switchTo)
     }
 
     @Test fun fuzzyOnlyChangesTheGroupsWhoseAnswerChanged() {

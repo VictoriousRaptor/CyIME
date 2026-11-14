@@ -3,7 +3,9 @@ package com.kingzcheung.xime.clipboard
 /**
  * How much clipboard history is kept: a fixed ceiling on the stored text (the user asked on
  * 2026-10-22 for a sensible fixed limit instead of measuring the phone), and never more than
- * [DISK_SHARE] of the free space. When it is full, new copies are not saved.
+ * [DISK_SHARE] of the free space. When a new record does not fit, the oldest history (not fixed, not
+ * in a group) makes way, whatever 「数量上限」 and 「保留时间」 say (user 11-12: 「不限」 yet 「剪贴板已满」);
+ * only when fixed and grouped records alone leave no room is the new one not saved.
  */
 internal object ClipboardCapacity {
     /** All stored text (fixed and history) together: about ten thousand everyday copies. */
@@ -37,11 +39,35 @@ internal object ClipboardCapacity {
 
     fun accepts(storedBytes: Long, addingBytes: Long, capacityBytes: Long): Boolean =
         storedBytes + addingBytes <= capacityBytes
+
+    /**
+     * A copy larger than this share of the room (a long log, say) is kept only if it fits as is: it
+     * never empties the history to make room for itself.
+     */
+    const val PUSH_OUT_SHARE = 4
+
+    fun pushesOut(addingBytes: Long, capacityBytes: Long): Boolean = addingBytes <= capacityBytes / PUSH_OUT_SHARE
+
+    /**
+     * How many of the oldest history records ([sizes] in bytes, oldest first) must go for [addingBytes]
+     * to fit; null when removing all of them is still not enough, or when a record too large to
+     * push out history does not fit as is.
+     */
+    fun oldestToRemove(sizes: List<Long>, storedBytes: Long, addingBytes: Long, capacityBytes: Long): Int? {
+        if (accepts(storedBytes, addingBytes, capacityBytes)) return 0
+        if (!pushesOut(addingBytes, capacityBytes)) return null
+        var stored = storedBytes
+        sizes.forEachIndexed { index, size ->
+            if (accepts(stored, addingBytes, capacityBytes)) return index
+            stored -= size
+        }
+        return if (accepts(stored, addingBytes, capacityBytes)) sizes.size else null
+    }
 }
 
 /**
- * Room left in the history. [refused] is set when a copy was not saved for lack of room and
- * cleared once records are removed; the board then says the clipboard is full.
+ * Room left in the history. [refused] is set when a copy was not saved because fixed and grouped
+ * records fill the room, and cleared once records are removed; the board then says the clipboard is full.
  */
 internal data class ClipboardRoom(val storedBytes: Long = 0, val capacityBytes: Long = Long.MAX_VALUE,
     val refused: Boolean = false) {

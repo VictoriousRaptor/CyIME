@@ -107,6 +107,8 @@ data class CandidatePageState(
     val railSymbols: List<String>? = null,
     /** 左栏音节拼音候选（九键输入/选择态复刻，与键盘左栏同源）；非空时优先于 railSymbols */
     val railPinyinOptions: List<String> = emptyList(),
+    /** 和 [railPinyinOptions] 一一对应：相近读音（下划线、浅色，用户 11-13 起不再加 ≈）。 */
+    val railPinyinNear: List<Boolean> = emptyList(),
     val choosingMergedLetter: Boolean = false,
     /** 拼音候选项选中索引（九键 SELECTION 态），-1 无选中 */
     val railSelectedPinyinIndex: Int = -1,
@@ -307,6 +309,7 @@ private fun CandidatePageContent(
                                     isSelected = isPinyinRail && index == state.railSelectedPinyinIndex,
                                     accentColor = state.railAccentColor,
                                     isPinyin = isPinyinRail,
+                                    approximate = isPinyinRail && state.railPinyinNear.getOrNull(index) == true,
                                 )
                             }
                         } else {
@@ -330,6 +333,7 @@ private fun CandidatePageContent(
                                         isSelected = isPinyinRail && index == state.railSelectedPinyinIndex,
                                         accentColor = state.railAccentColor,
                                         isPinyin = isPinyinRail,
+                                        approximate = isPinyinRail && state.railPinyinNear.getOrNull(index) == true,
                                     )
                                 }
                             }
@@ -761,6 +765,7 @@ private fun CandidateRailSymbolKey(
     isSelected: Boolean = false,
     accentColor: Color = Color.Unspecified,
     isPinyin: Boolean = false,
+    approximate: Boolean = false,
 ) {
     val cornerRadius = LocalKeyCornerRadius.current
     val shape = RoundedCornerShape(
@@ -793,31 +798,25 @@ private fun CandidateRailSymbolKey(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(pillColor.copy(alpha = 0.2f))
-                    .padding(horizontal = 3.dp, vertical = 1.dp)
-            ) {
-                Text(
-                    text = text,
-                    color = pillColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    fontFamily = AppFonts.candidateFontFamily
-                )
+        // 读音完整显示：放不下就缩小（用户 11-13）；相近读音下划线、浅色。
+        BoxWithConstraints(contentAlignment = Alignment.Center) {
+            val meaning = if (approximate) Modifier.semantics { contentDescription = "相近读音 $text" } else Modifier
+            val railWidth = maxWidth
+            if (isSelected) {
+                Box(
+                    modifier = meaning
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(pillColor.copy(alpha = 0.2f))
+                        .padding(horizontal = 3.dp, vertical = 1.dp)
+                ) {
+                    FittedRailText(text, pillColor, 13.sp, FontWeight.Medium, approximate,
+                        if (isPinyin) railWidth - 12.dp else null)
+                }
+            } else {
+                FittedRailText(text, if (approximate) approximateRailColor(textColor) else textColor,
+                    if (isPinyin) 13.sp else 16.sp, FontWeight.Normal, approximate,
+                    if (isPinyin) railWidth - 6.dp else null, meaning)
             }
-        } else {
-            Text(
-                text = text,
-                color = textColor,
-                fontSize = if (isPinyin) 13.sp else 16.sp,
-                fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                fontFamily = AppFonts.candidateFontFamily
-            )
         }
     }
 }
@@ -912,6 +911,8 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
             val textWidth = with(LocalDensity.current) { (maxWidth - 8.dp).toPx() }.coerceAtLeast(1f)
             val font = (metrics.fontSizeSp * minOf(1f, textWidth / sample.size.width.coerceAtLeast(1))).sp
             val rowHeight = if (state.choosingMergedLetter && items.isNotEmpty()) maxHeight / items.size else metrics.rowHeightDp.dp
+            // 九键读音（不是 14 键挑字母）用大一号的字，各自缩到放得下（用户 11-13）。
+            val pinyin = state.railPinyinOptions.isNotEmpty() && !state.choosingMergedLetter
             LazyColumn(Modifier.fillMaxSize().testTag("expanded-pinyin-options")) {
                 itemsIndexed(items) { index, item ->
                     T9CandidateItem(text = item, onClick = {
@@ -919,7 +920,9 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
                         else callbacks.onCommitText?.invoke(item)
                     }, onPress = { callbacks.onKeyPressDown?.invoke(item) }, textColor = state.textColor,
                         backgroundColor = keyBg, accentColor = state.railAccentColor,
-                        fontSize = font, isSelected = index == state.railSelectedPinyinIndex,
+                        fontSize = if (pinyin) metrics.pinyinFontSizeSp.sp else font,
+                        isSelected = index == state.railSelectedPinyinIndex,
+                        approximate = state.railPinyinNear.getOrNull(index) == true, fitWidth = pinyin,
                         modifier = Modifier.fillMaxWidth().height(rowHeight))
                 }
             }

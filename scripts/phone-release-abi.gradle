@@ -1,13 +1,15 @@
-// Real ARM64 device delivery; no IDE/testOnly injection and no emulator rebuild.
+// Build only the requested ARM ABI for device delivery (ARM64 by default).
 gradle.beforeProject { p ->
     if (p.path == ':app') p.afterEvaluate {
+        def abi = p.findProperty('cyimeReleaseAbi') ?: 'arm64-v8a'
+        if (!(abi in ['arm64-v8a', 'armeabi-v7a'])) throw new GradleException('Unsupported release ABI: ' + abi)
         p.android.defaultConfig.ndk.abiFilters.clear()
         // Limit native compilation too: androidTest otherwise builds every ABI.
         // ndk.abiFilters conflicts with the existing split APK filters in AGP.
         p.android.defaultConfig.externalNativeBuild.cmake.abiFilters.clear()
-        p.android.defaultConfig.externalNativeBuild.cmake.abiFilters.add('arm64-v8a')
+        p.android.defaultConfig.externalNativeBuild.cmake.abiFilters.add(abi)
         p.android.splits.abi.reset()
-        p.android.splits.abi.include('arm64-v8a')
+        p.android.splits.abi.include(abi)
         p.android.splits.abi.universalApk = false
     }
 }

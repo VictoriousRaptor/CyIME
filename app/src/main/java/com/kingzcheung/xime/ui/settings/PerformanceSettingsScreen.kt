@@ -73,7 +73,7 @@ internal val tierNames = mapOf(PerformanceTier.HIGH to "高配", PerformanceTier
 private fun tierHint(tier: PerformanceTier, speech: Boolean): String = when (tier) {
     PerformanceTier.HIGH -> "动效和炫光全开，其他效果保持原样" + if (speech) "；语音模型常驻，二次校正空闲 30 分钟后释放" else ""
     PerformanceTier.MEDIUM -> "保留按键动效，关炫光和液态玻璃" + if (speech) "；语音空闲 5 分钟先释放二次校正，30 分钟后全部释放" else ""
-    PerformanceTier.LOW -> "关动效、炫光、液态玻璃、点按气泡、滑行实时显示词、手写边写边识别" + if (speech) "；语音用完 1 分钟就释放" else ""
+    PerformanceTier.LOW -> "关动效、炫光、键缝动效、液态玻璃、点按气泡、滑行实时显示词、手写边写边识别" + if (speech) "；语音用完 1 分钟就释放" else ""
 }
 
 /** 开销页要的几样，都要读文件或偏好，在后台读。 */

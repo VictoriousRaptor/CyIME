@@ -63,6 +63,36 @@ internal fun legacyClipboardTextPinIds(storedPins: Set<String>): Set<Long> = sto
 
 internal fun clipboardColumnCount(widthDp: Float): Int = (widthDp / 160f).toInt().coerceIn(1, 5)
 
+/**
+ * Preference (board prefs): 列表显示（用户 11-14：有人想要剪贴板文字一条一横排；平铺 / 列表用顶栏按钮切换，记住上次）。
+ * 列表每条记录占一整行；没固定的图片不一张占一行，拼成一排左右滑。默认 false：照旧按宽度分几列的瀑布流平铺。
+ */
+internal const val CLIPBOARD_LIST_LAYOUT_KEY = "list_layout"
+
+/** Key of the one row holding the recent pictures in the list layout. */
+internal const val CLIPBOARD_IMAGE_STRIP_KEY = "image-strip"
+
+/** The list layout only where there is text: a tab of nothing but pictures keeps its columns. */
+internal fun clipboardListLayout(wanted: Boolean, cards: List<ClipboardCard>): Boolean =
+    wanted && cards.any { it is ClipboardCard.Text }
+
+/** Recent records in the list layout: the text [before] the newest picture, all recent [images] in one row, then the rest of the text. */
+internal data class ClipboardImageStrip(
+    val before: List<ClipboardCard>,
+    val images: List<ClipboardCard.Image>,
+    val after: List<ClipboardCard>,
+) {
+    /** The order shown, for keyboard focus and selection. */
+    val ordered: List<ClipboardCard> get() = before + images + after
+}
+
+internal fun clipboardImageStrip(recent: List<ClipboardCard>): ClipboardImageStrip {
+    val first = recent.indexOfFirst { it is ClipboardCard.Image }
+    if (first < 0) return ClipboardImageStrip(recent, emptyList(), emptyList())
+    return ClipboardImageStrip(recent.take(first), recent.filterIsInstance<ClipboardCard.Image>(),
+        recent.drop(first).filterIsInstance<ClipboardCard.Text>())
+}
+
 // Keep the existing placeholder shape for the whole thumbnail lifetime. Decoding
 // must not change masonry geometry as more images enter the viewport.
 internal const val ClipboardThumbnailAspectRatio = .8f

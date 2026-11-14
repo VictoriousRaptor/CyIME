@@ -136,6 +136,23 @@ internal class PinyinEditDisplay(raw: String, preedit: String, isT9: Boolean = f
     fun displayOffset(raw: Int): Int = offsets.indexOfLast { it <= raw }.coerceAtLeast(0)
 }
 
+/**
+ * 14 键的编辑缓冲显示读音（hao），引擎里是按过的键（GAO，大写是合并键）。在编码中间删字母或插键时，
+ * 没动的字母照旧送当初按的键，只有新插的是新的。不能把显示的字母当精确字母送进引擎：没认出读音的地方
+ * 显示的是键上第一个字母，完完全全的 wwqq 会变成精确的 qqqq，hao 变成 gao（11-13 反馈：14 键挪光标后删除、新增就乱了）。
+ * 返回与 [text] 逐字对齐的按键（分隔符照抄）；字母数和按键数对不上时 null，调用方照旧送 [text]。
+ */
+internal fun merged14KeysOf(text: String, engineCode: String): String? {
+    val keys = engineCode.filter { it != '\'' && !it.isWhitespace() }
+    if (keys.length != text.count { it != '\'' }) return null
+    var next = 0
+    return text.map { if (it == '\'') '\'' else keys[next++] }.joinToString("")
+}
+
+/** 14 键的合并键（qw）在编辑缓冲里显示键上第一个字母，送进引擎是大写的合并键（Q）；单字母键（l、m）原样。 */
+internal fun merged14TapDisplay(group: String): String = group.take(1)
+internal fun merged14TapKey(group: String): String = if (group.length > 1) group.take(1).uppercase() else group
+
 /** Nine-key code and its displayed reading match key for key; syllable delimiters are not keys. */
 internal fun codeKeysBefore(text: String, caret: Int): Int = text.take(caret.coerceAtLeast(0)).count { it != '\'' }
 

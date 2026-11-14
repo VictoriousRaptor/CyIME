@@ -188,4 +188,19 @@ class LuaTranslateOfflineTest {
         offline.states["en-zh"] = OfflineTranslateHostApi.STATE_READY
         assertNull(kotlinx.coroutines.runBlocking { adapter.onAction("downloadOffline") })
     }
+
+    @Test
+    fun `指定了源语言：离线按指定方向翻，不是中英就提示要填接口`() {
+        val offline = FakeOffline().apply {
+            states["en-zh"] = OfflineTranslateHostApi.STATE_READY
+            states["zh-en"] = OfflineTranslateHostApi.STATE_READY
+        }
+        val (adapter, _) = setup(offline = offline)
+        adapter.onPanelAction("select:targetLang:简体中文")
+        adapter.onPanelAction("select:sourceLang:英文")
+        adapter.generate("see you")
+        assertEquals("en-zh", offline.requests.single().second)
+        adapter.onPanelAction("select:sourceLang:日文")
+        assertTrue(adapter.hint().contains("日文翻成简体中文"))
+    }
 }

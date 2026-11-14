@@ -73,8 +73,10 @@ class NineFuzzyRailTest {
                     modifier = Modifier.height(260.dp), candidateState = state)
             }
         }
-        rule.onNodeWithTag("t9-pinyin-options").performScrollToNode(hasText("≈shi"))
-        rule.onNodeWithText("≈shi").performTouchInput { click() }
+        // 用户 11-13：相近读音不再写 ≈，写原样的 shi，加下划线、浅色；读屏读「相近读音 shi」。
+        rule.onNodeWithTag("t9-pinyin-options").performScrollToNode(hasContentDescription("相近读音 shi"))
+        rule.onAllNodesWithText("≈", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        rule.onNodeWithContentDescription("相近读音 shi", useUnmergedTree = true).performTouchInput { click() }
         verify(controller).onChoiceSelected(selected)
         System.getenv("CYIME_RENDER_OUT")?.let {
             val root = rule.activity.window.decorView

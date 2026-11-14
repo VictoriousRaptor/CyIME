@@ -30,7 +30,8 @@ class ClipboardGroupStore private constructor(context: Context) {
         return ClipboardGroupState(groups,
             ClipboardGroupCodec.decodeMembers(prefs.getStringSet(KEY_MEMBERS, null), groups),
             ClipboardGroupCodec.decodeHidden(prefs.getStringSet(KEY_HIDDEN, null)),
-            prefs.getString(KEY_TAB_ORDER, null)?.lines().orEmpty())
+            prefs.getString(KEY_TAB_ORDER, null)?.lines().orEmpty(),
+            ClipboardGroupCodec.decodeRecordOrder(prefs.getString(KEY_RECORD_ORDER, null), groups))
     }
 
     @Synchronized private fun update(change: (ClipboardGroupState) -> ClipboardGroupState) {
@@ -42,6 +43,7 @@ class ClipboardGroupStore private constructor(context: Context) {
         if (next.members != previous.members) editor.putStringSet(KEY_MEMBERS, ClipboardGroupCodec.encodeMembers(next.members))
         if (next.hidden != previous.hidden) editor.putStringSet(KEY_HIDDEN, next.hidden.mapTo(mutableSetOf()) { it.name })
         if (next.tabOrder != previous.tabOrder) editor.putString(KEY_TAB_ORDER, next.tabOrder.joinToString("\n"))
+        if (next.recordOrder != previous.recordOrder) editor.putString(KEY_RECORD_ORDER, ClipboardGroupCodec.encodeRecordOrder(next.recordOrder))
         editor.apply()
         _state.value = next
     }
@@ -87,6 +89,9 @@ class ClipboardGroupStore private constructor(context: Context) {
 
     fun setTabOrder(keys: List<String>) = update { it.reordered(keys) }
 
+    /** The order the user dragged group [groupId]'s records to on the board. */
+    fun setRecordOrder(groupId: String, keys: List<String>) = update { it.withRecordOrder(groupId, keys) }
+
     fun setAddTarget(groupId: String?) {
         addTarget = groupId?.let { it to System.currentTimeMillis() }
     }
@@ -131,6 +136,7 @@ class ClipboardGroupStore private constructor(context: Context) {
         private const val KEY_MEMBERS = "group_members"
         private const val KEY_HIDDEN = "hidden_categories"
         private const val KEY_TAB_ORDER = "tab_order"
+        private const val KEY_RECORD_ORDER = "group_record_order"
         private const val FORM_LIFETIME_MS = 10 * 60_000L
         /** Settings opens at once; an entry the page never took (it failed to open) must not stick. */
         private const val KEYBOARD_ENTRY_MS = 60_000L

@@ -9,12 +9,18 @@ internal data class EditorFieldPolicy(
     val signed: Boolean = false,
     val decimal: Boolean = false,
 ) {
-    enum class Kind { TEXT, PASSWORD, NUMBER_PASSWORD, NUMBER, PHONE, DATE, TIME, DATETIME, ADDRESS, SEARCH_OR_ADDRESS }
+    enum class Kind { TEXT, PASSWORD, VISIBLE_PASSWORD, NUMBER_PASSWORD, NUMBER, PHONE, DATE, TIME, DATETIME, ADDRESS, SEARCH_OR_ADDRESS }
 
     val scoped: Boolean get() = kind != Kind.TEXT
     val isAddressField: Boolean get() = kind == Kind.ADDRESS || kind == Kind.SEARCH_OR_ADDRESS
     val numberPanel: Boolean get() = kind in setOf(Kind.NUMBER_PASSWORD, Kind.NUMBER, Kind.PHONE, Kind.DATE, Kind.TIME, Kind.DATETIME)
-    val locksNativeInput: Boolean get() = scoped && !isAddressField
+    /**
+     * 可见密码（VISIBLE_PASSWORD）先给英文，但语言键能切回中文，只在这个框里有效（用户 11-13：写代码的软件被锁成英文切不回中文）。
+     * 不少代码编辑器（关掉联想、自动改正）用这个类型，真正的密码框用 PASSWORD / WEB_PASSWORD，照旧锁英文。
+     * 无论切没切，仍按密码框处理：不学词、不联想（EditorInfoClassifier.isSecretEditor 不变）。
+     */
+    val allowsNativeInput: Boolean get() = isAddressField || kind == Kind.VISIBLE_PASSWORD
+    val locksNativeInput: Boolean get() = scoped && !allowsNativeInput
 
     /** Only a newly typed key is converted. Existing content and explicit paste never enter here. */
     fun typedLiteral(text: String): String {
@@ -35,7 +41,7 @@ internal data class EditorFieldPolicy(
             Kind.DATE -> { c -> c in '0'..'9' || c in "/-. " }
             Kind.TIME -> { c -> c in '0'..'9' || c in ":. aApPmM" }
             Kind.DATETIME -> { c -> c in '0'..'9' || c in "/-:. aApPmM" }
-            Kind.PASSWORD, Kind.ADDRESS -> { c -> c in ' '..'~' }
+            Kind.PASSWORD, Kind.VISIBLE_PASSWORD, Kind.ADDRESS -> { c -> c in ' '..'~' }
             Kind.TEXT, Kind.SEARCH_OR_ADDRESS -> { _ -> true }
         }
         // Do not partially deliver a generated non-ASCII word/candidate.
@@ -57,7 +63,8 @@ internal data class EditorFieldPolicy(
         fun from(info: EditorInfo?): EditorFieldPolicy {
             val type = info?.inputType ?: InputType.TYPE_NULL
             val policy = fromInputType(type)
-            if (policy.kind == Kind.PASSWORD && EditorInfoClassifier.isTerminalEditor(info)) return EditorFieldPolicy()
+            if ((policy.kind == Kind.PASSWORD || policy.kind == Kind.VISIBLE_PASSWORD) &&
+                EditorInfoClassifier.isTerminalEditor(info)) return EditorFieldPolicy()
             if (info == null || policy.kind != Kind.ADDRESS ||
                 type and InputType.TYPE_MASK_VARIATION != InputType.TYPE_TEXT_VARIATION_URI) return policy
 
@@ -77,9 +84,12 @@ internal data class EditorFieldPolicy(
             val variation = inputType and InputType.TYPE_MASK_VARIATION
             return when (inputType and InputType.TYPE_MASK_CLASS) {
                 InputType.TYPE_CLASS_TEXT -> when (variation) {
+                    // 多行的「密码框」是借密码类型关掉联想、自动改正的代码编辑器（真正的密码框只有一行）：
+                    // 和可见密码一样先给英文、能切中文（用户 11-13：写代码、命令行一类的应用都要能打中文）。
                     InputType.TYPE_TEXT_VARIATION_PASSWORD,
-                    InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-                    InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(Kind.PASSWORD)
+                    InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(
+                        if (inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0) Kind.VISIBLE_PASSWORD else Kind.PASSWORD)
+                    InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> EditorFieldPolicy(Kind.VISIBLE_PASSWORD)
                     InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
                     InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
                     InputType.TYPE_TEXT_VARIATION_URI -> EditorFieldPolicy(Kind.ADDRESS)

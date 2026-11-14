@@ -52,6 +52,10 @@ t9:
   particle_alternative_margin: 0
   # 用户学习层占比 λ：词分数 = ln((1-λ)·P底座 + λ·P用户)，P用户取用户词库的上屏占比（近期选过的更高）；底座模型不被改写，0 为不学习。
   ngram_user_weight: 0.05
+  # 整段输入就是一个两字以上、拼全了的词时（944326 = 指导/知道/直到），按用户最近选过哪个分这些词的概率，占比 κ。
+  # 只看最近选的（每多 200 次上屏，分量降到约三分之一），很久以前选的、单字、简拼都不动；这些词的总概率不变，长句排位不动。
+  # 2026-11-13「卡词频」：九键 指导 要选 4 次才到第一、换回要 6 次、打 200 个别的词后掉回第 2。0 为不用。
+  ngram_user_input_weight: 0.9
   # 词库先验 μ：语料里没见过的词库词（细胞词库、生僻词）按 ln((1-μ)·P拆字 + μ·P词库频率) 计分，
   # 让“无精二”这类词首次也能排上；0 为不用。取值由调参集回放确定。
   ngram_dictionary_prior: 0.02
@@ -157,6 +161,8 @@ engine:
     # 打希腊字母名出希腊字母（设置 › 语言与方案 › 中文输出，默认关）：xita 第 3 个候选是 θ Θ，见 lua/cyime_greek_letters.lua。
     - lua_filter@*cyime_greek_letters
     - simplifier@traditionalize
+    # 我的短语里写的「余」照写的出（余宛如），见 traditionalize_user。
+    - simplifier@traditionalize_user
     - uniquifier
 
 speller:
@@ -265,3 +271,13 @@ traditionalize:
   option_name: traditionalization
   opencc_config: cyime_s2tw.json
   tips: none
+  # 短语（user_table）交给 traditionalize_user。
+  excluded_types: [user_table]
+
+# 我的短语按 cyime_s2tw_user.json 转：没有词组管着的「余」照写的出（姓余，用户 11-12），别的字照常转。
+# 其他候选上面已经转过（simplified），不再转。
+traditionalize_user:
+  option_name: traditionalization
+  opencc_config: cyime_s2tw_user.json
+  tips: none
+  excluded_types: [simplified]
