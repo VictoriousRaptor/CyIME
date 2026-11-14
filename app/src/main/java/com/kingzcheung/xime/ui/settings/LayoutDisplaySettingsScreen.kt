@@ -21,6 +21,7 @@ import androidx.compose.material.icons.twotone.AspectRatio
 import androidx.compose.material.icons.twotone.DataObject
 import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.EmojiSymbols
+import androidx.compose.material.icons.twotone.SpaceBar
 import androidx.compose.material.icons.twotone.Language
 import androidx.compose.material.icons.twotone.DashboardCustomize
 import androidx.compose.material.icons.twotone.ScreenRotation
@@ -147,11 +148,8 @@ private fun LayoutDisplayPage(
                         showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     val input = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
-                    SettingsToggleItem(Icons.TwoTone.Language, "语言键放左侧",
-                        "将语言键移到 123 数字键右侧；合并模式下放在合并按钮右侧。",
-                        checked = input.languageKeyOnLeft, onCheckedChange = {
-                            input.copy(languageKeyOnLeft = it).save(context)
-                        })
+                    SettingsItem(Icons.TwoTone.Reorder, "26 键底栏", "调整符号、数字、语言和标点的顺序与显示",
+                        onClick = { onOpenLayout(SettingsRoutes.QwertyBottomRow) }, showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     SettingsToggleItem(SymbolsAndNumbersIcon, "符号键循环切换",
                         "合并符号和数字键，点按依次切换符号、数字和原输入法键盘。",
@@ -183,6 +181,22 @@ private fun LayoutDisplayPage(
                         checked = enterSends, onCheckedChange = {
                             enterSends = it; SettingsPreferences.setEnterSendsEnabled(context, it)
                         })
+                })
+            }
+            if (page == null) item {
+                val input = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                SettingsSection(title = "其他布局底栏", content = {
+                    SettingsToggleItem(Icons.TwoTone.Language, "其他布局语言键放左侧",
+                        "26 键请在「26 键底栏」调整。其他布局将语言键放到数字键或合并按钮右侧。",
+                        checked = input.languageKeyOnLeft, onCheckedChange = { input.copy(languageKeyOnLeft = it).save(context) })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    SettingsToggleItem(Icons.TwoTone.SpaceBar, "其他字母布局逗号键",
+                        "14 键等其他字母布局在空格左侧显示逗号；关闭后空格加宽。26 键单独设置。",
+                        checked = input.qwertyCommaKey, onCheckedChange = { input.copy(qwertyCommaKey = it).save(context) })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    SettingsToggleItem(Icons.TwoTone.SpaceBar, "其他字母布局句号键",
+                        "14 键等其他字母布局在空格右侧显示句号；关闭后空格加宽。26 键单独设置。",
+                        checked = input.qwertyPeriodKey, onCheckedChange = { input.copy(qwertyPeriodKey = it).save(context) })
                 })
             }
             if (page == null) item {

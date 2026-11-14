@@ -47,6 +47,16 @@ class KeyboardInputPreferencesTest {
         }
     }
 
+    @Test fun `26 key bottom row persists independently and is watched for immediate updates`() {
+        val config = QwertyBottomRowConfig.parse("language,space,symbols,numbers")
+        KeyboardInputPreferences.read(context).copy(qwertyBottomRow = config,
+            languageKeyOnLeft = true, qwertyCommaKey = false, qwertyPeriodKey = false).save(context)
+        assertEquals(config, KeyboardInputPreferences.read(context).qwertyBottomRow)
+        assertTrue(QwertyBottomRowConfig.PREF_KEY in KeyboardInputPreferences.watchedKeys)
+        KeyboardInputPreferences.read(context).copy(symbolKeyCycle = true, languageKeyOnLeft = false).save(context)
+        assertEquals(config, KeyboardInputPreferences.read(context).qwertyBottomRow)
+    }
+
     @Test fun `symbol key cycle defaults off and persists without changing gestures or other settings`() {
         val before = KeyboardInputPreferences.read(context)
         assertEquals(false, before.symbolKeyCycle)

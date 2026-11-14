@@ -17,6 +17,7 @@ object SettingsRoutes {
     const val KeyEffect = "key_effect"
     const val Performance = "performance"
     const val LayoutDisplay = "layout_display"
+    const val QwertyBottomRow = "qwerty_bottom_row"
     const val Dictionary = "dictionary"
     const val DictContribute = "dict_contribute"
     const val CellDictionaries = "cell_dictionaries"

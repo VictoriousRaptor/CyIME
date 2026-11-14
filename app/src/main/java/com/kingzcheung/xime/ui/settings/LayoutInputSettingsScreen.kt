@@ -27,7 +27,7 @@ import com.kingzcheung.xime.ui.keyboard.normalizeCandidateDragPercent
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 
 internal enum class LayoutInputCategory(val route: String, val title: String, val description: String) {
-    Qwerty("layout_input_qwerty", "26 键", "中英混输、字母错位、空格两侧标点、分词键"),
+    Qwerty("layout_input_qwerty", "26 键", "中英混输、字母错位、底栏顺序、分词键"),
     Nine("layout_input_nine", "九键与 14 键", "拂动选字母、14 键双字母键、触发距离、方向圆盘与假名提示"),
     /** 英文、中文 26 键和九键滑行原来分在 26 键、九键两页三个开关（用户 11-09「三个入口太乱」），合到这一页；存的值不变。 */
     Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行，实时显示词，逐字删除"),
@@ -89,25 +89,11 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 SettingsSection(title = "按键排列与分词", content = {
                     QwertyStaggerSettings(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
-                    Column(Modifier.settingsSearchAnchor("空格两侧的标点").padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Text("空格两侧的标点", style = MaterialTheme.typography.titleSmall)
-                        Text("只开句号：原逗号键移到空格右侧，点按句号、滑动逗号。两个都开：滑动输入另一种宽度，" +
-                            "全角时点按全角、半角时点按半角。", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(8.dp))
-                        SpacePunctuationIllustration(settings.qwertyCommaKey, settings.qwertyPeriodKey)
-                    }
-                    SettingsToggleItem(Icons.TwoTone.SpaceBar, "空格左侧逗号键", "关闭后空格向左加宽。",
-                        checked = settings.qwertyCommaKey, onCheckedChange = {
-                            settings = settings.copy(qwertyCommaKey = it); settings.save(context)
-                        })
-                    SettingsToggleItem(Icons.TwoTone.SpaceBar, "空格右侧句号键", "开启后空格让出一个键宽。",
-                        checked = settings.qwertyPeriodKey, onCheckedChange = {
-                            settings = settings.copy(qwertyPeriodKey = it); settings.save(context)
-                        })
+                    SettingsItem(Icons.TwoTone.SwapHoriz, "26 键底栏", "调整底栏顺序，添加或移除逗号、句号",
+                        onClick = { onNavigate(SettingsRoutes.QwertyBottomRow) }, showArrow = true)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "底排标点固定上滑",
-                        "空格两侧的逗号、句号键和数字键盘的点键：上滑或长按输入右上角的符号。关闭后跟随全局角标设置。",
+                        "底栏的逗号、句号键和数字键盘的点键：上滑或长按输入右上角的符号。关闭后跟随全局角标设置。",
                         checked = settings.bottomPunctuationSwipeUp, onCheckedChange = {
                             settings = settings.copy(bottomPunctuationSwipeUp = it); settings.save(context)
                         })
@@ -120,7 +106,9 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         checked = settings.syllableSplitKey, onCheckedChange = {
                             settings = settings.copy(syllableSplitKey = it); settings.save(context)
                         })
-                    SyllableSplitKeyLegend(settings.syllableSplitKey, settings.qwertyCommaKey, settings.qwertyPeriodKey,
+                    SyllableSplitKeyLegend(settings.syllableSplitKey,
+                        com.kingzcheung.xime.ui.keyboard.QwertyBottomKey.COMMA in settings.qwertyBottomRow.keys,
+                        com.kingzcheung.xime.ui.keyboard.QwertyBottomKey.PERIOD in settings.qwertyBottomRow.keys,
                         settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "Shift 键分词",

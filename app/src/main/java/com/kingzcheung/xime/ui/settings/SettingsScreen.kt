@@ -264,6 +264,9 @@ fun SettingsScreen(
                 initialPage = entry.arguments?.getString("page"),
             )
         }
+        composable(SettingsRoutes.QwertyBottomRow) {
+            QwertyBottomRowSettingsScreen(onBack = { navController.popBackStack() })
+        }
         LayoutInputCategory.entries.forEach { category ->
             composable(category.route) {
                 LayoutInputSettingsContent(category, onBack = { navController.popBackStack() },
