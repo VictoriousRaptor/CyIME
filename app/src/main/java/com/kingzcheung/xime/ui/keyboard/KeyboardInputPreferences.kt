@@ -118,6 +118,8 @@ data class KeyboardInputPreferences(
     /** 空格左侧逗号键、右侧句号键。 */
     val qwertyCommaKey: Boolean = true,
     val qwertyPeriodKey: Boolean = true,
+    /** 26 键底栏独立配置；旧的位置、标点开关只供其他布局使用。 */
+    val qwertyBottomRow: QwertyBottomRowConfig = QwertyBottomRowConfig.Default,
     /** 空格两侧标点键、数字键盘点键的角标固定上滑/长按（11-09 起默认开：键在屏幕底边，往下滑不出去）。 */
     val bottomPunctuationSwipeUp: Boolean = true,
     val handwritingWubiHints: Boolean = false,
@@ -346,7 +348,7 @@ data class KeyboardInputPreferences(
                 DOUBLE_PINYIN_KEY_HINTS_KEY, DOUBLE_PINYIN_KEY_HINTS_WITH_CORNERS_KEY, DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY,
                 SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED, SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
                 *SideSymbolTarget.entries.map { it.prefKey }.toTypedArray(),
-                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY, LANGUAGE_KEY_ON_LEFT_KEY,
+                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY, LANGUAGE_KEY_ON_LEFT_KEY, QwertyBottomRowConfig.PREF_KEY,
                 "handwriting_pause_seconds", "handwriting_pause_seconds_v2", "handwriting_formula_delimiter") + FrostedGlassPreferences.keys
         }
 
@@ -395,6 +397,7 @@ data class KeyboardInputPreferences(
                 // 句号键 10-19 起默认开。旧键会被 save() 连同其他设置一起写成旧默认 false，
                 // 分不出是不是用户自己关的，所以只认新键；没有新键就是默认开。
                 qwertyPeriodKey = prefs.getBoolean("qwerty_period_key_v2", true),
+                qwertyBottomRow = QwertyBottomRowConfig.parse(prefs.getString(QwertyBottomRowConfig.PREF_KEY, null)),
                 syllableSplitKey = prefs.getBoolean("syllable_split_key", false),
                 shiftSyllableSplit = prefs.getBoolean("shift_syllable_split", false),
                 japaneseLongVowelKey = JapaneseLongVowelKey.fromName(prefs.getString(JAPANESE_LONG_VOWEL_KEY, null)),
@@ -551,6 +554,7 @@ data class KeyboardInputPreferences(
             .putBoolean(com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS, englishSentenceCaps)
             .putBoolean("qwerty_comma_key", qwertyCommaKey)
             .putBoolean("qwerty_period_key_v2", qwertyPeriodKey)
+            .putString(QwertyBottomRowConfig.PREF_KEY, qwertyBottomRow.encode())
             .putBoolean("syllable_split_key", syllableSplitKey)
             .putBoolean("shift_syllable_split", shiftSyllableSplit)
             .putString(JAPANESE_LONG_VOWEL_KEY, japaneseLongVowelKey.name)

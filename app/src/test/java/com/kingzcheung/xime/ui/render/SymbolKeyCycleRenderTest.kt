@@ -22,6 +22,7 @@ import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.keyboard.AppFonts
 import com.kingzcheung.xime.ui.keyboard.KeyboardCallbacks
 import com.kingzcheung.xime.ui.keyboard.KeyboardDispatchAction
+import com.kingzcheung.xime.ui.keyboard.QwertyBottomRowConfig
 import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.KeyboardView
 import com.kingzcheung.xime.ui.settings.LayoutDisplaySettingsContent
@@ -65,7 +66,8 @@ class SymbolKeyCycleRenderTest {
         handwriting: Boolean = false, width: Int = 400, split: Boolean = false, floating: Boolean = false, languageOnLeft: Boolean = false, languageMenu: Boolean = false,
         onGestureAction: ((GestureAction, String) -> Unit)? = null) {
         val app = rule.activity.application
-        KeyboardInputPreferences.read(app).copy(symbolKeyCycle = cycle, languageKeyOnLeft = languageOnLeft).save(app)
+        KeyboardInputPreferences.read(app).copy(symbolKeyCycle = cycle, languageKeyOnLeft = languageOnLeft,
+            qwertyBottomRow = if (languageOnLeft) QwertyBottomRowConfig.parse("symbols,numbers,language,comma,space,period") else QwertyBottomRowConfig.Default).save(app)
         SettingsPreferences.setSplitKeyboardEnabled(app, split)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
         val callbacks = KeyboardCallbacks(onKeyPress = { key, _ -> pressed += key }, onCandidateSelect = {},
@@ -248,13 +250,15 @@ class SymbolKeyCycleRenderTest {
         save("language-left-menu")
     }
 
-    @Test fun languagePositionChangesImmediatelyAndRestoresOriginalBounds() {
+    @Test fun customLanguagePositionChangesImmediatelyAndIgnoresLegacyPosition() {
         mount(cycle = false)
         val original = rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot
         repeat(2) {
             rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = true).save(rule.activity) }
+            assertEquals(original, rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot)
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(qwertyBottomRow = QwertyBottomRowConfig.parse("symbols,numbers,language,comma,space,period")).save(rule.activity) }
             assertLanguageBesideModeKey()
-            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = false).save(rule.activity) }
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = false, qwertyBottomRow = QwertyBottomRowConfig.Default).save(rule.activity) }
             assertEquals(original, rule.onNodeWithTag("language-key-control").fetchSemanticsNode().boundsInRoot)
         }
         save("language-default-restored")
@@ -279,9 +283,9 @@ class SymbolKeyCycleRenderTest {
     fun leftLanguagePreservesSplitGapAcrossBothModeStyles() {
         mount(width = 1000, split = true)
         for (cycle in listOf(true, false)) {
-            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(symbolKeyCycle = cycle, languageKeyOnLeft = false).save(rule.activity) }
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(symbolKeyCycle = cycle, languageKeyOnLeft = false, qwertyBottomRow = QwertyBottomRowConfig.Default).save(rule.activity) }
             val original = rule.onNodeWithTag("split-keyboard-gap:3").fetchSemanticsNode().boundsInRoot
-            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(languageKeyOnLeft = true).save(rule.activity) }
+            rule.runOnIdle { KeyboardInputPreferences.read(rule.activity).copy(qwertyBottomRow = QwertyBottomRowConfig.parse("symbols,numbers,language,comma,space,period")).save(rule.activity) }
             val moved = rule.onNodeWithTag("split-keyboard-gap:3").fetchSemanticsNode().boundsInRoot
             assertEquals("Moving language must preserve the split gap", original.left, moved.left, 1f)
             assertEquals(original.right, moved.right, 1f)
@@ -294,7 +298,7 @@ class SymbolKeyCycleRenderTest {
     fun leftLanguageFitsCompactPhone() { mount(width = 360, languageOnLeft = true); verifyLeftLanguage("compact") }
 
     @Test fun languagePositionSettingIsSearchableAndPersists() {
-        val title = "语言键放左侧"
+        val title = "其他布局语言键放左侧"
         SettingsSearchFocus.open(SettingsSearchIndex.single { it.title == title })
         rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") {
             LayoutDisplaySettingsContent(onBack = {})

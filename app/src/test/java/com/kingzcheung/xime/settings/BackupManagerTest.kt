@@ -11,6 +11,21 @@ import java.util.zip.ZipOutputStream
 
 class BackupManagerTest {
 
+    @Test fun `backup restores bottom row ordering and hidden punctuation as ordinary settings`() {
+        val key = com.kingzcheung.xime.ui.keyboard.QwertyBottomRowConfig.PREF_KEY
+        val order = "language,space,symbols,numbers"
+        val prefs = org.mockito.kotlin.mock<android.content.SharedPreferences>()
+        org.mockito.kotlin.whenever(prefs.all).thenReturn(mapOf(key to order, "symbol_key_cycle" to true))
+        val json = BackupManager.prefsToJson(prefs)
+        val result = restore(tempDir.newFolder("bottom-row"), zipOfText(mapOf(
+            "${BackupManager.META_PREFIX}settings.json" to json)))
+        assertTrue(result.isSuccess)
+        val values = BackupManager.parsePrefs(restoredPrefs.getValue("kime_settings").toByteArray())
+        assertEquals(order, values[key])
+        assertEquals(true, values["symbol_key_cycle"])
+        assertEquals(order, com.kingzcheung.xime.ui.keyboard.QwertyBottomRowConfig.parse(values[key] as String).encode())
+    }
+
     @get:Rule
     val tempDir = TemporaryFolder()
 

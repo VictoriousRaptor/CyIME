@@ -15,6 +15,12 @@ class SettingsSearchTest {
         }
     }
 
+    @Test fun bottomRowEditorIsReachableWithPreviousSettingNames() {
+        for (query in listOf("空格两侧的标点", "空格两侧标点", "地球键", "中英切换键", "语言切换")) {
+            assertTrue(query, searchSettings(query).any { it.target == SettingsRoutes.QwertyBottomRow })
+        }
+    }
+
     @Test fun everydayWordsFindTheSwitch() {
         // 用户以为九键长按坏了：搜“长按”要能找到九键拂动。
         assertTrue("拂动选字母" in titles("长按"))
@@ -95,8 +101,8 @@ class SettingsSearchTest {
         assertEquals("触觉反馈模式", titles("触觉反馈").first())
         assertTrue("触觉反馈模式" in titles("震动"))
         assertTrue("按键振动振幅" in titles("震动强度"))
-        assertTrue("空格两侧的标点" in titles("拳角"))
-        assertTrue("空格两侧的标点" in titles("板角"))
+        assertTrue("26 键底栏" in titles("拳角"))
+        assertTrue("26 键底栏" in titles("板角"))
         assertTrue("靠边停靠" in titles("扶窗"))
         assertTrue("游戏直通" in titles("打游戏"))
         assertTrue("游戏直通" in titles("WASD"))

@@ -90,6 +90,7 @@ class SettingsRoundTripTest {
             formulaDelimiter = FormulaDelimiter.entries.last { it != FormulaDelimiter.DOLLAR }, fixedSymbols = "，\n。",
             qwertyStagger = QwertyStaggerMode.PHYSICAL, qwertyStaggerCustom = 0.25f,
             qwertyCommaKey = false, qwertyPeriodKey = false, symbolKeyCycle = true, languageKeyOnLeft = true,
+            qwertyBottomRow = com.kingzcheung.xime.ui.keyboard.QwertyBottomRowConfig.parse("language,space,symbols,numbers"),
         )
         changed.save(context)
         val read = KeyboardInputPreferences.read(context)

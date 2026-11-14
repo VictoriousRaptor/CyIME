@@ -1026,9 +1026,10 @@ fun KeyboardLayout(
                     val bottom = letterKeyboardBottomRow(keyRows, fourteenKey || zhuyin)
                     // 空格左侧逗号、右侧句号；只开逗号时沿用原配置的逗号键。
                     val bottomPrefs = LocalKeyboardInputPreferences.current
+                    val customBottom = usesCustom26BottomRow(uiState.inputProfile, keyRows)
                     val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(bottomPrefs.symbolKeyCycle)
-                    val commaOnLeft = bottomPrefs.qwertyCommaKey
-                    val periodOnRight = bottomPrefs.qwertyPeriodKey
+                    val commaOnLeft = if (customBottom) QwertyBottomKey.COMMA in bottomPrefs.qwertyBottomRow.keys else bottomPrefs.qwertyCommaKey
+                    val periodOnRight = if (customBottom) QwertyBottomKey.PERIOD in bottomPrefs.qwertyBottomRow.keys else bottomPrefs.qwertyPeriodKey
                     val punctuationFull = LocalKeyboardPunctuation.current?.full ?: !isAsciiMode
                     val (leftPunctuation, rightPunctuation) = spacePunctuationKeys(commaOnLeft, periodOnRight,
                         punctuationFull, english = isAsciiMode,
@@ -1044,7 +1045,8 @@ fun KeyboardLayout(
                     // 逗号键分词：有逗号键放逗号键左下角，只开句号键放句号键。
                     val (leftSplit, rightSplit) = syllableSplitOnPunctuation(syllableSplit, leftPunctuation, rightPunctuation)
                     @Composable
-                    fun RowScope.PunctuationKey(key: SpacePunctuationKey, tag: String, split: Boolean = false) =
+                    fun RowScope.PunctuationKey(key: SpacePunctuationKey, tag: String, split: Boolean = false,
+                        colors: KeyboardKeyColors = KeyboardKeyColors(keyBackgroundColor, keyTextColor)) =
                         // 主副字符已按全角/半角写定并原样上屏；键面不能再转一次，否则角标与副字符的宽度相反。
                         CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
                         SwipeableKeyButton(
@@ -1053,8 +1055,8 @@ fun KeyboardLayout(
                             keepSymbolSwipeOnLongPress = keyLabelPrefs.bottomPunctuationSwipeUp,
                             text = key.primary,
                             onClick = { commitPunctuation(key.primary) },
-                            backgroundColor = keyBackgroundColor,
-                            textColor = keyTextColor,
+                            backgroundColor = colors.background,
+                            textColor = colors.foreground,
                             modifier = Modifier.weight(bottom.punctuation).testTag(tag),
                             swipeText = key.alternate.ifEmpty { null },
                             symbolInputText = key.alternate.ifEmpty { null },
@@ -1078,7 +1080,7 @@ fun KeyboardLayout(
                             .weight(1f),
                     ) {
                         val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
-                        @Composable fun LanguageKey() {
+                        @Composable fun LanguageKey(colors: KeyboardKeyColors = KeyboardKeyColors(specialKeyBackgroundColor, specialKeyTextColor)) {
                             // earth — 从配置读取
                             val k4KeyGesture = KeysConfigHelper.getKeyGesture("earth", isAsciiMode)
                             val k4TapAction = k4KeyGesture?.tap?.action
@@ -1157,8 +1159,8 @@ fun KeyboardLayout(
                                 LanguageKeyButton(
                                     icon = k4Icon ?: rememberVectorPainter(Icons.Default.Language),
                                     onClick = k4OnClick,
-                                    backgroundColor = specialKeyBackgroundColor,
-                                    iconColor = specialKeyTextColor,
+                                    backgroundColor = colors.background,
+                                    iconColor = colors.foreground,
                                     modifier = Modifier.weight(bottom.language),
                                     onPress = { onKeyPressDown?.invoke(k4TapValue) },
                                     onRelease = { onKeyRelease?.invoke(k4TapValue) },
@@ -1177,8 +1179,8 @@ fun KeyboardLayout(
                                     layoutMode = KeysConfigHelper.getButtonLayout(isAsciiMode),
                                     text = k4TapLabel,
                                     onClick = k4OnClick,
-                                    backgroundColor = specialKeyBackgroundColor,
-                                    textColor = specialKeyTextColor,
+                                    backgroundColor = colors.background,
+                                    textColor = colors.foreground,
                                     modifier = Modifier.weight(bottom.language),
                                     icon = k4Icon,
                                     swipeText = k4SwipeUpLabel.takeIf { it.isNotEmpty() },
@@ -1200,6 +1202,83 @@ fun KeyboardLayout(
                             }
 
                         }
+                        @Composable fun EnterKey(colors: KeyboardKeyColors = KeyboardKeyColors(specialKeyBackgroundColor, specialKeyTextColor)) {
+                            val enterTargetId = remember { Any() }
+                            var enterBounds by remember { mutableStateOf(Rect.Zero) }
+                            val shiftEnter: () -> Unit = {
+                                onGestureAction(GestureAction.COMMAND, com.kingzcheung.xime.keyboard.CtrlShortcuts.SHIFT_ENTER_COMMAND)
+                            }
+                            DisposableEffect(shiftSlideTargets) { onDispose { shiftSlideTargets.remove(enterTargetId) } }
+                            androidx.compose.runtime.SideEffect {
+                                if (enterBounds != Rect.Zero) shiftSlideTargets.putEnter(enterTargetId, enterBounds, shiftEnter)
+                            }
+                            ActionKeyButton(
+                                text = enterKeyText,
+                                onClick = {
+                                    if (!shiftSlideTargets.ctrlEnter()) {
+                                        if (viewModel.shiftMode.value == ShiftMode.HELD) {
+                                            // 算用过 Shift：松开 Shift 不再当点按切大小写。
+                                            viewModel.onCharacterTyped()
+                                            shiftEnter()
+                                        } else onKeyPress("enter")
+                                    }
+                                },
+                                backgroundColor = colors.background,
+                                textColor = colors.foreground,
+                                modifier = Modifier.weight(bottom.enter).testTag("qwerty-enter-key")
+                                    .onGloballyPositioned { enterBounds = dragSpace.bounds(it) },
+                                onPress = { onKeyPressDown?.invoke("enter") },
+                                onRelease = { onKeyRelease?.invoke("enter") },
+                                shadowEnabled = shadowEnabled,
+                                shadowElevation = shadowElevation,
+                                shadowShapeRadius = shadowShapeRadius,
+                            )
+                        }
+
+                        if (customBottom) {
+                            var spacePart = 0
+                            bottomPrefs.qwertyBottomRow.slots(bottomPrefs.symbolKeyCycle, splitKeyboard).forEach { slot ->
+                                val key = slot.key
+                                val part = if (key == QwertyBottomKey.SPACE) spacePart++ else 0
+                                if (key == null) SplitGapSpacer(3, splitGapDp)
+                                else androidx.compose.runtime.key(key, part) {
+                                    val colors = if (slot.special) KeyboardKeyColors(specialKeyBackgroundColor, specialKeyTextColor)
+                                        else KeyboardKeyColors(keyBackgroundColor, keyTextColor)
+                                    Box(Modifier.weight(slot.weight).fillMaxHeight().testTag("qwerty-bottom:${key.id}")) {
+                                        Row(Modifier.fillMaxSize()) {
+                                            CompositionLocalProvider(LocalFunctionKeyColors provides colors, LocalEnterKeyColors provides colors) {
+                                                if (isVoiceMode && !isVoiceSticky && key != QwertyBottomKey.SPACE) {
+                                                    DummyKeyButton(backgroundColor = colors.background.copy(alpha = .5f), modifier = Modifier.weight(1f))
+                                                } else when (key) {
+                                                    QwertyBottomKey.SYMBOLS, QwertyBottomKey.NUMBERS -> KeyboardModeKey(
+                                                        slot = if (key == QwertyBottomKey.SYMBOLS) 1 else 2,
+                                                        onKeyPress = onKeyPress, backgroundColor = colors.background, textColor = colors.foreground,
+                                                        modifier = Modifier.weight(1f), onKeyPressDown = onKeyPressDown,
+                                                        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                                                        ctrlTargets = shiftSlideTargets,
+                                                        onCtrlShortcut = { letter -> onGestureAction(GestureAction.COMMAND,
+                                                            com.kingzcheung.xime.keyboard.CtrlShortcuts.command(letter)) },
+                                                    )
+                                                    QwertyBottomKey.COMMA -> leftPunctuation?.let { PunctuationKey(it, "qwerty-punctuation-key", leftSplit, colors) }
+                                                    QwertyBottomKey.PERIOD -> rightPunctuation?.let { PunctuationKey(it, "qwerty-period-key", rightSplit, colors) }
+                                                    QwertyBottomKey.LANGUAGE -> LanguageKey(colors)
+                                                    QwertyBottomKey.ENTER -> EnterKey(colors)
+                                                    QwertyBottomKey.SPACE -> SpaceKey(
+                                                        schemaName = if (part == 0) schemaName else "",
+                                                        isAsciiMode = isAsciiMode && part == 0,
+                                                        isSttEnabled = isSttEnabled, isVoiceMode = isVoiceMode, voiceSticky = isVoiceSticky,
+                                                        keyBackgroundColor = colors.background, keyTextColor = colors.foreground,
+                                                        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                                                        modifier = Modifier.weight(1f), onKeyPress = onKeyPress,
+                                                        onKeyPressDown = onKeyPressDown, onKeyRelease = onKeyRelease, onVoiceModeChange = onVoiceModeChange,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
                         if (isVoiceMode && !isVoiceSticky) {
                             DummyKeyButton(
                                 backgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
@@ -1392,36 +1471,8 @@ fun KeyboardLayout(
                             // 只认手指按着的 Shift：自动大写、单次大写、大写锁定时的回车照常（不把句首回车变成换行）。
                             // 和字母键同一种登记：位置记成状态，每次重组都按当前位置登记到当前这块键盘的目标里，
                             // 不靠某一次布局回调（键盘重建、目标换了一份时回车不会漏登记）；id 每个回车键各一个，别的键盘撤销不到它。
-                            val enterTargetId = remember { Any() }
-                            var enterBounds by remember { mutableStateOf(Rect.Zero) }
-                            val shiftEnter: () -> Unit = {
-                                onGestureAction(GestureAction.COMMAND, com.kingzcheung.xime.keyboard.CtrlShortcuts.SHIFT_ENTER_COMMAND)
-                            }
-                            DisposableEffect(shiftSlideTargets) { onDispose { shiftSlideTargets.remove(enterTargetId) } }
-                            androidx.compose.runtime.SideEffect {
-                                if (enterBounds != Rect.Zero) shiftSlideTargets.putEnter(enterTargetId, enterBounds, shiftEnter)
-                            }
-                            ActionKeyButton(
-                                text = enterKeyText,
-                                onClick = {
-                                    if (!shiftSlideTargets.ctrlEnter()) {
-                                        if (viewModel.shiftMode.value == ShiftMode.HELD) {
-                                            // 算用过 Shift：松开 Shift 不再当点按切大小写。
-                                            viewModel.onCharacterTyped()
-                                            shiftEnter()
-                                        } else onKeyPress("enter")
-                                    }
-                                },
-                                backgroundColor = specialKeyBackgroundColor,
-                                textColor = specialKeyTextColor,
-                                modifier = Modifier.weight(bottom.enter).testTag("qwerty-enter-key")
-                                    .onGloballyPositioned { enterBounds = dragSpace.bounds(it) },
-                                onPress = { onKeyPressDown?.invoke("enter") },
-                                onRelease = { onKeyRelease?.invoke("enter") },
-                                shadowEnabled = shadowEnabled,
-                                shadowElevation = shadowElevation,
-                                shadowShapeRadius = shadowShapeRadius,
-                            )
+                            EnterKey()
+                        }
                         }
                     }
                 }
