@@ -60,7 +60,9 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
                 // 换了方向的条目时，该语言的选中条目也跟着换，语言键切回来、菜单里打勾的都是它。
                 if (stored != saved && target == stored && !policy.scoped) InputModes.selectProfile(service, target,
                     InputModes.languageOf(target, service.uiState.value.schemas))
-                val refreshName = service.uiState.value.currentSchemaId != target || service.uiState.value.schemas.isEmpty()
+                val refreshName = service.uiState.value.currentSchemaId != target || service.uiState.value.schemas.isEmpty() ||
+                    service.schemaNameStale
+                service.schemaNameStale = false
                 service.uiState.value = service.uiState.value.copy(currentSchemaId = target, isAsciiMode = ascii)
                 if (policy.scoped && !handwriting) {
                     service.keyboardViewModel.discardTemporaryHandwriting()

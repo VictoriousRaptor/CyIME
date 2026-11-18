@@ -183,10 +183,28 @@ class RimeEngine {
 
     private fun mergedSpellerAlphabet(): String {
         val schema = nativeGetCurrentSchema().orEmpty()
+        readAuxCode(schema)
         return mergedAlphabet?.takeIf { it.first == schema }?.second ?: run {
             nativeGetSchemaString(schema, "speller/alphabet").orEmpty().also { mergedAlphabet = schema to it }
         }
     }
+
+    /**
+     * 双拼辅助码：（方案，会话代号，开着没有）。补丁写了 cyime_aux_code/table 才算开着（SpellingPatches.auxCodeParts），
+     * 部署、换方案后会话代号变了就重读，设置刚改、还没部署完时照旧是关的。
+     */
+    @Volatile private var auxCode: Triple<String, Long, Boolean>? = null
+
+    private fun readAuxCode(schema: String) {
+        val generation = sessionGeneration.get()
+        if (auxCode?.let { it.first == schema && it.second == generation } == true) return
+        auxCode = Triple(schema, generation,
+            !nativeGetSchemaString(schema, com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_MARK).isNullOrEmpty())
+    }
+
+    /** 不加锁：[schemaId] 的辅助码开着（` 打字中送进 Rime，Shift 键换成「辅」）。还没读过时返回 false，按键队列下一键就读到。 */
+    internal fun auxCodeActive(schemaId: String): Boolean =
+        auxCode?.takeIf { it.first == schemaId && it.second == sessionGeneration.get() }?.third == true
 
     /** 按键队列里先读一次当前方案的字母表，屏幕键盘线程随后可以不加锁地查 [spellerAlphabetHas]。 */
     internal fun warmSpellerAlphabet() { locked { mergedSpellerAlphabet() } }
@@ -198,8 +216,9 @@ class RimeEngine {
     internal fun spellerAlphabetHas(schemaId: String, c: Char): Boolean =
         mergedAlphabet?.takeIf { it.first == schemaId }?.second?.contains(c) == true
 
-    /** 不加锁：[schemaId] 的字母表已经读过（读到空串也算）。 */
-    internal fun spellerAlphabetKnown(schemaId: String): Boolean = mergedAlphabet?.first == schemaId
+    /** 不加锁：[schemaId] 的字母表已经读过（读到空串也算），辅助码也读过（换过会话要重读）。 */
+    internal fun spellerAlphabetKnown(schemaId: String): Boolean = mergedAlphabet?.first == schemaId &&
+        auxCode?.let { it.first == schemaId && it.second == sessionGeneration.get() } == true
 
     internal fun mergedLetterKeyCode(letter: Char): Int = locked {
         // An intentionally customized old schema must remain usable and must not be overwritten.
@@ -259,6 +278,61 @@ class RimeEngine {
     private var reselectCaret = -1
     private var reselectInput = ""
     internal fun currentCandidateRevision(): Long = candidateRevision.get()
+
+    data class SentenceEditSnapshot(
+        val input: String, val sentence: String, val boundaries: List<Int>, val revision: Long,
+    )
+
+    internal fun sentenceEditSnapshot(revision: Long): SentenceEditSnapshot? = locked {
+        if (!isInitialized || !nativeHasSession() || nativeIsAsciiMode() || candidateRevision.get() != revision) return@locked null
+        val values = nativeSentenceEditSnapshot()
+        if (values.size < 5) return@locked null
+        val boundaries = values.drop(2).map { it.toIntOrNull() ?: return@locked null }
+        SentenceEditSnapshot(values[0], values[1], boundaries, revision)
+    }
+
+    data class SentenceEditCandidate(
+        val text: String, val code: String, val selected: List<PinyinSyllableOption> = emptyList(),
+    )
+    data class SentenceEditCandidates(val words: List<SentenceEditCandidate>, val options: List<PinyinSyllableOption>)
+
+    internal fun sentenceEditCandidates(snapshot: SentenceEditSnapshot, code: String,
+        selected: List<PinyinSyllableOption>, originalBegin: Int, originalEnd: Int): SentenceEditCandidates = locked {
+        if (candidateRevision.get() != snapshot.revision || !nativeHasSession())
+            return@locked SentenceEditCandidates(emptyList(), emptyList())
+        val selectedIds = selected.flatMap { listOf(it.syllableId, it.start, it.end) }.toIntArray()
+        val records = nativeSentenceEditCandidates(code, selectedIds, originalBegin, originalEnd)
+        val options = parsePinyinSyllableOptions(records.filter { it.startsWith('\u001f') }
+            .map { it.drop(1) }.toTypedArray(), code, 0)
+        val words = records.filterNot { it.startsWith('\u001f') }.mapNotNull { record ->
+            val split = record.indexOf('\t')
+            val length = record.substring(0, split.takeIf { it >= 0 } ?: return@mapNotNull null).toIntOrNull()
+                ?: return@mapNotNull null
+            val text = record.substring(split + 1)
+            if (length !in 1..code.length || text.isEmpty()) null
+            else if (selected.any { it.start < length && it.end > length }) null
+            else SentenceEditCandidate(text, code.take(length), selected.filter { it.end <= length })
+        }.distinct()
+        SentenceEditCandidates(words, options)
+    }
+
+    internal fun applySentenceEdit(snapshot: SentenceEditSnapshot, start: Int, end: Int,
+                                   segments: List<SentenceEditCandidate>): RimeProcessResult? = editPinyinAndReadState {
+        val code = segments.joinToString("") { it.code }
+        val replacement = segments.joinToString("") { it.text }
+        val lengths = segments.flatMap { listOf(it.code.length, it.text.length) }.toIntArray()
+        val choices = segments.flatMap { segment ->
+            listOf(segment.selected.size) + segment.selected.flatMap { listOf(it.syllableId, it.start, it.end) }
+        }.toIntArray()
+        if (candidateRevision.get() != snapshot.revision || !nativeHasSession() ||
+            !nativeApplySentenceEdit(snapshot.input, snapshot.sentence, start, end, code, replacement, lengths, choices)) false
+        else { candidateRevision.incrementAndGet(); true }
+    }
+
+    private external fun nativeSentenceEditSnapshot(): Array<String>
+    private external fun nativeSentenceEditCandidates(code: String, selected: IntArray, originalBegin: Int, originalEnd: Int): Array<String>
+    private external fun nativeApplySentenceEdit(input: String, sentence: String, start: Int, end: Int,
+                                                  code: String, replacement: String, lengths: IntArray, choices: IntArray): Boolean
 
     internal fun glidePreviewRevision(): Long = candidateRevision.get()
 
@@ -699,6 +773,22 @@ class RimeEngine {
         }
     }
 
+    internal fun saveClearUndo(): Boolean = locked {
+        isInitialized && nativeHasSession() && !nativeIsAsciiMode() && nativeSaveClearUndo()
+    }
+
+    internal fun restoreClearUndo(expectedRevision: Long): RimeProcessResult? = locked {
+        if (!isInitialized || !nativeHasSession() || candidateRevision.get() != expectedRevision || nativeIsAsciiMode()) return@locked null
+        if (!nativeRestoreClearUndo()) return@locked null
+        candidateRevision.incrementAndGet()
+        withDisplayPreedit(nativeGetProcessResult(true))
+    }
+
+    internal fun discardClearUndo() = locked { nativeDiscardClearUndo() }
+    private external fun nativeSaveClearUndo(): Boolean
+    private external fun nativeRestoreClearUndo(): Boolean
+    private external fun nativeDiscardClearUndo()
+
     /** Snapshot/apply run on the existing input FIFO, under one engine lock. */
     internal fun readPinyinEditSnapshot(): Array<String> = locked {
         if (nativeHasSession()) nativePinyinEditSnapshot().also { snapshot ->
@@ -1051,8 +1141,11 @@ class RimeEngine {
         if (!isInitialized) return false
         mutateLocked {
             ensureT9SchemaPatchesForDeployedSchemas(userDataDir)
+            // 先关掉会话再维护：会话开着时 librime 按缓存里的旧方案列表编译，刚打开的方案这一遍编不进去（11-15 首道双拼）。
+            nativeReleaseSessionForMaintenance()
             if (!nativeStartMaintenance(false)) {
                 FileLogger.w(TAG, "deployIncremental: startMaintenance returned false, falling back to full deploy")
+                try { nativeReloadSessionAfterMaintenance() } finally { sessionReplaced() }
                 return false
             }
             // A slow native worker still owns build/. Wait before reloading or falling back.
@@ -1369,6 +1462,7 @@ class RimeEngine {
             }
         }
     }
+    private external fun nativeReleaseSessionForMaintenance()
     private external fun nativeStartMaintenance(full: Boolean): Boolean
     private external fun nativeJoinMaintenance()
     private external fun nativeDeploy(): Boolean

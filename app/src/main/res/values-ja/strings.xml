@@ -45,8 +45,8 @@
     <string name="item_handwriting_title">手書き</string>
     <string name="item_handwriting_summary">一時停止で認識、数式マーク、手書きモデル</string>
     <string name="section_system">システム</string>
-    <string name="item_clipboard_title">クリップボードと同期</string>
-    <string name="item_clipboard_summary">認証コードの自動コピー、PC などとのクリップボード同期</string>
+    <string name="item_clipboard_title">クリップボード</string>
+    <string name="item_clipboard_summary">パネル表示、履歴、認証コードの自動コピー、PC との同期</string>
     <string name="item_extensions_title">拡張機能</string>
     <string name="item_extensions_summary">入力方式、モデル、プラグイン：ダウンロード、インストール済み、インポート</string>
     <string name="item_backup_title">バックアップと復元</string>

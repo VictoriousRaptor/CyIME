@@ -84,8 +84,9 @@ fun SmartPredictionSettingsContent(
     pendingImport?.let { uri ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text("导入学习文件") },
-            text = { Text("新增：保留已学的，加入文件里的条目，同一条取较大次数。\n替换：本机学习和个人语料方案整份换成文件内容，电脑上删掉的条目只有替换才生效。\n不会修改 Rime 用户词库或模型。") },
+            title = { Text("导入学习文件或文字") },
+            text = { Text("新增：保留已学的，加入文件里的条目，同一条取较大次数。\n替换：本机学习和个人语料方案整份换成文件内容，电脑上删掉的条目只有替换才生效。\n" +
+                "也可以选自己的文字（txt、md、csv、srt 等都行）：当作这些字都打过一遍来学，只新增不替换。\n不会修改 Rime 用户词库或模型。") },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pendingImport = null; viewModel.importLearningData(uri, merge = false) }) { Text("替换") }
@@ -244,7 +245,8 @@ fun SmartPredictionSettingsContent(
                     status = uiState.learningStatus,
                     onSave = viewModel::saveUserData, onRefresh = viewModel::refreshCacheSize,
                     onExport = { exportFile.launch("CyIME-personal-learning.json") },
-                    onImport = { importFile.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+                    // 不按类型筛：md、srt 等在很多手机上没有 text/plain 类型，选了再看内容是不是文字（用户 11-15：md 都选不了）
+                    onImport = { importFile.launch(arrayOf("*/*")) }
                 )
             }
         }

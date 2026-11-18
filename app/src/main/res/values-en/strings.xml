@@ -45,8 +45,8 @@
     <string name="item_handwriting_title">Handwriting</string>
     <string name="item_handwriting_summary">Recognize on pause, formula marks, handwriting models</string>
     <string name="section_system">System</string>
-    <string name="item_clipboard_title">Clipboard and sync</string>
-    <string name="item_clipboard_summary">Auto-copy verification codes, sync the clipboard with your PC and other devices</string>
+    <string name="item_clipboard_title">Clipboard</string>
+    <string name="item_clipboard_summary">Panel display, history, auto-copy verification codes, sync with your PC</string>
     <string name="item_extensions_title">Extensions</string>
     <string name="item_extensions_summary">Input methods, models and plugins: download, installed, import</string>
     <string name="item_backup_title">Backup and restore</string>

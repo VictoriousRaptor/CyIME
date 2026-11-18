@@ -44,7 +44,7 @@ data class KeyGapLightConfig(
     val switch: Boolean = true,
     /** 长按进度：按住有长按的键，线沿键边走一圈，走满就是长按生效的那一刻。 */
     val hold: Boolean = true,
-    /** 空格移光标：色块跟着手指走，每走一格留一个刻度。 */
+    /** 空格移光标：进入时从手指处扩开一次；空格上面的键缝亮成轨道，色块和往上的光柱跟着手指走，每走一格留一个刻度。 */
     val space: Boolean = true,
     /** 语音音量：听写时两排键之间的键缝当音量条，从中间往两边长。 */
     val voice: Boolean = true,

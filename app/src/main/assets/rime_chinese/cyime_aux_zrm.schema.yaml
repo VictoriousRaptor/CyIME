@@ -1,0 +1,33 @@
+# Rime schema
+# encoding: utf-8
+#
+# 双拼辅助码的码表（自然码辅助码），不是给人直接选的输入方案（CyimeInputDefaults.dependencies 里，方案列表不显示）。
+# 「双拼方案 › 辅助码」选了它时，26 键双拼方案的补丁把它加进 schema/dependencies，部署时编出码表；
+# 方案里雾凇的 search.lua（lua_filter@*search@cyime_aux_zrm）按它「以码查字」筛候选，见 SpellingPatches.auxCodeParts。
+
+schema:
+  schema_id: cyime_aux_zrm
+  name: 自然码辅助码
+  version: "2026.11.15"
+  description: |
+    双拼辅助码码表，只供筛选候选用。
+
+engine:
+  processors:
+    - speller
+    - selector
+    - navigator
+    - express_editor
+  segmentors:
+    - abc_segmentor
+  translators:
+    - table_translator
+
+speller:
+  alphabet: zyxwvutsrqponmlkjihgfedcba
+
+translator:
+  dictionary: cyime_aux_zrm
+  enable_user_dict: false
+  enable_sentence: false
+  enable_completion: true

@@ -200,7 +200,7 @@ object ExtensionManager {
                     Log.e(TAG, "Error preloading from ${pluginInfo?.name}", e)
                 }
             }
-            _emojiCategoriesFlow.value = pluginCategories + EmojiData.categories
+            _emojiCategoriesFlow.value = pluginCategories + EmojiData.drawableCategories
         } catch (e: Exception) {
             Log.e(TAG, "Failed to preload emoji data", e)
         }

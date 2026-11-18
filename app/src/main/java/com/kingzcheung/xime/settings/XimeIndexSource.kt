@@ -169,6 +169,25 @@ object XimeIndexSource {
         return remote.copy(plugins = merged + bundled.plugins.filter { it.id !in byId })
     }
 
+    /**
+     * 装着的随包插件比安装包里带的旧：用包里那份升级，不联网。以前要自己去插件市场点更新，
+     * 新版翻译栏的语言选择装了新安装包也看不到（11-15）。开关、设置照旧（和市场里点更新一样）。
+     */
+    internal suspend fun updateBundledPlugins(context: Context) = withContext(Dispatchers.IO) {
+        val installed = PluginManager.getAllInstallPlugins()
+        val bundled = runCatching { bundledPlugins(context) }.getOrNull() ?: return@withContext
+        for (entry in bundled.plugins) {
+            val have = installed.find { it.id == entry.id } ?: continue
+            if (!bundledIsNewer(have.version, entry.currentVersion)) continue
+            val version = entry.resolvedVersion() ?: continue
+            runCatching { installMarketPlugin(context, entry.id, version) }
+                .onFailure { Log.w("XimeIndexSource", "随包插件 ${entry.id} 升级失败", it) }
+        }
+    }
+
+    internal fun bundledIsNewer(installed: String, bundled: String): Boolean =
+        com.kingzcheung.xime.plugin.core.util.VersionUtil.compare(installed, bundled) < 0
+
     internal fun bundledPlugins(context: Context): PluginsDirectIndex =
         context.assets.open("plugin-market/index.yaml").bufferedReader().use {
             XimeIndexParser.parsePluginsDirectIndex(it.readText())

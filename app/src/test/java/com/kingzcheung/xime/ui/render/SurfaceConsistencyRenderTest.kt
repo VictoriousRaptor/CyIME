@@ -22,7 +22,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.settings.FrostedGlassConfig
 import com.kingzcheung.xime.settings.KeysConfigHelper
-import com.kingzcheung.xime.ui.keyboard.CursorControlOverlay
 import com.kingzcheung.xime.ui.keyboard.ForgetLearningConfirm
 import com.kingzcheung.xime.ui.keyboard.KaomojiKeyboard
 import com.kingzcheung.xime.ui.keyboard.KeyboardCallbacks
@@ -30,7 +29,6 @@ import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.KeyboardLayout
 import com.kingzcheung.xime.ui.keyboard.LocalKeyboardExplicitWidth
 import com.kingzcheung.xime.ui.keyboard.LocalKeyboardInputPreferences
-import com.kingzcheung.xime.ui.keyboard.hiddenDuringCursorControl
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.ui.theme.XimeTheme
 import com.kingzcheung.xime.ui.theme.keyboardBackground
@@ -46,7 +44,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * 一致性修复的出图核对：光标调整遮罩（盖在 26 键上）、颜文字空页、忘掉学习确认卡，
+ * 一致性修复的出图核对：26 键、颜文字空页、忘掉学习确认卡，
  * 柔和蓝 / 黑白 / iOS 渐变 / 薰衣草紫 × 深浅色 × 毛玻璃。只在设了 CYIME_RENDER_OUT 时出图。
  */
 @RunWith(AndroidJUnit4::class)
@@ -80,8 +78,7 @@ class SurfaceConsistencyRenderTest {
                         Box(Modifier.requiredSize(480.dp, 300.dp).then(keyboardBg)) {
                             KeyboardLayout({}, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {}),
                                 KeyboardUiState(currentSchemaId = "rime_ice", themeId = theme, isDarkTheme = dark),
-                                false, Modifier.requiredSize(480.dp, 300.dp).hiddenDuringCursorControl(true))
-                            CursorControlOverlay(palette.background, palette.text, Modifier.requiredSize(480.dp, 300.dp))
+                                false, Modifier.requiredSize(480.dp, 300.dp))
                         }
                         Box(Modifier.requiredSize(380.dp, 300.dp).then(keyboardBg)) {
                             KaomojiKeyboard({}, Modifier.requiredSize(380.dp, 300.dp), palette.text, palette.accent)

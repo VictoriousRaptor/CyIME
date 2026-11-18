@@ -589,7 +589,7 @@ private fun CandidatePageItem(
         BasicText(
             text = annotated,
             style = TextStyle(fontWeight = FontWeight.Normal, lineHeight = 25.sp,
-                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)),
+                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)).withInputTextLocale(),
         )
     }
 }
@@ -904,14 +904,14 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
             .background(frostedKeyColor(keyBg, state.textColor, LocalKeyboardInputPreferences.current.frostedGlass))) {
             val metrics = t9CandidateMetrics(maxWidth.value, maxHeight.value, LocalDensity.current.fontScale,
-                LocalKeyboardInputPreferences.current.keyTextScale, keyContentScale(maxWidth.value, maxHeight.value / 4f))
+                rememberCandidateTextSize().toFloat(), keyContentScale(maxWidth.value, maxHeight.value / 4f))
             val sample = androidx.compose.ui.text.rememberTextMeasurer().measure(if (state.choosingMergedLetter) "W" else "shuang",
                 TextStyle(fontSize = metrics.fontSizeSp.sp, fontFamily = AppFonts.candidateFontFamily),
                 maxLines = 1, softWrap = false)
             val textWidth = with(LocalDensity.current) { (maxWidth - 8.dp).toPx() }.coerceAtLeast(1f)
             val font = (metrics.fontSizeSp * minOf(1f, textWidth / sample.size.width.coerceAtLeast(1))).sp
             val rowHeight = if (state.choosingMergedLetter && items.isNotEmpty()) maxHeight / items.size else metrics.rowHeightDp.dp
-            // 九键读音（不是 14 键挑字母）用大一号的字，各自缩到放得下（用户 11-13）。
+            // 九键读音（不是 14 键挑字母）和候选字一样大，各自缩到放得下（用户 11-13、11-15）。
             val pinyin = state.railPinyinOptions.isNotEmpty() && !state.choosingMergedLetter
             LazyColumn(Modifier.fillMaxSize().testTag("expanded-pinyin-options")) {
                 itemsIndexed(items) { index, item ->

@@ -56,6 +56,8 @@
         "glide_typing": {"keyMs": 0.2, "memoryMb": 8, "estimated": true},
         "glide_preview": {"keyMs": 0.0, "memoryMb": 0, "estimated": true, "note": "滑动中每 60 ms 在后台识别一次"},
         "liquid_glass": {"keyMs": 0.8, "memoryMb": 1, "estimated": true},
+        "liquid_glass_strong": {"keyMs": 0.2, "memoryMb": 0, "estimated": true},
+        "liquid_glass_strongest": {"keyMs": 0.4, "memoryMb": 0, "estimated": true},
         "press_bubble": {"keyMs": 1.5, "memoryMb": 1, "estimated": true},
         "double_pinyin_key_hints": {"keyMs": 0.3, "memoryMb": 0, "estimated": true},
         "delete_recovery": {"keyMs": 0.0, "memoryMb": 0, "estimated": true},

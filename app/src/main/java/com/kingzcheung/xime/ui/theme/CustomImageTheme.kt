@@ -171,6 +171,10 @@ object CustomImageTheme {
             ?.forEach { it.delete() }
     }
 
+    /** 这张轮播图片调过的摆放；没调过是铺满居中。 */
+    internal fun slidePlacement(context: Context, src: String): ThemeImagePlacement =
+        ThemeImagePlacement.decode(com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(context).slidePlacements[src])
+
     /** 还在的轮播图片（themes/…）；文件没了的跳过。 */
     fun slides(context: Context, stored: List<String>): List<String> =
         stored.filter { it.removePrefix("themes/").startsWith(SLIDE_PREFIX) && File(themesDir(context), it.removePrefix("themes/")).isFile }
@@ -203,14 +207,18 @@ object CustomImageTheme {
         val name = "$FILE_PREFIX${System.currentTimeMillis()}-${(0..99999).random()}.jpg"
         check(File(dir, next.removePrefix("themes/")).renameTo(File(dir, name))) { "无法保存图片" }
         val base = SettingsPreferences.getPrefsPublic(context).getString(KEY_BASE, null) ?: SoftBlueTheme.ID
-        commit(context, "themes/$name", base, ThemeImagePlacement.DEFAULT)
+        // 这张调过摆放就照它调的，没调过铺满居中：顶上来以后和它轮播时看起来一样。
+        val placement = ThemeImagePlacement.decode(motion.read(context).slidePlacements[next])
+        commit(context, "themes/$name", base, placement)
         motion.setSlides(context, stored.filter { it != next })
+        motion.forgetSlidePlacements(context, listOf(next))
         return true
     }
 
     /** 清空轮播图片（主图不动）。在 IO 线程调用。 */
     fun clearSlides(context: Context) {
         com.kingzcheung.xime.settings.BackgroundMotionPreferences.setSlides(context, emptyList())
+        com.kingzcheung.xime.settings.BackgroundMotionPreferences.forgetSlidePlacements(context)
         themesDir(context).listFiles()?.filter { it.name.startsWith(SLIDE_PREFIX) }?.forEach { it.delete() }
     }
 
@@ -218,6 +226,7 @@ object CustomImageTheme {
     fun removeSlide(context: Context, src: String) {
         val prefs = com.kingzcheung.xime.settings.BackgroundMotionPreferences
         prefs.setSlides(context, prefs.read(context).slides.filter { it != src })
+        prefs.forgetSlidePlacements(context, listOf(src))
         File(themesDir(context), src.removePrefix("themes/")).takeIf { it.name.startsWith(SLIDE_PREFIX) }?.delete()
     }
 
@@ -251,7 +260,8 @@ object CustomImageTheme {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         val base = prefs.getString(KEY_BASE, null) ?: SoftBlueTheme.ID
         check(prefs.edit().remove(KEY_SRC).remove(KEY_BASE).remove(KEY_PLACEMENT)
-            .remove(com.kingzcheung.xime.settings.BackgroundMotionPreferences.KEY_SLIDES).commit()) { "无法保存设置" }
+            .remove(com.kingzcheung.xime.settings.BackgroundMotionPreferences.KEY_SLIDES)
+            .remove(com.kingzcheung.xime.settings.BackgroundMotionPreferences.KEY_SLIDE_PLACEMENTS).commit()) { "无法保存设置" }
         themesDir(context).listFiles()?.filter { it.name.startsWith(FILE_PREFIX) }?.forEach { it.delete() }
         return base
     }

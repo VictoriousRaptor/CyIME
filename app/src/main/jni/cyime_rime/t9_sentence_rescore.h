@@ -38,7 +38,7 @@ bool T9InitialsOnly(const string& input);
 void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool ngram_sentence_start,
                         size_t keys_per_syllable, double rime_weight, double tail_correction_margin,
                         double slip_margin, int initials_choices, double initials_margin,
-                        const string& initials_first, Poet* poet,
+                        const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences);

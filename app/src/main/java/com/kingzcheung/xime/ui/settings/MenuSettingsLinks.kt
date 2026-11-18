@@ -10,7 +10,7 @@ import com.kingzcheung.xime.keyboard.ToolbarButtonItem
  */
 internal val MenuSettingsTitles: Map<ToolbarButton, String> = mapOf(
     ToolbarButton.SCHEMA to "语言与方案",
-    ToolbarButton.CLIPBOARD to "剪贴板与同步",
+    ToolbarButton.CLIPBOARD to "剪贴板",
     ToolbarButton.OCR to "已安装的模型",
     ToolbarButton.FLOAT to "键盘尺寸与位置",
     ToolbarButton.FLOATING to "键盘尺寸与位置",

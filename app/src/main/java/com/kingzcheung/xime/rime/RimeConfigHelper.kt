@@ -39,6 +39,9 @@ object RimeConfigHelper {
     const val DEPLOYMENT_REVISION = "rime_deployment_revision"
     /** 最近一次部署没过的方案和原因（给设置页、输入法提示用）；空表示上次部署没有问题。 */
     const val DEPLOYMENT_PROBLEM = "rime_deployment_problem"
+    /** 同一次部署里每个没生效的方案和原因（JSON：方案 id → 原因），设置页在那个方案自己那一行显示。 */
+    const val DEPLOYMENT_SCHEMA_PROBLEMS = "rime_deployment_schema_problems"
+    private const val NOT_IN_LIST = "部署结果里没有它"
 
     /** Retry failures, never queue user keystrokes, and never overlap a running native deployment. */
     suspend fun prepareAutomatically(context: Context, status: (String) -> Unit = {}) {
@@ -157,6 +160,8 @@ object RimeConfigHelper {
         val engine = RimeEngine.getInstance()
         engine.initialize(user, shared)
         val success = synchronized(deploymentLock) {
+            // 「重新部署(修复)」也重编方案列表：librime 只按秒级修改时间判断要不要重编，列表旧了它会一直认为不用编。
+            dropCompiledSchemaList(context, "redeploy")
             val usable = engine.deploy() && deploymentUsable(context)
             if (usable) storeDeploymentHash(context)
             SettingsPreferences.setDeploymentDone(context, usable)
@@ -185,9 +190,11 @@ object RimeConfigHelper {
         val available = engine.getAvailableSchemas().toSet()
         val build = File(context.filesDir, "rime/build")
         val broken = enabled.mapNotNull { id ->
-            (missingBuildArtifact(build, id) ?: if (id !in available) "不在部署结果的方案列表里" else null)?.let { id to it }
+            (missingBuildArtifact(build, id) ?: if (id !in available) NOT_IN_LIST else null)?.let { id to it }
         }.toMap()
+        recordSchemaProblems(context, broken)
         if (broken.isEmpty()) return recordProblem(context, "", usable = true)
+        if (broken.containsValue(NOT_IN_LIST)) logSchemaListDiagnostics(context, enabled, available)
         val current = SettingsPreferences.getCurrentSchema(context)
         // 一个方案编译不出来（内置的也一样）只提示它，不再挡住整个键盘：2026-11-02 用户手机上 14 键两个方案没编译出来，
         // 26 键明明能用，键盘却一直卡在「正在加载词库」。当前方案坏了就先换到同语言能用的方案。
@@ -387,8 +394,13 @@ object RimeConfigHelper {
                 " damaged=${damaged.size} hashMs=$hashMs changedSince=${changedSinceHash(context)}")
             val buildExists = buildDir.exists() && buildDir.listFiles()?.isNotEmpty() == true
             val engine = RimeEngine.getInstance()
-            val deployed: Boolean
-            if (buildExists && damaged.isEmpty()) {
+            var deployed: Boolean
+            // 编译出的方案列表少了启用的方案：librime 按秒级修改时间判断 default.yaml 要不要重编，
+            // 列表旧了它可能一直认为不用编（11-15 首道双拼一直「不在部署结果的方案列表里」）。删掉编译出的列表再部署。
+            val staleList = buildExists && damaged.isEmpty() && dropStaleSchemaList(context)
+            if (staleList) {
+                deployed = engine.deploy()
+            } else if (buildExists && damaged.isEmpty()) {
                 // build 已就位但配置有变化：增量维护，只编译变更的 schema/dict，
                 // 避免 custom.yaml 补丁等小幅改动触发 60MB 词库全量重编译（持锁 30s+）。
                 FileLogger.w(TAG, "Build exists, running incremental maintenance")
@@ -409,7 +421,13 @@ object RimeConfigHelper {
                 SettingsPreferences.setDeploymentDone(context, false)
                 return recordProblem(context, "部署失败：词库编译未完成" + storageHint(context), usable = false)
             }
-            if (deploymentUsable(context)) {
+            var usable = deploymentUsable(context)
+            // 部署完列表还是少了启用的方案：再重编一次列表、整个部署一遍（会话先关掉），只试这一次。
+            if (schemaProblems(context).containsValue(NOT_IN_LIST) && dropCompiledSchemaList(context, "still stale after deploy")) {
+                deployed = engine.deploy()
+                usable = deployed && deploymentUsable(context)
+            }
+            if (usable) {
                 storeDeploymentHash(context)
                 SettingsPreferences.setDeploymentDone(context, true)
                 return true
@@ -417,6 +435,70 @@ object RimeConfigHelper {
             SettingsPreferences.setDeploymentDone(context, false)
             return false
         }
+    }
+
+    /**
+     * 编译出的 default.yaml 里的方案列表（只读文件，不经引擎）；没有这个文件或没有列表时为 null。
+     * librime 写出的是块格式：`schema_list:` 下每项一行 `- schema: id`（可能带 case 等别的键）。
+     */
+    internal fun compiledSchemaList(text: String): List<String>? {
+        val lines = text.lines()
+        val header = lines.indexOfFirst { it.trimEnd() == "schema_list:" }
+        if (header < 0) return null
+        val item = Regex("""^\s*(?:-\s*)?\{?\s*schema:\s*["']?([^"',}\s#]+)""")
+        return lines.drop(header + 1).takeWhile { it.isBlank() || it.first().isWhitespace() || it.startsWith("-") }
+            .mapNotNull { item.find(it)?.groupValues?.get(1) }
+    }
+
+    fun compiledSchemaList(context: Context): List<String>? =
+        File(context.filesDir, "rime/build/default.yaml").takeIf { it.isFile }
+            ?.let { runCatching { compiledSchemaList(it.readText()) }.getOrNull() }
+
+    /**
+     * 纯判断，可单测：启用了、也编译过（[built]），编译出的列表里却没有的方案。读不到列表时不判（交给部署）。
+     * 没编译过的（刚打开、文件缺了）不算：那是正常的增量部署要做的事，不用为它整个重来。
+     */
+    internal fun missingFromCompiledList(enabled: List<String>, compiled: List<String>?, built: (String) -> Boolean): List<String> =
+        if (compiled == null) emptyList() else enabled.filter { it !in compiled && built(it) }
+
+    private fun dropStaleSchemaList(context: Context): Boolean {
+        val build = File(context.filesDir, "rime/build")
+        val missing = missingFromCompiledList(SchemaManager.getEnabledSchemas(context), compiledSchemaList(context)) {
+            File(build, "$it.schema.yaml").isFile
+        }
+        return missing.isNotEmpty() && dropCompiledSchemaList(context, "missing $missing")
+    }
+
+    private fun dropCompiledSchemaList(context: Context, why: String): Boolean {
+        val compiled = File(context.filesDir, "rime/build/default.yaml")
+        if (!compiled.isFile) return false
+        FileLogger.w(TAG, "Recompiling the schema list ($why)")
+        return compiled.delete()
+    }
+
+    private fun recordSchemaProblems(context: Context, problems: Map<String, String>) {
+        val json = org.json.JSONObject().apply { problems.forEach { (id, reason) -> put(id, reason) } }
+        SettingsPreferences.getPrefsPublic(context).edit().putString(DEPLOYMENT_SCHEMA_PROBLEMS, json.toString()).apply()
+    }
+
+    /** 上次部署没生效的方案和原因；没有问题时为空。 */
+    fun schemaProblems(context: Context): Map<String, String> = runCatching {
+        val json = org.json.JSONObject(SettingsPreferences.getPrefsPublic(context).getString(DEPLOYMENT_SCHEMA_PROBLEMS, "{}").orEmpty())
+        json.keys().asSequence().associateWith { json.getString(it) }
+    }.getOrDefault(emptyMap())
+
+    /**
+     * 方案编译出来了却不在方案列表里时，把三方的列表和文件时间写进日志：启用列表、编译出的文件、引擎读到的。
+     * 文件里有、引擎读到的没有，是引擎还拿着旧列表；文件里也没有，是列表没重编。
+     */
+    private fun logSchemaListDiagnostics(context: Context, enabled: List<String>, available: Set<String>) {
+        val rime = File(context.filesDir, "rime")
+        fun time(name: String) = File(rime, name).takeIf { it.isFile }?.lastModified()?.div(1000) ?: 0
+        val stamps = File(rime, "build/default.yaml").takeIf { it.isFile }?.readLines().orEmpty()
+            .dropWhile { it.trim() != "timestamps:" }.drop(1).takeWhile { it.startsWith("    ") }.joinToString(",") { it.trim() }
+        FileLogger.w(TAG, "Schema list mismatch: enabled=$enabled compiledFile=${compiledSchemaList(context)} " +
+            "engine=${available.sorted()} mtime default.yaml=${time("default.yaml")} " +
+            "default.custom.yaml=${time("default.custom.yaml")} build/default.yaml=${time("build/default.yaml")} recorded=[$stamps]")
     }
     
     fun initializeRimeData(context: Context): Pair<String, String> = runBlocking {

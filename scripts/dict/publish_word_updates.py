@@ -8,6 +8,8 @@
 你平时只改这两张表（每行 词<TAB>拼音<TAB>权重，拼音用空格分音节，和以前一样）：
   app/data/cyime_domain_terms.tsv   输入法用语、新词
   app/data/cyime_user_fixes.tsv     必过词（排序要对的词）
+游戏名、网络流行语等新词在 app/data/cyime_new_words.tsv，由 tools/dictionaries/new_words.py 从候选表生成，不手改；
+三张表一起下发。
 内置分类词库（明日方舟等）出了新词，加到 app/data/cell_updates/builtin_<id>.tsv（每行 词<TAB>拼音，
 例如 builtin_arknights.tsv；id 和 CellDictionaryCatalog.kt 里的 builtin_ 名字一样），文件里有的就是在线下发的全部补词。
 脚本把这些表合成 app/src/main/assets/cell_dictionaries/word_updates.json（main 和 dictionaries 两部分），版本号 revision 加 1；
@@ -42,7 +44,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REL = "app/src/main/assets/cell_dictionaries/word_updates.json"
 TARGET = ROOT / REL
-TABLES = [ROOT / "app/data/cyime_domain_terms.tsv", ROOT / "app/data/cyime_user_fixes.tsv"]
+TABLES = [ROOT / "app/data/cyime_domain_terms.tsv", ROOT / "app/data/cyime_user_fixes.tsv",
+          ROOT / "app/data/cyime_new_words.tsv"]
 CELL_DIR = ROOT / "app/data/cell_updates"
 CATALOG = ROOT / "app/src/main/java/com/kingzcheung/xime/settings/CellDictionaryCatalog.kt"
 FORMAT = "cyime.cell-words.v1"

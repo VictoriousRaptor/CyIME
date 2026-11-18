@@ -59,8 +59,8 @@ class CyimeInputDefaultsTest {
     @Test fun doublePinyinWaitsUntilItsSchemasAreGeneratedAndBringsFourteenKeyCompanions() {
         val dp = CyimeInputDefaults.doublePinyin
         assertNull(CyimeInputDefaults.withDoublePinyin(listOf("rime_ice"), setOf("rime_ice", "double_pinyin_flypy")))
-        // 微软双拼没有 14 键版本（没有分号键），文件不存在就不补。
-        val k14 = dp.filterNot { it == DoublePinyinScheme.MICROSOFT_ID }.map { DoublePinyinScheme.k14Id(it) }
+        // 每种内置双拼都有 14 键版本（微软双拼的分号并到 L 键）；文件不存在就不补。
+        val k14 = dp.map { DoublePinyinScheme.k14Id(it) }
         val available = setOf("rime_ice", "pinyin_14jian") + dp + k14
         assertEquals(listOf("rime_ice") + dp + listOf("pinyin_14jian") + k14,
             CyimeInputDefaults.withDoublePinyin(listOf("rime_ice", "pinyin_14jian"), available))

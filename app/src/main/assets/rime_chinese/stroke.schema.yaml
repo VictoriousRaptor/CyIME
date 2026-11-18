@@ -61,6 +61,7 @@ speller:
   delimiter: " '"
 
 translator:
+  enable_sentence: false
   dictionary: stroke
   preedit_format:
 #   - xlit/hspnz/㇐㇑㇒㇏㇠/   # 中日韓筆畫（橫豎撇捺折）

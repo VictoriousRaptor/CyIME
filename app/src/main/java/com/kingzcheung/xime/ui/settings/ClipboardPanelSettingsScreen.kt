@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.twotone.ContentPaste
 import androidx.compose.material.icons.twotone.Folder
 import androidx.compose.material.icons.twotone.PhotoLibrary
+import androidx.compose.material.icons.twotone.Sync
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,15 +57,18 @@ import com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste
  * 剪贴板面板 (用户 11-03：剪贴板的几个小菜单要有一个实体的设置页)：⋯ 菜单里的两个开关 (最近截图、
  * 上屏后自动关闭剪贴板)、分组，和原来在「剪贴板与同步」里的卡片行数、历史记录放在一页。
  * 和面板菜单是同一个值，哪边改都一样。多选、新增、添加图片、拍照识别、同步、清空未固定是对眼前记录的操作，留在菜单里。
+ *
+ * 用户 11-15：这页改名「剪贴板」，从设置首页直接进；验证码、敏感内容、导出导入从原「剪贴板与同步」挪来，
+ * 同步本身是插件，这里只放一个跳到「剪贴板同步」的入口。设置项名字和值都没变。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> Unit) {
+fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> Unit, onNavigateToSync: () -> Unit = {}) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("剪贴板面板") },
+                title = { Text("剪贴板") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -84,6 +88,20 @@ fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> 
             ClipboardPanelDisplaySettings(onNavigateToGroups)
             ClipboardPasteSettings()
             ClipboardHistoryLimitsSetting()
+            // 下面几项原来在「剪贴板与同步」页，原样挪来。
+            VerificationCodeSettings()
+            ClipboardSensitiveSetting()
+            SettingsSection(title = "同步", content = {
+                SettingsItem(
+                    icon = Icons.TwoTone.Sync,
+                    title = "剪贴板同步",
+                    subtitle = "扫码连接电脑，和其他手机、平板互相同步",
+                    onClick = onNavigateToSync,
+                    showArrow = true,
+                )
+            })
+            ClipboardExportSetting()
+            ClipboardImportSetting()
             Spacer(Modifier.height(8.dp))
         }
     }

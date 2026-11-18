@@ -146,7 +146,7 @@ class CursorMagnifierRenderTest {
         strip.performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(28f, 0f)) }
         rule.mainClock.advanceTimeBy(96)
         rule.runOnIdle { assertTrue(moves > 0); assertEquals(listOf(true), tracking) }
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         shot("bottom-lift-swipe")
         strip.performTouchInput { up() }
         assertGestureStopped()
@@ -204,7 +204,7 @@ class CursorMagnifierRenderTest {
         rule.runOnIdle { assertEquals("gesture tracking: reads=$reads moves=$moves keys=$keys", listOf(true), tracking) }
         popupLocation()
         rule.onNodeWithTag("cursor-magnifier").assertIsDisplayed()
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         target.performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(direction * 28f, 0f)) }
         rule.mainClock.advanceTimeBy(96)
         rule.runOnIdle { assertTrue(moves > 0) }
@@ -249,7 +249,7 @@ class CursorMagnifierRenderTest {
     @Test fun disabledMagnifierDoesNotReadOrTrackAndCursorMovementStillWorks() {
         mount(enabled = false)
         hold()
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
         rule.onNodeWithTag("space-key").performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(28f, 0f)) }
         rule.mainClock.advanceTimeBy(160)
@@ -470,7 +470,7 @@ class CursorMagnifierRenderTest {
         missingAnchor = true
         mount()
         hold()
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
         rule.onNodeWithTag("space-key").performTouchInput { up() }
     }
@@ -567,7 +567,7 @@ class CursorMagnifierRenderTest {
         IncognitoState.passwordField = true
         mount()
         hold()
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         rule.onNodeWithTag("cursor-magnifier").assertDoesNotExist()
         rule.runOnIdle { assertEquals(0, reads) }
         rule.onNodeWithTag("space-key").performTouchInput { up() }

@@ -132,7 +132,8 @@ private fun MotionSpeedRow(selected: BackgroundMotionSpeed, onSelect: (Backgroun
  * 背景图片排：第一张是主图，后面是轮流显示的图，每张右上角 ×，最后一格 ＋ 加图；下面一行小字说下一步。
  * 原来主图只有一行「已设置」看不见，轮播图在另一组最底下、要先开动态背景才出现，删除分在两处
  * （用户 11-13：离得太远，以为没设置图片，删除不知道在哪删）。
- * 点第一张弹出「调整位置」「换一张」：只有它有摆放可调；其余的图轮播时都是铺满居中。
+ * 点第一张弹出「调整位置」「换一张」。点后面的图弹出「调整位置」（11-15 起轮播图也能调，没调过的铺满居中），
+ * 不止一张时还有「其余几张也这样摆」，一次让所有轮播图用同一个摆放。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -146,6 +147,8 @@ internal fun BackgroundImageStrip(
     onRemoveMain: () -> Unit,
     onAdd: () -> Unit,
     onRemoveSlide: (String) -> Unit,
+    onAdjustSlide: (String) -> Unit = {},
+    onApplySlideToOthers: (String) -> Unit = {},
 ) {
     Column(Modifier.settingsSearchAnchor("轮播图片").fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
         // 一行四张、全部摊开，不横向滚动：最多 9 张加一格 ＋ 三行内看全，＋ 总在看得见的地方。
@@ -165,7 +168,20 @@ internal fun BackgroundImageStrip(
                             modifier = Modifier.testTag("background-image-replace"))
                     }
                 }
-                slides.forEach { src -> SlideThumb(src, tileWidth, tileHeight, onRemove = { onRemoveSlide(src) }) }
+                slides.forEach { src ->
+                    var slideMenu by remember(src) { mutableStateOf(false) }
+                    Box {
+                        SlideThumb(src, tileWidth, tileHeight, onClick = { slideMenu = true },
+                            onRemove = { onRemoveSlide(src) }, clickLabel = "调整位置")
+                        DropdownMenu(expanded = slideMenu, onDismissRequest = { slideMenu = false }) {
+                            DropdownMenuItem(text = { Text("调整位置") }, onClick = { slideMenu = false; onAdjustSlide(src) },
+                                modifier = Modifier.testTag("background-slide-adjust:$src"))
+                            if (slides.size > 1) DropdownMenuItem(text = { Text("其余几张也这样摆") },
+                                onClick = { slideMenu = false; onApplySlideToOthers(src) },
+                                modifier = Modifier.testTag("background-slide-apply-all:$src"))
+                        }
+                    }
+                }
                 if (slides.size < BackgroundMotionPreferences.MAX_SLIDES) {
                     Box(Modifier.size(tileWidth, tileHeight).clip(RoundedCornerShape(8.dp))
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
@@ -186,7 +202,7 @@ internal fun BackgroundImageStrip(
 internal fun backgroundImageHint(count: Int, imageOn: Boolean, motionOn: Boolean): String = when {
     !imageOn -> "上面的开关关着：键盘用配色方案的底色，这些图片留着"
     count < 2 -> "点图片调整位置或换一张；点 ＋ 加几张，轮流显示"
-    motionOn -> "共 $count 张，背景每动完一圈换下一张；点第一张调整位置"
+    motionOn -> "共 $count 张，背景每动完一圈换下一张；点哪张就调哪张的位置"
     else -> "共 $count 张，打开下面的「动态背景」才会轮流换"
 }
 

@@ -894,13 +894,32 @@ object KeysConfigHelper {
     }
     
     /**
-     * 字母键盘上方开着「数字行」：26 键第一排的角标换成 [QwertySwipeSymbols.numberRowUp] 那一套。
-     * 输入法读设置时（[com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read]）和 [loadConfig] 时跟着开关更新。
+     * 26 键角标现在用哪一套（开没开数字行、显示哪边角标，见 [CornerVariant]）。
+     * 输入法读设置时（[com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read]）和 [loadConfig] 时跟着开关更新；
+     * 是 Compose 状态，一变键盘上的角标就重画。
      */
-    @Volatile var numberRowCorners: Boolean = false
+    private val cornerVariantState = mutableStateOf(CornerVariant.BOTH)
+    internal var cornerVariant: CornerVariant
+        get() = cornerVariantState.value
+        set(value) { cornerVariantState.value = value }
+    /** 字母键盘上方开着「数字行」。 */
+    var numberRowCorners: Boolean
+        get() = cornerVariant.numberRow
+        set(value) { cornerVariant = CornerVariant.of(value, cornerVariant.showsUp, cornerVariant.showsDown) }
+    internal fun refreshCornerVariant(context: Context) {
+        cornerVariant = CornerVariant.of(SettingsPreferences.isNumberRowEnabled(context),
+            SettingsPreferences.isSwipeUpHintsEnabled(context), SettingsPreferences.isSwipeDownHintsEnabled(context))
+    }
+    /** 键盘现在是全角还是半角：打开了「跟随全角半角」的角标按它换写法。键盘重画时由 KeyboardView 更新。 */
+    private val cornerFullWidthState = mutableStateOf(true)
+    internal var cornerFullWidth: Boolean
+        get() = cornerFullWidthState.value
+        set(value) { cornerFullWidthState.value = value }
 
-    private var symbolOverridesZh: Map<String, String> = emptyMap()
-    private var symbolOverridesEn: Map<String, String> = emptyMap()
+    private var symbolOverridesZh: Map<CornerVariant, Map<String, String>> = emptyMap()
+    private var symbolOverridesEn: Map<CornerVariant, Map<String, String>> = emptyMap()
+    /** 中文各套里跟随全角半角的格子（英文不分全角半角）。 */
+    private var symbolFollowsZh: Map<CornerVariant, Set<String>> = emptyMap()
     private var symbolCustomZh: Map<String, KeyGestureConfig> = emptyMap()
     private var symbolCustomEn: Map<String, KeyGestureConfig> = emptyMap()
     private var symbolOverridesK14: Map<String, String> = emptyMap()
@@ -920,10 +939,14 @@ object KeysConfigHelper {
                 .onFailure { Log.e(TAG, "无法保存旧布局", it) }
             runCatching { QwertySwipeSymbols.adoptFixedPreset(context, symbolCustomZh) }
                 .onFailure { Log.e(TAG, "无法保存10-12布局", it) }
-            numberRowCorners = SettingsPreferences.isNumberRowEnabled(context)
-            symbolOverridesZh = QwertySwipeSymbols.load(context, false)
+            runCatching { QwertySwipeSymbols.adoptVariants(context) }
+                .onFailure { Log.e(TAG, "无法分开保存各套角标", it) }
+            refreshCornerVariant(context)
+            symbolOverridesZh = CornerVariant.entries.associateWith { QwertySwipeSymbols.load(context, false, it) }
             // 英文26键有自己的半角预设，只用英文页的修改。
-            symbolOverridesEn = QwertySwipeSymbols.load(context, true)
+            symbolOverridesEn = CornerVariant.entries.associateWith { QwertySwipeSymbols.load(context, true, it) }
+            symbolFollowsZh = CornerVariant.entries.associateWith {
+                QwertySwipeSymbols.follows(false, it, QwertySwipeSymbols.loadFollows(context, false, it)) }
             symbolOverridesK14 = FourteenKeySymbols.load(context)
             symbolOverridesCustom = customLayouts.filter(CustomLayoutSymbols::editable)
                 .associate { it.id to CustomLayoutSymbols.load(context, it) }
@@ -1842,12 +1865,13 @@ object KeysConfigHelper {
      *  键 id 为键面标签：一、丨、丿、丶、乛、*、分词、，、。 */
     fun getStrokeKeyGesture(key: String): KeyGestureConfig? = _strokeGestureConfigs[key]
 
-    internal fun qwertySymbolEditorValues(context: Context, english: Boolean): Map<String, String> {
-        val overrides = QwertySwipeSymbols.load(context, english)
+    internal fun qwertySymbolEditorValues(context: Context, english: Boolean,
+        variant: CornerVariant = cornerVariant): Map<String, String> {
+        val overrides = QwertySwipeSymbols.load(context, english, variant)
         val custom = if (english) symbolCustomEn else symbolCustomZh
         return buildMap {
             for (key in QwertySwipeSymbols.keys.map(Char::toString)) {
-                val gesture = QwertySwipeSymbols.apply(key, null, overrides, custom[key], english, numberRowCorners)!!
+                val gesture = QwertySwipeSymbols.apply(key, null, overrides, custom[key], english, variant = variant)!!
                 put("up.$key", gesture.swipeUp!!.value.ifEmpty { gesture.swipeUp.label })
                 put("down.$key", gesture.swipeDown!!.value.ifEmpty { gesture.swipeDown.label })
             }
@@ -1908,7 +1932,7 @@ object KeysConfigHelper {
      * 第一排不再重复画数字（用户 11-11「开启数字行多了一堆符号」）；不是数字的角标照旧。
      */
     internal fun withoutNumberRowDigits(key: String, config: KeyGestureConfig): KeyGestureConfig {
-        if (!numberRowCorners || key !in QwertySwipeSymbols.numberRowUp) return config
+        if (!numberRowCorners || key !in QwertySwipeSymbols.firstRowKeys) return config
         fun digit(def: GestureDef?) = def != null && def.value.ifEmpty { def.label }.let { it.length == 1 && it[0] in '0'..'9' }
         // 换成空的（不是 null）：null 时 getSwipeUpLabel 等会退回全局默认角标，又把数字画出来。
         val empty = GestureDef(action = GestureAction.NONE)
@@ -1937,8 +1961,11 @@ object KeysConfigHelper {
                 if (custom != null && normalized == ";" && custom.hasSemicolon())
                     return config[normalized]?.copy(swipeUp = null, swipeDown = null)
                 val owner = custom?.positionLetter(normalized) ?: cornerCellOwner(normalized, letters, isAsciiMode) ?: normalized
-                QwertySwipeSymbols.apply(owner, config[normalized], if (english) symbolOverridesEn else symbolOverridesZh,
-                    (if (english) symbolCustomEn else symbolCustomZh)[owner], english, numberRowCorners)
+                val variant = cornerVariant
+                QwertySwipeSymbols.apply(owner, config[normalized],
+                    (if (english) symbolOverridesEn else symbolOverridesZh)[variant].orEmpty(),
+                    (if (english) symbolCustomEn else symbolCustomZh)[owner], english, variant = variant,
+                    follows = if (english) emptySet() else symbolFollowsZh[variant].orEmpty(), fullWidth = cornerFullWidth)
             }
             // 合并键（14/17/18 键、自建双字母布局）：按键的读顺序用同一张表（MergedKeySymbols），14 键可在设置页改。
             // Shift 或分体把双字母键拆成单字母时，两个字母都沿用原来那个键的角标，符号位置不跟着变。

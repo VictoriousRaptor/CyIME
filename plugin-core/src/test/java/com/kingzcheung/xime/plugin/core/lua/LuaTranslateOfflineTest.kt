@@ -10,7 +10,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
+import java.util.Locale
 import java.io.File
 
 /**
@@ -18,6 +21,11 @@ import java.io.File
  * 连不上接口时这一句改用离线；模型没下载时栏左边是「下载」。真实 Lua 运行时 + 假宿主。
  */
 class LuaTranslateOfflineTest {
+
+    // 自动检测是「界面语言 ⇄ 目标语言」互译（host.uiLanguage 读默认 Locale）：测试固定在简体中文界面
+    private var savedLocale: Locale = Locale.getDefault()
+    @Before fun chineseInterface() { savedLocale = Locale.getDefault(); Locale.setDefault(Locale.SIMPLIFIED_CHINESE) }
+    @After fun restoreLocale() { Locale.setDefault(savedLocale) }
 
     private class Store : PluginConfigStore {
         private val map = HashMap<String, String>()
@@ -94,7 +102,7 @@ class LuaTranslateOfflineTest {
     }
 
     @Test
-    fun `没填密钥没下模型：圆钮是下载，只下当前方向`() {
+    fun `没填密钥没下模型：圆钮是下载，互译两个方向都下`() {
         val offline = FakeOffline()
         val (adapter, _) = setup(offline = offline)
         assertEquals("download", adapter.button().key)
@@ -102,13 +110,25 @@ class LuaTranslateOfflineTest {
         adapter.generate("你好")
         assertTrue(offline.requests.isEmpty())
         adapter.onPanelAction("download")
-        assertEquals(listOf("zh-en"), offline.downloads)
+        assertEquals(listOf("zh-en", "en-zh"), offline.downloads)
         assertTrue(adapter.hint().contains("40%"))
     }
 
     @Test
-    fun `模型在：中文离线译成英文，英文原样`() {
+    fun `互译只下了一个方向：圆钮还是下载，只补下另一个`() {
         val offline = FakeOffline().apply { states["zh-en"] = OfflineTranslateHostApi.STATE_READY }
+        val (adapter, _) = setup(offline = offline)
+        assertEquals("download", adapter.button().key)
+        adapter.onPanelAction("download")
+        assertEquals(listOf("en-zh"), offline.downloads)
+    }
+
+    @Test
+    fun `模型在：中文离线译成英文，英文离线译成中文`() {
+        val offline = FakeOffline().apply {
+            states["zh-en"] = OfflineTranslateHostApi.STATE_READY
+            states["en-zh"] = OfflineTranslateHostApi.STATE_READY
+        }
         val (adapter, _) = setup(offline = offline)
         assertEquals("lang", adapter.button().key)
         adapter.generate("你好，明天见")
@@ -118,8 +138,10 @@ class LuaTranslateOfflineTest {
         adapter.awaitIdle()
         assertEquals("离线译文不剥引号", "“Hello, see you tomorrow.”", adapter.getPanelState("").items.single().text)
         adapter.generate("hello there")
-        assertEquals(1, offline.requests.size)
-        assertEquals("hello there", adapter.getPanelState("").items.single().text)
+        assertEquals("en-zh", offline.requests.last().second)
+        offline.requests.last().third.onDone("你好")
+        adapter.awaitIdle()
+        assertEquals("你好", adapter.getPanelState("").items.single().text)
     }
 
     @Test

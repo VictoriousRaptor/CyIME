@@ -41,9 +41,11 @@ internal fun rememberNineKeyFuzzyReadings(schema: String, profile: InputProfile)
         produceState<NineKeyFuzzyReadings?>(null) {
             value = withContext(Dispatchers.Default) {
                 val groups = SpellingPatches.fuzzy(context)
+                // 双拼九键的拼音栏全靠这里按方案的两个键算，没开模糊音也要有（只列精确读音）。
+                if (scheme != null) return@withContext NineKeyFuzzyReadings(scheme,
+                    if (SpellingPatches.fuzzyDoublePinyin(context)) groups else emptySet())
                 if (groups.isEmpty()) return@withContext null
-                if (scheme != null && !SpellingPatches.fuzzyDoublePinyin(context)) return@withContext null
-                NineKeyFuzzyReadings(scheme, groups)
+                NineKeyFuzzyReadings(null, groups)
             }
         }.value
     }

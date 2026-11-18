@@ -16,6 +16,7 @@ target_include_directories(rime-static PRIVATE "${CMAKE_SOURCE_DIR}/cyime_rime")
 target_sources(rime-static PRIVATE "${CMAKE_SOURCE_DIR}/cyime_rime/t9_script_options.cc"
                "${CMAKE_SOURCE_DIR}/cyime_rime/t9_cylm_sentence.cc"
                "${CMAKE_SOURCE_DIR}/cyime_rime/t9_sentence_rescore.cc"
+               "${CMAKE_SOURCE_DIR}/cyime_rime/full_pinyin_tail.cc"
                "${CMAKE_SOURCE_DIR}/cyime_rime/t9_joint_decoder.cc")
 # Source properties are per directory: set it where rime-static is defined, or main() gets linked in.
 set_source_files_properties("${CMAKE_SOURCE_DIR}/cylm/cylm.cpp" TARGET_DIRECTORY rime-static PROPERTIES COMPILE_DEFINITIONS "CYLM_LIBRARY;CYLM_ORT"

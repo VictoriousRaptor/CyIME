@@ -30,7 +30,7 @@ enum class FuzzyHabit(val title: String, val example: String, val fuzzyIds: List
 
 /** 一种可选的双拼：[example] 是“双拼”两个字的打法，如 ul'pb。 */
 data class DoublePinyinChoice(val id: String, val name: String, val example: String, val builtin: Boolean = true,
-    /** 只有 26 键（ing 在分号键上的微软双拼）：14 键、九键没有分号键，不生成这两个版本。 */
+    /** 只有 26 键的双拼。现在没有这样的方案（微软双拼的分号在 14 键、九键上并到 L 键，11-15），留着给以后的方案。 */
     val lettersOnly: Boolean = false)
 
 /**
@@ -179,7 +179,7 @@ data class SetupPlan(
     val sttEnabled: Boolean,
     /** 中文、英文语音要用的模式；null 表示不改。 */
     val voiceMode: String?,
-    /** 九键词组模型用哪一档；null 表示不用。 */
+    /** 词组模型（t9_ngram.lm，九键和全拼、双拼整句都用）用哪一档；null 表示不用。名字沿用旧的。 */
     val t9Model: String?,
     val keep: List<SetupItem>,
     /** 建议删掉的：已经在手机上的，或安装包里带着、还没解压出来的。 */
@@ -225,8 +225,8 @@ object SetupGuidePlanner {
         SpeechModelCatalog.ZIPFORMER -> "另一个边说边出字的中文模型"
         SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA -> "日语专用语音模型"
         BuiltinModelCatalog.SPEAKER_MODEL -> "字幕：分清谁在说话"
-        CandidateModelCatalog.NGRAM -> "九键整句组词(完整)"
-        CandidateModelCatalog.NGRAM_SMALL -> "九键整句组词(精简)"
+        CandidateModelCatalog.NGRAM -> "整句组词(完整)"
+        CandidateModelCatalog.NGRAM_SMALL -> "整句组词(精简)"
         CandidateModelCatalog.GRAMMAR -> "九键语法增强(旧)"
         HANDWRITING -> "手写识别"
         else -> id
@@ -282,7 +282,7 @@ object SetupGuidePlanner {
     private const val K14_SUFFIX = "_14jian"
     private const val T9_SUFFIX = "_t9"
 
-    /** 这种打法能用的键盘：全拼、双拼有 26 键、14 键、九键（微软双拼只有 26 键）；五笔只问打法，不问键盘。 */
+    /** 这种打法能用的键盘：全拼、双拼有 26 键、14 键、九键（只有 26 键的双拼除外）；五笔只问打法，不问键盘。 */
     fun keyboards(facts: SetupFacts, answers: SetupAnswers): List<KeyboardWay> {
         val choices = when (answers.typing) {
             TypingWay.FULL_PINYIN -> listOf(KeyboardWay.QWERTY, KeyboardWay.K14, KeyboardWay.T9)
@@ -313,6 +313,16 @@ object SetupGuidePlanner {
         }
         TypingWay.WUBI -> WUBI
         TypingWay.KEEP -> null
+    }
+
+    /**
+     * 用拼音打中文（全拼、双拼，九键、26 键、14 键都算；不改打法时看现在的打法）：要用词组模型 t9_ngram.lm。
+     * 26 键全拼、双拼的整句排序也读它（tasks-chinese.gradle.kts 各方案的 t9/sentence_rescore、ngram_model），
+     * 不只九键（11-15 训练线程查到：原来只看九键，26 键用户不下载，装了的还被列进「可以删掉」）。
+     */
+    fun usesPinyin(facts: SetupFacts, answers: SetupAnswers): Boolean {
+        val typing = if (answers.typing == TypingWay.KEEP) facts.typing else answers.typing
+        return typing == TypingWay.FULL_PINYIN || typing == TypingWay.DOUBLE_PINYIN
     }
 
     fun inputPlan(facts: SetupFacts, answers: SetupAnswers): InputPlan {
@@ -415,17 +425,19 @@ object SetupGuidePlanner {
             else -> "${facts.device}剩余空间不到 3 GB，先用「说完一句出字」，少占 226 MB。"
         }
 
-        // 九键词组：完整 203 MB，精简 105 MB（首选约低 3 个百分点）。已经有哪一档就留哪一档。
-        // 全拼选了九键就是用九键，“用九键打字吗”那题不再问。
+        // 词组模型：完整 203 MB，精简 105 MB（九键首选约低 3 个百分点）。已经有哪一档就留哪一档。
+        // 全拼选了九键就是用九键，“用九键打字吗”那题不再问。用拼音打中文就要它：26 键全拼、双拼的整句也用。
         val usesT9 = answers.t9 || answers.typing == TypingWay.FULL_PINYIN && keyboardOf(facts, answers) == KeyboardWay.T9
-        // 有内存焦虑用精简版（小一半）；只有完整版在、又没联网下不了精简版时先留完整版，不让九键没模型可用。
+        val usesModel = usesT9 || usesPinyin(facts, answers)
+        // 有内存焦虑用精简版（小一半）；只有完整版在、又没联网下不了精简版时先留完整版，不让打字没模型可用。
         val smallReachable = available(CandidateModelCatalog.NGRAM_SMALL) || facts.online
-        var t9Model = if (!usesT9) null else when {
+        var t9Model = if (!usesModel) null else when {
             saver && (smallReachable || !available(CandidateModelCatalog.NGRAM)) -> CandidateModelCatalog.NGRAM_SMALL
             CandidateModelCatalog.NGRAM in facts.installed && !veryTight -> CandidateModelCatalog.NGRAM
             CandidateModelCatalog.NGRAM_SMALL in facts.installed -> CandidateModelCatalog.NGRAM_SMALL
             CandidateModelCatalog.NGRAM in facts.inPackage && !veryTight -> CandidateModelCatalog.NGRAM
-            light || tight -> CandidateModelCatalog.NGRAM_SMALL
+            // 不用九键的新下精简档：26 键公开长句 1,180 句首选两档一样（79.1%，没有模型 72.5%），不必多下 100 MB。
+            light || tight || !usesT9 -> CandidateModelCatalog.NGRAM_SMALL
             else -> CandidateModelCatalog.NGRAM
         }
 
@@ -511,8 +523,8 @@ object SetupGuidePlanner {
         SpeechModelCatalog.XASR -> "说完后把整句中文再认一遍，错字比只用上面的少三分之一，也更快。"
         SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA -> "你已经给日语选了它，保留。"
         BuiltinModelCatalog.SPEAKER_MODEL -> "字幕里分清是谁在说话。"
-        CandidateModelCatalog.NGRAM -> "九键按整句常用说法组词，长句一次打对的更多。"
-        CandidateModelCatalog.NGRAM_SMALL -> "九键按整句组词；比完整版小一半，首选略差一点。"
+        CandidateModelCatalog.NGRAM -> "九键、全拼和双拼按整句常用说法组词，长句一次打对的更多。"
+        CandidateModelCatalog.NGRAM_SMALL -> "九键、全拼和双拼按整句组词；比完整版小一半，九键首选略差一点。"
         HANDWRITING -> "手写输入要用，只有 7 MB。"
         else -> ""
     }
@@ -524,7 +536,7 @@ object SetupGuidePlanner {
             SpeechModelCatalog.PARAFORMER -> "能省就省：先用「说完一句出字」。以后在语音设置里可以再下。".takeIf { voiceNeeded }
             SpeechModelCatalog.XASR -> "能省就省：先不留整句精修(136 MB)。以后在语音设置里可以再下。"
                 .takeIf { answers.voice != VoiceUse.NEVER }
-            CandidateModelCatalog.NGRAM -> "能省就省：九键改用精简版，小一半。".takeIf { t9Model == CandidateModelCatalog.NGRAM_SMALL }
+            CandidateModelCatalog.NGRAM -> "能省就省：改用精简版，小一半。".takeIf { t9Model == CandidateModelCatalog.NGRAM_SMALL }
             else -> null
         }
     }
@@ -548,8 +560,8 @@ object SetupGuidePlanner {
         }
         BuiltinModelCatalog.SPEAKER_MODEL -> "不用字幕。"
         CandidateModelCatalog.NGRAM, CandidateModelCatalog.NGRAM_SMALL ->
-            if (t9Model == null) "不用九键。" else "九键只用一档，两档二选一。"
-        CandidateModelCatalog.GRAMMAR -> if (t9Model == null) "不用九键。" else "有了九键整句组词，它就不再起作用。"
+            if (t9Model == null) "不用拼音打字。" else "只用一档，两档二选一。"
+        CandidateModelCatalog.GRAMMAR -> if (t9Model == null) "不用拼音打字。" else "有了整句组词，它就不再起作用。"
         else -> ""
     }
 
@@ -562,8 +574,8 @@ object SetupGuidePlanner {
         SpeechModelCatalog.ZIPFORMER_JA_INT8 -> "Zipformer · 日语轻量"
         SpeechModelCatalog.ZIPFORMER_JA -> "Zipformer · 日语原版"
         BuiltinModelCatalog.SPEAKER_MODEL -> "声纹模型"
-        CandidateModelCatalog.NGRAM -> "九键词组模型(完整)"
-        CandidateModelCatalog.NGRAM_SMALL -> "九键词组模型(精简)"
+        CandidateModelCatalog.NGRAM -> "词组模型(完整)"
+        CandidateModelCatalog.NGRAM_SMALL -> "词组模型(精简)"
         CandidateModelCatalog.GRAMMAR -> "九键语法增强"
         HANDWRITING -> "手写模型"
         else -> ""
@@ -576,7 +588,7 @@ object SetupGuidePlanner {
         SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.XASR, SpeechModelCatalog.ZIPFORMER,
         SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA -> "语音"
         BuiltinModelCatalog.SPEAKER_MODEL -> "字幕"
-        CandidateModelCatalog.NGRAM, CandidateModelCatalog.NGRAM_SMALL, CandidateModelCatalog.GRAMMAR -> "九键组词"
+        CandidateModelCatalog.NGRAM, CandidateModelCatalog.NGRAM_SMALL, CandidateModelCatalog.GRAMMAR -> "整句组词"
         HANDWRITING -> "手写"
         else -> ""
     }

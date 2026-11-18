@@ -17,7 +17,9 @@ internal class ImePinyinSyllableSelector(private val service: XimeInputMethodSer
 
     fun request(revision: Long, reply: (PinyinSyllableChoices?) -> Unit) {
         val owner = service.uiState.value
-        if (!eligible(owner)) { reply(null); return }
+        // 打了辅助码（` 后面是形码，SpellingPatches.AuxCode）：编码里不全是拼音，不给改读音。
+        if (!eligible(owner) || com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_TRIGGER in
+            service.candidateState.value.inputText) { reply(null); return }
         val layout = owner.inputProfile.layout
         val isCurrent = { current(owner.inputSessionId, owner.currentSchemaId, layout) }
         service.keyRouter.postRimeJob {

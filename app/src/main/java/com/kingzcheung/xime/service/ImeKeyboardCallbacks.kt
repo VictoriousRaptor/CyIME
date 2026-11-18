@@ -52,6 +52,7 @@ internal fun rememberImeKeyboardCallbacks(
 ): KeyboardCallbacks {
     val view = LocalView.current
     val preeditEditor = remember(service) { ImePreeditEditor(service) }
+    val sentenceEditor = remember(service) { ImeSentenceEditor(service) }
     val syllableSelector = remember(service) { ImePinyinSyllableSelector(service) }
     return remember(floatingMinY, state.isFloatingMode, effectiveScreenH, state.inputSessionId, state.showKeyboardResize) {
         val floatingDragX = FloatingDragAxis()
@@ -59,12 +60,28 @@ internal fun rememberImeKeyboardCallbacks(
         KeyboardCallbacks(
             startDeleteDrag = {
                 val generation = service.beginDeleteDrag()
-                DeleteDragSession(ImeDistanceBackspace(service, state.inputSessionId)::move) { service.finishDeleteDrag(generation) }
+                val clearSentence = service.keyboardCallbacks?.onSentenceHorizontalDelete
+                val move = if (clearSentence == null) ImeDistanceBackspace(service, state.inputSessionId)::move
+                else {
+                    var cleared = false
+                    val handler: (Int) -> Unit = { distance ->
+                        if (!cleared && distance != 0) {
+                            cleared = true
+                            clearSentence()
+                        }
+                    }
+                    handler
+                }
+                DeleteDragSession(move) { service.finishDeleteDrag(generation) }
             },
             isDeleteDragging = { service.deleteDragActive.value },
             onLetterNeighbors = { schema, encoded -> service.keyRouter.letterNeighbors = schema to encoded },
             onGlideWord = service.keyRouter::commitGlideWord,
             onGlideCode = service.keyRouter::typeGlideCode,
+            onT9GlideAlternatives = { digits, words ->
+                val state = service.uiState.value
+                service.candidateTransform.t9GlideAlternatives.offer(digits, words, state.currentSchemaId, state.inputSessionId)
+            },
             glidePreviewer = service.keyRouter::glidePreviewer,
             onGlideEnglishPreview = service::showGlideEnglishPreview,
             onGlidePreviewCode = service::showGlidePreviewCode,
@@ -86,6 +103,12 @@ internal fun rememberImeKeyboardCallbacks(
             onRetryRejectedCommit = service.keyRouter::retryRejectedCommit,
             onCancelRejectedCommit = service.keyRouter::cancelRejectedCommit,
             onOpenPreeditEditor = preeditEditor::open,
+            onOpenSentenceEdit = sentenceEditor::open,
+            onSentenceCandidates = sentenceEditor::candidates,
+            onApplySentenceEdit = sentenceEditor::apply,
+            onSentencePreview = sentenceEditor::preview,
+            onSentenceDragPreview = sentenceEditor::dragPreview,
+            onEndSentencePreview = sentenceEditor::endPreview,
             onLivePreeditEdit = preeditEditor::edit,
             onRequestPinyinSyllables = syllableSelector::request,
             onSelectPinyinSyllable = syllableSelector::select,

@@ -43,7 +43,7 @@ import androidx.compose.material.icons.twotone.Palette
 import androidx.compose.material.icons.twotone.QueryStats
 import androidx.compose.material.icons.twotone.Storefront
 import androidx.compose.material.icons.twotone.Straighten
-import androidx.compose.material.icons.twotone.Sync
+import androidx.compose.material.icons.twotone.ContentPaste
 import androidx.compose.material.icons.twotone.TableChart
 import androidx.compose.material.icons.twotone.ToggleOn
 import androidx.compose.material.icons.twotone.Tune
@@ -92,7 +92,7 @@ fun SettingsMainContent(
     onNavigateToSmartPrediction: () -> Unit,
     onNavigateToSpeechToText: () -> Unit,
     onNavigateToAbout: () -> Unit,
-    onNavigateToClipboardSync: () -> Unit = {},
+    onNavigateToClipboard: () -> Unit = {},
     onNavigateToBackup: () -> Unit = {},
     onNavigateToHardwareKeyboard: () -> Unit = {},
     onNavigateToLanguages: () -> Unit = {},
@@ -374,10 +374,10 @@ fun SettingsMainContent(
             item {
                 SettingsSection(title = stringResource(R.string.section_system), searchKey = "系统", content = {
                     SettingsItem(
-                        icon = Icons.TwoTone.Sync,
-                        title = stringResource(R.string.item_clipboard_title), searchKey = "剪贴板与同步",
+                        icon = Icons.TwoTone.ContentPaste,
+                        title = stringResource(R.string.item_clipboard_title), searchKey = "剪贴板",
                         subtitle = stringResource(R.string.item_clipboard_summary),
-                        onClick = onNavigateToClipboardSync,
+                        onClick = onNavigateToClipboard,
                         showArrow = true
                     )
                     HorizontalDivider(

@@ -105,6 +105,11 @@ object PerformanceCosts {
         T9_GLIDE("t9_glide_typing", "九键滑行"),
         // 开着 = 玻璃和液态玻璃都开；单开它会连玻璃一起开，实测值要减去玻璃那一项再写进表。
         LIQUID_GLASS("liquid_glass", "液态玻璃"),
+        // 「液态玻璃强度」的后两档（标准就是上面那一项，不另记）。开着 = 液态玻璃开着并且选的是这一档，两档只会开一档；
+        // 单开一档会连液态玻璃和玻璃一起开，实测值要减去那两项再写进表。关 = 退回标准。
+        // 多出来的折射只在图片背景、Android 13 以上才有：要测到它得用图片背景（我的图片或内置图片主题）。
+        LIQUID_GLASS_STRONG("liquid_glass_strong", "液态玻璃：加强"),
+        LIQUID_GLASS_STRONGEST("liquid_glass_strongest", "液态玻璃：最强"),
         PRESS_BUBBLE("press_bubble", "点按弹出气泡"),
         DOUBLE_PINYIN_KEY_HINTS("double_pinyin_key_hints", "双拼键位提示"),
         DELETE_RECOVERY("delete_recovery", "删字后给同音字"),
@@ -141,11 +146,20 @@ object PerformanceCosts {
     /** 键缝动效的分项：返回它的设置键（和 id 相同）；不是分项返回 null。 */
     private fun gapLightEventOf(item: Item): String? = item.id.takeIf { it in KeyGapLightPreferences.eventKeys }
 
+    /** 「液态玻璃强度」后两档各自存的值（[com.kingzcheung.xime.ui.theme.LiquidGlassStrength.id]）；不是这两项返回 null。 */
+    private fun liquidStrengthOf(item: Item): String? = when (item) {
+        Item.LIQUID_GLASS_STRONG -> "strong"
+        Item.LIQUID_GLASS_STRONGEST -> "strongest"
+        else -> null
+    }
+    private val liquidStrengthIds = setOf(Item.LIQUID_GLASS_STRONG.id, Item.LIQUID_GLASS_STRONGEST.id)
+
     fun isOn(context: Context, item: Item): Boolean {
         fuzzyOf(item)?.let { return it in SpellingPatches.fuzzy(context) }
         t9FuzzyOf(item)?.let { return SpellingPatches.fuzzyT9Digits(context) && it in SpellingPatches.fuzzy(context) }
         val prefs = SettingsPreferences.getPrefsPublic(context)
         gapLightEventOf(item)?.let { return KeyGapLightPreferences.eventEnabled(prefs, it) }
+        liquidStrengthOf(item)?.let { return isOn(context, Item.LIQUID_GLASS) && SettingsPreferences.glassLiquidStrength(context) == it }
         val input by lazy { KeyboardInputPreferences.read(context) }
         return when (item) {
             Item.NEIGHBOR_CORRECTION -> input.neighborCorrection
@@ -203,6 +217,17 @@ object PerformanceCosts {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         // 同液态玻璃：开一种时总开关没开就一起开；关只关这一种，总开关留给 KEY_GAP_LIGHT 那一项管。
         gapLightEventOf(item)?.let { KeyGapLightPreferences.setEvent(prefs, it, on); return }
+        // 开一档时液态玻璃（连同玻璃）没开就一起开；关只在现在正是这一档时退回标准，液态玻璃留给 LIQUID_GLASS 那一项管。
+        liquidStrengthOf(item)?.let {
+            if (on) {
+                FrostedGlassPreferences.saveProfiles(context, FrostedGlassPreferences.readProfiles(context).withEnabled(true))
+                SettingsPreferences.setGlassLiquid(context, true)
+                SettingsPreferences.setGlassLiquidStrength(context, it)
+            } else if (SettingsPreferences.glassLiquidStrength(context) == it) {
+                SettingsPreferences.setGlassLiquidStrength(context, SettingsPreferences.GLASS_LIQUID_STRENGTH_DEFAULT)
+            }
+            return
+        }
         val input = KeyboardInputPreferences.read(context)
         when (item) {
             Item.NEIGHBOR_CORRECTION -> input.copy(neighborCorrection = on).save(context)
@@ -582,12 +607,13 @@ object PerformanceCosts {
 
     /**
      * 当前开着的 [on] 换成 [settings] 这组档位值之后哪些开着；液态玻璃要玻璃也开着才算，
-     * 键缝动效的各种分项要总开关开着才算。别的开关原样不动。
+     * 液态玻璃强度的两档要液态玻璃开着才算，键缝动效的各种分项要总开关开着才算。别的开关原样不动。
      */
     fun projected(on: Set<String>, settings: PerformanceSettings): Set<String> {
-        val next = (on - tierItems.keys) + tierItems.filter { (id, value) ->
+        val tiered = (on - tierItems.keys) + tierItems.filter { (id, value) ->
             value(settings) && (id != Item.LIQUID_GLASS.id || Item.GLASS.id in on)
         }.keys
+        val next = if (Item.LIQUID_GLASS.id in tiered) tiered else tiered - liquidStrengthIds
         return if (Item.KEY_GAP_LIGHT.id in next) next else next - KeyGapLightPreferences.eventKeys
     }
 
@@ -651,9 +677,13 @@ object PerformanceCosts {
         return Math.round(100 * (time + part(load.memoryMb, full.memoryMb)) / 2).toInt().coerceIn(0, 100)
     }
 
-    /** “全开”：表里登记的开关全开（九键上用九键那一组），加常驻语音和九键模型，词库按当前的。 */
+    /**
+     * “全开”：表里登记的开关全开（九键上用九键那一组），加常驻语音和九键模型，词库按当前的。
+     * 液态玻璃强度的两档只会开一档，全开按最强算。
+     */
     fun fullOn(device: Device, nineKey: Boolean): Set<String> =
         Item.entries.filter { if (nineKey) it.nineKey || fuzzyOf(it) == null else !it.nineKey }
+            .filter { it != Item.LIQUID_GLASS_STRONG }
             .map { it.id }.filterTo(linkedSetOf()) { it in device.items }
 
     /** 本机现在打的是不是九键（模糊音两组按键盘分开算）。 */

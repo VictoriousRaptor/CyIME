@@ -1441,6 +1441,38 @@ bool T9Processor::ReplaceEditableSuffix(const std::string& pinyin) {
     return true;
 }
 
+void T9Processor::SaveClearUndo() {
+    clear_undo_ = ClearUndoState{input_buffer_, letter_constraints_, letter_commits_, state_machine_,
+        undo_model_, left_column_locked_, separator_consumed_digits_, last_choice_consumed_digits_,
+        last_rime_input_, undone_right_commit_count_, original_digit_sequence_, last_commit_digit_sequence_,
+        digit_recall_key_valid_, pending_fullcommit_capture_};
+}
+
+bool T9Processor::RestoreClearUndo() {
+    if (!clear_undo_) return false;
+    auto state = std::move(*clear_undo_);
+    clear_undo_.reset();
+    input_buffer_ = std::move(state.input);
+    letter_constraints_ = std::move(state.constraints);
+    letter_commits_ = std::move(state.letter_commits);
+    state_machine_ = std::move(state.state);
+    undo_model_ = std::move(state.undo);
+    left_column_locked_ = state.left_locked;
+    separator_consumed_digits_ = std::move(state.separator_digits);
+    last_choice_consumed_digits_ = std::move(state.choice_digits);
+    last_rime_input_ = std::move(state.last_input);
+    undone_right_commit_count_ = state.undone_count;
+    original_digit_sequence_ = std::move(state.original_digits);
+    last_commit_digit_sequence_ = std::move(state.last_commit_digits);
+    digit_recall_key_valid_ = state.recall_valid;
+    pending_fullcommit_capture_ = std::move(state.pending_capture);
+    pending_action_ = RimePendingAction::kNone;
+    pending_input_.clear();
+    return true;
+}
+
+void T9Processor::DiscardClearUndo() { clear_undo_.reset(); }
+
 void T9Processor::ClearComposition(int mode) {
     // mode=0: CLEAR_COMPOSITION_ONLY — 仅清 RIME composition，保留 local state
     // mode=1: CLEAR_ALL — 清 composition + 重置 local state

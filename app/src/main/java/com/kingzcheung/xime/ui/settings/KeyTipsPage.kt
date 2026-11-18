@@ -55,11 +55,17 @@ internal fun keyTipGroups(settings: KeyboardInputPreferences): List<KeyTipGroup>
             add(KeyTip("点一下 !@#", "$hold 秒内、没拖动就松手才打开符号面板；时限在「按键与手势 › 符号键松手打开符号的时限」里调。",
                 listOf("按键与手势 › 符号键松手打开符号的时限")))
         }),
-        KeyTipGroup("九键", listOf(
-            KeyTip("按住 !@# 拖到数字键上松手", "1 关闭、2 刷新、3 重做、4 全选、5 剪切、6 查找、7 撤销、8 复制、9 粘贴；也可以另一根手指直接点数字键。回车、空格同 26 键。"),
-            KeyTip("长按「下一项」", "等于按住 Shift：候选中英对调，松手恢复。"),
-            KeyTip("从「下一项」拖到候选上松手", "这条候选有英文就上屏英文。"),
-        )),
+        KeyTipGroup("九键", buildList {
+            add(KeyTip("按住 !@# 拖到数字键上松手", "1 关闭、2 刷新、3 重做、4 全选、5 剪切、6 查找、7 撤销、8 复制、9 粘贴；也可以另一根手指直接点数字键。回车、空格同 26 键。"))
+            // 「去掉 0 键，回车加高」开着时没有「下一项」键，这两条不写（用户 11-15）。
+            if (!settings.t9MergeZeroIntoEnter) {
+                add(KeyTip("长按「下一项」", "等于按住 Shift：候选中英对调，松手恢复。"))
+                add(KeyTip("从「下一项」拖到候选上松手", "这条候选有英文就上屏英文。"))
+            } else if (settings.cornerSymbolInput) {
+                add(KeyTip("回车${if (settings.reverseSymbolSwipe) "上拉" else "下拉"}", "打 0(打字选词时不接)。已去掉 0 键，见「九键与 14 键 › 去掉 0 键，回车加高」。",
+                    listOf("九键与 14 键 › 去掉 0 键，回车加高")))
+            }
+        }),
         KeyTipGroup("其他按键", listOf(
             KeyTip("${upper}字母键", "输入键上方的角标；${lower}输入下方的角标。"),
             KeyTip("长按空格左右拖", "移动光标。"),

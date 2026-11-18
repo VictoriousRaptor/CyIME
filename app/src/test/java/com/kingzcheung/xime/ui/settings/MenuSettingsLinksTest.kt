@@ -33,6 +33,7 @@ class MenuSettingsLinksTest {
         assertEquals(SettingsRoutes.KeyboardResize, target(ToolbarButton.FLOAT))
         assertEquals(SettingsRoutes.KeyboardResize, target(ToolbarButton.FLOATING))
         assertEquals(SettingsRoutes.ToolbarArrange, target(ToolbarButton.ARRANGE))
+        assertEquals(SettingsRoutes.ClipboardPanel, target(ToolbarButton.CLIPBOARD))
         assertEquals(SettingsRoutes.SmartPrediction, target(ToolbarButton.INCOGNITO))
         assertEquals("无痕模式", menuSettingsEntry(ToolbarButtonItem.Builtin(ToolbarButton.INCOGNITO))?.anchor)
     }

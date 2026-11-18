@@ -118,7 +118,7 @@ internal fun InputExperienceSettings(
                     // 空格两边的标点键长按也输入角标（用户 11-09），写出来，和执行一致（用户 11-14）。
                     com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE -> "滑动时键内预览，松手输入。字母键长按没有反应；空格两边的标点键长按也输入角标。"
                     com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE ->
-                        "长按弹出这个字母的大写和带声调的写法；滑得慢时可能先弹出气泡。"
+                        "长按弹出这个字母的大小写；中文键盘上 a e i o u 和 v 还有带声调的写法（ā á ǎ à），个别字母有 ç ñ 这类变体。滑得慢时可能先弹出气泡。"
                     com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS -> (if (glideLock != null && !t9OnlyLock)
                         "字母键按住 ${symbolLongPressLabel(settings.symbolLongPressSeconds)} 秒弹出上下两个角标：不动松手出上角标，往右挪一格松手出下角标；只有一个角标时按满立刻输入。"
                         else "按住 ${symbolLongPressLabel(settings.symbolLongPressSeconds)} 秒立刻输入上方角标，不用松手；气泡显示输入的角标，松手消失。") +
@@ -131,7 +131,7 @@ internal fun InputExperienceSettings(
                     // 搜索「长按时间」等落到上面「按键角标的符号和数字」（SettingsSearch 的关键词），不单设锚点：没选长按时这里不显示。
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("长按多久输入角标：${symbolLongPressLabel(settings.symbolLongPressSeconds)} 秒")
-                        Text("默认 0.3 秒。26、14 键，九键和笔画都用这个时长。", style = MaterialTheme.typography.bodySmall)
+                        Text("默认 0.5 秒。26、14 键，九键和笔画都用这个时长。", style = MaterialTheme.typography.bodySmall)
                         Slider(value = settings.symbolLongPressSeconds, modifier = Modifier.testTag("symbol-long-press-slider"),
                             onValueChange = { settings = settings.copy(symbolLongPressSeconds = normalizeSymbolLongPressSeconds(it)) },
                             onValueChangeFinished = { settings.save(context) }, valueRange = 0.1f..1f, steps = 17)

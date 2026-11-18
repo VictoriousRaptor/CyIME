@@ -434,8 +434,11 @@ class SwipeableKeyButtonGestureTest {
         rule.mainClock.advanceTimeBy(450L)
         rule.runOnIdle {
             assertTrue(events.state.isLongPress)
+            // 三项以上按画出来的格选：条以键为中心、每格一个键宽，长按到点就选手指下面的中间那格。
+            assertEquals(1, events.state.selectedLongPressIndex)
             assertTrue(events.commits.isEmpty())
         }
+        // 挪不到半个键宽还在同一格（以前三项挤在一个键宽里，这一下就换格了）。
         rule.onNodeWithTag("key").performTouchInput {
             moveTo(center + Offset(70f * events.density, 0f))
         }

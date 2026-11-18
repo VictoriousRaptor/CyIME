@@ -17,17 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -47,9 +41,12 @@ import com.kingzcheung.xime.platform.AndroidPlatform
  * 输入法读不到背后应用的像素（模糊由系统在 ImeGlassBlurWindow 里做），所以透明背景下做不出弯折背后文字。
  * 背景是自己的图片（「我的图片」开玻璃时不透明）时像素在手里：Android 13 以上按键边缘折射这张图
  * （用户 11-02「自定义键盘背景的时候可以把按键做成这种玻璃效果」）。
+ *
+ * 11-15 加「液态玻璃强度」三档（[LiquidGlassStrength]）：标准就是上面这个保守版，也是默认；加强、最强是用户自己选的。
  */
 internal object LiquidGlass {
     private val on = mutableStateOf(false)
+    private val level = mutableStateOf(LiquidGlassStrength.STANDARD)
     // SharedPreferences 只弱引用监听器，这里必须强引用住。
     @Volatile private var listener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
@@ -57,6 +54,12 @@ internal object LiquidGlass {
     fun enabled(context: Context): Boolean {
         if (listener == null) bind(context.applicationContext ?: context)
         return on.value
+    }
+
+    /** 强度档位，同样可在组合里读。只在液态玻璃开着时有意义。 */
+    fun strength(context: Context): LiquidGlassStrength {
+        if (listener == null) bind(context.applicationContext ?: context)
+        return level.value
     }
 
     /**
@@ -83,8 +86,11 @@ internal object LiquidGlass {
         if (listener != null) return
         val prefs = SettingsPreferences.getPrefsPublic(context)
         on.value = SettingsPreferences.glassLiquid(context)
+        level.value = LiquidGlassStrength.of(SettingsPreferences.glassLiquidStrength(context))
         val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == null || key == SettingsPreferences.KEY_GLASS_LIQUID) on.value = SettingsPreferences.glassLiquid(context)
+            if (key == null || key == SettingsPreferences.KEY_GLASS_LIQUID_STRENGTH)
+                level.value = LiquidGlassStrength.of(SettingsPreferences.glassLiquidStrength(context))
         }
         listener = l
         prefs.registerOnSharedPreferenceChangeListener(l)
@@ -98,6 +104,7 @@ internal fun Modifier.liquidGlassCap(cap: Modifier, radius: Dp): Modifier = comp
     val colors = MaterialTheme.colorScheme
     val palette = LocalMaterialPalette.current ?: MaterialPalette(colors.surface, colors.primary)
     val dark = palette.surface.luminance() < .5f
+    val strength = LiquidGlass.strength(androidx.compose.ui.platform.LocalContext.current)
     val held = remember { mutableStateOf(false) }
     val observed = pointerInput(Unit) {
         awaitEachGesture {
@@ -110,19 +117,19 @@ internal fun Modifier.liquidGlassCap(cap: Modifier, radius: Dp): Modifier = comp
             held.value = false
         }
     }
-    observed.then(liquidRefraction(radius)).then(cap).then(liquidRim(radius, dark, held))
+    observed.then(liquidRefraction(radius, strength)).then(cap).then(liquidRim(radius, dark, held, strength))
 }
 
 /**
- * 图片背景的边缘折射：只在键帽外圈约 5dp 取样并弯折，保留轻微色散，键中央直接透出键盘已画好的背景。
+ * 图片背景的边缘折射：只在键帽外圈约 5dp（加强 8dp、最强 11dp）取样并弯折，保留轻微色散，键中央直接透出键盘已画好的背景。
  * 没有图片、背景半透明（再画会叠深）、Android 12 及以下都不画。
  * 不另存图片（直接用共用背景那张），按住时不鼓起，键盘不动就不重画。
  */
-private fun Modifier.liquidRefraction(radius: Dp): Modifier =
-    if (AndroidPlatform.runtimeShader) liquidRefraction33(radius) else this
+private fun Modifier.liquidRefraction(radius: Dp, strength: LiquidGlassStrength): Modifier =
+    if (AndroidPlatform.runtimeShader) liquidRefraction33(radius, strength) else this
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private fun Modifier.liquidRefraction33(radius: Dp): Modifier = composed {
+private fun Modifier.liquidRefraction33(radius: Dp, strength: LiquidGlassStrength): Modifier = composed {
     val root = LocalView.current.rootView
     val backdrop = LocalSharedKeyboardBackdrop.current?.takeIf { it.windowRoot === root && it.opacity >= .99f }
         ?: return@composed this
@@ -146,7 +153,8 @@ private fun Modifier.liquidRefraction33(radius: Dp): Modifier = composed {
             // are relative to the Compose root, including while the IME window slides into place.
             val left = offset.x + width * ((1f - motion.scale) / 2f + motion.shiftX)
             val top = offset.y + height * ((1f - motion.scale) / 2f + motion.shiftY)
-            LiquidRefractionShader.bind(shader, imageShader, size.width, size.height, radius.toPx(), 5f * density, 9.5f * density,
+            LiquidRefractionShader.bind(shader, imageShader, size.width, size.height, radius.toPx(),
+                strength.bevelDp * density, strength.bendDp * density, strength.spread,
                 left, top, bitmap.width / (width * motion.scale), bitmap.height / (height * motion.scale))
             paint.shader = shader
             drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint) }
@@ -166,6 +174,7 @@ private object LiquidRefractionShader {
         uniform float radius;
         uniform float bevel;
         uniform float strength;
+        uniform float spread;
         uniform float2 imageOrigin;
         uniform float2 pixelsPerUnit;
         half4 main(float2 p) {
@@ -182,8 +191,8 @@ private object LiquidRefractionShader {
             float2 uv = (p - imageOrigin) * pixelsPerUnit;
             float2 off = -n * (strength * e * e * e) * pixelsPerUnit;
             half4 red = image.eval(uv + off);
-            half4 green = image.eval(uv + off * 1.03);
-            half4 blue = image.eval(uv + off * 1.06);
+            half4 green = image.eval(uv + off * (1.0 + spread));
+            half4 blue = image.eval(uv + off * (1.0 + 2.0 * spread));
             half coverage = min(red.a, min(green.a, blue.a));
             return half4(min(half3(red.r, green.g, blue.b), half3(coverage)), coverage)
                 * half(e * clamp(0.5 - d, 0.0, 1.0));
@@ -193,12 +202,14 @@ private object LiquidRefractionShader {
     val shared: RuntimeShader? by lazy { try { RuntimeShader(SOURCE) } catch (_: Throwable) { null } }
 
     fun bind(shader: RuntimeShader, image: android.graphics.Shader, width: Float, height: Float,
-        radius: Float, bevel: Float, strength: Float, left: Float, top: Float, pixelsPerX: Float, pixelsPerY: Float) {
+        radius: Float, bevel: Float, strength: Float, spread: Float,
+        left: Float, top: Float, pixelsPerX: Float, pixelsPerY: Float) {
         shader.setInputShader("image", image)
         shader.setFloatUniform("iSize", width, height)
         shader.setFloatUniform("radius", radius)
         shader.setFloatUniform("bevel", bevel)
         shader.setFloatUniform("strength", strength)
+        shader.setFloatUniform("spread", spread)
         shader.setFloatUniform("imageOrigin", left, top)
         shader.setFloatUniform("pixelsPerUnit", pixelsPerX, pixelsPerY)
     }
@@ -206,17 +217,18 @@ private object LiquidRefractionShader {
 
 /**
  * 一道细亮边：朝光的左上亮，对角右下有一道弱一些的回光，中间几乎没有。不画厚度渐变和阴影
- * （第一版画了，看着像塑料按钮）。
+ * （第一版画了，看着像塑料按钮）。加强、最强两档多画的厚度和高光见 [liquidRimGeometry]。
  */
-private fun liquidRim(radius: Dp, dark: Boolean, held: androidx.compose.runtime.State<Boolean>): Modifier =
+private fun liquidRim(radius: Dp, dark: Boolean, held: androidx.compose.runtime.State<Boolean>,
+    strength: LiquidGlassStrength): Modifier =
     Modifier.drawWithCache {
-        val rim = liquidRimGeometry(radius, dark)
+        val rim = liquidRimGeometry(radius, dark, strength)
         val heldFill = Color.White.copy(alpha = if (dark) .04f else .08f)
         onDrawWithContent {
             val down = held.value
             if (rim.visible) clipPath(rim.path) {
                 if (down) drawPath(rim.path, heldFill)
-                drawPath(rim.path, rim.brush, style = Stroke(if (down) rim.stroke * 1.6f else rim.stroke))
+                drawLiquidRim(rim, held = down)
             }
             drawContent()
         }
@@ -226,35 +238,18 @@ private fun liquidRim(radius: Dp, dark: Boolean, held: androidx.compose.runtime.
  * 面板件上的同一道细亮边（不含按住变亮）：画在底色上面、内容下面，[radius] 大于半高时就是胶囊。
  * 路径和渐变按尺寸缓存，只在本来就要重画时跟着画；[alpha] 在绘制阶段读，跟随按下淡出也不多组合一次。
  * 调用方先用 [LiquidGlass.surfacesOn] 判断，没开时原来的描边一点不变。
+ * 「液态玻璃强度」不管面板件：这里一直是标准档的细亮边。
  */
 internal fun Modifier.liquidGlassEdge(radius: Dp, alpha: () -> Float = { 1f }): Modifier = composed {
     val colors = MaterialTheme.colorScheme
     val palette = LocalMaterialPalette.current ?: MaterialPalette(colors.surface, colors.primary)
     val dark = palette.surface.luminance() < .5f
     drawWithCache {
-        val rim = liquidRimGeometry(radius, dark)
+        val rim = liquidRimGeometry(radius, dark, body = false)
         onDrawWithContent {
             val shown = alpha().coerceIn(0f, 1f)
-            if (rim.visible && shown > 0f) clipPath(rim.path) {
-                drawPath(rim.path, rim.brush, alpha = shown, style = Stroke(rim.stroke))
-            }
+            if (rim.visible && shown > 0f) clipPath(rim.path) { drawLiquidRim(rim, alpha = shown) }
             drawContent()
         }
     }
-}
-
-private class LiquidRimGeometry(val path: Path, val brush: Brush, val stroke: Float, val visible: Boolean)
-
-private fun androidx.compose.ui.draw.CacheDrawScope.liquidRimGeometry(radius: Dp, dark: Boolean): LiquidRimGeometry {
-    val stroke = .75f * density
-    val inset = stroke / 2f
-    val corner = (radius.toPx() - inset).coerceIn(0f, size.minDimension / 2f)
-    val bounds = Rect(inset, inset, size.width - inset, size.height - inset)
-    val path = Path().apply { addRoundRect(RoundRect(bounds, CornerRadius(corner))) }
-    val brush = Brush.linearGradient(
-        listOf(Color.White.copy(alpha = if (dark) .45f else .75f), Color.White.copy(alpha = .10f),
-            Color.White.copy(alpha = .06f), Color.White.copy(alpha = if (dark) .22f else .35f)),
-        Offset.Zero, Offset(size.width, size.height),
-    )
-    return LiquidRimGeometry(path, brush, stroke, bounds.width > 0f && bounds.height > 0f)
 }

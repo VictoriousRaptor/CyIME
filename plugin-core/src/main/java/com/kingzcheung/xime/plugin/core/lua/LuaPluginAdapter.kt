@@ -5,6 +5,7 @@ import com.kingzcheung.xime.plugin.core.api.PluginIcon
 import com.kingzcheung.xime.plugin.core.config.IPluginConfigurable
 import com.kingzcheung.xime.plugin.core.config.UiNode
 import com.kingzcheung.xime.plugin.core.config.UiNodeType
+import com.kingzcheung.xime.plugin.core.config.visibleSettingsFields
 import com.kingzcheung.xime.plugin.core.lua.sdk.LuaPluginContract
 import com.kingzcheung.xime.plugin.core.model.PluginContext
 import org.luaj.vm2.LuaValue
@@ -78,8 +79,19 @@ open class LuaPluginAdapter(
                 unit = m["unit"]?.tojstring(),
                 style = m["style"]?.tojstring(),
                 section = m["section"]?.tojstring(),
-                required = m["required"]?.toboolean() ?: false,
-            )
+                required = m["required"]?.toboolean() == true || m["requiredWhenVisible"]?.toboolean() == true,
+            ).apply {
+                m["visibleWhen"]?.takeIf { it.istable() }?.let { condition ->
+                    val key = condition.get("key")
+                    val expected = condition.get("value")
+                    if (key.isstring() && expected.isstring()) visibleWhen = key.tojstring() to expected.tojstring()
+                }
+                m["optionLabels"]?.takeIf { it.istable() }?.let { labels ->
+                    optionLabels = options.mapNotNull { value ->
+                        labels.get(value).takeIf { it.isstring() }?.let { value to it.tojstring() }
+                    }.toMap()
+                }
+            }
             if (nodes.size >= MAX_UI_NODES) break
         }
         return nodes
@@ -133,7 +145,7 @@ open class LuaPluginAdapter(
      * Lua 插件不再需要实现 isConfigured——配置状态由宿主统一判定。
      */
     open fun isConfigured(): Boolean {
-        val schema = getSettingsSchema()
+        val schema = getSettingsSchema().visibleSettingsFields(pluginContext.configStore)
         if (schema.isEmpty()) return true
         return schema.none { it.required && it.key != null && pluginContext.configStore.get(it.key).isNullOrBlank() }
     }

@@ -473,7 +473,7 @@ private fun KeyGapLightDetailSettings(
         KeyGapLightEventToggle("上屏和发送", "点空格一块光往上走，点回车整排往上扫。", config.commit, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_COMMIT) { onChange(config.copy(commit = it)) }
         KeyGapLightEventToggle("切换大小写", "大写出现时从 Shift 扩开，取消时收回去。", config.switch, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SWITCH) { onChange(config.copy(switch = it)) }
         KeyGapLightEventToggle("长按进度", "按住时线沿键边走一圈，走满就是长按生效。", config.hold, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_HOLD) { onChange(config.copy(hold = it)) }
-        KeyGapLightEventToggle("空格移光标", "色块跟着手指走，每走一格留一个刻度。", config.space, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SPACE) { onChange(config.copy(space = it)) }
+        KeyGapLightEventToggle("空格移光标", "进入时扩开一次，光柱跟着手指走，每走一格留一个刻度。", config.space, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SPACE) { onChange(config.copy(space = it)) }
         KeyGapLightEventToggle("语音音量", "听写时两排键之间的键缝当音量条，从中间往两边长。", config.voice, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_VOICE) { onChange(config.copy(voice = it)) }
     }
 }

@@ -51,6 +51,23 @@ fun download(url: String, target: File, what: String) {
         connection.disconnect()
     }
 }
+// Content hash of a dictionary zip, same scheme as azooKeyDictionaryContentHash / azooKeyMergedDictionaryHash.
+fun azooKeyZipContentHash(file: File): String {
+    val files = sortedMapOf<String, String>()
+    ZipInputStream(file.inputStream().buffered()).use { input ->
+        while (true) {
+            val entry = input.nextEntry ?: break
+            if (!entry.isDirectory) files[entry.name] = sha256(input.readBytes())
+        }
+    }
+    return sha256(files.entries.joinToString("") { (path, hash) -> "$path\u0000$hash\n" }.toByteArray())
+}
+// The merged dictionary and the engine are published for on-demand download (BuiltinModelCatalog):
+// japanese-dictionary-<hash8>.zip and japanese-engine-azookey-<hash8>-<abi>.tar.bz2. Builds use them too,
+// so building from source needs no files that only exist on the maintainer's computer (GitHub #377).
+val azooKeyPublishedDictionaryName = "japanese-dictionary-${azooKeyMergedDictionaryHash.take(8)}.zip"
+fun azooKeyPublishedUrls(name: String) = listOf("https://github.com/Cyletix/CyIME/releases/download/models/$name",
+    "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/$name")
 val prepareJapaneseDictionaries by tasks.registering {
     group = "build setup"
     description = "Fetch and verify the pinned azooKey dictionary for offline APK assets"
@@ -71,6 +88,21 @@ val prepareJapaneseDictionaries by tasks.registering {
         retiredRoot.deleteRecursively()
         if (zip.isFile && version.isFile && version.readText() == azooKeyMergedDictionaryHash) return@doLast
         targetRoot.mkdirs()
+        val published = File(targetRoot, "$azooKeyPublishedDictionaryName.download")
+        try {
+            val fetched = azooKeyPublishedUrls(azooKeyPublishedDictionaryName).any { url ->
+                runCatching { download(url, published, "merged azooKey dictionary") }.isSuccess &&
+                    runCatching { azooKeyZipContentHash(published) }.getOrNull() == azooKeyMergedDictionaryHash
+            }
+            if (fetched) {
+                java.nio.file.Files.move(published.toPath(), zip.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                version.writeText(azooKeyMergedDictionaryHash)
+                return@doLast
+            }
+        } finally {
+            published.delete()
+        }
+        // Fallback: rebuild it from the pinned upstream commit and the louds/ zip.
         val archive = File(targetRoot, "upstream.zip.download")
         try {
             download("https://github.com/ensan-hcl/azooKey_dictionary_storage/archive/$azooKeyDictionaryCommit.zip",
@@ -177,8 +209,29 @@ val prepareAzooKeyLibraries by tasks.registering {
                     runCatching { download(url, pending, "azooKey library $abi") }.isSuccess &&
                         sha256(pending) == hash
                 }
-                check(fetched) { "azooKey library $abi unavailable or SHA-256 mismatch: $name" }
-                java.nio.file.Files.move(pending.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                if (fetched) {
+                    java.nio.file.Files.move(pending.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    return@forEach
+                }
+                // Fallback: the engine archive published for on-demand download holds the same library.
+                val archiveName = "japanese-engine-azookey-${hash.take(8)}-$abi.tar.bz2"
+                val archive = File(target.parentFile, "$archiveName.download")
+                val unpacked = File(target.parentFile, "$archiveName.unpacked")
+                try {
+                    val extracted = azooKeyPublishedUrls(archiveName).any { url ->
+                        unpacked.deleteRecursively()
+                        unpacked.mkdirs()
+                        runCatching { download(url, archive, "azooKey engine archive $abi") }.isSuccess &&
+                            ProcessBuilder("tar", "-xjf", archive.absolutePath, "-C", unpacked.absolutePath)
+                                .redirectErrorStream(true).start().let { it.inputStream.readBytes(); it.waitFor() } == 0 &&
+                            File(unpacked, "japanese-engine/libCyAzooKey.so").let { it.isFile && sha256(it) == hash }
+                    }
+                    check(extracted) { "azooKey library $abi unavailable or SHA-256 mismatch: $name / $archiveName" }
+                    File(unpacked, "japanese-engine/libCyAzooKey.so").copyTo(target, overwrite = true)
+                } finally {
+                    archive.delete()
+                    unpacked.deleteRecursively()
+                }
             } finally {
                 pending.delete()
             }

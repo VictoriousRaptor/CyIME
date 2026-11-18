@@ -106,6 +106,52 @@ data class PersonalLearningData(
         const val STORED_HIGH_WATER = MAX_SEQUENCES
         const val STORED_KEPT = 90_000
 
+        /** 和键盘上屏时学的同一套切法（UserNgramCache.tokenize）：字母数字和常用中文标点各算一个。 */
+        private const val TOKEN_PUNCTUATION = "，。！？、；：\"' "
+        private val SRT_TIME = Regex("""^\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->""")
+        /** 一份文字最多学这么多组（每种），合进本机后不把自己平时打字学到的挤掉太多。 */
+        const val TEXT_KEPT = 50_000
+        /** 网址和 Markdown 链接目标不是打出来的字。 */
+        private val LINK = Regex("""https?://\S+|www\.\S+|\]\([^)]*\)""")
+
+        /**
+         * 「喂自己语料」：任意文字文件（txt、md、csv、json、srt、字幕、聊天记录…）按「这些字都打过一遍」来学，
+         * 得到和平时打字一样的搭配次数，用「新增」合进本机学习。按行学，不跨行连；字幕的序号行和时间行跳过，
+         * Markdown、表格的符号本来就不算字，自动去掉。
+         */
+        fun fromText(text: String): PersonalLearningData {
+            val bigrams = HashMap<List<String>, Int>()
+            val trigrams = HashMap<List<String>, Int>()
+            for (raw in text.lineSequence()) {
+                val line = raw.trim()
+                if (line.isEmpty() || line.all { it.isDigit() } || SRT_TIME.containsMatchIn(line)) continue
+                val tokens = line.replace(LINK, " ").replace(Regex("\\s+"), " ")
+                    .filter { it.isLetterOrDigit() || it in TOKEN_PUNCTUATION }.trim().map { it.toString() }
+                tokens.windowed(2).forEach { bigrams.merge(it, 1, Int::plus) }
+                tokens.windowed(3).forEach { trigrams.merge(it, 1, Int::plus) }
+            }
+            fun rows(counts: Map<List<String>, Int>) = counts.entries.sortedByDescending { it.value }.take(TEXT_KEPT)
+                .map { LearnedSequence(it.key, it.value.coerceAtMost(MAX_COUNT)) }
+            return PersonalLearningData(rows(bigrams), rows(trigrams))
+        }
+
+        /**
+         * 选的文件当文字读：UTF-8（可带 BOM），不是就按 GB18030（Windows 记事本存的中文）。
+         * 有 NUL 或大量控制字符的当成二进制文件（图片、压缩包、词库），返回 null。
+         */
+        fun textOf(bytes: ByteArray): String? {
+            fun decode(charset: java.nio.charset.Charset) = runCatching {
+                charset.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+            }.getOrNull()
+            val text = (decode(Charsets.UTF_8) ?: decode(java.nio.charset.Charset.forName("GB18030")))
+                ?.removePrefix("\uFEFF") ?: return null
+            if (text.isEmpty() || '\u0000' in text) return null
+            val control = text.count { it.isISOControl() && it != '\n' && it != '\r' && it != '\t' }
+            return text.takeIf { control * 100 <= it.length }
+        }
+
         /**
          * [storedLocally] 读本机自己的学习文件：条目数、次数和最近输入超限时先读入、再由
          * [boundedForStorage] 裁剪；格式错误仍然拒绝，避免覆盖损坏前的数据。导入外部文件保持严格。

@@ -219,15 +219,6 @@ fun SchemaSettingsContent(
         }
     }
 
-    uiState.deployReport?.let { report ->
-        AlertDialog(
-            onDismissRequest = { viewModel.clearDeployReport() },
-            title = { Text(if (report.startsWith("部署失败")) "部署失败" else "部署完成") },
-            text = { Text(report) },
-            confirmButton = { TextButton(onClick = { viewModel.clearDeployReport() }) { Text("知道了") } },
-        )
-    }
-
     uiState.importReport?.let { report ->
         AlertDialog(
             onDismissRequest = viewModel::clearImportReport,
@@ -306,6 +297,17 @@ fun SchemaSettingsContent(
                     .weight(1f)
                     .padding(horizontal = 16.dp),
             ) {
+                // 整个部署没过时写在最上面（不弹框）；个别方案没生效的原因写在那个方案的行里。
+                uiState.deployReport?.let { report ->
+                    item(key = "deploy-report") {
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("schema-deploy-report"),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(report, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { viewModel.clearDeployReport() }) { Text("知道了") }
+                        }
+                    }
+                }
                 item {
                     SettingsGroupTitle("已启用的输入组合", Modifier.padding(top = 8.dp))
                 }
@@ -328,6 +330,8 @@ fun SchemaSettingsContent(
                         schema = schema,
                         enabled = true,
                         isCompiled = isEnglish || SchemaManager.isSchemaCompiled(context, id),
+                        status = if (isEnglish) null else SchemaApplyStatus.of(id, enabled = true,
+                            applying = uiState.isApplying || uiState.isDeploying, uiState.deployedSchemas, uiState.schemaProblems),
                         isCurrent = !isEnglish && id == uiState.currentSchema,
                         onToggle = { if (!isEnglish) viewModel.toggleSchema(schema) },
                         onSelect = { if (!isEnglish) viewModel.selectSchema(schema) },
@@ -499,6 +503,8 @@ internal fun SchemaToggleItem(
     /** 在同一张卡片里的第几行、共几行（见 SettingsGroupRow）；单独一行时四角都圆。正拖着的那行单独浮起、四角圆。 */
     groupIndex: Int = 0,
     groupSize: Int = 1,
+    /** 开着的方案应用得怎么样（已生效、正在应用、没生效及原因）；关着的方案为 null。 */
+    status: SchemaApplyStatus? = null,
 ) {
     val radius = 12.dp
     val top = if (isDragging || groupIndex == 0) radius else 0.dp
@@ -589,14 +595,22 @@ internal fun SchemaToggleItem(
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
-                    if (isCompiled) {
-                        Text(
-                            text = "已编译",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    // 以前这里写「已编译」，编译出来但没进方案列表时也这么写（11-15 首道双拼）。现在写实际应用结果，
+                    // 短的（已生效、正在应用）放在原位置，行高不变；没生效的原因长，单独一行。
+                    if (status != null && !status.isError) Text(
+                        text = status.text,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("schema-status:${schema.schemaId}")
+                    )
                 }
+                if (status != null && status.isError) Text(
+                    text = status.text,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("schema-status:${schema.schemaId}")
+                )
             }
 
             Switch(

@@ -2,6 +2,7 @@ package com.kingzcheung.xime.ui.keyboard
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
@@ -14,6 +15,32 @@ internal object KeyboardKeyMetrics {
     fun longPressMenuWidthPx(keyWidth: Float, cells: Int, keyboardWidth: Float, margin: Float): Float =
         (cells.coerceAtLeast(1) * keyWidth.coerceAtLeast(1f))
             .coerceAtMost((keyboardWidth - 2f * margin).coerceAtLeast(1f))
+
+    /** 长按选项条离屏幕边留的空。 */
+    val LongPressMenuMargin = 4.dp
+
+    /**
+     * 长按选项条的左边和每格宽（和 [keyLeft] 同一坐标）。画气泡（[measureSwipeBubble]）和手指选哪一格
+     * （[longPressMenuIndex]）都用它，选中的就是手指上方画着的那一格。
+     * 文字项至少按三格宽排，图标项一项一格；条以按键为中心，碰到键盘边就往里挪。
+     * [keyboardWidth] 不知道时（null）不往里挪。
+     */
+    fun longPressMenuCells(keyLeft: Float, keyWidth: Float, count: Int, iconMenu: Boolean,
+        keyboardWidth: Float?, margin: Float): LongPressMenuCells {
+        val n = count.coerceAtLeast(1)
+        val cellMin = if (iconMenu) n else maxOf(n, 3)
+        val bodyWidth = longPressMenuWidthPx(keyWidth, cellMin, keyboardWidth ?: Float.MAX_VALUE, margin)
+        val centered = keyLeft + keyWidth / 2f - bodyWidth / 2f
+        val left = if (keyboardWidth == null) centered
+            else centered.coerceIn(margin, maxOf(margin, keyboardWidth - bodyWidth - margin))
+        return LongPressMenuCells(left, bodyWidth, bodyWidth / n)
+    }
+
+    /** 手指在 [x]（和 [cells] 同一坐标）时落在第几格。 */
+    fun longPressMenuIndex(x: Float, cells: LongPressMenuCells, count: Int): Int {
+        if (count <= 1 || cells.cellWidth <= 0f) return 0
+        return kotlin.math.floor((x - cells.left) / cells.cellWidth).toInt().coerceIn(0, count - 1)
+    }
 
     fun contentScale(widthDp: Float, heightDp: Float): Float {
         // Compose 按像素分配等权行列，兄弟键可能相差不足 1dp；字号不能跟着逐键抖动。
@@ -65,3 +92,12 @@ internal fun keyLabelSizeSp(text: String, baseSp: Float, widthDp: Float, heightD
 @Composable
 internal fun keyIconSizeDp(widthDp: Float, heightDp: Float, baseDp: Float = KeyboardKeyMetrics.FunctionIconSize.value): Float =
     KeyboardKeyMetrics.iconSizeDp(widthDp, heightDp, baseDp, keyContentScale(widthDp, heightDp))
+
+/** 长按选项条：[left] 起，共 [width] 宽，每格 [cellWidth]。 */
+internal data class LongPressMenuCells(val left: Float, val width: Float, val cellWidth: Float)
+
+/**
+ * 键盘这一刻在窗口里的位置（和按键 boundsInRoot 同一坐标），给长按选项条算靠边往里挪了多少。
+ * 每个键盘布局在根上提供；没提供时选项条按不靠边算。
+ */
+internal val LocalLongPressMenuKeyboard = staticCompositionLocalOf<(() -> Rect)?> { null }

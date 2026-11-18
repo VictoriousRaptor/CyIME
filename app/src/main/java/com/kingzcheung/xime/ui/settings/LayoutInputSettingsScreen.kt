@@ -9,6 +9,7 @@ import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.Abc
 import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.Hearing
+import androidx.compose.material.icons.automirrored.twotone.KeyboardReturn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -126,6 +127,14 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 })
                 }
                 LayoutInputCategory.Nine -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsSection(title = "九键按键", content = {
+                        // 用户 11-15：很多人要去掉 0 键换大回车。默认关，原来的排法不变；说明照开关和角标设置写实际能做什么。
+                        SettingsToggleItem(Icons.AutoMirrored.TwoTone.KeyboardReturn, "去掉 0 键，回车加高",
+                            t9MergeZeroSubtitle(settings.cornerSymbolInput, settings.reverseSymbolSwipe),
+                            checked = settings.t9MergeZeroIntoEnter, onCheckedChange = {
+                                settings = settings.copy(t9MergeZeroIntoEnter = it); settings.save(context)
+                            })
+                    })
                     SettingsSection(title = "九键手势", content = {
                         val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                             com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_FLICK_LETTERS, true)
@@ -144,10 +153,13 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             Text("拖到候选选词的距离：键盘的 ${settings.candidateDragPercent.toInt()}%", style = MaterialTheme.typography.titleSmall)
                             Slider(value = settings.candidateDragPercent,
                                 modifier = Modifier.testTag("t9-candidate-drag-percent"),
+                                // 去掉了 0 键就没有「下一项」可拖，这项不起作用：置灰并写明。
+                                enabled = !settings.t9MergeZeroIntoEnter,
                                 valueRange = 20f..80f, steps = 5,
                                 onValueChange = { settings = settings.copy(candidateDragPercent = normalizeCandidateDragPercent(it)) },
                                 onValueChangeFinished = { settings.save(context) })
-                            Text("默认 50%。按住「下一项」拖过这么远才算拖到候选选词；没拖这么远仍是「下一项」自己的左滑、右滑。",
+                            Text(if (settings.t9MergeZeroIntoEnter) "已打开上面的「去掉 0 键，回车加高」，没有「下一项」键可拖，这项不起作用。"
+                                else "默认 50%。按住「下一项」拖过这么远才算拖到候选选词；没拖这么远仍是「下一项」自己的左滑、右滑。",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     })
@@ -407,4 +419,15 @@ private fun QwertyStaggerSettings(
             }
         }
     }
+}
+
+/**
+ * 「去掉 0 键，回车加高」的说明：照实写开了以后少了什么、0 去哪打。
+ * 回车上打 0 和 1～9 的数字角标同一个方向（跟「反转上下滑方向」），关了「上下滑输入符号」就不接。
+ */
+internal fun t9MergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe: Boolean): String {
+    val zero = if (cornerSymbolInput) "数字 0 在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}打(和 1～9 的数字一样，打字选词时不接)，数字键盘里也有。"
+        else "「上下滑输入符号」关着，回车上不能打 0，到数字键盘里打。"
+    return "右边一列只留删除、重输和占两格高的回车。没有「下一项」键：不能点它切下一项、左滑上一项，" +
+        "长按换英文、拖到候选上屏英文也用不了，选词直接点候选。$zero"
 }

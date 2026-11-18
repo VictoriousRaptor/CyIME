@@ -157,10 +157,11 @@ data class DoublePinyinScheme(
     fun t9Schema(): String {
         require(this == FLYPY || valid())
         val t9 = t9Id(id)
-        val algebra = algebra() + T9_DIGITS.map { (letters, digit) -> "derive/[$letters]/$digit/" }
+        // ing 在分号上的方案（微软双拼）：分号和 L 同在 5 键上（键盘上分号紧挨着 L）。
+        val algebra = algebra() + t9Digits().map { (letters, digit) -> "derive/[$letters]/$digit/" }
         val laiLe = listOfNotNull(code("lai"), code("le")).takeIf { it.size == 2 }?.joinToString("")
             ?.takeIf { keys -> keys.all { it in 'a'..'z' } }
-            ?.map { key -> T9_DIGITS.first { key in it.first }.second }?.joinToString("")
+            ?.map { key -> t9Digits().first { key in it.first }.second }?.joinToString("")
         val particleChoice = laiLe?.let { "cyime_particle_shortcuts:\n  exact: [\"$it 来了\"]" }.orEmpty()
         return """
             |$GENERATED_MARK$t9
@@ -213,7 +214,7 @@ data class DoublePinyinScheme(
             |    - uniquifier
             |
             |speller:
-            |  alphabet: zyxwvutsrqponmlkjihgfedcba9876543210
+            |  alphabet: zyxwvutsrqponmlkjihgfedcba9876543210${if (usesSemicolon) ";" else ""}
             |  initials: zyxwvutsrqponmlkjihgfedcba9876543210
             |  delimiter: " '"
             |  algebra:
@@ -227,8 +228,9 @@ data class DoublePinyinScheme(
             |  comment_format: []
             |
             |t9:
-            |  # 左侧拼音栏和整句解码按全拼的数字计算，双拼九键不用；候选上方按双拼两键一字显示拼音。
-            |  left_panel_mode: none
+            |  # 左侧拼音栏的读音由输入法按本方案的两个键算（NineKeyFuzzyReadings），引擎只负责点选后锁定；
+            |  # 以前写 none，没开模糊音时双拼九键没有拼音栏，选不了读音（11-15）。候选上方按双拼两键一字显示拼音。
+            |  left_panel_mode: pinyin
             |  double_pinyin: true
             |  isDisplayOriginalPreedit: false
             |
@@ -280,7 +282,7 @@ data class DoublePinyinScheme(
         text = text.replaceRange(header.range, schemaBlock)
         // 每个字的两位各自可以换成合并键；词库里的单个大写字母音节与合并键的大写编码同形，14 键用不到，先删掉。
         val merged = (0..1).flatMap { position -> K14_GROUPS.map { (letters, key) -> "derive/^(.{$position})[$letters](.*)$/\$1$key\$2/" } }
-        text = replaceList(text, "speller", "algebra", listOf("erase/^[A-Z]$/") + algebra() + merged)
+        text = replaceList(text, "speller", "algebra", listOf("erase/^[A-Z]$/") + algebra() + semicolonOnL() + merged)
         val prism = Regex("(?m)^  prism: double_pinyin_flypy_14jian\\b.*$")
         check(prism.containsMatchIn(text)) { "14 键小鹤双拼方案缺少 prism" }
         text = text.replace(prism, "  prism: $k14")
@@ -303,7 +305,7 @@ data class DoublePinyinScheme(
                 "  description: |\n    CyIME 双拼方案（由键位表生成）在自建布局「$layoutName」上的版本，词库与 26 键双拼相同。\n"))
         check(schemaBlock.contains("  schema_id: $layoutVariantId\n")) { "双拼方案缺少 schema_id" }
         text = text.replaceRange(header.range, schemaBlock)
-        val merged = (0..1).flatMap { position ->
+        val merged = semicolonOnL() + (0..1).flatMap { position ->
             groups.filter { it.length > 1 }.map { group -> "derive/^(.{$position})[${group.drop(1)}](.*)$/\$1${group[0]}\$2/" }
         }
         // 原有规则一字不动，合并键的派生接在最后（作用在已经换好的双拼编码上）。
@@ -321,6 +323,16 @@ data class DoublePinyinScheme(
         text = text.replaceRange(translator.range, translatorBlock)
         return "$GENERATED_MARK$layoutVariantId\n$text"
     }
+
+    /**
+     * 14 键、自建合并键布局没有分号键：ing 在分号上的方案（微软双拼）把分号并到 L 键上（键盘上分号紧挨着 L），
+     * 排在合并键派生前面，L 和别的字母合成一个键时一起跟过去。只加拼写，原来的分号拼写不动。
+     */
+    private fun semicolonOnL(): List<String> = if (usesSemicolon) listOf("derive/;/l/") else emptyList()
+
+    /** 九键的字母分组；ing 在分号上的方案，分号和 L 同在 5 键。 */
+    internal fun t9Digits(): List<Pair<String, Int>> =
+        if (usesSemicolon) T9_DIGITS.map { (letters, digit) -> (if (digit == 5) "$letters;" else letters) to digit } else T9_DIGITS
 
     /** 换掉 [section] 段里 [key] 列表的全部条目（含其间的注释行）。 */
     private fun replaceList(text: String, section: String, key: String, items: List<String>): String {

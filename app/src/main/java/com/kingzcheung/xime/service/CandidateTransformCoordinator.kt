@@ -41,6 +41,8 @@ data class T9CandidateInjection(
     val snapshot: PluginCandidateSnapshot,
     /** 通讯录插件的人名/号码：不按锚点插，交给 [com.kingzcheung.xime.contacts.ContactCandidates.merge]。 */
     val contactName: Boolean? = null,
+    /** 九键滑行的备选（[T9GlideAlternatives]）：这一笔的数字串；插在首选之后，点了直接上屏。 */
+    val glideInput: String? = null,
 )
 
 /**
@@ -226,13 +228,19 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
     fun transformForT9(result: RimeProcessResult): List<T9CandidateInjection>? {
         if (result.isAsciiMode) return null
         if (result.inputText.isEmpty() && result.candidates.isEmpty()) return null
+        val state = service.uiState.value
+        val glide = t9GlideAlternatives.injections(result.inputText, result.candidates.map { it.text },
+            !result.hasPrevPage, state.currentSchemaId, state.inputSessionId)
         val contacts = contactItems(result.inputText, result.preeditText, !result.hasPrevPage, t9 = true).map {
             T9CandidateInjection(null, PluginCandidateSnapshot(it.text, it.comment), contactName = it.isName)
         }
         val plugin = transformForT9ByPlugin(result)
-        if (contacts.isEmpty()) return plugin
-        return plugin.orEmpty() + contacts
+        if (contacts.isEmpty() && glide.isEmpty()) return plugin
+        return glide + plugin.orEmpty() + contacts
     }
+
+    /** 九键滑行这一笔的备选，见 [T9GlideAlternatives]。 */
+    val t9GlideAlternatives = T9GlideAlternatives()
 
     private fun transformForT9ByPlugin(result: RimeProcessResult): List<T9CandidateInjection>? {
         if (service.pluginEvents.isCurrentEditorSensitive) return null

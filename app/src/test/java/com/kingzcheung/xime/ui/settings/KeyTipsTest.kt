@@ -40,4 +40,17 @@ class KeyTipsTest {
         val longPress = text(KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS))
         assertTrue(longPress.contains("长按字母键|"))
     }
+
+    /** 「去掉 0 键，回车加高」开着时没有「下一项」，不写它的技巧，改写回车上打 0（用户 11-15）。 */
+    @Test fun mergedZeroKeyDropsNextCandidateTips() {
+        val normal = text(KeyboardInputPreferences())
+        assertTrue(normal.contains("长按「下一项」|"))
+        assertTrue(normal.contains("从「下一项」拖到候选上松手|"))
+        assertFalse(normal.contains("回车下拉|"))
+        val merged = text(KeyboardInputPreferences(t9MergeZeroIntoEnter = true))
+        assertFalse(merged.contains("下一项」|"))
+        assertTrue(merged.contains("回车下拉|打 0"))
+        assertTrue(text(KeyboardInputPreferences(t9MergeZeroIntoEnter = true, reverseSymbolSwipe = true)).contains("回车上拉|打 0"))
+        assertFalse(text(KeyboardInputPreferences(t9MergeZeroIntoEnter = true, cornerSymbolInput = false)).contains("打 0"))
+    }
 }

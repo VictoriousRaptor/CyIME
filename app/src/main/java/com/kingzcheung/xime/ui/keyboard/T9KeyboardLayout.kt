@@ -216,6 +216,7 @@ private fun T9KeyboardSwipeOverlay(
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     val liveKeyboardBounds = remember { LiveBounds() }
+    val longPressMenuKeyboard: () -> Rect = remember(liveKeyboardBounds) { { liveKeyboardBounds.current(keyboardBounds, "keyboard") } }
     val dragSpace = LocalKeyDragSpace.current
     var dragArea by remember { mutableStateOf(Rect.Zero) }
     val input = LocalKeyboardInputPreferences.current
@@ -267,7 +268,8 @@ private fun T9KeyboardSwipeOverlay(
     KeyGapLightMode(gapLight, ctrlTargets.ctrlFaces, on = ctrlTargets.ctrlFaces)
     KeyGapLightMode(gapLight, uiState.isAsciiMode to uiState.inputProfile)
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalT9GlideKeys provides glideKeys,
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
+        LocalT9GlideKeys provides glideKeys,
         LocalKeyGapLight provides gapLight) {
     Box(
         modifier = modifier
@@ -283,13 +285,17 @@ private fun T9KeyboardSwipeOverlay(
                 val doublePinyin = glideDoublePinyin
                 glideScope.launch {
                     // 很短又认不出：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
-                    val digits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    val glide = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                         runCatching {
-                            com.kingzcheung.xime.glide.GlideLexicon.t9Digits(glideContext, keys, xs, ys, dictionary, doublePinyin)
-                        }.getOrDefault("")
-                    }.ifEmpty { com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString().orEmpty() }
+                            com.kingzcheung.xime.glide.GlideLexicon.t9Glide(glideContext, keys, xs, ys, dictionary, doublePinyin)
+                        }.getOrNull()
+                    }
+                    val digits = glide?.digits.orEmpty()
+                        .ifEmpty { com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString().orEmpty() }
                     if (digits.isEmpty()) return@launch
                     kotlinx.coroutines.withContext(inputContext) {
+                        // 同一笔的其他词（#214）：先登记，打入的数字串整笔出现时候选栏在首选之后给出。
+                        callbacks.onT9GlideAlternatives?.invoke(digits, glide?.alternatives.orEmpty().takeIf { glide?.digits == digits }.orEmpty())
                         for (digit in digits) {
                             val key = digit.toString()
                             if (callbacks.onPreeditKeyInput?.invoke(key) != true) controller.onDigitPressed(key)
@@ -531,7 +537,7 @@ private fun T9KeyboardContent(
                 }
                 // One four-slot scale for letters and syllables, independent of option count.
                 val metrics = t9CandidateMetrics(maxWidth.value, maxHeight.value,
-                    LocalDensity.current.fontScale, LocalKeyboardInputPreferences.current.keyTextScale,
+                    LocalDensity.current.fontScale, rememberCandidateTextSize().toFloat(),
                     keyContentScale(maxWidth.value, maxHeight.value / 4f))
                 val sample = rememberTextMeasurer().measure("shuang",
                     TextStyle(fontSize = metrics.fontSizeSp.sp, fontFamily = AppFonts.candidateFontFamily),
@@ -570,7 +576,7 @@ private fun T9KeyboardContent(
                             textColor = keyTextColor,
                             backgroundColor = keyBackgroundColor,
                             accentColor = accentColor,
-                            // 读音用大一号的字，每个各自缩到放得下；符号列表照旧。
+                            // 读音和候选字一样大，每个各自缩到放得下；符号列表小一号。
                             fontSize = (if (option != null) metrics.pinyinFontSizeSp else candidateFontSize).sp,
                             isSelected = isSelected,
                             approximate = option?.near == true,
@@ -816,13 +822,15 @@ private fun T9KeyboardContent(
             // 长按“下一项”= 按住 Shift：按住期间候选中英对调，松手就恢复（用户 10-30：松手不恢复就再也变不回去）；
             // 长按那次松手不切下一项。
             var glossHoldUsed by remember { mutableStateOf(false) }
-            androidx.compose.runtime.LaunchedEffect(nextCandidate) {
-                if (!nextCandidate) com.kingzcheung.xime.gloss.CandidateGlossary.t9NextHeld.value = false
+            // 「九键去掉 0 键」开着时没有 0 键（用户 11-15，默认关）：下一项、长按换中英、拖到候选都没有，0 在大回车上滑。
+            val mergeZero = LocalKeyboardInputPreferences.current.t9MergeZeroIntoEnter
+            androidx.compose.runtime.LaunchedEffect(nextCandidate, mergeZero) {
+                if (!nextCandidate || mergeZero) com.kingzcheung.xime.gloss.CandidateGlossary.t9NextHeld.value = false
             }
             // 读 revision 让词典加载完成后重组到这里。
             val glossHoldEnabled = nextCandidate && com.kingzcheung.xime.gloss.CandidateGlossary.revision
                 .let { com.kingzcheung.xime.gloss.CandidateGlossary.isLoaded }
-            NineKeyButton(
+            if (!mergeZero) NineKeyButton(
                 digit = "", letters = if (nextCandidate) "下一项" else "0",
                 icon = if (nextCandidate) rememberVectorPainter(Icons.AutoMirrored.Filled.KeyboardArrowRight) else null,
                 // 箭头只占图标框中间一小块，按退格等功能图标的视觉高度放大（用户 10-24：太小看不清）。
@@ -863,16 +871,30 @@ private fun T9KeyboardContent(
             androidx.compose.runtime.SideEffect {
                 if (enterBounds != Rect.Zero) ctrlTargets.putEnter(enterTargetId, enterBounds)
             }
-            ActionKeyButton(
-                text = heldEnterText(uiState.enterKeyText, ctrlTargets.ctrlFaces),
-                onClick = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") },
+            val enterText = heldEnterText(uiState.enterKeyText, ctrlTargets.ctrlFaces)
+            val onEnter = { if (!ctrlTargets.ctrlEnter()) onKeyPress("enter") }
+            val enterModifier = Modifier.weight(if (mergeZero) 2f else 1f).testTag("t9-enter-key")
+                .onGloballyPositioned {
+                    enterBounds = dragSpace.bounds(it)
+                    ctrlTargets.putEnter(enterTargetId, enterBounds)
+                }
+            if (mergeZero) T9MergedEnterKey(
+                text = enterText, onClick = onEnter,
+                // 没在选候选时（原来 0 键点一下打 0 的时候）往角标方向滑打 0，方向和 1~9 的数字一样；
+                // 关了「上下滑输入符号」就不接（同其他数字角标），0 只在数字键盘里有。
+                onZero = if (!nextCandidate && LocalKeyboardInputPreferences.current.cornerSymbolInput) ({ commitDirect("0") }) else null,
+                showZeroHint = hintsActive && swipeHints.up,
+                backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
+                modifier = enterModifier,
+                onPress = { onKeyPressDown?.invoke("enter") },
+                onSwipeStateChange = onSwipeStateChange,
+                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+            ) else ActionKeyButton(
+                text = enterText,
+                onClick = onEnter,
                 backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor,
-                modifier = Modifier.weight(1f).testTag("t9-enter-key")
-                    .onGloballyPositioned {
-                        enterBounds = dragSpace.bounds(it)
-                        ctrlTargets.putEnter(enterTargetId, enterBounds)
-                    },
+                modifier = enterModifier,
                 onPress = { onKeyPressDown?.invoke("enter") },
                 shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation,
@@ -880,6 +902,43 @@ private fun T9KeyboardContent(
             )
         }
     }
+}
+
+/**
+ * 「九键去掉 0 键」时占两格高的回车（用户 11-15）：点一下照旧是回车（含 Ctrl+回车），颜色、图标同普通回车；
+ * [onZero] 不为空时往角标方向滑一下打 0，键上角标处写一个小「0」。
+ */
+@Composable
+internal fun T9MergedEnterKey(
+    text: String,
+    onClick: () -> Unit,
+    onZero: (() -> Unit)?,
+    showZeroHint: Boolean,
+    backgroundColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    onPress: (() -> Unit)? = null,
+    onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
+    shadowEnabled: Boolean = true,
+    shadowElevation: Dp = 1.dp,
+    shadowShapeRadius: Dp = 8.dp,
+) {
+    val enter = LocalEnterKeyColors.current
+    SwipeableIconKeyButton(
+        icon = rememberVectorPainter(actionKeyIcon(text)),
+        onClick = onClick,
+        backgroundColor = enter?.background ?: backgroundColor,
+        iconColor = enter?.foreground ?: textColor,
+        modifier = modifier.semantics { contentDescription = text },
+        swipeText = if (onZero != null && showZeroHint) "0" else null,
+        swipeUpLabel = if (onZero != null) "0" else null,
+        onSwipeUp = onZero,
+        onPress = onPress,
+        onSwipeStateChange = onSwipeStateChange,
+        followSymbolSwipeDirection = true,
+        gapLight = GapLightKind.SWEEP,
+        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+    )
 }
 
 // ─── 九键数字键（可长按） ──────────────────────────────────────────────

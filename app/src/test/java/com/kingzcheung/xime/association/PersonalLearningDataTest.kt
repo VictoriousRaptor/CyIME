@@ -119,4 +119,41 @@ class PersonalLearningDataTest {
         val data = PersonalLearningData(bigrams = listOf(LearnedSequence(listOf("你", "好"), 3)))
         assertSame(data, data.boundedForStorage())
     }
+
+    // 用户 11-15：「喂自己语料」只能选 txt，md 都选不了。现在任意文字文件都按打过这些字来学。
+    private fun pairs(data: PersonalLearningData) = data.bigrams.associate { it.tokens.joinToString("") to it.count }
+
+    @Test fun markdownIsLearnedWithoutSymbolsLinksOrCrossLineJoins() {
+        val data = PersonalLearningData.fromText("# 原神攻略\n\n- **刻晴**很强\n[看这里](https://example.com/a)：原神\n")
+        val learned = pairs(data)
+        assertEquals(2, learned["原神"])
+        assertTrue("刻晴" in learned && "晴很" in learned)
+        assertTrue(learned.keys.none { it.contains('#') || it.contains('*') || it.contains('-') || it.contains('/') })
+        assertFalse("略刻" in learned)  // 行与行不连
+        assertFalse(learned.keys.any { it == "ht" || it == "ex" })
+        assertTrue(data.trigrams.any { it.tokens == listOf("原", "神", "攻") })
+    }
+
+    @Test fun subtitleNumbersAndTimesAreSkipped() {
+        val srt = "1\r\n00:00:01,000 --> 00:00:02,500\r\n今天开黑\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\n今天上分\r\n"
+        val learned = pairs(PersonalLearningData.fromText(srt))
+        assertEquals(2, learned["今天"])
+        assertTrue(learned.keys.none { it.any(Char::isDigit) })
+    }
+
+    @Test fun csvAndJsonKeepWordsAndCountsStayWithinImportLimits() {
+        val data = PersonalLearningData.fromText("名字,说明\n绝区零,游戏\n{\"text\":\"绝区零\"}\n")
+        assertEquals(2, pairs(data)["绝区"])
+        // 导出再按学习文件读回去，格式合法（每个字一格、次数在范围内）
+        assertEquals(data, PersonalLearningData.decode(data.encode()))
+        assertTrue(PersonalLearningData.fromText("\n  \n123\n").bigrams.isEmpty())
+    }
+
+    @Test fun textIsRecognisedByContentNotExtension() {
+        assertEquals("你好 md", PersonalLearningData.textOf("\uFEFF你好 md".toByteArray(Charsets.UTF_8)))
+        assertEquals("记事本存的", PersonalLearningData.textOf("记事本存的".toByteArray(charset("GB18030"))))
+        assertNull(PersonalLearningData.textOf(ByteArray(0)))
+        assertNull(PersonalLearningData.textOf(byteArrayOf(0x40, 0x15, 0x00, 0x00, 0x12, 0x34)))  // 搜狗 scel 这类二进制
+        assertNull(PersonalLearningData.textOf(ByteArray(200) { (1 + it % 30).toByte() }))
+    }
 }

@@ -160,7 +160,12 @@ class ClipboardImages private constructor(private val context: Context) {
         refresh()
     }
 
-    fun capture(uri: Uri, timestamp: Long = System.currentTimeMillis(), mimeType: String = "image/png") {
+    /**
+     * [more]: 同一次复制里的其余几张（相册多选复制），也记进历史、排在第一张后面，不弹提示。
+     * 它们的时间依次比第一张早 1 毫秒，按时间排的列表里顺序和复制时一样。
+     */
+    fun capture(uri: Uri, timestamp: Long = System.currentTimeMillis(), mimeType: String = "image/png",
+        more: List<Pair<Uri, String>> = emptyList()) {
         val key = previewState.beginCopy(uri.toString(), timestamp) ?: return
         scope.launch {
             runCatching {
@@ -176,6 +181,23 @@ class ClipboardImages private constructor(private val context: Context) {
             }.onFailure {
                 previewState.failed(key)
                 android.util.Log.w("ClipboardImages", "Copied image unavailable (${it.javaClass.simpleName}); retry on next clipboard refresh")
+            }
+            more.forEachIndexed { index, (extra, extraMime) ->
+                val stamp = timestamp - index - 1
+                runCatching {
+                    val image = prepare(ClipboardImage(extra.toString(), extraMime, stamp)).copy(timestamp = stamp)
+                    mutex.withLock {
+                        hidden = hidden - image.uri
+                        prefs.edit().putStringSet("hidden_images", hidden).apply()
+                        val rest = history.filterNot { it.uri == image.uri }
+                        val at = rest.indexOfFirst { it.timestamp < stamp }.let { if (it < 0) rest.size else it }
+                        history = retainHistory(rest.take(at) + image + rest.drop(at))
+                        save()
+                        publish()
+                    }
+                }.onFailure {
+                    android.util.Log.w("ClipboardImages", "Copied image ${index + 2} unavailable (${it.javaClass.simpleName})")
+                }
             }
         }
     }
@@ -202,7 +224,9 @@ class ClipboardImages private constructor(private val context: Context) {
                 }
                 return@withLock image
             }
-            cachedSources[image.uri]?.takeIf { File(directory, Uri.parse(it.uri).lastPathSegment.orEmpty()).isFile }?.let { return@withLock it }
+            // 按地址加复制时间记：有的应用每次复制都用同一个地址放不同的图，只按地址认会一直拿到第一次那张（#174）。
+            val sourceKey = "${image.timestamp}:${image.uri}"
+            cachedSources[sourceKey]?.takeIf { File(directory, Uri.parse(it.uri).lastPathSegment.orEmpty()).isFile }?.let { return@withLock it }
             require(source.scheme == "content") { "Unsupported image URI" }
             val mime = runCatching { context.contentResolver.getType(source) }.getOrNull()
                 ?.takeIf { it.startsWith("image/") } ?: image.mimeType
@@ -235,7 +259,7 @@ class ClipboardImages private constructor(private val context: Context) {
                     val reused = same.copy(timestamp = image.timestamp, label = image.label,
                         source = preferredImageSource(same.source, image.uri), sha256 = hash)
                     history = retainHistory(listOf(reused) + history.filterNot { it.uri == same.uri })
-                    cachedSources[image.uri] = reused
+                    cachedSources[sourceKey] = reused
                     save()
                     publish()
                     return@withLock reused
@@ -243,7 +267,7 @@ class ClipboardImages private constructor(private val context: Context) {
                 val cached = image.copy(uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file).toString(),
                     mimeType = mime, source = image.uri, sha256 = hash)
                 history = retainHistory(listOf(cached) + history)
-                cachedSources[image.uri] = cached
+                cachedSources[sourceKey] = cached
                 // Readers may still hold a granted URI. Reclaim only old, unreferenced files.
                 val retained = history.mapNotNull { Uri.parse(it.uri).lastPathSegment }.toSet()
                 directory.listFiles()?.filter { it.name !in retained && it.lastModified() < System.currentTimeMillis() - 24 * 60 * 60_000L }

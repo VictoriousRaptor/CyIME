@@ -146,6 +146,7 @@ onKeyPressDown: ((String) -> Unit)?,
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     val liveKeyboardBounds = remember { LiveBounds() }
+    val longPressMenuKeyboard: () -> Rect = remember(liveKeyboardBounds) { { liveKeyboardBounds.current(keyboardBounds, "keyboard") } }
 
     val isDarkTheme = keyTextColor == Color(0xFFE8EAED)
 
@@ -172,7 +173,8 @@ onKeyPressDown: ((String) -> Unit)?,
     // 键缝动效的光层（默认关，关着时是 null）。
     val gapLight = rememberKeyGapLight()
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight) {
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
+        LocalKeyGapLight provides gapLight) {
     Box(
         modifier = modifier
             .onGloballyPositioned { coordinates ->
@@ -484,25 +486,7 @@ private fun StrokeKeyboardContent(
                     )
                 }
                 StrokeDigitKey(
-                    digit = "*", swipeDigit = "6",
-                    onClick = { onKeyPress("*") },
-                    onPress = { onKeyPressDown?.invoke("*") },
-                    backgroundColor = keyBackgroundColor,
-                    textColor = keyTextColor,
-                    modifier = Modifier.weight(1f),
-                    shadowEnabled = shadowEnabled,
-                    shadowElevation = shadowElevation,
-                    shadowShapeRadius = shadowShapeRadius,
-                    fontSize = strokeFontSize,
-                    onSwipeStateChange = onSwipeStateChange,
-                    swipes = swipesFor("*", "6"),
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            ) {
-                StrokeDigitKey(
-                    digit = "分词", swipeDigit = "7",
+                    digit = "分词", swipeDigit = "6",
                     onClick = { onKeyPress("word_separator") },
                     onPress = { onKeyPressDown?.invoke("word_separator") },
                     backgroundColor = keyBackgroundColor,
@@ -513,7 +497,25 @@ private fun StrokeKeyboardContent(
                     shadowShapeRadius = shadowShapeRadius,
                     fontSize = strokeFontSize,
                     onSwipeStateChange = onSwipeStateChange,
-                    swipes = swipesFor("分词", "7"),
+                    swipes = swipesFor("分词", "6"),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                StrokeDigitKey(
+                    digit = "*", swipeDigit = "7",
+                    onClick = { onKeyPress("*") },
+                    onPress = { onKeyPressDown?.invoke("*") },
+                    backgroundColor = keyBackgroundColor,
+                    textColor = keyTextColor,
+                    modifier = Modifier.weight(1f),
+                    shadowEnabled = shadowEnabled,
+                    shadowElevation = shadowElevation,
+                    shadowShapeRadius = shadowShapeRadius,
+                    fontSize = strokeFontSize,
+                    onSwipeStateChange = onSwipeStateChange,
+                    swipes = swipesFor("*", "7"),
                 )
                 StrokeDigitKey(
                     digit = "，", swipeDigit = "8",

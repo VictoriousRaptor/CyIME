@@ -36,8 +36,12 @@ data class SchemaUiState(
     /** 启停、导入后正在自动应用（#340）。 */
     val isApplying: Boolean = false,
     val toastMessage: String? = null,
-    /** 部署没过或有方案没编译出来时的说明，页面弹窗显示（Toast 在 Android 12 以后最多两行，放不下方案名和原因）。 */
+    /** 整个部署没过时的说明，显示在列表顶上；个别方案没生效的原因写在那个方案自己那一行（[schemaProblems]）。 */
     val deployReport: String? = null,
+    /** 编译出的方案列表（build/default.yaml）；读不到时为 null。在里面的方案那一行写「已生效」。 */
+    val deployedSchemas: Set<String>? = null,
+    /** 上次部署没生效的方案和原因。 */
+    val schemaProblems: Map<String, String> = emptyMap(),
     val importReport: String? = null,
 )
 
@@ -57,16 +61,12 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
             SchemaChangeApplier.applying.collect { applying -> _uiState.update { it.copy(isApplying = applying) } }
         }
         viewModelScope.launch {
-            // 同一条编译问题这一页只弹一次：以后每次启停都会自动应用，不能每点一下开关就弹一遍。
-            var shownProblem = ""
+            // 不再弹框（11-15 用户：弹的框含糊，生效了也看不出来）：哪个方案没生效、为什么，写在那个方案自己那一行；
+            // 只有整个部署没过才在列表顶上写一句。
             SchemaChangeApplier.finished.collect { usable ->
                 val problem = withContext(Dispatchers.IO) { RimeConfigHelper.deploymentProblem(context) }
-                when {
-                    problem.isNotEmpty() && problem != shownProblem -> _uiState.update { it.copy(deployReport = problem) }
-                    problem.isEmpty() && !usable ->
-                        _uiState.update { it.copy(deployReport = "方案没有应用成功，原因见「关于 › 日志查看器」。可点列表底部「重新部署(修复)」再试。") }
-                }
-                shownProblem = problem
+                _uiState.update { it.copy(deployReport = if (usable) null
+                    else problem.ifEmpty { "方案没有应用成功，原因见「关于 › 日志查看器」。可点列表底部「重新部署(修复)」再试。" }) }
                 refresh()
             }
         }
@@ -83,13 +83,18 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
                     SettingsPreferences.getCurrentSchema(context),
                 )
             }
+            val (deployed, problems) = withContext(Dispatchers.IO) {
+                RimeConfigHelper.compiledSchemaList(context)?.toSet() to RimeConfigHelper.schemaProblems(context)
+            }
             // 语言与方案页需要所有组合，只有独立的启停开关列表排除联动项。
             val sorted = allSchemas.sortedByDescending { it.schemaId in enabledSchemas }
             _uiState.update {
                 it.copy(
                     allSchemas = sorted,
                     enabledSchemas = enabledSchemas,
-                    currentSchema = currentSchema
+                    currentSchema = currentSchema,
+                    deployedSchemas = deployed,
+                    schemaProblems = problems,
                 )
             }
         }
@@ -215,9 +220,10 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
             }
             val problem = RimeConfigHelper.deploymentProblem(context)
             when {
-                problem.isNotEmpty() -> _uiState.update { it.copy(deployReport = problem) }
-                success -> { showToast("部署完成"); onDeployed?.invoke() }
-                else -> _uiState.update { it.copy(deployReport = "部署失败，原因见「关于 › 日志查看器」。") }
+                success && problem.isEmpty() -> { showToast("部署完成"); onDeployed?.invoke() }
+                // 个别方案没生效：原因写在那一行，不再弹框。
+                success -> { showToast("部署完成，没生效的方案在那一行写了原因"); _uiState.update { it.copy(deployReport = null) } }
+                else -> _uiState.update { it.copy(deployReport = problem.ifEmpty { "部署失败，原因见「关于 › 日志查看器」。" }) }
             }
             refresh()
         }

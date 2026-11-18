@@ -1,0 +1,135 @@
+# 新词：游戏名、网络流行语、新产品名。由 tools/dictionaries/new_words.py 从候选表生成，请勿手改。
+# 构建时和 cyime_domain_terms.tsv 一样只往上提权重；publish_word_updates.py 在线下发。词<TAB>拼音<TAB>权重
+七日世界	qi ri shi jie	3000
+三角洲行动	san jiao zhou xing dong	3000
+上分	shang fen	3000
+不河里	bu he li	3000
+世界是个草台班子	shi jie shi ge cao tai ban zi	3000
+世界计划	shi jie ji hua	3000
+主打陪伴	zhu da pei ban	3000
+二游	er you	3000
+二重螺旋	er chong luo xuan	3000
+人机感	ren ji gan	3000
+人权卡	ren quan ka	3000
+优雅永不过时	you ya yong bu guo shi	3000
+光遇	guang yu	1110
+公主请上车	gong zhu qing shang che	3000
+公主连结	gong zhu lian jie	3000
+冲鸭	chong ya	2227
+出圈	chu quan	2174
+功德加一	gong de jia yi	3000
+包浆	bao jiang	3000
+十连	shi lian	3000
+单抽	dan chou	3000
+南方小土豆	nan fang xiao tu dou	3000
+卡拉彼丘	ka la bi qiu	3000
+卡池	ka chi	2121
+即梦	ji meng	3000
+原始征途	yuan shi zheng tu	3000
+原生鸿蒙	yuan sheng hong meng	3000
+原石	yuan shi	3000
+原神	yuan shen	12000
+双影奇境	shuang ying qi jing	3000
+反向旅游	fan xiang lv you	3000
+反向种草	fan xiang zhong cao	3000
+可灵	ke ling	1985
+吃谷	chi gu	3000
+喷射战士	pen she zhan shi	3000
+嘴替	zui ti	3000
+图生视频	tu sheng shi pin	3000
+城市领航	cheng shi ling hang	3000
+塌房	ta fang	3000
+声骸	sheng hai	1515
+多巴胺穿搭	duo ba an chuan da	3000
+大保底	da bao di	3000
+大反转	da fan zhuan	3000
+夺笋	duo sun	742
+好运莲莲	hao yun lian lian	161
+孔乙己文学	kong yi ji wen xue	3000
+宝可梦朱紫	bao ke meng zhu zi	3000
+宝藏博主	bao zang bo zhu	3000
+家人们谁懂啊	jia ren men shui dong a	3000
+尔滨	er bin	3000
+巫师三	wu shi san	3000
+干饭	gan fan	1453
+幻塔	huan ta	1660
+库洛游戏	ku luo you xi	3000
+异环	yi huan	3000
+强度党	qiang du dang	3000
+归龙潮	gui long chao	3000
+微氪	wei ke	1448
+怪物猎人荒野	guai wu lie ren huang ye	3000
+悦己消费	yue ji xiao fei	3000
+情绪内耗	qing xu nei hao	3000
+情绪消费	qing xu xiao fei	3000
+抽象文化	chou xiang wen hua	3000
+掉分	diao fen	3000
+掉大分	diao da fen	3000
+搭子文化	da zi wen hua	3000
+搭子社交	da zi she jiao	3000
+搭子经济	da zi jing ji	3000
+散爆网络	san bao wang luo	3000
+整活	zheng huo	526
+整顿职场	zheng dun zhi chang	3000
+文生图	wen sheng tu	3000
+文生视频	wen sheng shi pin	3000
+断亲	duan qin	3000
+斯普拉遁	si pu la dun	3000
+新梗	xin geng	2699
+旅游搭子	lv you da zi	3000
+无尽冬日	wu jin dong ri	3000
+无语子	wu yu zi	3000
+明日方舟终末地	ming ri fang zhou zhong mo di	3000
+星琼	xing qiong	3000
+星痕共鸣	xing hen gong ming	3000
+晶核	jing he	3000
+智谱清言	zhi pu qing yan	3000
+智驾	zhi jia	3000
+曼波	man bo	511
+极氪	ji ke	3000
+森空岛	sen kong dao	3000
+泰裤辣	tai ku la	1741
+浓人	nong ren	3000
+淡人	dan ren	3000
+清醒消费	qing xing xiao fei	3000
+火影忍者手游	huo ying ren zhe shou you	3000
+爱你老己	ai ni lao ji	3000
+版本之子	ban ben zhi zi	3000
+物华弥新	wu hua mi xin	3000
+班味	ban wei	3000
+电子乞丐	dian zi qi gai	3000
+痛包	tong bao	3000
+硬核	ying he	3000
+秘塔搜索	mi ta sou suo	3000
+精神离职	jing shen li zhi	3000
+精致穷	jing zhi qiong	3000
+纳米搜索	na mi sou suo	3000
+终末地	zhong mo di	3000
+羊了个羊	yang le ge yang	3000
+美拉德	mei la de	3000
+美拉德穿搭	mei la de chuan da	3000
+老己	lao ji	3000
+老梗	lao geng	3000
+肝度	gan du	856
+脆皮大学生	cui pi da xue sheng	3000
+脆皮年轻人	cui pi nian qing ren	3000
+腾讯元宝	teng xun yuan bao	3000
+舔包	tian bao	3000
+蔚来	wei lai	3000
+蚌埠住了	beng bu zhu le	506
+谷子经济	gu zi jing ji	3000
+赛博乞丐	sai bo qi gai	3000
+赛博菩萨	sai bo pu sa	3000
+跑刀	pao dao	3000
+这河里吗	zhe he li ma	3000
+逆水寒手游	ni shui han shou you	3000
+造梗	zao geng	3000
+遗器	yi qi	3000
+金铲铲之战	jin chan chan zhi zhan	3000
+难蚌	nan beng	3000
+集合啦动物森友会	ji he la dong wu sen you hui	3000
+雾锁王国	wu suo wang guo	3000
+首充	shou chong	3000
+鸣潮	ming chao	3000
+鹰角	ying jiao	1759
+鼠鼠我啊	shu shu wo a	3000

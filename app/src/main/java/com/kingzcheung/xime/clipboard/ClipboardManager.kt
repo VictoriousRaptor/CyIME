@@ -213,12 +213,13 @@ class ClipboardManager private constructor(private val context: Context) {
                 val secret = !private && clipKey in secretClips
                 val imageMime = (0 until clipData.description.mimeTypeCount).map { clipData.description.getMimeType(it) }
                     .firstOrNull { it.startsWith("image/") }
-                val imageSource = copiedImageSource((0 until clipData.itemCount).mapNotNull { index ->
+                val imageSources = copiedImageSources((0 until clipData.itemCount).mapNotNull { index ->
                     val entry = clipData.getItemAt(index)
                     (entry.uri ?: entry.intent?.data)?.takeIf { it.scheme == "content" }?.let { uri ->
                         CopiedImageSource(uri.toString(), runCatching { context.contentResolver.getType(uri) }.getOrNull())
                     }
                 }, imageMime)
+                val imageSource = imageSources.firstOrNull()
                 if (imageSource != null) {
                     lastReadClipTimestamp = clipData.description.timestamp
                     // 图片粘贴失败时写入系统剪贴板是兼容回退，不是用户新复制。
@@ -227,8 +228,10 @@ class ClipboardManager private constructor(private val context: Context) {
                         images.dismissPreview()
                         return
                     }
-                    images.capture(Uri.parse(imageSource.uri), clipData.description.timestamp,
-                        imageSource.resolvedMime?.takeIf { it.startsWith("image/") } ?: imageMime ?: "image/png")
+                    fun mimeOf(source: CopiedImageSource) = source.resolvedMime?.takeIf { it.startsWith("image/") } ?: imageMime ?: "image/png"
+                    // 一次复制了几张图（相册多选）：每张都记进图片历史，只给第一张弹提示（#174）。
+                    images.capture(Uri.parse(imageSource.uri), clipData.description.timestamp, mimeOf(imageSource),
+                        more = imageSources.drop(1).map { Uri.parse(it.uri) to mimeOf(it) })
                     return
                 }
                 images.dismissPreview()

@@ -131,11 +131,11 @@ class RoundThreeImeTest {
             rule.mainClock.autoAdvance = false
             rule.onNodeWithContentDescription("空格").performTouchInput { down(center) }
             rule.mainClock.advanceTimeBy(350)
-            rule.onNodeWithText("光标调整").assertIsDisplayed()
+            rule.onNodeWithText("移动光标").assertIsDisplayed()
             screenshot("round3-cursor-control")
             rule.onNodeWithContentDescription("空格").performTouchInput { up() }
             rule.mainClock.advanceTimeByFrame()
-            rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+            rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
             rule.mainClock.autoAdvance = true
 
             assertTrue(engine.switchSchema("japanese_kana"))

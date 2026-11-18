@@ -283,18 +283,20 @@ class DoublePinyinSchemeTest {
     }
 
     @Test fun t9VersionTypesEachSyllableOnTwoDigitKeys() {
-        val digits = mapOf("abc" to '2', "def" to '3', "ghi" to '4', "jkl" to '5', "mno" to '6', "pqrs" to '7', "tuv" to '8', "wxyz" to '9')
+        // 微软双拼 ing 的分号和 L 同在 5 键。
+        val digits = mapOf("abc" to '2', "def" to '3', "ghi" to '4', "jkl;" to '5', "mno" to '6', "pqrs" to '7', "tuv" to '8', "wxyz" to '9')
         fun t9(code: String) = code.map { c -> digits.entries.first { c in it.key }.value }.joinToString("")
-        // 九键没有分号键，微软双拼没有九键版本。
-        for (scheme in DoublePinyinScheme.BUILTINS.filterNot { it.usesSemicolon } + custom) {
+        for (scheme in DoublePinyinScheme.BUILTINS + custom) {
             val id = DoublePinyinScheme.t9Id(scheme.id)
             val text = scheme.t9Schema()
+            // 点选拼音栏的读音会把双拼键送进输入，微软双拼的 x; 也要认。
+            assertEquals(scheme.id, scheme.usesSemicolon, text.contains("  alphabet: zyxwvutsrqponmlkjihgfedcba9876543210;\n"))
             val laiLe = t9(scheme.code("lai")!! + scheme.code("le")!!)
             assertTrue("来了 follows this scheme's own two-key codes", "exact: [\"$laiLe 来了\"]" in text)
             assertTrue(text.startsWith(DoublePinyinScheme.GENERATED_MARK + id + "\n"))
             assertTrue(text.contains("  schema_id: $id\n  language: zh\n  input_scheme: double_pinyin\n"))
             assertTrue(text.contains("  prism: $id\n"))
-            assertTrue(text.contains("  left_panel_mode: none\n  double_pinyin: true\n  isDisplayOriginalPreedit: false\n"))
+            assertTrue(text.contains("  left_panel_mode: pinyin\n  double_pinyin: true\n  isDisplayOriginalPreedit: false\n"))
             assertTrue(text.contains("    - t9_processor\n") && text.contains("    - t9_filter\n"))
             assertFalse(text.contains("joint_decoder") || text.contains("cylm"))
             val rules = text.substringAfter("  algebra:\n").lines().takeWhile { it.startsWith("    - ") }
@@ -308,6 +310,7 @@ class DoublePinyinSchemeTest {
             }
         }
         assertEquals("87", t9(DoublePinyinScheme.FLYPY.code("zhong")!!))
+        assertEquals("95", t9(DoublePinyinScheme.MICROSOFT.code("xing")!!))
         assertEquals("小鹤双拼九键", DoublePinyinScheme.FLYPY.t9Schema().substringAfter("  name: \"").substringBefore('"'))
     }
 
@@ -510,11 +513,18 @@ class DoublePinyinSchemeTest {
     private val base14 = listOf("src/main/assets", "app/src/main/assets").map { java.io.File(it, "rime_chinese/double_pinyin_flypy_14jian.schema.yaml") }
         .first { it.isFile }.readText()
 
+    /** 14 键、合并键布局没有分号键：分号（微软双拼的 ing）也能用 L 键打。 */
+    private fun onL(code: String) = setOf(code, code.replace(';', 'l'))
+
+    private fun text14(scheme: DoublePinyinScheme) = scheme.k14Schema(base14).substringAfter("  algebra:\n").lines()
+        .takeWhile { it.startsWith("    - ") }.map { it.removePrefix("    - \"").removeSuffix("\"").replace("\\\"", "\"").replace("\\\\", "\\") }
+
     @Test fun fourteenKeyVersionTypesEachKeyExactlyOrMerged() {
         val groups = mapOf("qw" to 'Q', "er" to 'E', "ty" to 'T', "ui" to 'U', "op" to 'O', "as" to 'A', "df" to 'D',
             "gh" to 'G', "jk" to 'J', "zx" to 'Z', "cv" to 'C', "bn" to 'B')
         fun merged(c: Char) = groups.entries.firstOrNull { c in it.key }?.value ?: c
-        for (scheme in DoublePinyinScheme.BUILTINS.drop(1).filterNot { it.usesSemicolon } + custom) {
+        // 14 键没有分号键：微软双拼的 ing（分号）并到 L 键，x; 也能打 xl、Zl。
+        for (scheme in DoublePinyinScheme.BUILTINS.drop(1) + custom) {
             val id = DoublePinyinScheme.k14Id(scheme.id)
             val text = scheme.k14Schema(base14)
             assertTrue(text.startsWith(DoublePinyinScheme.GENERATED_MARK + id + "\n"))
@@ -530,15 +540,16 @@ class DoublePinyinSchemeTest {
             val rules = text.substringAfter("  algebra:\n").lines().takeWhile { it.startsWith("    - ") }
                 .map { it.removePrefix("    - \"").removeSuffix("\"").replace("\\\"", "\"").replace("\\\\", "\\") }
             assertEquals("erase/^[A-Z]$/", rules.first())
-            assertEquals(1 + scheme.algebra().size + 24, rules.size)
+            assertEquals(1 + scheme.algebra().size + (if (scheme.usesSemicolon) 1 else 0) + 24, rules.size)
             for (syllable in DoublePinyinScheme.SYLLABLES) {
                 val result = spellings(rules, syllable)
-                val expected = codes(scheme, syllable).flatMap { setOf(it, "${merged(it[0])}${it[1]}", "${it[0]}${merged(it[1])}", "${merged(it[0])}${merged(it[1])}") }.toSet()
+                val expected = codes(scheme, syllable).flatMap(::onL).flatMap { setOf(it, "${merged(it[0])}${it[1]}", "${it[0]}${merged(it[1])}", "${merged(it[0])}${merged(it[1])}") }.toSet()
                 assertEquals(syllable, expected, result)
             }
         }
         // 自然码 zhong = VS：点 CV 键、AS 键，或侧滑出 V、S。
         assertEquals("CA", DoublePinyinScheme.ZIRANMA.code("zhong")!!.map(::merged).joinToString(""))
+        assertTrue("Zl" in spellings(text14(DoublePinyinScheme.MICROSOFT), "xing"))
     }
 
     /** 自己排的 20 键（we、yu、op、as、jk、cv 合并）上的双拼：每一位都可以点合并键（送键上第一个字母）或长按选精确字母。 */
@@ -564,9 +575,9 @@ class DoublePinyinSchemeTest {
                 - erase/^xx${'$'}/
             """.trimIndent() + "\n"
         val groups = listOf("q", "we", "r", "t", "yu", "i", "op", "as", "d", "f", "g", "h", "jk", "l", "z", "x", "cv", "b", "n", "m")
-        fun merged(c: Char) = groups.first { c in it }[0]
+        fun merged(c: Char) = groups.firstOrNull { c in it }?.get(0) ?: c
         val layout = "custom_pinyin_" + "2".repeat(32)
-        for (scheme in DoublePinyinScheme.BUILTINS.drop(1).filterNot { it.usesSemicolon } + custom) {
+        for (scheme in DoublePinyinScheme.BUILTINS.drop(1) + custom) {
             val id = DoublePinyinScheme.layoutVariantId(scheme.id, layout)
             assertEquals(scheme.id to layout, DoublePinyinScheme.splitLayoutVariant(id))
             val text = scheme.layoutSchema(scheme.schema(base), id, "二十键", groups)
@@ -582,9 +593,9 @@ class DoublePinyinSchemeTest {
             assertFalse(text.contains("enable_correction") || text.contains("cyime_neighbor_correction"))
             val rules = text.substringAfter("  algebra:\n").lines().takeWhile { it.startsWith("    - ") }
                 .map { it.removePrefix("    - \"").removeSuffix("\"").replace("\\\"", "\"").replace("\\\\", "\\") }
-            assertEquals(scheme.algebra() + scheme.separatorRules() + listOf(0, 1).flatMap { p -> groups.filter { it.length == 2 }.map { "derive/^(.{$p})[${it[1]}](.*)$/\$1${it[0]}\$2/" } }, rules)
+            assertEquals(scheme.algebra() + scheme.separatorRules() + listOfNotNull("derive/;/l/".takeIf { scheme.usesSemicolon }) + listOf(0, 1).flatMap { p -> groups.filter { it.length == 2 }.map { "derive/^(.{$p})[${it[1]}](.*)$/\$1${it[0]}\$2/" } }, rules)
             for (syllable in DoublePinyinScheme.SYLLABLES) {
-                val expected = codes(scheme, syllable).flatMap { setOf(it, "${merged(it[0])}${it[1]}", "${it[0]}${merged(it[1])}", "${merged(it[0])}${merged(it[1])}") }.toSet()
+                val expected = codes(scheme, syllable).flatMap(::onL).flatMap { setOf(it, "${merged(it[0])}${it[1]}", "${it[0]}${merged(it[1])}", "${merged(it[0])}${merged(it[1])}") }.toSet()
                 assertEquals(syllable, expected, spellings(rules, syllable).filterNot { '\'' in it }.toSet())
             }
         }

@@ -9,7 +9,10 @@ import com.kingzcheung.xime.plugin.core.lua.http.SseHostListener
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
+import java.util.Locale
 import java.io.File
 
 /**
@@ -17,6 +20,11 @@ import java.io.File
  * 栏里的字流式译出来，生成中就有一段；新的一句把没完的旧请求断掉；圆钮换目标语言。
  */
 class LuaTranslatePluginTest {
+
+    // 自动检测是「界面语言 ⇄ 目标语言」互译（host.uiLanguage 读默认 Locale）：测试固定在简体中文界面
+    private var savedLocale: Locale = Locale.getDefault()
+    @Before fun chineseInterface() { savedLocale = Locale.getDefault(); Locale.setDefault(Locale.SIMPLIFIED_CHINESE) }
+    @After fun restoreLocale() { Locale.setDefault(savedLocale) }
 
     private class InMemoryConfigStore : PluginConfigStore {
         private val map = HashMap<String, String>()
@@ -232,5 +240,43 @@ class LuaTranslatePluginTest {
         assertEquals("英文", store.get("sourceLang"))
         adapter.onPanelAction("select:sourceLang:简体中文")
         assertEquals("英文", store.get("targetLang"))
+    }
+
+    @Test
+    fun `自动检测是互译：打中文译成目标语言，打英文译成中文`() {
+        val (adapter, sse, _) = setup()
+        adapter.onPanelInput("明天见")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段话翻译成英文"))
+        adapter.onPanelInput("see you tomorrow")
+        adapter.onPanelAction("generate")
+        assertTrue("英文原文译成界面语言", sse.bodies.last().contains("把下面这段话翻译成简体中文"))
+        assertTrue(adapter.getPanelState("").ui!!.first { it.type == UiNodeType.TEXT }.value!!.contains("简体中文和英文互译"))
+        // 指定了原文语言就不互译，照指定的翻
+        adapter.onPanelAction("select:sourceLang:英文")
+        adapter.onPanelAction("select:targetLang:日文")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段英文翻译成日文"))
+    }
+
+    @Test
+    fun `界面是英文：打英文译成目标语言，目标也是英文时换成中文`() {
+        Locale.setDefault(Locale.ENGLISH)
+        val (adapter, sse, _) = setup()
+        adapter.onPanelInput("see you tomorrow")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段话翻译成简体中文"))
+        adapter.onPanelInput("明天见")
+        adapter.onPanelAction("generate")
+        assertTrue(sse.bodies.last().contains("把下面这段话翻译成英文"))
+    }
+
+    @Test
+    fun `界面语言标签`() {
+        assertEquals("zh", uiLanguageTag(Locale.SIMPLIFIED_CHINESE))
+        assertEquals("zh-Hant", uiLanguageTag(Locale.TRADITIONAL_CHINESE))
+        assertEquals("zh-Hant", uiLanguageTag(Locale.forLanguageTag("zh-Hant-CN")))
+        assertEquals("en", uiLanguageTag(Locale.US))
+        assertEquals("ja", uiLanguageTag(Locale.JAPAN))
     }
 }

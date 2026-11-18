@@ -6,18 +6,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.settings.*
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
+import com.kingzcheung.xime.ui.keyboard.rememberSwipeHintsEnabled
 import com.kingzcheung.xime.ui.keyboard.SideSymbolTarget
 import com.kingzcheung.xime.ui.keyboard.SymbolInputMode
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +34,10 @@ import kotlinx.coroutines.withContext
 /**
  * 「按键符号」：每页只有一个和键盘上一样的预览，点哪个键／哪一格就弹小框改它，改完即生效，没有保存按钮。
  * 恢复默认、布局版本收在右上角菜单（11-01 用户：原页面上下重复、说明绕、两种保存方式）。
+ *
+ * 26 键（用户 11-15：一个一个符号改太弱，各种情形要各有一套）：页面上方是数字行、上方角标、下方角标三个开关，
+ * 开关组合出六套布局（[CornerVariant]），现在是哪种情形就编辑哪一套，和键盘上用的是同一套；
+ * 「整排输入」一次改一整排，「从另一套复制」把别的情形的一套搬过来，每格可单独设「跟随全角半角」。
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +56,14 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     val fourteen = merged == FOURTEEN
     var customLayouts by remember { mutableStateOf<List<CustomKeyboardLayout>>(emptyList()) }
     val customLayout = customLayouts.firstOrNull { it.id == merged }
+    // 26 键现在编辑的是哪一套：跟着本页上面三个开关（数字行、上方角标、下方角标）走，和键盘上实际用的是同一套。
+    val hints = rememberSwipeHintsEnabled()
+    val variant = if (merged == null) CornerVariant.of(inputSettings.numberRow, hints.up, hints.down) else CornerVariant.BOTH
+    // 这一套里改过的「跟随全角半角」（格子 → 开或关），没改过的照预设。
+    var followOverrides by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    val follows = if (merged == null) QwertySwipeSymbols.follows(english, variant, followOverrides) else emptySet()
+    var rowInput by remember { mutableStateOf(false) }
+    var copying by remember { mutableStateOf(false) }
     // 正在弹框编辑的键；null 表示没有打开编辑框。
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -67,7 +86,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     var sideReset by remember { mutableStateOf<(() -> Unit)?>(null) }
     fun back() { if (!busy) onBack() }
     BackHandler { back() }
-    LaunchedEffect(english, merged, reload) {
+    LaunchedEffect(english, merged, variant, reload) {
         swipes = if (merged == null) LetterSwipeBindings.load(context, english) else emptyMap()
         loaded = false
         val layouts = withContext(Dispatchers.IO) {
@@ -82,11 +101,12 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         values = withContext(Dispatchers.IO) {
             if (merged == FOURTEEN) KeysConfigHelper.fourteenSymbolEditorValues(context)
             else if (custom != null) KeysConfigHelper.customLayoutSymbolEditorValues(context, custom)
-            else KeysConfigHelper.qwertySymbolEditorValues(context, english)
+            else KeysConfigHelper.qwertySymbolEditorValues(context, english, variant)
         }
         originalOverrides = if (merged == FOURTEEN) FourteenKeySymbols.load(context)
             else if (custom != null) CustomLayoutSymbols.load(context, custom)
-            else QwertySwipeSymbols.load(context, english)
+            else QwertySwipeSymbols.load(context, english, variant)
+        followOverrides = if (merged == null) QwertySwipeSymbols.loadFollows(context, english, variant) else emptyMap()
         val boardKeys = if (merged == FOURTEEN) FourteenKeySymbols.keys
             else custom?.let(CustomLayoutSymbols::keys) ?: QwertySwipeSymbols.keys.map(Char::toString)
         if (editing !in boardKeys) editing = null
@@ -99,18 +119,20 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         english = nextEnglish; merged = nextMerged; sideTarget = nextSide; message = ""; editing = null
     }
     // 改完一个键（或载入一个版本）立刻写入，键盘上马上生效；只存和原来不同的位置，其余仍跟预设走。
-    fun persist(next: Map<String, String>, nextSwipes: Map<String, String>, done: String = "") {
+    fun persist(next: Map<String, String>, nextSwipes: Map<String, String>, done: String = "",
+        nextFollows: Map<String, Boolean> = followOverrides) {
         busy = true
         val snapshot = originalOverrides + next.filter { (key, value) -> originalValues[key] != value }
         val board = fourteen
         val custom = customLayout
         val en = english
-        values = next; swipes = nextSwipes
+        val kind = variant
+        values = next; swipes = nextSwipes; followOverrides = nextFollows
         scope.launch {
             runCatching { withContext(Dispatchers.IO) {
                 if (board) FourteenKeySymbols.save(context, snapshot)
                 else if (custom != null) CustomLayoutSymbols.save(context, custom, snapshot)
-                else QwertySwipeSymbols.save(context, en, snapshot, nextSwipes)
+                else QwertySwipeSymbols.save(context, en, snapshot, nextSwipes, kind, nextFollows)
             } }
                 .onSuccess { originalOverrides = snapshot; originalValues = next; message = done }
                 .onFailure { message = "保存失败：${it.message}" }
@@ -123,20 +145,17 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         val board = fourteen
         val custom = customLayout
         val en = english
-        // 自建布局没有 YAML 那一层，清掉修改就是预设。
-        // 中文 26 键第一排不写死：它跟着「数字行」开关在数字和另一套符号之间换（见 QwertySwipeSymbols.numberRowUp）。
-        val firstRow = QwertySwipeSymbols.rows[0].map(Char::toString)
+        // 自建布局没有 YAML 那一层，清掉修改就是预设。26 键只恢复现在编辑的这一套，别的情形的几套不动。
+        val kind = variant
         val preset = if (en || custom != null) emptyMap() else buildMap {
-            (if (board) FourteenKeySymbols.up else QwertySwipeSymbols.up.filterKeys { it !in firstRow })
-                .forEach { (k, v) -> put("up.$k", v) }
-            (if (board) FourteenKeySymbols.down else QwertySwipeSymbols.down.filterKeys { it !in firstRow })
-                .forEach { (k, v) -> put("down.$k", v) }
+            (if (board) FourteenKeySymbols.up else QwertySwipeSymbols.up(false, kind)).forEach { (k, v) -> put("up.$k", v) }
+            (if (board) FourteenKeySymbols.down else QwertySwipeSymbols.down(false, kind)).forEach { (k, v) -> put("down.$k", v) }
         }
         scope.launch {
             runCatching { withContext(Dispatchers.IO) {
                 if (board) FourteenKeySymbols.save(context, preset)
                 else if (custom != null) CustomLayoutSymbols.save(context, custom, preset)
-                else QwertySwipeSymbols.save(context, en, preset, emptyMap())
+                else QwertySwipeSymbols.save(context, en, preset, emptyMap(), kind, emptyMap())
             } }
                 .onSuccess { message = "已恢复默认"; reload++ }
                 .onFailure { message = "保存失败：${it.message}" }
@@ -147,7 +166,8 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     val side = sideTargets.firstOrNull { it.key == sideTarget }
     // 布局版本存的是 26 键 52 个位置，中文26键、英文26键各存各的（11-09 用户：英文布局没设计完没法存）。
     val versionsAvailable = side == null && merged == null
-    val tabName = side?.label ?: customLayout?.name ?: if (fourteen) "中文14键" else if (english) "英文26键" else "中文26键"
+    val tabName = side?.label ?: customLayout?.name ?: if (fourteen) "中文14键"
+        else "${if (english) "英文26键" else "中文26键"}（${variant.label}）"
     KeyboardSettingsScaffold("按键符号", ::back, preview = true, actions = {
         Box {
             IconButton(onClick = { menu = true }, enabled = !busy, modifier = Modifier.testTag("symbol-menu")) {
@@ -167,6 +187,20 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                             else persist(values, LetterSwipeBindings.withEditPreset(swipes, reverseSwipe),
                                 "Z X C V ${LetterSwipeBindings.directions[LetterSwipeBindings.upperDirection(reverseSwipe)]}改为撤销、剪切、复制、粘贴")
                         })
+                    // 中文才分全角半角；一次把整套设成跟随或固定，单个格子在点键弹出的小框里改。
+                    if (!english) {
+                        DropdownMenuItem(text = { Text("有两种写法的符号都跟随全角半角") }, enabled = loaded,
+                            modifier = Modifier.testTag("symbol-follow-all"), onClick = {
+                                menu = false
+                                persist(values, swipes, "有全角半角两种写法的符号都已设为跟随",
+                                    QwertySwipeSymbols.slotIds.associateWith { QwertySwipeSymbols.hasWidthPair(values[it].orEmpty()) })
+                            })
+                        DropdownMenuItem(text = { Text("所有符号都不跟随全角半角") }, enabled = loaded,
+                            modifier = Modifier.testTag("symbol-follow-none"), onClick = {
+                                menu = false
+                                persist(values, swipes, "所有符号都已设为固定字符", QwertySwipeSymbols.slotIds.associateWith { false })
+                            })
+                    }
                 }
                 if (versionsAvailable) {
                     DropdownMenuItem(text = { Text("存为版本") }, enabled = loaded,
@@ -201,8 +235,21 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     }
     if (side != null) SideSymbolEditor(side, onResetReady = { sideReset = it })
     else {
-        Text("点按键修改，${topGesture}输入上方，${bottomGesture}输入下方", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (merged == null) {
+            // 这三个就是键盘本身的开关（和「键盘布局」「按键与手势」里的是同一个）：切到哪种情形，下面就是那种情形的一套。
+            SymbolSwitchRow("数字行", "字母上方加一排数字", inputSettings.numberRow, "symbol-switch-number-row") {
+                SettingsPreferences.setNumberRowEnabled(context, it) }
+            SymbolSwitchRow("上方角标提示", "显示按键右上角的小符号", hints.up, "symbol-switch-up") {
+                SettingsPreferences.setSwipeUpHintsEnabled(context, it) }
+            SymbolSwitchRow("下方角标提示", "显示按键左下角的小符号", hints.down, "symbol-switch-down") {
+                SettingsPreferences.setSwipeDownHintsEnabled(context, it) }
+            Text("现在编辑「${variant.label}」这一套。三个开关组合出六套，各自保存，互不影响。", modifier = Modifier.testTag("symbol-variant"),
+                style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("点按键修改，${topGesture}输入上方，${bottomGesture}输入下方" + (if (merged != null) ""
+            else if (english) "。颜色淡的一边键盘上不显示，照样能滑出"
+            else "。颜色淡的一边键盘上不显示，照样能滑出；带下划线的跟随全角半角"),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val boardRows = if (fourteen) FourteenKeySymbols.rows
             else customLayout?.let(CustomLayoutSymbols::rows)
             ?: QwertySwipeSymbols.rows.map { row -> row.map(Char::toString) }
@@ -212,6 +259,18 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             inputSettings.evenMergedKeys).toDouble()
         val rowSlots = boardRows.maxOf { row -> row.sumOf(::width) }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // 开着数字行时把数字行也画出来（只看不改，键和顺序在「数字行」页改），对照着排第一排。
+            if (merged == null && variant.numberRow) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                inputSettings.numberRowKeys().forEach { key ->
+                    Surface(Modifier.weight(1f).height(32.dp), shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(key, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             boardRows.forEach { row ->
                 val units = row.sumOf(::width)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -228,9 +287,13 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                             Column(horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.SpaceEvenly) {
                                 Text(boundUp ?: values["up.$key"].orEmpty(), style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                                    modifier = Modifier.alpha(if (variant.showsUp) 1f else 0.38f),
+                                    textDecoration = TextDecoration.Underline.takeIf { boundUp == null && "up.$key" in follows },
                                     color = if (boundUp != null) MaterialTheme.colorScheme.primary else Color.Unspecified)
                                 Text(key.uppercase(), style = MaterialTheme.typography.titleMedium)
                                 Text(boundDown ?: values["down.$key"].orEmpty(), style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                                    modifier = Modifier.alpha(if (variant.showsDown) 1f else 0.38f),
+                                    textDecoration = TextDecoration.Underline.takeIf { boundDown == null && "down.$key" in follows },
                                     color = if (boundDown != null) MaterialTheme.colorScheme.primary else Color.Unspecified)
                             }
                         }
@@ -238,6 +301,12 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                     if (units < rowSlots - 1e-3) Spacer(Modifier.weight(((rowSlots - units) / 2).toFloat()))
                 }
             }
+        }
+        if (merged == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { rowInput = true; message = "" }, enabled = loaded && !busy,
+                modifier = Modifier.testTag("symbol-row-input")) { Text("整排输入") }
+            OutlinedButton(onClick = { copying = true; message = "" }, enabled = loaded && !busy,
+                modifier = Modifier.testTag("symbol-copy")) { Text("从另一套复制") }
         }
     }
     if (message.isNotEmpty()) Text(message, style = MaterialTheme.typography.bodySmall,
@@ -251,12 +320,56 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             upperSlot = LetterSwipeBindings.upperDirection(reverseSwipe)
                 .takeUnless { inputSettings.symbolInputMode == SymbolInputMode.LONG_PRESS },
             lowerSlot = LetterSwipeBindings.lowerDirection(reverseSwipe),
+            upShown = variant.showsUp, downShown = variant.showsDown,
+            followUp = ("up.$key" in follows).takeIf { merged == null && !english },
+            followDown = ("down.$key" in follows).takeIf { merged == null && !english },
             onDismiss = { editing = null },
-            onDone = { up, down, nextSwipes ->
+            onDone = { up, down, nextSwipes, followUp, followDown ->
                 editing = null
                 val next = values + ("up.$key" to up) + ("down.$key" to down)
-                if (next != values || (nextSwipes != null && nextSwipes != swipes)) persist(next, nextSwipes ?: swipes)
+                var nextFollows = followOverrides
+                if (followUp != null && followUp != ("up.$key" in follows)) nextFollows = nextFollows + ("up.$key" to followUp)
+                if (followDown != null && followDown != ("down.$key" in follows)) nextFollows = nextFollows + ("down.$key" to followDown)
+                if (next != values || (nextSwipes != null && nextSwipes != swipes) || nextFollows != followOverrides)
+                    persist(next, nextSwipes ?: swipes, "", nextFollows)
             })
+    }
+    if (rowInput) SymbolRowsDialog(values, variant, onDismiss = { rowInput = false }) { next ->
+        rowInput = false
+        if (next != values) persist(next, swipes, "已整排修改")
+    }
+    if (copying) {
+        // 先选一套，再点「覆盖」才执行（用户 11-16：点了之后会怎么样不清楚）。
+        var source by remember { mutableStateOf<CornerVariant?>(null) }
+        AlertDialog(onDismissRequest = { copying = false }, modifier = Modifier.testTag("symbol-copy-dialog"),
+            title = { Text("从另一套复制") },
+            text = {
+                Column {
+                    Text("现在这一套是「${variant.label}」。选一套，把它的全部上下角标和跟随全角半角的设置搬过来，" +
+                        "现在这一套原有的符号会被覆盖；被复制的那一套不变。", style = MaterialTheme.typography.bodySmall)
+                    CornerVariant.entries.filter { it != variant }.forEach { other ->
+                        Row(Modifier.fillMaxWidth().testTag("symbol-copy:${other.id}").clickable { source = other }
+                            .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = source == other, onClick = null)
+                            Text(other.label, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(enabled = source != null, modifier = Modifier.testTag("symbol-copy-confirm"), onClick = {
+                val other = source ?: return@TextButton
+                copying = false
+                val en = english
+                scope.launch {
+                    val (copied, copiedFollows) = withContext(Dispatchers.IO) {
+                        KeysConfigHelper.qwertySymbolEditorValues(context, en, other) to
+                            QwertySwipeSymbols.follows(en, other, QwertySwipeSymbols.loadFollows(context, en, other))
+                    }
+                    persist(copied, swipes, "已把「${other.label}」这一套复制到「${variant.label}」",
+                        QwertySwipeSymbols.slotIds.associateWith { it in copiedFollows })
+                }
+            }) { Text("覆盖现在这一套") } },
+            dismissButton = { TextButton(onClick = { copying = false }) { Text("取消") } })
     }
     if (confirmReset) AlertDialog(onDismissRequest = { confirmReset = false },
         title = { Text("「$tabName」恢复默认？") },
@@ -311,9 +424,13 @@ private val FOURTEEN = InputLayout.MERGED14.id
 @Composable
 private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: String, bottomGesture: String,
     swipes: Map<String, String>?, upperSlot: String?, lowerSlot: String,
-    onDismiss: () -> Unit, onDone: (String, String, Map<String, String>?) -> Unit) {
+    upShown: Boolean = true, downShown: Boolean = true, followUp: Boolean? = null, followDown: Boolean? = null,
+    onDismiss: () -> Unit, onDone: (String, String, Map<String, String>?, Boolean?, Boolean?) -> Unit) {
     var upText by rememberSaveable(key) { mutableStateOf(up) }
     var downText by rememberSaveable(key) { mutableStateOf(down) }
+    // 跟随全角半角：null 表示这一页不分全角半角（英文、14 键、自建布局），不显示开关。
+    var upFollows by rememberSaveable(key) { mutableStateOf(followUp == true) }
+    var downFollows by rememberSaveable(key) { mutableStateOf(followDown == true) }
     var swipeDraft by remember(key) { mutableStateOf(swipes) }
     // 这个方向设了滑动动作时，对应的符号暂时用不上：写在框下，免得以为改了符号没反应。
     fun shadowedBy(slot: String?): String? = slot?.let { swipeDraft?.get("${key.lowercase()}.$it") }
@@ -325,13 +442,15 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = upText, onValueChange = { upText = it }, singleLine = true,
-                    label = { Text("上方（$topGesture）") }, placeholder = { Text("留空不放符号") },
+                    label = { Text("上方（$topGesture）" + if (upShown) "" else "，键盘上不显示") }, placeholder = { Text("留空不放符号") },
                     supportingText = upNote?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth().testTag("symbol-editor-up"))
+                if (followUp != null) FollowWidthRow(upText, upFollows, "symbol-editor-up-follow") { upFollows = it }
                 OutlinedTextField(value = downText, onValueChange = { downText = it }, singleLine = true,
-                    label = { Text("下方（$bottomGesture）") }, placeholder = { Text("留空不放符号") },
+                    label = { Text("下方（$bottomGesture）" + if (downShown) "" else "，键盘上不显示") }, placeholder = { Text("留空不放符号") },
                     supportingText = downNote?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth().testTag("symbol-editor-down"))
+                if (followDown != null) FollowWidthRow(downText, downFollows, "symbol-editor-down-follow") { downFollows = it }
                 swipeDraft?.let { current ->
                     LetterSwipeEditor(key, current) { slot, binding ->
                         swipeDraft = if (binding.isEmpty()) current - slot else current + (slot to binding)
@@ -339,7 +458,76 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onDone(upText, downText, swipeDraft) }) { Text("完成") } },
+        confirmButton = { TextButton(onClick = {
+            onDone(upText, downText, swipeDraft, upFollows.takeIf { followUp != null }, downFollows.takeIf { followDown != null })
+        }) { Text("完成") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+}
+
+/** 本页的开关一律是「标题 + 一行说明 + 右侧 Switch」的整行开关。 */
+@Composable
+private fun SymbolSwitchRow(title: String, description: String, checked: Boolean, tag: String, enabled: Boolean = true,
+    onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)
+        .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled, colors = settingsSwitchColors())
+    }
+}
+
+/** 一格符号的「跟随全角半角」：有全角、半角两种写法才能开，说明里写出两种写法各是什么。 */
+@Composable
+private fun FollowWidthRow(symbol: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    val paired = QwertySwipeSymbols.hasWidthPair(symbol)
+    SymbolSwitchRow("跟随全角半角",
+        if (paired) "全角时出 ${QwertySwipeSymbols.width(symbol, true)}，半角时出 ${QwertySwipeSymbols.width(symbol, false)}"
+        else "这个符号只有一种写法，全角半角都出它",
+        checked && paired, tag, enabled = paired, onChange = onChange)
+}
+
+/**
+ * 「整排输入」：三排键的上方、下方各一行字，一次改完一整排（格式见 [SymbolRowText]）。显示的那一边排在前面。
+ */
+@Composable
+private fun SymbolRowsDialog(values: Map<String, String>, variant: CornerVariant, onDismiss: () -> Unit,
+    onDone: (Map<String, String>) -> Unit) {
+    val rows = QwertySwipeSymbols.rows.map { row -> row.map(Char::toString) }
+    val names = listOf("第一排 Q 到 P", "第二排 A 到 L", "第三排 Z 到 M")
+    fun shown(direction: String) = if (direction == "up") variant.showsUp else variant.showsDown
+    val directions = listOf("up" to "上方", "down" to "下方").sortedByDescending { shown(it.first) }
+    val drafts = remember {
+        mutableStateMapOf<String, String>().apply {
+            for ((direction, _) in directions) rows.forEachIndexed { index, row ->
+                put("$direction.$index", SymbolRowText.format(row.map { values["$direction.$it"].orEmpty() }))
+            }
+        }
+    }
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("symbol-rows-dialog"),
+        title = { Text("整排输入") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("一个字符一格，从左到右对应这一排的键；空着的格子写 ${SymbolRowText.EMPTY}。要放短语时，用空格把各格隔开。",
+                    style = MaterialTheme.typography.bodySmall)
+                for ((direction, directionName) in directions) rows.indices.forEach { index ->
+                    OutlinedTextField(value = drafts.getValue("$direction.$index"), onValueChange = { drafts["$direction.$index"] = it },
+                        singleLine = true,
+                        label = { Text("${names[index]} $directionName" + if (shown(direction)) "" else "（键盘上不显示）") },
+                        modifier = Modifier.fillMaxWidth().testTag("symbol-row:$direction.$index"))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = {
+            onDone(values + buildMap {
+                for ((direction, _) in directions) rows.forEachIndexed { index, row ->
+                    SymbolRowText.parse(drafts.getValue("$direction.$index"), row.size)
+                        .forEachIndexed { column, cell -> put("$direction.${row[column]}", cell) }
+                }
+            })
+        }) { Text("完成") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
 

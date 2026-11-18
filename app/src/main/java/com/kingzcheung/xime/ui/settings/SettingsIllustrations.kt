@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.settings.CandidateCommentMode
+import com.kingzcheung.xime.ui.theme.liquidGlassSample
 
 /**
  * 一排 [IllustratedChoiceCard] 的高度：至少 [min]；示意图和标题放不下（字多一行、系统字号调大）时按内容长高，
@@ -612,6 +613,59 @@ internal fun KeyFaceHintsLegend(up: Boolean, down: Boolean, doublePinyin: Boolea
         }
         if (!doublePinyin && !up && !down) Text("键上只有字母，滑动照样能输入符号",
             fontSize = 12.sp, color = onSurface.copy(alpha = 0.7f), maxLines = 2)
+    }
+}
+
+/**
+ * 「液态玻璃强度」三选一（主题与外观 › 材质效果，液态玻璃开着才显示）：标准／加强／最强，标准是原来的样子。
+ * 卡片里的两个键用键盘上同一段代码画这一档的亮边、厚度和高光；图片背景的折射画不进示意图，写在下面那行说明里。
+ */
+@Composable
+internal fun LiquidGlassStrengthChoice(
+    current: com.kingzcheung.xime.ui.theme.LiquidGlassStrength,
+    onChoose: (com.kingzcheung.xime.ui.theme.LiquidGlassStrength) -> Unit,
+) {
+    Column(Modifier.settingsSearchAnchor("液态玻璃强度").fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("液态玻璃强度", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Row(Modifier.fillMaxWidth().choiceCardRowHeight(92.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.kingzcheung.xime.ui.theme.LiquidGlassStrength.entries.forEach { level ->
+                IllustratedChoiceCard(level.label, current == level, onClick = { onChoose(level) },
+                    modifier = Modifier.weight(1f), tag = "liquid-glass-strength:${level.id}", illustrationPadding = 6.dp) {
+                    LiquidGlassStrengthIllustration(level)
+                }
+            }
+        }
+        Column {
+            Text(when (current) {
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STANDARD -> "原来的样子：按键一道细亮边。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG -> "亮边更粗更亮，边里面多一圈厚度；图片背景在边缘折射得更宽。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST -> "亮边、厚度和图片背景的折射都再加一档。"
+            } + "模糊和透明度不跟着变。", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when (current) {
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STANDARD -> Unit
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG ->
+                    PerformanceCostNote(com.kingzcheung.xime.settings.PerformanceCosts.Item.LIQUID_GLASS_STRONG)
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST ->
+                    PerformanceCostNote(com.kingzcheung.xime.settings.PerformanceCosts.Item.LIQUID_GLASS_STRONGEST)
+            }
+        }
+    }
+}
+
+/** [LiquidGlassStrengthChoice] 卡片里的两个键。键色取图例的键色（当前主题的真键盘），深浅跟着它。 */
+@Composable
+internal fun LiquidGlassStrengthIllustration(strength: com.kingzcheung.xime.ui.theme.LiquidGlassStrength) {
+    val key = MaterialTheme.colorScheme.surface
+    val dark = key.luminance() < .5f
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (label in listOf("A", "S")) {
+            Box(Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(7.dp)).background(key)
+                .liquidGlassSample(7.dp, dark, strength), contentAlignment = Alignment.Center) {
+                Text(label, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            }
+        }
     }
 }
 

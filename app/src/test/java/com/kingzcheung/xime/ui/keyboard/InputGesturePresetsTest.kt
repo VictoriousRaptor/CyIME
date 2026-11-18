@@ -110,6 +110,14 @@ class InputGesturePresetsTest {
             InputGestureLock.Option.SEMICOLON_ON_SHIFT, true)?.message)
         assertNull(InputGestureLocks.lockFor(base, InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true))
         assertNull(InputGestureLocks.lockFor(base, InputGestureLock.Option.SEMICOLON_ON_SHIFT, true))
+        // 双拼辅助码打字时把 Shift 键变成「辅」，和 Shift 键分词互锁；辅助码开着时它说了算。
+        assertEquals("已被「双拼辅助码」锁定", InputGestureLocks.lockFor(base.copy(doublePinyinAuxCode = true),
+            InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)?.message)
+        assertEquals("已被「Shift 键分词」锁定", InputGestureLocks.lockFor(base.copy(shiftSyllableSplit = true),
+            InputGestureLock.Option.DOUBLE_PINYIN_AUX_CODE, true)?.message)
+        assertEquals("已被「双拼辅助码」锁定", InputGestureLocks.lockFor(base.copy(doublePinyinAuxCode = true, shiftSyllableSplit = true),
+            InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)?.message)
+        assertNull(InputGestureLocks.lockFor(base, InputGestureLock.Option.DOUBLE_PINYIN_AUX_CODE, true))
     }
 
     @Test fun `twenty six key glide locks corner symbols to long press and says which glide`() {

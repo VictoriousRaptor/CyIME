@@ -9,8 +9,7 @@ internal class NineKeyFuzzyReadings(val scheme: DoublePinyinScheme?, groups: Set
             val spelling = code(scheme, reading) ?: continue
             fun add(typed: String, near: Boolean) {
                 val keys = code(scheme, typed) ?: return
-                if (keys.any { it !in 'a'..'z' }) return
-                val digits = keys.map { "22233344455566677778889999"[it - 'a'] }.joinToString("")
+                val digits = keys.map { digitOf(it) ?: return }.joinToString("")
                 getOrPut(digits) { ArrayList() }.add(Reading(reading, spelling, digits.length, near))
             }
             // 全拼的精确读音已有原生左栏；双拼的读音必须按当前方案的两个键计算。
@@ -27,6 +26,13 @@ internal class NineKeyFuzzyReadings(val scheme: DoublePinyinScheme?, groups: Set
 
     companion object {
         private fun code(scheme: DoublePinyinScheme?, reading: String) = if (scheme == null) reading else scheme.code(reading)
+
+        /** 字母所在的数字键；微软双拼 ing 的分号和 L 同在 5 键（[DoublePinyinScheme.t9Digits]）。 */
+        private fun digitOf(key: Char): Char? = when (key) {
+            in 'a'..'z' -> "22233344455566677778889999"[key - 'a']
+            ';' -> '5'
+            else -> null
+        }
         private val initials = setOf(SpellingPatches.Fuzzy.Z, SpellingPatches.Fuzzy.C, SpellingPatches.Fuzzy.S,
             SpellingPatches.Fuzzy.NL, SpellingPatches.Fuzzy.FH, SpellingPatches.Fuzzy.RL)
 
@@ -42,17 +48,20 @@ internal class NineKeyFuzzyReadings(val scheme: DoublePinyinScheme?, groups: Set
         /** 字母补丁排在数字映射之后。用临时字符避免一组规则的输出继续触发另一组。 */
         fun doubleRules(scheme: DoublePinyinScheme, groups: Set<SpellingPatches.Fuzzy>): List<String> {
             val circled = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ"
+            // 分号（微软双拼的 ing）也先换成临时字符，最后换回来。
+            val semicolon = '⊙'
+            fun mark(key: Char) = if (key == ';') semicolon else circled[key - 'a']
             val sources = sortedMapOf<String, MutableSet<String>>()
             for (reading in DoublePinyinScheme.SYLLABLES) {
                 val from = scheme.code(reading) ?: continue
                 for (typed in alternatives(reading, groups)) {
                     val to = scheme.code(typed) ?: continue
-                    if (from != to && to.all { it in 'a'..'z' }) sources.getOrPut(to) { sortedSetOf() }.add(from)
+                    if (from != to && to.all { it in 'a'..'z' || it == ';' }) sources.getOrPut(to) { sortedSetOf() }.add(from)
                 }
             }
             return sources.map { (to, from) ->
-                "fuzz/^(${from.joinToString("|")})$/${to.map { circled[it - 'a'] }.joinToString("")}/"
-            } + "xlit/$circled/abcdefghijklmnopqrstuvwxyz/"
+                "fuzz/^(${from.joinToString("|")})$/${to.map(::mark).joinToString("")}/"
+            } + "xlit/$circled$semicolon/abcdefghijklmnopqrstuvwxyz;/"
         }
     }
 }

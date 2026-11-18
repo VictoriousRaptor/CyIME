@@ -43,14 +43,14 @@ class HttpHostApiImpl(
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val request = chain.request()
-            Log.d(TAG, "[$pluginId] >>> ${request.method} ${request.url}")
+            Log.d(TAG, "[$pluginId] >>> ${request.method} ${request.url.toString().substringBefore('?')}")
             val start = System.currentTimeMillis()
             try {
                 val resp = chain.proceed(request)
                 Log.d(TAG, "[$pluginId] <<< ${resp.code} in ${System.currentTimeMillis() - start}ms")
                 resp
             } catch (e: Exception) {
-                Log.d(TAG, "[$pluginId] <<< FAIL ${e.message} in ${System.currentTimeMillis() - start}ms")
+                Log.d(TAG, "[$pluginId] <<< FAIL ${e.javaClass.simpleName} in ${System.currentTimeMillis() - start}ms")
                 throw e
             }
         }
@@ -128,9 +128,12 @@ class HttpHostApiImpl(
                 toHttpResponse(response)
             }
         } catch (e: Exception) {
-            lastErrorMsg = e.message ?: "request failed"
-            Log.e(TAG, "[$pluginId] HTTP $method $url failed", e)
-            PluginErrorLog.logError(pluginId, "HTTP 请求失败 ($method $url)", e.message ?: "request failed", e)
+            // Signed URLs can contain credentials. Exceptions may repeat the complete request target.
+            val safeUrl = url.substringBefore('?')
+            val detail = if (safeUrl != url) e.javaClass.simpleName else e.message ?: "request failed"
+            lastErrorMsg = detail
+            Log.e(TAG, "[$pluginId] HTTP $method $safeUrl failed: $detail")
+            PluginErrorLog.logError(pluginId, "HTTP 请求失败 ($method $safeUrl)", detail, e.takeIf { safeUrl == url })
             null
         }
     }

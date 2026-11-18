@@ -77,6 +77,12 @@ local function trim(s)
   return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local SPARK = "https://spark-api-open.xf-yun.com/x2"
+local function usesSpark() return host.config.get("provider") == SPARK end
+local function providerKey()
+  return trim(host.config.get(usesSpark() and "sparkPassword" or KEY_API_KEY) or "")
+end
+
 local function startsWith(s, p) return p ~= "" and s:sub(1, #p) == p end
 local function endsWith(s, p) return p ~= "" and #s >= #p and s:sub(-#p) == p end
 local function contains(s, p) return s:find(p, 1, true) ~= nil end
@@ -357,12 +363,9 @@ function plugin.getSettingsSchema()
   if trim(host.config.get(KEY_BASE_URL) or "") == "" then host.config.set(KEY_BASE_URL, DEFAULT_BASE_URL) end
   if trim(host.config.get(KEY_MODEL) or "") == "" then host.config.set(KEY_MODEL, DEFAULT_MODEL) end
   local schema = {
-    { key = KEY_API_KEY, label = "API 密钥", type = "secret", placeholder = "sk-…", required = true,
-      section = "接口", helpText = "只存在这台手机里，不进备份，只发给下面的接口地址" },
-    { key = KEY_BASE_URL, label = "接口地址", type = "text", defaultValue = DEFAULT_BASE_URL, section = "接口",
-      helpText = "OpenAI 兼容接口，到 /v1 为止。例：https://api.deepseek.com/v1、https://api.siliconflow.cn/v1" },
-    { key = KEY_MODEL, label = "模型", type = "text", defaultValue = DEFAULT_MODEL, section = "接口",
-      helpText = "例：gpt-4o-mini、deepseek-chat、Qwen/Qwen2.5-7B-Instruct" },
+    { key = "provider", label = "服务商", type = "select", options = { "自定义兼容接口", SPARK },
+      helpText = "讯飞星火 X2 对应 spark-api-open.xf-yun.com。",
+      optionLabels = { [SPARK] = "讯飞星火 X2" }, defaultValue = "自定义兼容接口", section = "接口" },
     { key = "testConnection", label = "测试接口", type = "button", section = "接口" },
   }
   -- 提示词单独一组；框按内容长高
@@ -391,6 +394,28 @@ function plugin.getSettingsSchema()
     else
       prompt { key = promptKey(m.id), label = m.label, type = "textarea",
         defaultValue = m.prompt }
+    end
+  end
+  -- 旧宿主显示全部服务的独立字段；新版按所选服务显示并校验。
+  local providerFields = {
+    { value = "自定义兼容接口", fields = {
+      { key = KEY_API_KEY, label = "API 密钥", type = "secret", placeholder = "sk-…", requiredWhenVisible = true,
+        section = "接口", helpText = "只存在这台手机里，不进备份，只发给下面的接口地址" },
+      { key = KEY_BASE_URL, label = "接口地址", type = "text", defaultValue = DEFAULT_BASE_URL, section = "接口",
+        helpText = "OpenAI 兼容接口，到 /v1 为止。例：https://api.deepseek.com/v1、https://api.siliconflow.cn/v1" },
+      { key = KEY_MODEL, label = "模型", type = "text", defaultValue = DEFAULT_MODEL, section = "接口",
+        helpText = "例：gpt-4o-mini、deepseek-chat、Qwen/Qwen2.5-7B-Instruct" },
+    } },
+    { value = SPARK, fields = {
+      { key = "sparkPassword", label = "星火 X2 APIPassword", type = "secret", requiredWhenVisible = true, section = "接口", helpText = "选择讯飞星火 X2 时填写，使用星火控制台的 HTTP 凭据" },
+    } },
+  }
+  local index = 2
+  for _, group in ipairs(providerFields) do
+    for _, field in ipairs(group.fields) do
+      field.visibleWhen = { key = "provider", value = group.value }
+      table.insert(schema, index, field)
+      index = index + 1
     end
   end
   return schema
@@ -474,10 +499,10 @@ end
 
 -- 返回 content, err
 local function callApi(instruction, text, systemPrompt)
-  local apiKey = trim(host.config.get(KEY_API_KEY) or "")
+  local apiKey = providerKey()
   if apiKey == "" then return nil, "还没填 API 密钥：点下面的「设置」" end
-  local baseUrl = trim(configOr(KEY_BASE_URL, DEFAULT_BASE_URL)):gsub("/+$", "")
-  local model = trim(configOr(KEY_MODEL, DEFAULT_MODEL))
+  local baseUrl = usesSpark() and SPARK or trim(configOr(KEY_BASE_URL, DEFAULT_BASE_URL)):gsub("/+$", "")
+  local model = usesSpark() and "spark-x" or trim(configOr(KEY_MODEL, DEFAULT_MODEL))
   local endpoint = baseUrl .. "|" .. model
   local function send(withTemperature)
     local req = {
@@ -488,6 +513,7 @@ local function callApi(instruction, text, systemPrompt)
       },
       stream = false,
     }
+    if usesSpark() then req.thinking = { type = "disabled" } end
     if withTemperature then req.temperature = 0.3 end
     local headers = {
       ["Content-Type"] = "application/json",
@@ -554,7 +580,7 @@ local function buildUi()
   local ui = {}
   if generating then return ui end
   -- 没填密钥：一打开就说，先去设置（用户 11-03「装了插件啥都没有，不知道干啥的」）
-  if trim(host.config.get(KEY_API_KEY) or "") == "" then
+  if providerKey() == "" then
     ui[#ui + 1] = { type = "section", label = "先填接口" }
     ui[#ui + 1] = { type = "text", value = "AI 改写用你自己的 AI 接口改写或翻译输入框里的字。点「设置」填 API 密钥、接口地址和模型。", style = "caption" }
     ui[#ui + 1] = { type = "button", key = "host:settings", label = "设置" }
@@ -678,7 +704,7 @@ end
 
 -- 设置页「测试接口」按钮：nil = 成功，字符串 = 失败原因
 function plugin.testConnection()
-  if trim(host.config.get(KEY_API_KEY) or "") == "" then return "还没填 API 密钥" end
+  if providerKey() == "" then return "还没填 API 密钥" end
   local mode = MODE_BY_ID["fix"]
   local sample = "我明天早上八点到公司，你门先开会把。"
   local content, err = callApi(mode.prompt, sample)

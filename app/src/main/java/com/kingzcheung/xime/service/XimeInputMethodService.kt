@@ -649,6 +649,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private var pendingVoiceAction: (() -> Unit)? = null
     internal var composeViewRef: View? = null
     internal var lastClearedText: String = ""
+    internal var lastClearedComposition: ClearedComposition? = null
     /** 空闲态上滑清空掉的整框文字，供下滑撤回原位恢复；与 [lastClearedText]（清掉的编码）互斥。 */
     @Volatile internal var lastClearedDocument: ClearedDocument? = null
     /** 上面两样是从哪个输入框清掉的：下滑撤回只放回同一个框（应用的框清掉的字不能撤回到「新增固定」里）。 */
@@ -1007,16 +1008,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (key?.startsWith(com.kingzcheung.xime.settings.HardwareKeyboardPreferences.PREFIX) == true) {
                 uiState.value = uiState.value.copy(hardwareOptions = com.kingzcheung.xime.settings.HardwareKeyboardPreferences.read(this))
             }
+            // 底部留白、调低按横竖屏分开存（键名带方向后缀），哪个方向的改了都重新量。
+            if (key == SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD || SettingsPreferences.isBottomCalibrationKey(key)) {
+                val decor = window.window?.decorView
+                refreshKeyboardBottomPadding()
+                updateKeyboardBottomInsets(decor?.rootWindowInsets)
+                decor?.requestApplyInsets()
+            }
             when (key) {
-                SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD, SettingsPreferences.KEY_KEYBOARD_BOTTOM_PADDING_DP,
-                SettingsPreferences.KEY_KEYBOARD_BOTTOM_LOWERING_DP, SettingsPreferences.KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP -> {
-                    val decor = window.window?.decorView
-                    val padding = SettingsPreferences.getKeyboardBottomPaddingDp(this@XimeInputMethodService)
-                    if (uiState.value.keyboardBottomPaddingDp != padding)
-                        uiState.value = uiState.value.copy(keyboardBottomPaddingDp = padding)
-                    updateKeyboardBottomInsets(decor?.rootWindowInsets)
-                    decor?.requestApplyInsets()
-                }
                 SettingsPreferences.KEY_INPUT_TEXT_LOCATION -> syncInlinePinyinLocation()
                 RimeConfigHelper.DEPLOYMENT_REVISION, com.kingzcheung.xime.settings.LanguagePreferences.KEY -> {
                     val languagesOnly = key == com.kingzcheung.xime.settings.LanguagePreferences.KEY
@@ -2488,35 +2487,39 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     keyRouter.moveHardwareCandidate(1)
                                 }
                             }
-                            HardwareKeyboardCandidateBar(
-                                frostedGlass = glass,
-                                inputText = if (hardwareEnglish) "" else cand.inputText,
-                                preeditText = if (hardwareEnglish) "" else cand.shownPreedit(state.inputProfile),
-                                showPreedit = keyboardPrefs.showCodeInCandidateBar,
-                                candidates = hardwareCandidates.windowWords(state.hardwareOptions.associationInWindow),
-                                hasNextPage = hardwareCandidates.hasNextPage,
-                                hasPrevPage = hardwareCandidates.hasPreviousPage,
-                                cursorAnchor = state.cursorAnchor.takeIf { state.hardwareOptions.followCursor },
-                                highlightIndex = hardwareHighlight,
-                                cardBackgroundColor = cardBg,
-                                candidateTextColor = hardwarePalette.candidateText,
-                                activeColor = hardwarePalette.accent,
-                                selectedTextColor = hardwarePalette.selectedText,
-                                preeditBackgroundColor = hardwarePalette.key,
-                                comments = hardwareCandidates.comments,
-                                commentsAreGlosses = hardwareGlosses && !hardwareCandidates.association,
-                                onPrevious = previousHardwareCandidate.takeUnless { hardwareCandidates.association },
-                                onNext = nextHardwareCandidate.takeUnless { hardwareCandidates.association },
-                                onCandidateSelect = selectHardwareCandidate,
-                                bottomDocked = bottomDocked,
-                                showNumberLabels = true,
-                                surface = hardwareSurface,
-                                onPreeditBoundsChanged = { updateHardwarePreeditBounds(it) },
-                                onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = false, it) },
-                                avoidBoundsInWindow = hardwareToolbarBounds.value,
-                                avoidCaret = state.cursorAnchor.takeIf { state.hardwareOptions.avoidEditor },
-                                onShown = { words, count -> keyRouter.reportHardwareShown(words, count) },
-                            )
+                            // 实体键盘的候选也按输入语言的写法画汉字（见 inputTextLocaleTag）。
+                            com.kingzcheung.xime.ui.keyboard.ProvideInputTextLocale(state.inputProfile.language, state.inputProfile.scheme,
+                                keyboardPrefs.traditionalOutput) {
+                                HardwareKeyboardCandidateBar(
+                                    frostedGlass = glass,
+                                    inputText = if (hardwareEnglish) "" else cand.inputText,
+                                    preeditText = if (hardwareEnglish) "" else cand.shownPreedit(state.inputProfile),
+                                    showPreedit = keyboardPrefs.showCodeInCandidateBar,
+                                    candidates = hardwareCandidates.windowWords(state.hardwareOptions.associationInWindow),
+                                    hasNextPage = hardwareCandidates.hasNextPage,
+                                    hasPrevPage = hardwareCandidates.hasPreviousPage,
+                                    cursorAnchor = state.cursorAnchor.takeIf { state.hardwareOptions.followCursor },
+                                    highlightIndex = hardwareHighlight,
+                                    cardBackgroundColor = cardBg,
+                                    candidateTextColor = hardwarePalette.candidateText,
+                                    activeColor = hardwarePalette.accent,
+                                    selectedTextColor = hardwarePalette.selectedText,
+                                    preeditBackgroundColor = hardwarePalette.key,
+                                    comments = hardwareCandidates.comments,
+                                    commentsAreGlosses = hardwareGlosses && !hardwareCandidates.association,
+                                    onPrevious = previousHardwareCandidate.takeUnless { hardwareCandidates.association },
+                                    onNext = nextHardwareCandidate.takeUnless { hardwareCandidates.association },
+                                    onCandidateSelect = selectHardwareCandidate,
+                                    bottomDocked = bottomDocked,
+                                    showNumberLabels = true,
+                                    surface = hardwareSurface,
+                                    onPreeditBoundsChanged = { updateHardwarePreeditBounds(it) },
+                                    onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = false, it) },
+                                    avoidBoundsInWindow = hardwareToolbarBounds.value,
+                                    avoidCaret = state.cursorAnchor.takeIf { state.hardwareOptions.avoidEditor },
+                                    onShown = { words, count -> keyRouter.reportHardwareShown(words, count) },
+                                )
+                            }
                             HardwareKeyboardToolbar(
                                 frostedGlass = glass,
                                 selectedTextColor = hardwarePalette.selectedText,
@@ -3832,6 +3835,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     // ── 原有方法 ──
 
     
+    /** 上一次开始输入时这个框要不要数字面板；只用来认出同一界面里数字框和文字框之间的切换（#333）。 */
+    private var lastStartWantedNumberPanel: Boolean? = null
+
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         endGlidePreview()
         super.onStartInput(attribute, restarting)
@@ -3926,6 +3932,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         voicePillResumePending = voicePillResumeEnabled() && voicePillResume.appliesTo(attribute?.packageName) &&
             voicePillResumeFieldAllowed()
         lastClearedText = ""
+        if (lastClearedComposition != null) inputCommands.submit { rimeEngine.discardClearUndo() }
+        lastClearedComposition = null
         lastClearedDocument = null
         lastSwipeDelete = null
 
@@ -3947,6 +3955,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             SettingsPreferences.isVerboseLoggingEnabled(this)
         )
         
+        // 从地址栏这类单独记语言的框出来，方案回到进框前的，名字要等准备时重读（#353：空格显示意大利语，打的是中文）。
+        if (editorPresentation.currentSchemaId != uiState.value.currentSchemaId) schemaNameStale = true
         uiState.value = uiState.value.copy(
             inputSessionId = System.nanoTime(),
             // 语言键菜单里中文指向进框前的方案：网址、邮箱框和可见密码框（代码编辑器）都先给英文、能切回中文。
@@ -3968,10 +3978,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
         // Show the existing layout immediately. Native preparation is queued below,
         // before the first key, rather than loading translators on this callback.
-        if (!restarting) keyboardViewModel.resetKeyboard(uiState.value.isAsciiMode,
+        // 同一个界面里换输入框时宿主只给 restarting：数字框和文字框之间换了才照新框复位键盘（#333）；
+        // 同一类框照旧不动，QQ 这类每打一个字都重启输入的宿主不会把手动切的键盘打回去。
+        val wantsNumberPanel = editorInputPolicy.field.numberPanel ||
+            (EditorInfoClassifier.isNumberEditor(attribute) && SettingsPreferences.isAutoNumberKeyboardEnabled(this))
+        val keyboardRestart = restarting && (lastStartWantedNumberPanel ?: wantsNumberPanel) == wantsNumberPanel
+        lastStartWantedNumberPanel = wantsNumberPanel
+        if (!keyboardRestart) keyboardViewModel.resetKeyboard(uiState.value.isAsciiMode,
             uiState.value.currentSchemaId.ifBlank { SettingsPreferences.getCurrentSchema(this) },
-            editorInputPolicy.field.numberPanel ||
-                (EditorInfoClassifier.isNumberEditor(attribute) && SettingsPreferences.isAutoNumberKeyboardEnabled(this)))
+            wantsNumberPanel)
         synchronizeKeyboardInputSession()
 
         // 先重置候选状态到初始值，避免前一 session 的残留状态影响新输入
@@ -4034,7 +4049,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             }
         }
 
-        EditorInputPreparation(this).schedule(restarting, EditorInfoClassifier.isNumberEditor(attribute))
+        EditorInputPreparation(this).schedule(keyboardRestart, EditorInfoClassifier.isNumberEditor(attribute))
         attribute?.let { updateEnterKeyText(it) }
     }
     
@@ -4311,6 +4326,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         return true
     }
 
+    /** 底部留白按当前方向重新读（#329：横竖屏分开记），转屏和改设置时调用。 */
+    private fun refreshKeyboardBottomPadding() {
+        val padding = SettingsPreferences.getKeyboardBottomPaddingDp(this)
+        if (uiState.value.keyboardBottomPaddingDp != padding)
+            uiState.value = uiState.value.copy(keyboardBottomPaddingDp = padding)
+    }
+
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         currentResolvedKeyboardSize = null
         clearHardwareSurfaceBounds()
@@ -4321,6 +4343,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 期间经原连接做的编辑不会记进光标前文字，结束后整份作废，下次照旧去读。
         TrackedInputConnection.withRawConnection { super.onConfigurationChanged(newConfig) }
         trackedConnection?.memory?.edited()
+        refreshKeyboardBottomPadding()
         if (newConfig.screenWidthDp > newConfig.screenHeightDp) {
             closeToolPanel()
         }
@@ -4738,6 +4761,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * ([privacy]), completions ([editorRestricted], [editorSecret]) and literal field input
      * ([editorInputPolicy], whose language/schema presentation is returned).
      */
+    /** uiState 的方案已换、空格上的方案名还是旧的；输入框准备好后重读名字。只在主线程读写。 */
+    internal var schemaNameStale = false
+
     private fun beginEditorField(attribute: EditorInfo?, restarting: Boolean): EditorSessionPresentation {
         // 敏感输入框（密码等）判定；插件派发读同一结果，这里只重置 composing 去重
         pluginEvents.onStartInput()
@@ -4952,6 +4978,25 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal fun moveInlineCompositionCaret(offset: Int) = inlineComposition.moveCaret(offset)
 
     internal fun inlinePinyinText(): String? = inlineComposition.text
+
+    internal fun inlinePinyinCaret(): Int = inlineComposition.caret
+
+    /** Move only within the composing text we just wrote, leaving surrounding text untouched. */
+    internal fun placeInlinePinyinCaret(text: String, offset: Int): Boolean {
+        if (inlineComposition.text != text || offset !in 0..text.length) return false
+        if (offset == inlineComposition.caret) return true
+        val ic = currentInputConnection ?: return false
+        val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return false
+        val content = value.text ?: return false
+        val sel = value.selectionStart
+        if (value.startOffset < 0 || sel !in 0..content.length || sel != value.selectionEnd) return false
+        val start = sel - inlineComposition.caret
+        if (start < 0 || start + text.length > content.length ||
+            content.subSequence(start, start + text.length).toString() != text) return false
+        if (!ic.setSelection(value.startOffset + start + offset, value.startOffset + start + offset)) return false
+        inlineComposition.moveCaret(offset)
+        return true
+    }
 
     internal fun hasInlinePinyinCaretInside(): Boolean = inlineComposition.text?.let {
         inlineComposition.caret < it.length

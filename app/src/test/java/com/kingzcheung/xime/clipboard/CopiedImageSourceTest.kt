@@ -25,4 +25,15 @@ class CopiedImageSourceTest {
         assertNull(copiedImageSource(listOf(CopiedImageSource("file:///private/screenshot.png", "image/png")), "image/png"))
         assertNull(copiedImageSource(listOf(CopiedImageSource("content://notes/1", "text/plain")), "image/png"))
     }
+
+    @Test fun aMultiImageCopyKeepsEveryImageInOrder() {
+        val first = CopiedImageSource("content://media/external/images/media/1", "image/jpeg")
+        val text = CopiedImageSource("content://notes/1", "text/plain")
+        val second = CopiedImageSource("content://media/external/images/media/2", "image/png")
+        val unresolved = CopiedImageSource("content://media/external/images/media/3", null)
+        assertEquals(listOf(first, second, unresolved), copiedImageSources(listOf(first, text, second, unresolved), "image/jpeg"))
+        assertEquals(listOf(first, second), copiedImageSources(listOf(first, text, second, unresolved), null))
+        assertEquals(first, copiedImageSource(listOf(text, first, second), "image/jpeg"))
+        assertEquals(listOf(first), copiedImageSources(listOf(first, first), "image/jpeg"))
+    }
 }

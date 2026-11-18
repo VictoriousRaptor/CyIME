@@ -145,7 +145,9 @@ internal fun PreeditEditorBar(
 }
 
 internal object PreeditStyle {
-    val FontSize = 18.sp
+    /** 输入的拼音跟「候选字大小」一起放大缩小（用户 11-15：有人说拼音太小）；默认字号下仍是 18sp。 */
+    val FontSize: androidx.compose.ui.unit.TextUnit
+        @androidx.compose.runtime.Composable get() = (18f * candidateSizeFactor(rememberCandidateTextSize())).sp
     val SurfaceHeight = 32.dp
 }
 

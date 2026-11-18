@@ -126,8 +126,8 @@ object SetupGuide {
             keyboard = keyboard,
             keyboardName = chineseLayout?.displayName.orEmpty(),
             shownDoublePinyin = DoublePinyinScheme.BUILTINS.map { it.id }.filterTo(linkedSetOf()) { it in enabledSchemas },
-            doublePinyinChoices = doublePinyins.map { DoublePinyinChoice(it.id, it.name, it.preview(), !DoublePinyinSchemes.isCustom(it.id),
-                lettersOnly = it.usesSemicolon) },
+            // 每种双拼都有 14 键、九键版本（ing 在分号上的方案把分号并到 L 键），不再标 lettersOnly。
+            doublePinyinChoices = doublePinyins.map { DoublePinyinChoice(it.id, it.name, it.preview(), !DoublePinyinSchemes.isCustom(it.id)) },
             wubiInstalled = File(SchemaManager.getRimeDir(context), "${SetupGuidePlanner.WUBI}.schema.yaml").isFile,
             wubi98Installed = File(SchemaManager.getRimeDir(context), "${SetupGuidePlanner.WUBI98}.schema.yaml").isFile,
             doublePinyinKeyHints = keys.doublePinyinKeyHints,
@@ -246,27 +246,8 @@ object SetupGuide {
     /** 「更多配置」要问的现在的值；在 IO 线程调用（玻璃效果的实测代价要读文件）。 */
     fun readMore(context: Context): SetupMoreFacts {
         val keys = KeyboardInputPreferences.read(context)
-        val glass = com.kingzcheung.xime.settings.FrostedGlassPreferences.readProfiles(context).dark.enabled
         return SetupMoreFacts(
-            current = SetupMoreChoices(
-                spaceHold = com.kingzcheung.xime.ui.keyboard.CursorChoices.spaceHold(keys),
-                deleteSkipsAssociation = SettingsPreferences.isDeleteSkipsAssociation(context),
-                clearBeforeCursorOnly = keys.clearBeforeCursorOnly,
-                textSize = SetupMore.textSizeOf(SettingsPreferences.getCandidateTextSize(context), keys.keyTextScale),
-                feedback = SetupMore.feedbackOf(SettingsPreferences.isSoundEnabled(context), SettingsPreferences.isVibrationEnabled(context)),
-                glass = glass,
-                autoPunctuation = SettingsPreferences.isSttAutoPunctuation(context),
-                // 存着的角标方式，不管滑行：开着滑行时键盘按长按处理，关了滑行就回到这里存的方式（见 SetupMore.effectiveCorner）。
-                corner = when {
-                    keys.symbolInputMode == com.kingzcheung.xime.ui.keyboard.SymbolInputMode.LONG_PRESS ->
-                        com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS
-                    keys.letterLongPressMenu -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE
-                    else -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE
-                },
-                reverseSwipe = keys.reverseSymbolSwipe,
-                glide = GlideChoice.of(keys.glideTyping, keys.chineseGlideTyping),
-                cancelButton = SettingsPreferences.shouldShowCandidateCancelButton(context),
-            ),
+            current = readMoreChoices(context, keys),
             sttEnabled = SettingsPreferences.isSttEnabled(context),
             predictionEnabled = SettingsPreferences.isSmartPredictionEnabled(context),
             reverseSwipe = keys.reverseSymbolSwipe,
@@ -278,6 +259,33 @@ object SetupGuide {
             }.getOrNull(),
             reverseDeleteSwipe = keys.reverseDeleteSwipe,
             glideLock = glideLock(keys),
+        )
+    }
+
+    /**
+     * 「更多配置」每题现在的值，读的都是设置页那几个开关存的同一处设置（11-14 反馈：两边要一致）。
+     * 页面上每点一项就写进设置，再用它读回来显示实际生效的值。
+     */
+    fun readMoreChoices(context: Context, keys: KeyboardInputPreferences = KeyboardInputPreferences.read(context)): SetupMoreChoices {
+        val glass = com.kingzcheung.xime.settings.FrostedGlassPreferences.readProfiles(context).dark.enabled
+        return SetupMoreChoices(
+            spaceHold = com.kingzcheung.xime.ui.keyboard.CursorChoices.spaceHold(keys),
+            deleteSkipsAssociation = SettingsPreferences.isDeleteSkipsAssociation(context),
+            clearBeforeCursorOnly = keys.clearBeforeCursorOnly,
+            textSize = SetupMore.textSizeOf(SettingsPreferences.getCandidateTextSize(context), keys.keyTextScale),
+            feedback = SetupMore.feedbackOf(SettingsPreferences.isSoundEnabled(context), SettingsPreferences.isVibrationEnabled(context)),
+            glass = glass,
+            autoPunctuation = SettingsPreferences.isSttAutoPunctuation(context),
+            // 存着的角标方式，不管滑行：开着滑行时键盘按长按处理，关了滑行就回到这里存的方式（见 SetupMore.effectiveCorner）。
+            corner = when {
+                keys.symbolInputMode == com.kingzcheung.xime.ui.keyboard.SymbolInputMode.LONG_PRESS ->
+                    com.kingzcheung.xime.ui.keyboard.CornerInputChoice.LONG_PRESS
+                keys.letterLongPressMenu -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE_BUBBLE
+                else -> com.kingzcheung.xime.ui.keyboard.CornerInputChoice.SWIPE
+            },
+            reverseSwipe = keys.reverseSymbolSwipe,
+            glide = GlideChoice.of(keys.glideTyping, keys.chineseGlideTyping),
+            cancelButton = SettingsPreferences.shouldShowCandidateCancelButton(context),
         )
     }
 

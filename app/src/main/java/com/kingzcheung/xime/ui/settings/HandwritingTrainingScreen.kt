@@ -246,7 +246,7 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
             formulaBank = bank
             _state.update {
                 it.copy(counts = counts, personalModel = personalModelState(),
-                    uploaded = if (contribute) HandwritingContribution.uploadedLines(app) else 0)
+                    uploaded = if (contribute) HandwritingContribution.uploadedCount(app) else 0)
             }
             if (contribute) {
                 withContext(Dispatchers.IO) { contributePrompts }
@@ -745,16 +745,20 @@ class HandwritingTrainingViewModel @JvmOverloads constructor(
                 val result = withContext(Dispatchers.IO) {
                     HandwritingContribution.upload(app, store.samples(), BuildConfig.VERSION_NAME)
                 }
-                _state.update { it.copy(uploaded = HandwritingContribution.uploadedLines(app)) }
-                _events.emit(TrainingEvent.Message(
-                    if (result.count == 0) "没有新写的样本" else "已上传 ${result.count} 条，谢谢"))
+                _state.update { it.copy(uploaded = HandwritingContribution.uploadedCount(app)) }
+                val heldNote = if (result.held > 0) "；${result.held} 条(长公式、一段话)服务器暂时收不了，可以用右上角「分享样本文件」发给作者" else ""
+                _events.emit(TrainingEvent.Message(when {
+                    result.count > 0 -> "已上传 ${result.count} 条，谢谢$heldNote"
+                    result.held > 0 -> "没有能上传的新样本$heldNote"
+                    else -> "没有新写的样本"
+                }))
             } catch (e: Exception) {
                 Log.w(TRAINING_TAG, "upload failed", e)
                 FileLogger.e(TRAINING_TAG, "upload failed", e)
                 _events.emit(TrainingEvent.Message("上传失败：${e.message}，可以改用分享"))
             } finally {
                 // 分批上传中途失败时，已确认的批次也算传了
-                _state.update { it.copy(uploading = false, uploaded = HandwritingContribution.uploadedLines(app)) }
+                _state.update { it.copy(uploading = false, uploaded = HandwritingContribution.uploadedCount(app)) }
             }
         }
     }

@@ -46,6 +46,35 @@ class PinyinEditEngineTest {
     }
     private fun mode(id: String) { assertTrue(engine.switchSchema(id)); engine.setOption("ascii_mode", false) }
 
+    @Test fun clearUndoRestoresConfirmedPinyinAndCandidates() {
+        mode("rime_ice"); assertTrue(engine.setInput("nihao"))
+        val index = engine.getCandidates().indexOf("你")
+        assertTrue(index >= 0); assertTrue(engine.selectCandidate(index))
+        val before = engine.readPinyinEditSnapshot().toList()
+        val candidates = engine.getCandidates().toList()
+        assertTrue(engine.saveClearUndo())
+        engine.endQueuedComposition(false)
+        val restored = engine.restoreClearUndo(engine.currentCandidateRevision())
+        assertNotNull(restored)
+        assertEquals(before, engine.readPinyinEditSnapshot().toList())
+        assertEquals(candidates, engine.getCandidates().toList())
+        assertEquals("", engine.commit())
+    }
+
+    @Test fun clearUndoRestoresNineKeyInputAndBackspace() {
+        mode("t9_pinyin")
+        for (key in "64426") { assertTrue(engine.processKey(key.code, 0)); engine.t9FlushRimeInput() }
+        val digits = engine.t9GetRemainingDigits()
+        val candidates = engine.getCandidates().toList()
+        assertTrue(engine.saveClearUndo())
+        engine.endQueuedComposition(true)
+        assertNotNull(engine.restoreClearUndo(engine.currentCandidateRevision()))
+        assertEquals(digits, engine.t9GetRemainingDigits())
+        assertEquals(candidates, engine.getCandidates().toList())
+        assertTrue(engine.processKey(0xff08, 0)); engine.t9FlushRimeInput()
+        assertEquals(digits.dropLast(1), engine.t9GetRemainingDigits())
+    }
+
     @Test fun fourteenKeyRepresentativeCodeDisplaysCandidateReading() {
         mode("pinyin_14jian"); engine.setInput("qeb")
         val snapshot = engine.readPinyinEditSnapshot()

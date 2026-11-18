@@ -87,10 +87,19 @@ private const val GAP_LIGHT_WAVE_DP_PER_MS = 2.6f
 private const val GAP_LIGHT_RISE_MS = 190
 private const val GAP_LIGHT_SWEEP_MS = 260
 private const val GAP_LIGHT_FLASH_MS = 240
-/** 移光标走一格留下的刻度多久收掉；松手后色块多久收掉；色块的半宽（dp）。 */
+/** 移光标走一格留下的刻度多久收掉；松手后多久收掉；色块的半宽、光柱的半宽、刻度最窄多宽（dp）。 */
 private const val GAP_LIGHT_TICK_MS = 260
 private const val GAP_LIGHT_BEAD_FADE_NANOS = 120_000_000L
-private const val GAP_LIGHT_BEAD_HALF_DP = 14f
+private const val GAP_LIGHT_BEAD_HALF_DP = 22f
+private const val GAP_LIGHT_BEAM_HALF_DP = 11f
+private const val GAP_LIGHT_TICK_MIN_DP = 2f
+/**
+ * 移光标时键盘不再压淡（用户 11-15：遮罩把键缝效果挡住了，要更显著），这个状态全靠键缝里的光：
+ * 亮度在设置的基础上再提这么多倍（不超过 1）；轨道、光柱相对色块的亮度。都是整块的实色，分级不渐变。
+ */
+private const val GAP_LIGHT_CURSOR_BOOST = 1.35f
+private const val GAP_LIGHT_RAIL_SHADE = .34f
+private const val GAP_LIGHT_BEAM_SHADE = .62f
 private const val BEAD_OFF = 0
 private const val BEAD_ON = 1
 private const val BEAD_ENDING = 2
@@ -118,7 +127,10 @@ internal class KeyGapLightTrigger {
         field?.tap(token ?: return, kind)
     }
 
-    /** 正在按住空格移光标；[x] 是手指在键格里的横坐标（像素，和这个键的触摸坐标同一个原点）。 */
+    /**
+     * 正在按住空格移光标；[x] 是手指在键格里的横坐标（像素，和这个键的触摸坐标同一个原点）。
+     * 第一次调就是进入移光标的那一刻：从手指的位置扩开一次。
+     */
     fun cursorAt(x: Float) {
         field?.bead(token ?: return, x)
     }
@@ -197,7 +209,10 @@ internal class KeyGapLightField {
     }
     private val holds = ArrayList<Hold>()
 
-    /** 移光标时跟着手指的色块：在空格上面那条键缝里。 */
+    /**
+     * 移光标：空格上面那条键缝横贯整块键盘亮成一条轨道，色块在轨道上跟着手指；
+     * 色块往上是一根光柱，一直到按键区顶边，只从键缝里露出来。
+     */
     private var beadState = BEAD_OFF
     private var beadX = 0f
     private var beadY = 0f
@@ -403,19 +418,25 @@ internal class KeyGapLightField {
         }
     }
 
-    /** 按住空格移光标：色块跟着手指。[xInCell] 是手指在这个键的键格里的横坐标。 */
+    /**
+     * 按住空格移光标：色块和光柱跟着手指。[xInCell] 是手指在这个键的键格里的横坐标。
+     * 刚进入的那一下（长按生效）整块键盘换了意思，和切换大小写同一种色带从手指的位置扩开一次。
+     */
     internal fun bead(token: Any, xInCell: Float) {
         val config = config
         if (!config.enabled || !config.space) return
-        if ((motionScale?.scaleFactor ?: 1f) <= 0f) return
+        val scale = motionScale?.scaleFactor ?: 1f
+        if (scale <= 0f) return
         val net = ensureNet() ?: return
         val key = netKeys[token] ?: return
         if (!net.has(key)) return
         val spot = spots[token] ?: return
-        val width = layer?.takeIf { it.isAttached }?.size?.width ?: return
-        beadX = (caps[key * 4] - spot.pads[0] + xInCell).coerceIn(0f, width.toFloat())
+        val size = layer?.takeIf { it.isAttached }?.size ?: return
+        val entering = beadState != BEAD_ON
+        beadX = (caps[key * 4] - spot.pads[0] + xInCell).coerceIn(0f, size.width.toFloat())
         beadY = net.top(key)
         beadState = BEAD_ON
+        if (entering) wave(Offset(beadX, (net.top(key) + net.bottom(key)) / 2f), true, size.width, size.height, scale)
         stamp.intValue++
     }
 
@@ -610,7 +631,9 @@ internal class KeyGapLightField {
         if (config.style == KeyGapLightStyle.TRACE) drawPulses(config, color, line, lineAcross, lineAlong)
         // 长按进度的线压在键格的边上，本来就在键缝里，不用裁。
         if (holds.isNotEmpty()) drawHolds(config, color, lineAcross, lineAlong)
-        if (ticks.isNotEmpty() || beadState != BEAD_OFF) drawBead(config, color, lineAlong)
+        // 移光标的轨道横穿整排、光柱竖穿整块键盘，会经过键帽底下和没有键的空当（第二排两头）。
+        // 不管键帽透不透明都裁到键缝里：光柱停在空当上时不会亮出一整块。
+        if (ticks.isNotEmpty() || beadState != BEAD_OFF) clipPath(gapMask()) { drawBead(config, color, lineAlong) }
         // 音量条横穿整排，会从跨两排的高键底下经过：键帽半透明时同样裁到键缝里。
         if (voiceActive) {
             if (translucentCaps) clipPath(gapMask()) { drawVoice(config, color) } else drawVoice(config, color)
@@ -634,25 +657,31 @@ internal class KeyGapLightField {
         }
     }
 
-    /** 移光标：色块和刻度都画在空格上面那条键缝里，高度不超过键缝，键帽半透明也透不出来。 */
+    /**
+     * 移光标：空格上面那条键缝是轨道（横贯整块键盘，暗一级），色块在轨道上跟着手指（最亮，占满键缝的高度），
+     * 色块往上一根光柱到按键区顶边（中间一级），每走一格在轨道上留一个刻度。全是硬边的实色块，松手一起收掉。
+     */
     private fun DrawScope.drawBead(config: KeyGapLightConfig, color: Color, lineAlong: Float) {
         if (gapY < .5f) return
+        val strong = min(1f, config.brightness * GAP_LIGHT_CURSOR_BOOST)
+        val fade = if (beadState == BEAD_OFF) 0f
+            else if (beadState != BEAD_ENDING || beadEndStart < 0L) 1f
+            else 1f - ((now - beadEndStart).toFloat() / GAP_LIGHT_BEAD_FADE_NANOS).coerceIn(0f, 1f)
+        if (fade > 0f) {
+            fill(0f, beadY - gapY, size.width, beadY + gapY, color, strong * GAP_LIGHT_RAIL_SHADE * fade)
+            val beam = GAP_LIGHT_BEAM_HALF_DP * pixelsPerDp
+            fill(beadX - beam, 0f, beadX + beam, beadY - gapY, color, strong * GAP_LIGHT_BEAM_SHADE * fade)
+        }
+        val half = max(max(lineAlong, GAP_LIGHT_TICK_MIN_DP * pixelsPerDp), 1f) / 2f
         for (index in ticks.indices) {
             val tick = ticks[index]
             val elapsed = if (tick.start < 0L) GAP_LIGHT_LEAD_NANOS else now - tick.start
-            val alpha = gapLightCut((elapsed.toFloat() / tick.durationNanos).coerceIn(0f, 1f), .3f) * config.brightness
-            val half = max(lineAlong, 1f) / 2f
+            val alpha = gapLightCut((elapsed.toFloat() / tick.durationNanos).coerceIn(0f, 1f), .3f) * strong
             if (alpha > 0f) block(tick.x - half, tick.y - gapY, tick.x + half, tick.y + gapY, color, alpha, vertical = true)
         }
-        if (beadState == BEAD_OFF) return
-        val fade = if (beadState != BEAD_ENDING) 1f
-            else if (beadEndStart < 0L) 1f
-            else 1f - ((now - beadEndStart).toFloat() / GAP_LIGHT_BEAD_FADE_NANOS).coerceIn(0f, 1f)
         if (fade <= 0f) return
-        val half = GAP_LIGHT_BEAD_HALF_DP * pixelsPerDp
-        // 上下各让一个像素，色块和两边的键帽之间留一条缝，看得出是一块东西。
-        val inset = if (gapY > 2f) 1f else 0f
-        fill(max(0f, beadX - half), beadY - gapY + inset, min(size.width, beadX + half), beadY + gapY - inset, color, config.brightness * fade)
+        val bead = GAP_LIGHT_BEAD_HALF_DP * pixelsPerDp
+        fill(beadX - bead, beadY - gapY, beadX + bead, beadY + gapY, color, strong * fade)
     }
 
     /** 长按进度：从键的上边正中出发，顺时针沿键边走，走过的部分是实的。 */

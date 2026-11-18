@@ -580,18 +580,18 @@ class KeyboardInputPreferencesTest {
         assertEquals(0.1f, KeyboardInputPreferences.read(context).languageMenuHoldSeconds, 0f)
     }
 
-    @Test fun `corner long press delay keeps the old 0_3 s default, persists, is bounded and caps glide takeover`() {
-        // 用户 11-08：关闭角标滑动后长按时间要能调；默认仍是原来写死的 0.3 秒。
-        assertEquals(0.3f, KeyboardInputPreferences().symbolLongPressSeconds, 0f)
-        assertEquals(300L, KeyboardInputPreferences.read(context).symbolLongPressMs)
+    @Test fun `corner long press delay defaults to 0_5 s, persists, is bounded and caps glide takeover`() {
+        // 用户 11-08：关闭角标滑动后长按时间要能调。用户 11-15：默认改成 0.5 秒（原来 0.3 秒）。
+        assertEquals(0.5f, KeyboardInputPreferences().symbolLongPressSeconds, 0f)
+        assertEquals(500L, KeyboardInputPreferences.read(context).symbolLongPressMs)
         KeyboardInputPreferences(symbolInputMode = SymbolInputMode.LONG_PRESS, symbolLongPressSeconds = 0.55f).save(context)
         val restored = KeyboardInputPreferences.read(context)
         assertEquals(0.55f, restored.symbolLongPressSeconds, 0.001f)
         assertEquals(550L, restored.symbolLongPressMs)
-        assertTrue("symbol_long_press_seconds" in KeyboardInputPreferences.watchedKeys)
+        assertTrue("symbol_long_press_seconds_v2" in KeyboardInputPreferences.watchedKeys)
         assertEquals(0.1f, normalizeSymbolLongPressSeconds(0f), 0f)
         assertEquals(1f, normalizeSymbolLongPressSeconds(5f), 0f)
-        assertEquals(0.3f, normalizeSymbolLongPressSeconds(Float.NaN), 0f)
+        assertEquals(0.5f, normalizeSymbolLongPressSeconds(Float.NaN), 0f)
         assertEquals(0.25f, normalizeSymbolLongPressSeconds(0.26f), 0.001f)
         // 滑行接管的按住上限：滑动输入不变；长按输入时不晚于角标输入的那一刻。
         assertEquals(300L, KeyboardInputPreferences(symbolLongPressSeconds = 0.15f).glideHoldMs)

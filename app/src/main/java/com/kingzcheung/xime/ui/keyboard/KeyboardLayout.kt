@@ -181,6 +181,16 @@ fun KeyboardLayout(
         candidateState != null) remember(candidateState) {
         androidx.compose.runtime.derivedStateOf { awaitsDoublePinyinFinal(candidateState.value.inputText) }
     } else null
+    // 双拼辅助码（双拼方案 › 辅助码，默认关）：打拼音时 Shift 键变成「辅」，点它再打形码筛候选。
+    // 只认补丁真写进当前方案的（RimeEngine.auxCodeActive，按键队列第一键就读到），14 键、合并键布局没有。
+    val auxOnShift = if (LocalKeyboardInputPreferences.current.doublePinyinAuxCode && doublePinyin && !isAsciiMode &&
+        !fourteenKey && candidateState != null) remember(candidateState, uiState.currentSchemaId) {
+        androidx.compose.runtime.derivedStateOf {
+            val input = candidateState.value.inputText
+            auxCodeKeyShown(input, ingOnShift?.value == true) && com.kingzcheung.xime.rime.RimeEngine.isInitialized() &&
+                com.kingzcheung.xime.rime.RimeEngine.getInstance().auxCodeActive(uiState.currentSchemaId)
+        }
+    } else null
     // 注音（大千）：11 列，下面三行 10 键缩进半键，没有 Shift，删除键在第四行末尾。
     val zhuyin = !isAsciiMode && uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN
     // 数字行（默认关）：字母上方一排，键和顺序在「按键符号 → 数字行」里改；注音不加（见 [numberRowShown]）。
@@ -405,6 +415,7 @@ fun KeyboardLayout(
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     val liveKeyboardBounds = remember { LiveBounds() }
+    val longPressMenuKeyboard: () -> Rect = remember(liveKeyboardBounds) { { liveKeyboardBounds.current(keyboardBounds, "keyboard") } }
     // 滑行：英文 26 键出整词（「滑行输入」）；中文全拼、双拼 26 键（含分体、自定义字母排列）出一个词的编码交给 Rime
     // （「中文滑行输入」，单独的开关，默认关）。整键盘滑动移动光标与其冲突时让位。
     // 角标照常按两个角标提示开关显示，滑行不改它（用户 10-31：不能改他的习惯）。
@@ -566,6 +577,7 @@ fun KeyboardLayout(
         LocalHoneycombKeys provides honeycomb,
         LocalCustomAccent provides KeyboardThemes.getPrimaryColor(uiState.themeId, uiState.isDarkTheme),
         LocalShiftSlideTargets provides shiftSlideTargets,
+        LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
         LocalLetterGlide provides glideEnabled,
         LocalKeyCornerRadius provides kbKey.cornerRadius.dp,
         LocalEnterKeyColors provides KeyboardKeyColors(KeyboardThemes.getEnterKeyColor(uiState.themeId, uiState.isDarkTheme), specialKeyTextColor),
@@ -671,7 +683,7 @@ fun KeyboardLayout(
                                     onInput = { text -> (onCommitText ?: onKeyPress)(text) },
                                     onKeyPressDown = onKeyPressDown,
                                     onKeyRelease = onKeyRelease,
-                                    showHints = swipeUpHintsEnabled || swipeDownHintsEnabled,
+                                    onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
                                 )
                             }
                         }
@@ -842,6 +854,7 @@ fun KeyboardLayout(
                             val shiftSlot = Modifier.weight(letterSideKeyWeight)
                             SemicolonShiftKey(
                                 ingActive = ingOnShift,
+                                auxActive = auxOnShift,
                                 onKeyPress = onKeyPress,
                                 onKeyPressDown = onKeyPressDown,
                                 backgroundColor = specialKeyBackgroundColor,
@@ -1012,7 +1025,7 @@ fun KeyboardLayout(
                         }
                     }
 
-                    // 蜂窝布局的第四行字母（zxcvbnm），与第二行同宽对齐。注音的第四行 10 键，删除键占第 11 列。
+                    // 蜂窝布局的第四行字母（zxcvbnm），与第二行同宽对齐。注音的第四行 10 键，删除键在末尾占一键半宽。
                     renderRows.getOrNull(3)?.let { row3 ->
                         Row(modifier = Modifier.weight(1f)) {
                             if (isVoiceMode && !isVoiceSticky) DummyKeyboardRow(
@@ -1042,7 +1055,8 @@ fun KeyboardLayout(
                                 onGestureAction = onGestureAction,
                                 configVersion = cfgVer,
                             )
-                            if (zhuyin && !(isVoiceMode && !isVoiceSticky)) deleteKey(Modifier.weight(1f))
+                            // 删除键原来只有一个注音键宽，挨着 ㄥ 容易按错（#375）：加宽到一键半，这一行十个键各窄一点。
+                            if (zhuyin && !(isVoiceMode && !isVoiceSticky)) deleteKey(Modifier.weight(ZHUYIN_DELETE_KEY_WEIGHT))
                         }
                         Spacer(Modifier.height(honeycombOverhang))
                     }
@@ -2245,3 +2259,6 @@ internal fun commitLongPressChoice(label: String, onCommitText: ((String) -> Uni
 internal fun letterLongPressMenuAllowed(key: String, enabled: Boolean): Boolean =
     // 字母键是 1～2 个字母（26 键 q、14 键 qw）；earth 之类的功能键名不算。
     enabled || key.length !in 1..2 || !key.all { it in 'a'..'z' || it in 'A'..'Z' }
+
+/** 注音第四行末尾删除键的宽度（按一个注音键算）。 */
+internal const val ZHUYIN_DELETE_KEY_WEIGHT = 1.5f

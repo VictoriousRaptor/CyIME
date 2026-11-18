@@ -121,7 +121,7 @@ fun SettingsScreen(
                     onNavigateToSmartPrediction = { navController.navigate(SettingsRoutes.SmartPrediction) },
                     onNavigateToSpeechToText = { navController.navigate(SettingsRoutes.SpeechToText) },
                     onNavigateToAbout = { navController.navigate(SettingsRoutes.About) },
-                    onNavigateToClipboardSync = { navController.navigate(SettingsRoutes.ClipboardSync) },
+                    onNavigateToClipboard = { navController.navigate(SettingsRoutes.ClipboardPanel) },
                     onNavigateToBackup = { navController.navigate(SettingsRoutes.Backup) },
                     onNavigateToRoute = { navController.navigate(it) },
                 )
@@ -310,13 +310,13 @@ fun SettingsScreen(
             ClipboardSyncSettingsContent(
                 onBack = { navController.popBackStack() },
                 onNavigateToPlugins = { navController.navigate(SettingsRoutes.Plugins) },
-                onNavigateToPanel = { navController.navigate(SettingsRoutes.ClipboardPanel) },
             )
         }
         composable(SettingsRoutes.ClipboardPanel) {
             ClipboardPanelSettingsContent(
                 onBack = { navController.popBackStack() },
                 onNavigateToGroups = { navController.navigate(SettingsRoutes.ClipboardGroups) },
+                onNavigateToSync = { navController.navigate(SettingsRoutes.ClipboardSync) },
             )
         }
         composable(SettingsRoutes.ClipboardGroups) {

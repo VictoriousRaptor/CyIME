@@ -10,6 +10,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -246,6 +250,8 @@ fun SpaceKeyButton(
             Text(if (voiceCancelArmed) "松手取消" else "上滑取消", color = cancelColors?.foreground ?: textColor,
                 fontSize = hintSize.sp, lineHeight = (hintSize * 1.2f).sp, maxLines = 1, softWrap = false,
                 fontFamily = AppFonts.keyFontFamily, modifier = Modifier.testTag("space-voice-cancel-hint"))
+        } else if (cursorActive) {
+            SpaceCursorHint(textColor, maxWidth.value, maxHeight.value, density.fontScale, !settings.hideFunctionKeyHints)
         } else if (!settings.hideFunctionKeyHints && SpaceLanguageFlash.isLanguageName(displayName) && labelSize >= 8f) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text(displayName, color = textColor,
@@ -266,5 +272,26 @@ fun SpaceKeyButton(
                     modifier = Modifier.testTag("space-language-flash").graphicsLayer { alpha = flashAlpha.value })
             }
         }
+    }
+}
+
+/**
+ * 按住空格移光标时空格上的提示（用户 11-15：整块键盘不再压淡，中间也不再盖「光标调整」，那一层把键缝动效挡住了）。
+ * 两头各一个箭头，中间写「移动光标」；箭头靠在键的两头，手指按在中间也看得见。
+ * 键窄得放不下字、或开了「功能键不显示提示字」时只留箭头。
+ */
+@Composable
+private fun SpaceCursorHint(color: Color, widthDp: Float, heightDp: Float, fontScale: Float, label: Boolean) {
+    val textSize = (heightDp * 0.32f / fontScale).coerceIn(9f, 16f)
+    val arrow = (heightDp * 0.5f).coerceIn(12f, 24f)
+    // 四个字、两个箭头、中间留的空都放得下才写字。
+    val showLabel = label && widthDp >= textSize * fontScale * 4.4f + arrow * 2f + 8f
+    // 平时的空格图标不在了：读屏和测试仍按「空格」找到这个键。
+    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp).testTag("space-cursor-hint").semantics { contentDescription = "空格" },
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = color, modifier = Modifier.size(arrow.dp))
+        if (showLabel) Text("移动光标", color = color, fontSize = textSize.sp, lineHeight = (textSize * 1.2f).sp,
+            maxLines = 1, softWrap = false, fontFamily = AppFonts.keyFontFamily)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = color, modifier = Modifier.size(arrow.dp))
     }
 }

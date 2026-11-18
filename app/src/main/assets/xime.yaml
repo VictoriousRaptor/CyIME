@@ -351,7 +351,7 @@ keyboard:
       earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
 
   # 注音（大千式，对应方案 cyime_zhuyin，默认不启用）：键帽是注音符号，同电脑大千键盘的列，
-  # 第一行 11 键，下面三行 10 键缩进半键，删除键在第四行末尾（KeyboardLayout 按 LayoutKind.ZHUYIN 排）。
+  # 第一行 11 键，第二三行 10 键缩进半键，第四行 10 键加一键半宽的删除键（KeyboardLayout 按 LayoutKind.ZHUYIN 排）。
   # 键帽送注音符号，ImeKeyRouter 换成大千键码（ZhuyinKeys）。第一声是空格。
   # 大千的逗号句号键是 ㄝ ㄡ，底排逗号键直接上屏全角标点，不经 Rime。
   zhuyin:

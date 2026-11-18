@@ -260,6 +260,25 @@ class PerformanceCostsTest {
         assertFalse("liquid_glass" in PerformanceCosts.projected(on - "glass", high))
     }
 
+    @Test fun liquidGlassStrengthOnlyCountsWhileLiquidGlassIsOn() {
+        val on = setOf("glass", "liquid_glass", "liquid_glass_strongest", "neighbor_correction")
+        val current = PerformanceSettings(true, true, 0, 0, liquidGlass = true)
+        // 中配关液态玻璃：选的档位跟着不算。
+        val medium = PerformanceProfile.applied(current, com.kingzcheung.xime.runtime.adaptation.PerformanceTier.MEDIUM)
+        assertFalse("liquid_glass" in PerformanceCosts.projected(on, medium))
+        assertFalse("liquid_glass_strongest" in PerformanceCosts.projected(on, medium))
+        // 高配不关：照旧算；玻璃关着时液态玻璃不算，档位也不算。
+        val high = PerformanceProfile.applied(current, com.kingzcheung.xime.runtime.adaptation.PerformanceTier.HIGH)
+        assertTrue("liquid_glass_strongest" in PerformanceCosts.projected(on, high))
+        assertFalse("liquid_glass_strongest" in PerformanceCosts.projected(on - "glass", high))
+        // 两档只会开一档：全开按最强算，不把两档加在一起。
+        val both = device.copy(items = device.items + mapOf(
+            "liquid_glass_strong" to PerformanceCosts.Cost(keyMs = 0.2), "liquid_glass_strongest" to PerformanceCosts.Cost(keyMs = 0.4)))
+        val full = PerformanceCosts.fullOn(both, nineKey = false)
+        assertTrue("liquid_glass_strongest" in full)
+        assertFalse("liquid_glass_strong" in full)
+    }
+
     @Test fun aTierThatTurnsTheKeyGapLightOffDropsEveryEffectOfIt() {
         val on = setOf("key_gap_light", "key_gap_light_typing", "key_gap_light_commit", "neighbor_correction")
         val current = PerformanceSettings(true, true, 0, 0, keyGapLight = true)

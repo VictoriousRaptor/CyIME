@@ -17,12 +17,21 @@ internal fun awaitsDoublePinyinFinal(input: String): Boolean =
     input.count { it != '\'' && it != ' ' } % 2 == 1
 
 /**
- * 左下角那一格：[ingActive] 为真时是 ing 键（点按送分号，微软双拼的 ing），否则是平常的 [shift]。
+ * 双拼辅助码开着时 Shift 键什么时候变成「辅」：正在打拼音、还没点过「辅」（编码里没有引导符 `），
+ * 也不是在等韵母（那一下留给 ing，只有微软双拼开了「ing 放在 Shift 键上」才会有）。
+ */
+internal fun auxCodeKeyShown(input: String, ingShown: Boolean): Boolean =
+    input.isNotEmpty() && com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_TRIGGER !in input && !ingShown
+
+/**
+ * 左下角那一格：[ingActive] 为真时是 ing 键（点按送分号，微软双拼的 ing）；[auxActive] 为真时是「辅」
+ * （点按送辅码引导符 `，接着打形码筛候选，见 SpellingPatches.AuxCode）；否则是平常的 [shift]。
  * 状态在这里读，打字时只重组这一格，不重组整个键盘。
  */
 @Composable
 internal fun SemicolonShiftKey(
     ingActive: State<Boolean>?,
+    auxActive: State<Boolean>? = null,
     onKeyPress: (String) -> Unit,
     onKeyPressDown: ((String) -> Unit)?,
     backgroundColor: Color,
@@ -42,6 +51,19 @@ internal fun SemicolonShiftKey(
             backgroundColor = backgroundColor,
             textColor = textColor,
             modifier = modifier.fillMaxHeight().testTag("shift-key-ing"),
+            shadowEnabled = shadowEnabled,
+            shadowElevation = shadowElevation,
+            shadowShapeRadius = shadowShapeRadius,
+        )
+    } else if (auxActive?.value == true) {
+        val trigger = com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_TRIGGER
+        SwipeableKeyButton(
+            text = "辅",
+            onClick = { onKeyPress(trigger) },
+            onPress = { onKeyPressDown?.invoke(trigger) },
+            backgroundColor = backgroundColor,
+            textColor = textColor,
+            modifier = modifier.fillMaxHeight().testTag("shift-key-aux"),
             shadowEnabled = shadowEnabled,
             shadowElevation = shadowElevation,
             shadowShapeRadius = shadowShapeRadius,

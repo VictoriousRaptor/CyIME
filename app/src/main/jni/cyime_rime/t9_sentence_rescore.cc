@@ -69,7 +69,7 @@ bool T9InitialsOnly(const string& input) {
 void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool ngram_sentence_start,
                         size_t keys_per_syllable, double rime_weight, double tail_correction_margin,
                         double slip_margin, int initials_choices, double initials_margin,
-                        const string& initials_first, Poet* poet,
+                        const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences) {
@@ -238,10 +238,22 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     // were corrections), so the choice is among sentences made from the same graph without
     // corrected words: the typed n-best, made again when corrections left two typed sentences or
     // fewer (rebuilding whenever one place was taken cost a per-key p95 of +3.5%, this +1.6%).
+    // A sentence pays `near_penalty` for each word that is only the second dictionary word of its letters
+    // (translator/sentence_near_homophone_margin lets those into the sentence graph: 充了 beside 冲了, 我妈 beside
+    // 我吗). The dictionary's first word keeps its place unless the word model prefers the other by more than that.
+    auto near_words = [](const Sentence& sentence) {
+      const auto& words = sentence.components();
+      return std::count_if(words.begin(), words.end(), [](const DictEntry& word) { return word.near_homophone; });
+    };
+    auto total = [&](const Sentence& sentence) {
+      return score(sentence) + rime_weight * sentence.weight() - near_penalty * near_words(sentence);
+    };
     deque<an<Sentence>> pool;
     for (const auto& sentence : *sentences)
       if (!corrected(sentence)) pool.push_back(sentence);
-    if (pool.size() <= 2 && pool.size() < sentences->size() && sentence_graph && poet) {
+    // Sentences through a second dictionary word come on top of the n-best, so they do not count here.
+    const auto typed = std::count_if(pool.begin(), pool.end(), [&](const auto& s) { return !near_words(*s); });
+    if (typed <= 2 && pool.size() < sentences->size() && sentence_graph && poet) {
       // Spans holding no corrected syllable keep all their words without looking at each one.
       vector<std::pair<size_t, size_t>> corrected_edges;
       for (const auto& from : q.syllables.edges)
@@ -269,8 +281,17 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       if (!remade.empty()) pool = std::move(remade);
     }
     double chosen_score = -std::numeric_limits<double>::infinity();
+    // The typed choice is made without the sentences through a second dictionary word, and the corrections below
+    // are judged against it as before; the best of those sentences takes the first place only at the end, when
+    // no correction did and its score, penalty paid, is still the higher one.
+    an<Sentence> near_choice;
+    double near_score = -std::numeric_limits<double>::infinity();
     for (const auto& sentence : pool) {
-      const double value = score(*sentence) + rime_weight * sentence->weight();
+      const double value = total(*sentence);
+      if (near_words(*sentence)) {
+        if (value > near_score) { near_score = value; near_choice = sentence; }
+        continue;
+      }
       if (value > chosen_score) { chosen_score = value; chosen = sentence; }
     }
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
@@ -280,7 +301,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       double fixed_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence)) continue;
-        const double value = score(*sentence) + rime_weight * sentence->weight();
+        const double value = total(*sentence);
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
       if (fixed) {
@@ -301,7 +322,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       double tail_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence) || !CorrectedOnlyAtTail(q, *sentence)) continue;
-        const double value = score(*sentence) + rime_weight * sentence->weight();
+        const double value = total(*sentence);
         if (value > tail_score) { tail_score = value; tail = sentence; }
       }
       if (tail && tail_score > chosen_score + tail_correction_margin) {
@@ -323,7 +344,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         if (!corrected(sentence)) continue;
         const string marks = sentence->correction_marks();
         const auto slips = std::max<std::ptrdiff_t>(1, std::count(marks.begin(), marks.end(), '='));
-        const double value = score(*sentence) + rime_weight * sentence->weight() - slip_margin * slips;
+        const double value = total(*sentence) - slip_margin * slips;
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
       if (fixed) {
@@ -332,6 +353,12 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         sentences->push_back(chosen);
         return;
       }
+    }
+    if (near_choice && near_score > chosen_score) {
+      sentences->clear();
+      sentences->push_back(near_choice);
+      sentences->push_back(chosen);
+      return;
     }
   }
   sentences->clear();

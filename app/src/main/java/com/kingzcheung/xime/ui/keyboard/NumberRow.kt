@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
@@ -35,14 +36,22 @@ internal fun numberRowSpans(count: Int, splitAt: Int): List<Float> =
 private val NUMBER_SHIFT_SYMBOLS = "1234567890".zip("!@#$%^&*()").associate { (digit, symbol) -> digit.toString() to symbol.toString() }
 
 /**
- * 数字行键的角标：和电脑键帽一样，1 上是 !，……，0 上是 )。跟着数字走，「按键符号 → 数字行」里改了顺序也不变；
+ * 数字行键上滑、下滑输入的符号：和电脑键帽一样，1 上是 !，……，0 上是 )（11-15 起不画在键上，见 [NumberKeyRow]）。跟着数字走，「按键符号 → 数字行」里改了顺序也不变；
  * 不是数字的格子（自己加的符号、短语）没有角标。开了数字行，这些符号从 26 键第一排挪到这里（用户 11-01 定）。
  */
 internal fun numberRowShiftSymbol(key: String): String? = NUMBER_SHIFT_SYMBOLS[key]
 
+/** 数字键长按弹出的分数（用户 11-15：数字行不画角标，长按直接弹菜单 ½ 到 ⅛）。 */
+internal val NUMBER_ROW_FRACTIONS = listOf("½", "⅓", "¼", "⅕", "⅙", "⅐", "⅛")
+
+/** 数字行这个键长按弹出的菜单：数字键都是 [NUMBER_ROW_FRACTIONS]，自己加的符号、短语没有。 */
+internal fun numberRowLongPressItems(key: String): List<String>? =
+    NUMBER_ROW_FRACTIONS.takeIf { numberRowShiftSymbol(key) != null }
+
 /**
- * 数字行的一排键：点按把键上写的原样上屏（[onInput]，和字母键上角标的数字同一条路，不拿来选候选）；
- * 数字键上滑、下滑或长按出 [numberRowShiftSymbol]，[showHints] 关时只是不显示角标，照样能滑出。
+ * 数字行的一排键：点按把键上写的原样上屏（[onInput]，和字母键上角标的数字同一条路，不拿来选候选）。
+ * 键上不画角标（用户 11-15）；数字键长按弹出 [numberRowLongPressItems]，挪到哪格松手输入哪格，
+ * 按多久和「长按输入」设的一样。上滑、下滑照旧输入 [numberRowShiftSymbol]，只是不画出来。
  */
 @Composable
 internal fun NumberKeyRow(
@@ -58,22 +67,25 @@ internal fun NumberKeyRow(
     onKeyPressDown: ((String) -> Unit)?,
     onKeyRelease: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
-    showHints: Boolean = true,
+    /** 长按菜单和按键气泡画在键盘上（[KeyboardLayout] 的 processSwipeState）；null 时不画。 */
+    onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
 ) {
+    val longPressMs = LocalKeyboardInputPreferences.current.symbolLongPressMs
     val spans = numberRowSpans(keys.size, splitAt)
     Row(modifier.fillMaxWidth().testTag("number-row")) {
         keys.forEachIndexed { index, key ->
             if (index == splitAt) SplitGapSpacer(NUMBER_ROW_SPLIT_ROW, splitGap)
             val shift = numberRowShiftSymbol(key)
             val commitShift: ((String) -> Unit)? = shift?.let { symbol -> { _: String -> onInput(symbol) } }
-            KeyButton(
+            SwipeableKeyButton(
                 text = key,
                 onClick = { onInput(key) },
-                swipeText = shift?.takeIf { showHints },
-                swipeDownText = shift?.takeIf { showHints },
                 onSwipe = commitShift,
                 onSwipeDown = commitShift,
-                onLongClick = shift?.let { symbol -> { onInput(symbol) } },
+                longPressItems = numberRowLongPressItems(key),
+                onLongPressSelect = onInput,
+                longPressTimeoutMillis = longPressMs,
+                onSwipeStateChange = onSwipeStateChange,
                 backgroundColor = keyBackgroundColor,
                 textColor = keyTextColor,
                 modifier = Modifier.weight(spans[index]).testTag("number-row-key:$index"),

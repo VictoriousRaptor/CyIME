@@ -447,6 +447,16 @@ fun SwipeableKeyButton(
         inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD && ctrlTargets != null
     // 这个键在键盘坐标里的左上角（和 Shift 拖动用的 dragBounds 同一坐标），手指在键里的位置加上它就是键盘坐标。
     val slideOrigin = remember { floatArrayOf(0f, 0f) }
+    val menuKeyboard = LocalLongPressMenuKeyboard.current
+    // 长按选项条在本键坐标里的位置，和气泡按同样的键、键盘位置算（见 processSwipeState 换成键盘坐标那一步）。
+    val longPressMenuCells: (Int, Boolean) -> LongPressMenuCells = { count, iconMenu ->
+        val key = liveBounds.current(buttonBounds, "key $text")
+        val keyboard = menuKeyboard?.invoke()
+        val keyLeft = if (keyboard != null) key.left - keyboard.left else 0f
+        val cells = KeyboardKeyMetrics.longPressMenuCells(keyLeft, key.width, count, iconMenu,
+            keyboard?.width, with(density) { KeyboardKeyMetrics.LongPressMenuMargin.toPx() })
+        cells.copy(left = cells.left - keyLeft)
+    }
     val gestureActions = if (flick != null) KeyGestureActions(
         // 拂动：方向固定对应字母，不随角标方向反转；数字等改为长按。
         text = text,
@@ -503,6 +513,7 @@ fun SwipeableKeyButton(
         inlineHorizontalPreview = true,
         longPressDrawableIds = longPressDrawableIds.orEmpty(),
         keyWidth = buttonBounds.width,
+        longPressMenuCells = longPressMenuCells,
         onLongPressSelect = onLongPressSelect,
         longPressTimeoutMillis = longPressTimeoutMillis,
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
@@ -1086,6 +1097,8 @@ fun SwipeableIconKeyButton(
     distanceDelete: Boolean = false,
     /** 删除键：按住连删按「长按删除速度」。会左右滑动删除的键都是删除键；手写的删除键不接滑动，单独标。 */
     deleteKey: Boolean = distanceDelete,
+    /** 键缝动效：删除键往里收，其余功能键按下亮；九键合并的大回车传 SWEEP，和普通回车一样。 */
+    gapLight: GapLightKind = if (deleteKey) GapLightKind.PULL else GapLightKind.PRESS,
 ) {
     // Gesture coroutines survive recomposition; route to the current editor/input callbacks.
     val currentOnClick by rememberUpdatedState(onClick)
@@ -1198,7 +1211,7 @@ fun SwipeableIconKeyButton(
             .background(feedbackColors.background)
             .keyHeldHighlight(isPressed && feedback == KeyFlickFeedback.NORMAL), materialLevel = com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED,
                 glowVisibility = if (feedback == KeyFlickFeedback.NORMAL) 1f else 1f - (flickPreview?.progress ?: 0f),
-                gapLight = if (deleteKey) GapLightKind.PULL else GapLightKind.PRESS)
+                gapLight = gapLight)
             .then(if (honeycombEdge != null) Modifier.honeycombLabelArea(half = true) else Modifier),
         contentAlignment = Alignment.Center
     ) {

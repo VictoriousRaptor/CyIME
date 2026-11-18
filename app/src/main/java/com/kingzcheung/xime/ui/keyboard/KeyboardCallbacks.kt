@@ -15,6 +15,8 @@ data class KeyboardCallbacks(
     val onGlideWord: ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> Unit)? = null,
     /** 中文滑行：识别出的一个词的编码（全拼或双拼），按点按同一路径接进当前编码；其后几个编码作候选栏里的备选。 */
     val onGlideCode: ((String, List<String>, Long?) -> Unit)? = null,
+    /** 九键滑行：这一笔要打入的数字串和同一笔的备选词，在打入之前登记；候选栏在首选之后给出（#214）。 */
+    val onT9GlideAlternatives: ((String, List<String>) -> Unit)? = null,
     /** 英文滑行实时预览：每笔开头取一次，返回按上下文算“现在抬手会上屏什么”的函数（可在后台线程调用）。 */
     val glidePreviewer: (() -> ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> GlideEnglishPreview)?)? = null,
     val onGlideEnglishPreview: ((GlideEnglishPreview, Long) -> Unit)? = null,
@@ -38,10 +40,17 @@ data class KeyboardCallbacks(
     /** Validate the rendered list again when a tap or delayed deletion is delivered. */
     val isCandidateSnapshotCurrent: (com.kingzcheung.xime.service.CandidateState) -> Boolean = { true },
     val onOpenPreeditEditor: (((com.kingzcheung.xime.rime.PinyinEditSession?) -> Unit) -> Unit)? = null,
+    val onOpenSentenceEdit: ((Int, Int, Long, (com.kingzcheung.xime.service.SentenceEditSession?) -> Unit) -> Unit)? = null,
+    val onSentenceCandidates: ((com.kingzcheung.xime.service.SentenceEditSession, String, List<com.kingzcheung.xime.rime.PinyinSyllableOption>, String, (com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidates) -> Unit) -> Unit)? = null,
+    val onApplySentenceEdit: ((com.kingzcheung.xime.service.SentenceEditSession, List<com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidate>, Boolean, (Boolean) -> Unit) -> Unit)? = null,
+    val onSentencePreview: ((com.kingzcheung.xime.service.SentenceEditSession, String) -> Unit)? = null,
+    val onSentenceDragPreview: ((com.kingzcheung.xime.service.SentenceEditSession?) -> Unit)? = null,
+    val onEndSentencePreview: ((com.kingzcheung.xime.service.SentenceEditSession) -> Unit)? = null,
     var onT9RefreshAfterPreeditEdit: (() -> Unit)? = null,
     /** Installed by the visible editor; the IME service consumes Back before hiding. */
     var onDismissPreeditEditor: (() -> Unit)? = null,
     var onPreeditKeyInput: ((String) -> Boolean)? = null,
+    var onSentenceHorizontalDelete: (() -> Unit)? = null,
     /** Touch cursor gestures can enter preedit editing; physical arrows never call this. */
     var onPreeditCursorMove: ((String) -> Boolean)? = null,
     val onLivePreeditEdit: ((com.kingzcheung.xime.rime.PinyinEditSession, String?, Int?, String?, (com.kingzcheung.xime.rime.PinyinEditSession?) -> Unit) -> Unit)? = null,

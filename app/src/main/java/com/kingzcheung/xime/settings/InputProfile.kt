@@ -102,7 +102,7 @@ object InputProfiles {
         InputScheme.WORDS -> "word"
         InputScheme.STROKE -> "一丨丿丶乛"
         InputScheme.WUBI, InputScheme.WUBI_PINYIN -> "字根编码"
-        InputScheme.EXTERNAL -> "自定义编码"
+        InputScheme.EXTERNAL -> if ((profile.engineProfile as? EngineProfile.Rime)?.schemaId in shapeCodeIds) "形码" else "自定义编码"
         InputScheme.ZHUYIN -> "ㄓㄨˋㄧㄣ"
         // 倉：仓颉 oiar，速成取首尾 or
         InputScheme.CANGJIE -> if ((profile.engineProfile as? EngineProfile.Rime)?.schemaId == "cyime_quick") "人口" else "人戈日口"
@@ -114,6 +114,11 @@ object InputProfiles {
     private val doublePinyinIds = setOf("double_pinyin", "double_pinyin_flypy", "double_pinyin_flypy_14jian", "double_pinyin_abc",
         "double_pinyin_mspy", "double_pinyin_sogou", "double_pinyin_ziguang", "double_pinyin_pyjj")
     private val wubiIds = setOf("wubi86", "wubi86_trad", "wubi98")
+    /**
+     * 扩展 › 方案里装的音形、形码（小鹤音形，CuratedRimeSchemes）：中文，编码按方案自己的码表，算「自定义编码」。
+     * 不算拼音、双拼：纠错、模糊音、滑行、拼音改读音这些按拼音写的都不碰它；方案里的 ; ' 等符号码照第三方方案送进 Rime。
+     */
+    private val shapeCodeIds = setOf("flypy")
     private val wubiPinyinIds = setOf("wubi86_pinyin", "wubi86_trad_pinyin")
 
     fun describe(id: String, language: InputLanguage? = null, scheme: InputScheme? = null): InputProfile {
@@ -165,7 +170,8 @@ object InputProfiles {
             LetterLanguage.ofSchema(id) != null -> LetterLanguage.ofSchema(id)!!.language
             inputScheme in setOf(InputScheme.ROMAJI, InputScheme.KANA) -> InputLanguage.JAPANESE
             inputScheme in setOf(InputScheme.PINYIN, InputScheme.DOUBLE_PINYIN, InputScheme.WUBI,
-                InputScheme.WUBI_PINYIN, InputScheme.STROKE, InputScheme.ZHUYIN, InputScheme.CANGJIE) || id == "handwriting" -> InputLanguage.CHINESE
+                InputScheme.WUBI_PINYIN, InputScheme.STROKE, InputScheme.ZHUYIN, InputScheme.CANGJIE) || id == "handwriting" ||
+                id in shapeCodeIds -> InputLanguage.CHINESE
             else -> InputLanguage.UNSPECIFIED
         }
         val layout = when {

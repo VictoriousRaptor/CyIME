@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.twotone.BugReport
 import androidx.compose.material.icons.twotone.Code
 import androidx.compose.material.icons.twotone.Description
+import androidx.compose.material.icons.twotone.EmojiEmotions
 import androidx.compose.material.icons.twotone.Favorite
 import androidx.compose.material.icons.twotone.NewReleases
 import androidx.compose.material.icons.twotone.PersonOutline
@@ -169,6 +170,7 @@ fun AboutContent(
     var verboseLoggingEnabled by remember {
         mutableStateOf(SettingsPreferences.isVerboseLoggingEnabled(context))
     }
+    var launchAdEgg by remember { mutableStateOf(SettingsPreferences.isLaunchAdEggEnabled(context)) }
     
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -346,6 +348,25 @@ fun AboutContent(
                             title = "存储空间",
                             onClick = onNavigateToStorageSpace
                         )
+                        // 彩蛋（用户 11-15）：默认关；老人包不放。刚打开时马上放一遍。
+                        if (!BuildConfig.ELDER) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 56.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            SettingsToggleItem(
+                                icon = Icons.TwoTone.EmojiEmotions,
+                                title = "启动广告（彩蛋）",
+                                subtitle = "每次打开设置先看 5 秒假广告，可以跳过。画着玩的，不联网。",
+                                checked = launchAdEgg,
+                                onCheckedChange = { enabled ->
+                                    launchAdEgg = enabled
+                                    SettingsPreferences.setLaunchAdEggEnabled(context, enabled)
+                                    if (enabled) LaunchAdEgg.preview()
+                                }
+                            )
+                        }
                         if (BuildConfig.DEBUG) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 56.dp),

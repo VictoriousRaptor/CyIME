@@ -45,8 +45,8 @@
     <string name="item_handwriting_title">手寫</string>
     <string name="item_handwriting_summary">停頓辨識、公式標記、手寫模型</string>
     <string name="section_system">系統</string>
-    <string name="item_clipboard_title">剪貼簿與同步</string>
-    <string name="item_clipboard_summary">驗證碼自動複製、與電腦等裝置同步剪貼簿</string>
+    <string name="item_clipboard_title">剪貼簿</string>
+    <string name="item_clipboard_summary">面板顯示、歷史記錄、驗證碼自動複製、與電腦同步</string>
     <string name="item_extensions_title">擴充</string>
     <string name="item_extensions_summary">輸入方案、模型和外掛：下載、已安裝、匯入</string>
     <string name="item_backup_title">備份與還原</string>

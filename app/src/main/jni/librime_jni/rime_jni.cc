@@ -112,6 +112,17 @@ struct CompositionResult {
 };
 
 // Rime 单例类
+// Keeps the proven source positions when a revised sentence becomes a selected
+// Rime segment. It also allows another range to be edited before committing.
+class SentenceEditSyllabifier : public rime::PhraseSyllabifier {
+public:
+    explicit SentenceEditSyllabifier(rime::Spans spans) : spans_(std::move(spans)) {}
+    rime::Spans Syllabify(const rime::Phrase*) override { return spans_; }
+private:
+    rime::Spans spans_;
+};
+
+// Rime 单例类
 class Rime {
 public:
     Rime() : rime(rime_get_api()) {}
@@ -365,7 +376,360 @@ public:
         return rime && session_id_ && index >= 0 && rime->highlight_candidate(session_id_, index);
     }
 
+    bool saveClearUndo() {
+        discardClearUndo();
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session || !session->context()) return false;
+        auto ctx = session->context();
+        auto t9 = rime::T9ProcessorRequire();
+        if (ctx->input().empty() && !t9) return false;
+        if (t9) t9->SaveClearUndo();
+        clear_undo_ = ClearUndo{session_id_, getCurrentSchema(), ctx->input(), ctx->caret_pos(),
+                                ctx->composition(), t9};
+        return true;
+    }
+
+    bool restoreClearUndo() {
+        if (!clear_undo_ || clear_undo_->session != session_id_ || clear_undo_->schema != getCurrentSchema()) return false;
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session || !session->context() || !session->context()->input().empty() ||
+            (clear_undo_->t9 && rime::T9ProcessorRequire() != clear_undo_->t9)) return false;
+        auto saved = std::move(*clear_undo_);
+        clear_undo_.reset();
+        auto ctx = session->context();
+        ctx->set_input(saved.input);
+        ctx->set_composition(std::move(saved.composition));
+        ctx->set_caret_pos(saved.caret);
+        return !saved.t9 || saved.t9->RestoreClearUndo();
+    }
+
+    void discardClearUndo() {
+        if (clear_undo_ && clear_undo_->t9 && rime::T9ProcessorRequire() == clear_undo_->t9)
+            clear_undo_->t9->DiscardClearUndo();
+        clear_undo_.reset();
+    }
+
     // Editable suffix only: confirmed segments stay owned by Rime and are never replayed.
+    // Only expose mappings which Rime can prove: one BMP Chinese character for
+    // each exact syllable of the complete first candidate. Ambiguous mappings
+    // must leave the live composition untouched.
+    std::vector<std::string> sentenceEditSnapshot() {
+        if (!rime || !session_id_ || rime::T9ProcessorRequire()) return {};
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session || !session->context()) return {};
+        auto ctx = session->context();
+        const auto& composition = ctx->composition();
+        if (composition.size() != 1) return {};
+        const auto& segment = composition.back();
+        if (!segment.menu || segment.start != 0 || segment.end != ctx->input().size()) return {};
+        auto candidate = segment.menu->GetCandidateAt(0);
+        if (!candidate) return {};
+        if (composition.GetConfirmedPosition() != 0 && candidate->type() != "cyime_sentence_edit") return {};
+        auto phrase = rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(candidate));
+        if (!phrase || !phrase->is_exact_match() || phrase->text() != candidate->text()) return {};
+        const auto& text = phrase->text();
+        size_t characters = 0;
+        for (size_t i = 0; i < text.size();) {
+            const auto c = static_cast<unsigned char>(text[i]);
+            if (c < 0xe4 || c > 0xe9 || i + 2 >= text.size() ||
+                (static_cast<unsigned char>(text[i + 1]) & 0xc0) != 0x80 ||
+                (static_cast<unsigned char>(text[i + 2]) & 0xc0) != 0x80) return {};
+            i += 3;
+            ++characters;
+        }
+        auto spans = phrase->spans();
+        if (characters < 2 || spans.Count() != characters || phrase->code().size() != characters ||
+            spans.start() != 0 || spans.end() != ctx->input().size()) return {};
+        std::vector<std::string> result{ctx->input(), text, "0"};
+        size_t offset = 0;
+        for (size_t i = 0; i < characters; ++i) {
+            const auto next = spans.NextStop(offset);
+            if (next <= offset || next > ctx->input().size()) return {};
+            result.push_back(std::to_string(next));
+            offset = next;
+        }
+        return result;
+    }
+
+    std::vector<std::string> sentenceEditCandidates(const std::string& code, const std::vector<int>& selections,
+                                                    int originalBegin, int originalEnd) {
+        if (!rime || !session_id_ || code.empty() || rime::T9ProcessorRequire()) return {};
+        auto source = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!source || !source->context()) return {};
+        const auto schema = getCurrentSchema();
+        if (schema.empty()) return {};
+        const auto id = rime->create_session();
+        if (!id) return {};
+        struct Guard { RimeApi* api; RimeSessionId id; ~Guard() { api->destroy_session(id); } } guard{rime, id};
+        if (!rime->select_schema(id, schema.c_str())) return {};
+        auto isolated = rime::Service::instance().GetSession(static_cast<rime::SessionId>(id));
+        if (!isolated || !isolated->context()) return {};
+        auto ctx = isolated->context();
+        for (const auto& option : source->context()->options()) ctx->set_option(option.first, option.second);
+        for (const auto& property : source->context()->properties()) ctx->set_property(property.first, property.second);
+        ctx->set_property(cyime::pinyin_selection::kProperty, "");
+        ctx->set_property(cyime::pinyin_selection::kAppliedProperty, "");
+        ctx->set_property(cyime::pinyin_selection::kAllowAbbreviationProperty, "1");
+        ctx->set_input(code);
+        for (size_t i = 0; i + 2 < selections.size(); i += 3) {
+            if (!cyime::pinyin_selection::Select(ctx, isolated->schema(), isolated->engine(), code, schema,
+                    selections[i + 1], selections[i + 2], selections[i])) break;
+        }
+        if (ctx->composition().empty() || !ctx->composition().back().menu) return {};
+        std::vector<std::string> result;
+        auto dictionary = cyime::pinyin_selection::OpenDictionary(isolated->schema());
+        if (dictionary) {
+            auto options = cyime::pinyin_selection::Options(ctx, isolated->schema(), isolated->engine(), dictionary.get());
+            // Prefer the original sentence's reading at the current rail position,
+            // but only while the remaining input still matches its original span.
+            const auto& composition = source->context()->composition();
+            if (!options.empty() && originalBegin >= 0 && originalEnd > originalBegin &&
+                composition.size() == 1 && composition.back().menu) {
+                auto candidate = composition.back().menu->GetCandidateAt(0);
+                auto phrase = candidate ? rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(candidate)) : nullptr;
+                if (phrase && static_cast<size_t>(originalEnd) <= phrase->code().size()) {
+                    const auto spans = phrase->spans();
+                    std::vector<size_t> bounds{spans.start()};
+                    for (int i = 0; i < originalEnd; ++i) {
+                        const auto next = spans.NextStop(bounds.back());
+                        if (next <= bounds.back()) { bounds.clear(); break; }
+                        bounds.push_back(next);
+                    }
+                    const auto& input = source->context()->input();
+                    const auto keys = [](const std::string& value, size_t begin, size_t end) {
+                        std::string result;
+                        for (size_t i = begin; i < end; ++i) {
+                            const char c = value[i];
+                            if (c != '\'' && c != ' ' && c != '\t' && c != '\n' && c != '\r') result.push_back(c);
+                        }
+                        return result;
+                    };
+                    if (!bounds.empty() && bounds.back() <= input.size() && options.front().start <= code.size() &&
+                        keys(input, bounds[originalBegin], bounds[originalEnd]) == keys(code, 0, code.size())) {
+                        const auto railPrefix = keys(code, 0, options.front().start);
+                        for (int i = originalBegin; i < originalEnd; ++i) {
+                            if (keys(input, bounds[originalBegin], bounds[i]) != railPrefix) continue;
+                            const auto endPrefix = keys(input, bounds[originalBegin], bounds[i + 1]);
+                            const auto reading = phrase->code()[i];
+                            const auto preferred = std::find_if(options.begin(), options.end(), [&](const auto& option) {
+                                return option.start <= code.size() && option.end <= code.size() &&
+                                    keys(code, 0, option.start) == railPrefix && keys(code, 0, option.end) == endPrefix &&
+                                    option.syllable == reading;
+                            });
+                            if (preferred != options.end()) std::rotate(options.begin(), preferred, preferred + 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            for (const auto& option : options) {
+                result.push_back("\x1f" + std::to_string(option.syllable) + "\t" + option.pinyin + "\t" +
+                    std::to_string(option.start) + "\t" + std::to_string(option.end) + "\t" +
+                    (option.selected ? "1" : "0"));
+            }
+        }
+        auto appendCandidates = [&](const std::string& query) {
+            if (ctx->composition().empty() || !ctx->composition().back().menu) return;
+            auto menu = ctx->composition().back().menu;
+            menu->Prepare(500);
+            for (size_t i = 0; i < menu->candidate_count(); ++i) {
+                auto candidate = menu->GetCandidateAt(i);
+                if (!candidate) continue;
+                auto phrase = rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(candidate));
+                if (!phrase || !phrase->is_exact_match() || phrase->start() != 0 || phrase->end() == 0 ||
+                    phrase->end() > query.size() || phrase->text() != candidate->text()) continue;
+                const auto& text = phrase->text();
+                size_t characters = 0;
+                bool valid = true;
+                for (size_t p = 0; p < text.size(); p += 3, ++characters) {
+                    if (static_cast<unsigned char>(text[p]) < 0xe4 || static_cast<unsigned char>(text[p]) > 0xe9 ||
+                        p + 2 >= text.size() || (static_cast<unsigned char>(text[p + 1]) & 0xc0) != 0x80 ||
+                        (static_cast<unsigned char>(text[p + 2]) & 0xc0) != 0x80) { valid = false; break; }
+                }
+                const auto spans = phrase->spans();
+                if (valid && characters > 0 && phrase->code().size() == characters && spans.Count() == characters &&
+                    spans.start() == 0 && spans.end() == phrase->end())
+                    result.push_back(std::to_string(phrase->end()) + "\t" + text);
+            }
+        };
+        const auto firstWord = result.size();
+        appendCandidates(code);
+        const auto fullEnd = result.size();
+        // Ask the same engine for each selected prefix as well: full-sentence
+        // ranking can otherwise push single-character choices beyond the menu limit.
+        for (size_t i = 0; i + 2 < selections.size(); i += 3) {
+            const int end = selections[i + 2];
+            if (end <= 0 || static_cast<size_t>(end) >= code.size()) continue;
+            const auto prefix = code.substr(0, end);
+            ctx->set_property(cyime::pinyin_selection::kProperty, "");
+            ctx->set_property(cyime::pinyin_selection::kAppliedProperty, "");
+            ctx->set_input(prefix);
+            bool valid = true;
+            for (size_t j = 0; j <= i; j += 3) {
+                if (!cyime::pinyin_selection::Select(ctx, isolated->schema(), isolated->engine(), prefix, schema,
+                        selections[j + 1], selections[j + 2], selections[j])) { valid = false; break; }
+            }
+            if (valid) appendCandidates(prefix);
+        }
+        // Keep the best full-code result first, followed by the selected
+        // syllable's alternatives, before the remaining full-code results.
+        std::rotate(result.begin() + std::min(firstWord + 1, fullEnd), result.begin() + fullEnd, result.end());
+        return result;
+    }
+
+    bool applySentenceEdit(const std::string& input, const std::string& sentence,
+                           size_t begin, size_t end, const std::string& code,
+                           const std::string& replacement, const std::vector<int>& lengths,
+                           const std::vector<int>& selections) {
+        const auto snapshot = sentenceEditSnapshot();
+        if (snapshot.size() < 5 || snapshot[0] != input || snapshot[1] != sentence ||
+            begin >= end || end + 2 >= snapshot.size() || code.empty() != replacement.empty()) return false;
+        auto source = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        auto ctx = source->context();
+        auto original = rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(
+            ctx->composition().back().menu->GetCandidateAt(0)));
+        if (!original || !original->language()) return false;
+        const size_t start = std::stoul(snapshot[begin + 2]);
+        const size_t finish = std::stoul(snapshot[end + 2]);
+        if (code.empty()) {
+            const auto next = input.substr(0, start) + input.substr(finish);
+            if (next.empty()) {
+                ctx->set_input("");
+                return true;
+            }
+            auto entry = original->entry();
+            entry.text = sentence.substr(0, begin * 3) + sentence.substr(end * 3);
+            entry.code.erase(entry.code.begin() + begin, entry.code.begin() + end);
+            entry.comment.clear(); entry.preedit.clear(); entry.custom_code.clear(); entry.matching_code_size = 0;
+            rime::Spans spans;
+            for (size_t i = 0; i <= begin; ++i) spans.AddVertex(std::stoul(snapshot[i + 2]));
+            for (size_t i = end + 1; i + 2 < snapshot.size(); ++i)
+                spans.AddVertex(start + std::stoul(snapshot[i + 2]) - finish);
+            auto phrase = rime::New<rime::Phrase>(original->language(), "cyime_sentence_edit", 0, next.size(),
+                                                  rime::New<rime::DictEntry>(entry));
+            phrase->set_syllabifier(rime::New<SentenceEditSyllabifier>(std::move(spans)));
+            rime::Segment segment(0, next.size());
+            segment.status = rime::Segment::kSelected;
+            segment.menu = rime::New<rime::Menu>();
+            segment.menu->AddTranslation(rime::New<rime::UniqueTranslation>(phrase));
+            segment.menu->Prepare(1);
+            rime::Composition combined;
+            combined.Reset(next);
+            combined.push_back(std::move(segment));
+            ctx->set_input(next);
+            ctx->set_composition(std::move(combined));
+            ctx->BeginEditing();
+            return true;
+        }
+        const auto id = rime->create_session();
+        if (!id) return false;
+        struct Guard { RimeApi* api; RimeSessionId id; ~Guard() { api->destroy_session(id); } } guard{rime, id};
+        const auto schema = getCurrentSchema();
+        if (schema.empty() || !rime->select_schema(id, schema.c_str())) return false;
+        auto isolated = rime::Service::instance().GetSession(static_cast<rime::SessionId>(id));
+        if (!isolated || !isolated->context()) return false;
+        auto local = isolated->context();
+        for (const auto& option : ctx->options()) local->set_option(option.first, option.second);
+        for (const auto& property : ctx->properties()) local->set_property(property.first, property.second);
+        if (lengths.empty() || lengths.size() % 2 != 0) return false;
+        rime::DictEntry middle = original->entry();
+        middle.text.clear();
+        middle.code.clear();
+        middle.comment.clear(); middle.preedit.clear(); middle.custom_code.clear(); middle.matching_code_size = 0;
+        rime::Spans localSpans;
+        localSpans.AddVertex(0);
+        size_t codeOffset = 0, textOffset = 0, localCharacters = 0, selectionOffset = 0;
+        local->set_property(cyime::pinyin_selection::kAllowAbbreviationProperty, "1");
+        for (size_t partIndex = 0; partIndex < lengths.size(); partIndex += 2) {
+            const int codeLength = lengths[partIndex], chars = lengths[partIndex + 1];
+            if (codeLength <= 0 || chars <= 0 || codeOffset + codeLength > code.size() ||
+                textOffset + static_cast<size_t>(chars) * 3 > replacement.size()) return false;
+            const auto partCode = code.substr(codeOffset, codeLength);
+            const auto partText = replacement.substr(textOffset, chars * 3);
+            local->set_property(cyime::pinyin_selection::kProperty, "");
+            local->set_property(cyime::pinyin_selection::kAppliedProperty, "");
+            local->set_input(partCode);
+            if (selectionOffset >= selections.size() || selections[selectionOffset] < 0) return false;
+            const auto count = static_cast<size_t>(selections[selectionOffset++]);
+            if (count > (selections.size() - selectionOffset) / 3) return false;
+            for (size_t i = 0; i < count; ++i, selectionOffset += 3) {
+                if (!cyime::pinyin_selection::Select(local, isolated->schema(), isolated->engine(), partCode, schema,
+                        selections[selectionOffset + 1], selections[selectionOffset + 2], selections[selectionOffset])) return false;
+            }
+            if (local->composition().empty() || !local->composition().back().menu) return false;
+            auto menu = local->composition().back().menu;
+            menu->Prepare(500);
+            rime::an<rime::Phrase> chosen;
+            for (size_t i = 0; i < menu->candidate_count(); ++i) {
+                auto candidate = menu->GetCandidateAt(i);
+                if (!candidate || candidate->text() != partText) continue;
+                auto phrase = rime::As<rime::Phrase>(rime::Candidate::GetGenuineCandidate(candidate));
+                if (phrase && phrase->text() == partText && phrase->is_exact_match() &&
+                    phrase->start() == 0 && phrase->end() == partCode.size()) { chosen = phrase; break; }
+            }
+            if (!chosen) return false;
+            const auto chosenSpans = chosen->spans();
+            if (chosen->code().size() != static_cast<size_t>(chars) || chosenSpans.Count() != static_cast<size_t>(chars) ||
+                chosenSpans.start() != 0 || chosenSpans.end() != partCode.size()) return false;
+            size_t offset = 0;
+            for (int i = 0; i < chars; ++i) {
+                const auto next = chosenSpans.NextStop(offset);
+                if (next <= offset) return false;
+                localSpans.AddVertex(codeOffset + next);
+                offset = next;
+            }
+            middle.text += partText;
+            const auto chosenCode = chosen->code();
+            middle.code.insert(middle.code.end(), chosenCode.begin(), chosenCode.end());
+            codeOffset += codeLength;
+            textOffset += static_cast<size_t>(chars) * 3;
+            localCharacters += chars;
+        }
+        if (codeOffset != code.size() || textOffset != replacement.size() || selectionOffset != selections.size()) return false;
+        auto part = [&](size_t first, size_t last) {
+            auto value = original->entry();
+            value.text = sentence.substr(first * 3, (last - first) * 3);
+            value.code = rime::Code(original->code().begin() + first, original->code().begin() + last);
+            value.comment.clear(); value.preedit.clear(); value.custom_code.clear(); value.matching_code_size = 0;
+            return value;
+        };
+        const auto prefix = part(0, begin);
+        const auto suffix = part(end, original->code().size());
+        const auto language = original->language();
+        const auto next = input.substr(0, start) + code + input.substr(finish);
+        rime::Composition combined;
+        combined.Reset(next);
+        rime::DictEntry entry = prefix;
+        entry.text += middle.text + suffix.text;
+        entry.code.insert(entry.code.end(), middle.code.begin(), middle.code.end());
+        entry.code.insert(entry.code.end(), suffix.code.begin(), suffix.code.end());
+        rime::Spans spans;
+        for (size_t i = 0; i <= begin; ++i) spans.AddVertex(std::stoul(snapshot[i + 2]));
+        size_t localOffset = 0;
+        for (size_t i = 0; i < localCharacters; ++i) {
+            const auto nextOffset = localSpans.NextStop(localOffset);
+            if (nextOffset <= localOffset) return false;
+            spans.AddVertex(start + nextOffset);
+            localOffset = nextOffset;
+        }
+        for (size_t i = end + 1; i + 2 < snapshot.size(); ++i)
+            spans.AddVertex(start + code.size() + std::stoul(snapshot[i + 2]) - finish);
+        auto phrase = rime::New<rime::Phrase>(language, "cyime_sentence_edit", 0, next.size(), rime::New<rime::DictEntry>(entry));
+        phrase->set_syllabifier(rime::New<SentenceEditSyllabifier>(std::move(spans)));
+        rime::Segment segment(0, next.size());
+        segment.status = rime::Segment::kSelected;
+        segment.menu = rime::New<rime::Menu>();
+        segment.menu->AddTranslation(rime::New<rime::UniqueTranslation>(phrase));
+        segment.menu->Prepare(1);
+        combined.push_back(std::move(segment));
+        ctx->set_input(next);
+        ctx->set_composition(std::move(combined));
+        ctx->BeginEditing();
+        return true;
+    }
+
+    // A transient session keeps preview edits and candidate generation out of the live session.
+    // T9 uses a process-global active processor; do not create another session while it is active.
     std::vector<std::string> pinyinEditSnapshot() {
         auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
         if (!session || !session->context()) return {};
@@ -918,9 +1282,21 @@ public:
         return false;
     }
 
+    // librime's workspace update reads the schema list through the shared config cache, and a live
+    // session's switcher keeps the old "default" config there: an incremental pass started under a live
+    // session compiles the list from before the change, so a schema just turned on is not built.
+    // Close the session first; reloadSessionAfterMaintenance reopens it on the same schema.
+    void releaseSessionForMaintenance() {
+        if (!rime || !session_id_) return;
+        schema_before_maintenance_ = getCurrentSchema();
+        rime->destroy_session(session_id_);
+        session_id_ = 0;
+    }
+
     bool reloadSessionAfterMaintenance() {
         if (!rime || rime->is_maintenance_mode()) return false;
-        const auto schema = getCurrentSchema();
+        const auto schema = session_id_ ? getCurrentSchema() : schema_before_maintenance_;
+        schema_before_maintenance_.clear();
         if (session_id_) rime->destroy_session(session_id_);
         session_id_ = 0;
         if (!createSession()) return false;
@@ -1489,8 +1865,18 @@ public:
     const std::string& get_shared_data_dir() const { return shared_data_dir_; }
 
 private:
+    struct ClearUndo {
+        RimeSessionId session;
+        std::string schema;
+        std::string input;
+        size_t caret;
+        rime::Composition composition;
+        rime::T9Processor* t9;
+    };
+    std::optional<ClearUndo> clear_undo_;
     RimeApi* rime;
     RimeSessionId session_id_ = 0;
+    std::string schema_before_maintenance_;
     bool incognito_ = false;
     std::string user_data_dir_;
     std::string shared_data_dir_;
@@ -1849,6 +2235,66 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeHighlightCandidate(JNIEnv*, jobj
 }
 
 JNIEXPORT jobjectArray JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeSentenceEditSnapshot(JNIEnv* env, jobject) {
+    const auto values = Rime::Instance().sentenceEditSnapshot();
+    jclass stringClass = env->FindClass("java/lang/String");
+    auto result = env->NewObjectArray(values.size(), stringClass, nullptr);
+    for (size_t i = 0; i < values.size(); ++i) {
+        auto value = CandidateString(env, values[i]);
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+    }
+    env->DeleteLocalRef(stringClass);
+    return result;
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeSentenceEditCandidates(JNIEnv* env, jobject, jstring code, jintArray selected,
+    jint originalBegin, jint originalEnd) {
+    const char* raw = code ? env->GetStringUTFChars(code, nullptr) : nullptr;
+    std::vector<int> selections;
+    if (selected) {
+        const auto count = env->GetArrayLength(selected);
+        selections.resize(count);
+        env->GetIntArrayRegion(selected, 0, count, selections.data());
+    }
+    const auto values = raw ? Rime::Instance().sentenceEditCandidates(raw, selections, originalBegin, originalEnd) : std::vector<std::string>{};
+    if (raw) env->ReleaseStringUTFChars(code, raw);
+    jclass stringClass = env->FindClass("java/lang/String");
+    auto result = env->NewObjectArray(values.size(), stringClass, nullptr);
+    for (size_t i = 0; i < values.size(); ++i) {
+        auto value = CandidateString(env, values[i]);
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+    }
+    env->DeleteLocalRef(stringClass);
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeApplySentenceEdit(JNIEnv* env, jobject,
+    jstring input, jstring sentence, jint begin, jint end, jstring code, jstring replacement, jintArray sizes, jintArray choices) {
+    if (!input || !sentence || !code || !replacement || !sizes || !choices || begin < 0 || end < 0) return JNI_FALSE;
+    const auto count = env->GetArrayLength(sizes);
+    std::vector<int> lengths(count);
+    if (count) env->GetIntArrayRegion(sizes, 0, count, lengths.data());
+    const auto choiceCount = env->GetArrayLength(choices);
+    std::vector<int> selections(choiceCount);
+    if (choiceCount) env->GetIntArrayRegion(choices, 0, choiceCount, selections.data());
+    const char* rawInput = env->GetStringUTFChars(input, nullptr);
+    const char* rawSentence = env->GetStringUTFChars(sentence, nullptr);
+    const char* rawCode = env->GetStringUTFChars(code, nullptr);
+    const char* rawReplacement = env->GetStringUTFChars(replacement, nullptr);
+    const bool success = rawInput && rawSentence && rawCode && rawReplacement &&
+        Rime::Instance().applySentenceEdit(rawInput, rawSentence, begin, end, rawCode, rawReplacement, lengths, selections);
+    if (rawInput) env->ReleaseStringUTFChars(input, rawInput);
+    if (rawSentence) env->ReleaseStringUTFChars(sentence, rawSentence);
+    if (rawCode) env->ReleaseStringUTFChars(code, rawCode);
+    if (rawReplacement) env->ReleaseStringUTFChars(replacement, rawReplacement);
+    return success ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jobjectArray JNICALL
 Java_com_kingzcheung_xime_rime_RimeEngine_nativePinyinEditSnapshot(JNIEnv* env, jobject) {
     auto values = Rime::Instance().pinyinEditSnapshot();
     jclass stringClass = env->FindClass("java/lang/String");
@@ -1878,6 +2324,21 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeGlidePreview(JNIEnv* env, jobjec
     }
     env->DeleteLocalRef(stringClass);
     return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeSaveClearUndo(JNIEnv*, jobject) {
+    return Rime::Instance().saveClearUndo() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeRestoreClearUndo(JNIEnv*, jobject) {
+    return Rime::Instance().restoreClearUndo() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeDiscardClearUndo(JNIEnv*, jobject) {
+    Rime::Instance().discardClearUndo();
 }
 
 JNIEXPORT void JNICALL
@@ -2931,6 +3392,11 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeDestroy(
 }
 
 // 部署
+JNIEXPORT void JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeReleaseSessionForMaintenance(JNIEnv*, jobject) {
+    Rime::Instance().releaseSessionForMaintenance();
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_kingzcheung_xime_rime_RimeEngine_nativeReloadSessionAfterMaintenance(JNIEnv*, jobject) {
     return Rime::Instance().reloadSessionAfterMaintenance() ? JNI_TRUE : JNI_FALSE;

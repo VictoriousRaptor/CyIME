@@ -28,7 +28,9 @@ class SetupGuidePlanTest {
     @Test fun lightPhoneOnLiteGetsTheSmallestWorkingSet() {
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.LIGHT), SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false))
         // X-ASR finalizes instead of SenseVoice, so it costs no extra memory even here.
-        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro"), plan.keepIds())
+        // 全拼 26 键整句也用词组模型（11-15）：轻量版没带，下精简档。
+        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro", CandidateModelCatalog.NGRAM_SMALL),
+            plan.keepIds())
         assertEquals(SpeechModelCatalog.SENSEVOICE, plan.voiceMode)
         assertTrue(plan.keep.all { it.source == SetupSource.DOWNLOAD })
         assertTrue(plan.remove.isEmpty())
@@ -40,9 +42,11 @@ class SetupGuidePlanTest {
             BuiltinModelCatalog.SPEAKER_MODEL, "ochwpro", CandidateModelCatalog.NGRAM)
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, installed = bundled, inPackage = bundled),
             SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false))
-        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro"), plan.keepIds())
-        assertEquals(setOf(BuiltinModelCatalog.SPEAKER_MODEL, CandidateModelCatalog.NGRAM), plan.removeIds())
-        assertEquals((27 + 203) * mb, plan.freedBytes)
+        // 全拼 26 键整句也用词组模型（11-15）：安装包带的完整档留着，不删。
+        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro", CandidateModelCatalog.NGRAM),
+            plan.keepIds())
+        assertEquals(setOf(BuiltinModelCatalog.SPEAKER_MODEL), plan.removeIds())
+        assertEquals(27 * mb, plan.freedBytes)
         assertEquals(136 * mb, plan.downloadBytes) // only X-ASR is not in the package
         assertTrue(plan.notes.any { "安装包" in it })
     }
@@ -115,7 +119,7 @@ class SetupGuidePlanTest {
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED),
             SetupAnswers(VoiceUse.NEVER, t9 = false, caption = false, memorySaver = true))
         assertNull(plan.voiceIdleMinutes)
-        assertEquals(setOf("ochwpro"), plan.keepIds())
+        assertEquals(setOf("ochwpro", CandidateModelCatalog.NGRAM_SMALL), plan.keepIds())
     }
 
     @Test fun memorySaverKeepsFullT9ModelWhenOfflineAndSmallIsMissing() {
@@ -352,10 +356,10 @@ class SetupGuidePlanTest {
         val plan = SetupGuidePlanner.plan(f, SetupGuidePlanner.suggest(f).copy(keyboard = KeyboardWay.T9, t9 = false))
         assertEquals("t9_pinyin", plan.input.switchTo)
         assertEquals(CandidateModelCatalog.NGRAM, plan.t9Model)
-        // 双拼九键不用九键整句组词模型：照“用九键打字吗”的回答。
+        // 双拼整句也用词组模型（11-15）：已经装着的完整档留着。
         val double = SetupGuidePlanner.plan(f, SetupGuidePlanner.suggest(f).copy(typing = TypingWay.DOUBLE_PINYIN,
             keyboard = KeyboardWay.T9, t9 = false))
-        assertNull(double.t9Model)
+        assertEquals(CandidateModelCatalog.NGRAM, double.t9Model)
     }
 
     @Test fun microsoftDoublePinyinOnlyOffersTwentySixKeys() {
@@ -412,7 +416,50 @@ class SetupGuidePlanTest {
     @Test fun donePageNamesTheModelsBeingDownloaded() {
         assertEquals("语音、手写模型", SetupGuidePlanner.kindsText(listOf(SpeechModelCatalog.SENSEVOICE,
             SpeechModelCatalog.PARAFORMER, SetupGuidePlanner.HANDWRITING)))
-        assertEquals("九键组词模型", SetupGuidePlanner.kindsText(listOf(CandidateModelCatalog.NGRAM)))
+        assertEquals("整句组词模型", SetupGuidePlanner.kindsText(listOf(CandidateModelCatalog.NGRAM)))
         assertEquals("模型", SetupGuidePlanner.kindsText(listOf("unknown")))
+    }
+
+    // 11-15 训练线程查到：26 键全拼、双拼的整句也读词组模型 t9_ngram.lm，原来只有选九键才留它。
+    @Test fun qwertyPinyinKeepsTheBundledWordModel() {
+        val bundled = setOf(SpeechModelCatalog.SENSEVOICE, "ochwpro", CandidateModelCatalog.NGRAM)
+        val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, installed = bundled, inPackage = bundled),
+            SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false, keyboard = KeyboardWay.QWERTY))
+        assertEquals(CandidateModelCatalog.NGRAM, plan.t9Model)
+        assertTrue(CandidateModelCatalog.NGRAM in plan.keepIds())
+        assertFalse(CandidateModelCatalog.NGRAM in plan.removeIds())
+        assertTrue(plan.remove.none { "九键" in it.reason })
+        // 只在包里、还没放进手机的完整档也留着（取出来，不下载）。
+        val packed = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, inPackage = setOf(CandidateModelCatalog.NGRAM)),
+            SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false))
+        assertEquals(SetupSource.IN_PACKAGE, packed.keep.single { it.id == CandidateModelCatalog.NGRAM }.source)
+    }
+
+    @Test fun qwertyPinyinOnLiteDownloadsTheSmallWordModel() {
+        for (typing in listOf(TypingWay.FULL_PINYIN, TypingWay.DOUBLE_PINYIN)) {
+            val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED),
+                SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false, typing = typing))
+            assertEquals(typing.name, CandidateModelCatalog.NGRAM_SMALL, plan.t9Model)
+            assertEquals(SetupSource.DOWNLOAD, plan.keep.single { it.id == CandidateModelCatalog.NGRAM_SMALL }.source)
+            assertFalse(CandidateModelCatalog.NGRAM in plan.keepIds())
+        }
+        // 用九键的照旧新下完整档。
+        assertEquals(CandidateModelCatalog.NGRAM, SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED),
+            SetupAnswers(VoiceUse.SOMETIMES, t9 = true, caption = false)).t9Model)
+    }
+
+    @Test fun wubiDoesNotDownloadTheWordModelAndSaysWhyWhenDropping() {
+        val wubi = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED),
+            SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false, typing = TypingWay.WUBI))
+        assertNull(wubi.t9Model)
+        assertTrue(wubi.keepIds().none { it == CandidateModelCatalog.NGRAM || it == CandidateModelCatalog.NGRAM_SMALL })
+        val installed = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, installed = setOf(CandidateModelCatalog.NGRAM)),
+            SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false, typing = TypingWay.WUBI))
+        assertEquals("不用拼音打字。", installed.remove.single { it.id == CandidateModelCatalog.NGRAM }.reason)
+        // 不改打法时看现在的打法：现在是仓颉这类，不要；现在是全拼，要。
+        val keep = SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false, typing = TypingWay.KEEP)
+        assertNull(SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED).copy(typing = TypingWay.KEEP), keep).t9Model)
+        assertFalse(SetupGuidePlanner.usesPinyin(facts(DeviceModelTier.ENHANCED).copy(typing = TypingWay.KEEP), keep))
+        assertTrue(SetupGuidePlanner.usesPinyin(facts(DeviceModelTier.ENHANCED), keep))
     }
 }

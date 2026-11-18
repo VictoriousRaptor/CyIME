@@ -36,6 +36,8 @@ package com.kingzcheung.xime.plugin.core.lua.sdk
  * - `getSettingsSchema()` -> UiNode[]；表单字段 type：
  *   `text` / `textarea` / `secret` / `select` / `multi_select` / `switch` / `number` / `button`
  *   - 字段必须带 `key`（configStore 绑定）；`options` 为空时宿主经 `getOptions(key)` 动态拉取
+ *   - `visibleWhen = { key = "provider", value = "..." }` 根据 SELECT 的存储值显示字段；
+ *     `requiredWhenVisible` 仅校验显示的字段。旧宿主显示所有字段，运行操作时由插件检查所选接口的凭据。
  *   - `button` 点击 → 宿主调用插件导出函数（key 即函数名），nil/空返回 = 成功
  * - `getOptions(key)` 动态选项（如 ASR 模型列表）
  * - `start()` / `pushPcm()` / `stop()` 音频流式识别（网络 API 由宿主白名单提供）

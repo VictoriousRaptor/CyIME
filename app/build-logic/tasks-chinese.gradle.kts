@@ -19,7 +19,8 @@ fun chineseSha(file: File): String {
     return md.digest().joinToString("") { "%02x".format(it) }
 }
 /** cyime_english.dict.yaml: english.txt frequency order, rime-ice spellings for the rest (see the call site). */
-fun cyimeEnglishWords(englishTxt: List<String>, rimeIceLines: List<String>, contractionLines: List<String>): String {
+fun cyimeEnglishWords(englishTxt: List<String>, rimeIceLines: List<String>, contractionLines: List<String>,
+                      extraWords: List<String> = emptyList()): String {
     val wordPattern = Regex("[A-Za-z][A-Za-z']*")
     val literal = mutableListOf<String>()
     var body = false
@@ -74,6 +75,8 @@ fun cyimeEnglishWords(englishTxt: List<String>, rimeIceLines: List<String>, cont
         add(text, weight)
     }
     literal.forEach { add(it, 1) }
+    // Letters-only words of data/cyime_mixed_words.tsv (PPT, CyIME), as spelled there.
+    extraWords.forEach { add(it, 1) }
     return "# Generated from bundled english.txt (order) and rime-ice en_dicts (spellings); licenses retained alongside sources.\n" +
         "---\nname: cyime_english\nversion: \"1\"\nsort: by_weight\n...\n" +
         rows.entries.joinToString("\n", postfix = "\n") { (key, weight) -> key + "\t" + weight }
@@ -115,7 +118,7 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("unicodeCodes", 2)
     inputs.property("doublePinyinSentences", 1)
     inputs.property("shortcutOrder", 1)
-    inputs.property("englishWordsDictionary", 1)
+    inputs.property("englishWordsDictionary", 2)
     inputs.file(file("src/main/assets/english_contractions.txt"))
     val extWeights = file("data/rime_ice_ext_weights.tsv.gz")
     inputs.file(extWeights)
@@ -129,10 +132,15 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(domainTerms)
     val userFixes = file("data/cyime_user_fixes.tsv")
     inputs.file(userFixes)
+    // 游戏名、网络流行语（tools/dictionaries/new_words.py 生成，和 cyime_domain_terms.tsv 一样只往上提）。
+    val newWords = file("data/cyime_new_words.tsv")
+    inputs.file(newWords)
     val removedWords = file("data/cyime_removed_words.txt.gz")
     inputs.file(removedWords)
     val removedNames = file("data/cyime_removed_names.txt")
     inputs.file(removedNames)
+    val removedParticleHomophones = file("data/cyime_removed_particle_homophones.txt")
+    inputs.file(removedParticleHomophones)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
     inputs.file(acronymFilter)
     val englishMemory = file("data/cyime_en_memory.lua")
@@ -215,7 +223,7 @@ val prepareChineseDictionaries by tasks.registering {
         // rate the IME's own words near zero (上屏 43, 出词 11), so 只输入声母 came out 只输入圣母 and 每个键
         // 每个见. Raise the existing rime-ice entries here; missing ones are added to cyime_terms below.
         // The user's must-pass words (app/data/cyime_user_fixes.tsv) use the same floor, one code each.
-        val domainFloors = (domainTerms.readLines() + userFixes.readLines()).filter { it.isNotBlank() && !it.startsWith("#") }
+        val domainFloors = (domainTerms.readLines() + userFixes.readLines() + newWords.readLines()).filter { it.isNotBlank() && !it.startsWith("#") }
             .map { it.split('\t') }.associate { (it[0] + "\t" + it[1]) to it[2].toInt() }.toMutableMap()
         // Sentence pattern verb + 完了/好了 + 吗/没 (user 2026-10-30: 测完了吗 came out 测验了吗 on nine-key): these
         // phrases sat near 200, below 洗澡了吗 and 吃药了吗 on the same keys; each one present gets at least 1000
@@ -245,6 +253,10 @@ val prepareChineseDictionaries by tasks.registering {
         // common surname, appear whole in a public list of Chinese personal names, and are not famous (base.dict, the
         // chat and subtitle word model, or weight 150 and up keep them).
         removedNames.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // A common word plus a homophone of a sentence-final particle that chat writes far less often than the word plus
+        // the particle (2026-11-15: shengxiaoma gave 生肖马, not 生效吗, on every keyboard). One whole word beat 生效 + 吗 in
+        // the sentence; the list is built by tools/ime_lab/particle_homophone_words.py, which never lists a base.dict word.
+        removedParticleHomophones.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
         // 那 before 哪 (his rule: 那个 ahead of 哪个; ime5 2026-11-11 那几家 came after 哪几家). Where 那X and 哪X are both
         // words and X starts with a measure word or 几/些/一 (那几家, 那一种, 那些人), 那X gets at least 哪X's weight + 1.
         // A 那 form under 5% of its 哪 form is a misspelling, not a word of its own (那怕, 那一), and is left alone.
@@ -553,7 +565,8 @@ val prepareChineseDictionaries by tasks.registering {
         File(root, "cyime_english.dict.yaml").writeText(cyimeEnglishWords(
             file("src/main/assets/english.txt").readLines(),
             listOf("en_ext", "en").flatMap { File(root, "en_dicts/$it.dict.yaml").readLines() },
-            file("src/main/assets/english_contractions.txt").readLines()))
+            file("src/main/assets/english_contractions.txt").readLines(),
+            extraMixed.map { it[0] }.filter { w -> w.all { it in 'A'..'Z' || it in 'a'..'z' } }))
 
         // Same engine, dictionary and options as Chinese26; only the keyboard arrangement differs.
         // A sentence-final particle (吧, 呗, 呢…, app/data/sentence_final_particles.txt) is penalised as the first
@@ -649,6 +662,12 @@ val prepareChineseDictionaries by tasks.registering {
             // full: first choice 48351 -> 50613 (2500 gained, 238 lost); long input keeps one word per span (with two,
             // 我用纸折成了一个纸船 became 我用指着成了一个只穿).
             "  sentence_word_homophones: 2\n  sentence_word_max_syllables: 4\n  sentence_other_prefixes: 4\n" +
+            // sentence_near_homophone_margin: a sentence may also use the second dictionary word of a span of letters
+            // when its dictionary weight is within this much (ln) of the first word's; such sentences are searched
+            // in a beam of their own and come after the n-best, so no sentence made before is lost. Long input kept
+            // one word per span, so the word model never saw 我妈 beside 我吗 or 充了 beside 冲了 (49707 : 13049).
+            // The numbers are with t9/near_homophone_penalty below.
+            "  sentence_near_homophone_margin: 3.5\n" +
             // Short input (the same four syllables) also gets eight sentences to choose from, not four, and long
             // input goes without the other-prefix sentences. Of the short phrases still wrong with four, the right
             // one was not among the sentences 1469 times in 1555 (shazhushi: 杀猪是 刹住是 啥注释 啥主食, no 杀猪时).
@@ -716,6 +735,12 @@ val prepareChineseDictionaries by tasks.registering {
             // the reported zdky 这都可以 to 真的可以 (1.71). With 2.0: 1007 -> 1068, none of them moves.
             "  initials_choices: 5\n" +
             "  initials_lead_margin: 2.0\n" +
+            // near_homophone_penalty: what a sentence pays (ln) for each second dictionary word it uses (see
+            // translator/sentence_near_homophone_margin); corrections are judged against the typed choice made
+            // without those sentences, as before. 2026-11-15 cloud engine, 14k cases with public sentences added:
+            // 2.0 lost three right first choices (看到他 -> 看到她, 偷一个 -> 头一个, 实战 -> 施展), 3.0 one, 3.5 pushed
+            // one slip correction out of the first three, 4.0 none; 42 first choices gained (我妈/我吗, 又/有, 再/在).
+            "  near_homophone_penalty: 4.0\n" +
             // final_g_word_margin: a dictionary word read with the final g added (cyime_final_g_correction) leads the
             // sentence of the typed letters when the word model finds it more likely by this margin (ln 100, the
             // weight of a correction): 已安装 -14.8 against 一按转 -22.2. Of 68843 correctly typed short phrases 12
@@ -821,6 +846,10 @@ val prepareChineseDictionaries by tasks.registering {
             })
         }
         val fullPinyinSchema = baseSchema.replace("  dependencies:\n", "  dependencies:\n    - $omissionId\n    - cyime_letter_swap\n    - cyime_cn_en\n") +
+            // full_pinyin/offer_homophone_tails: a whole sentence that ends in a single character also offers the
+            // same sentence with the other common characters of that last syllable (见了你吗 / 见了你妈), up to three
+            // sentences; data/cyime_tail.cyt (public chat, subtitles, wiki). The first choice is never changed.
+            "\nfull_pinyin:\n  offer_homophone_tails: true\n" +
             "\ncyime_omission_schema: $omissionId\ncyime_edit_schema: cyime_letter_swap\n" +
             "\ncyime_particle_shortcuts:\n  __include: cyime_particle_shortcuts:/common\n  alphabet: abcdefghijklmnopqrstuvwxyz\n  selected_tail: true\n"
         File(root, "rime_ice.schema.yaml").writeText(fullPinyinSchema)

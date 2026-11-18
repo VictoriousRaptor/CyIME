@@ -89,6 +89,22 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
             .onSuccess { schemes = it }.onFailure { message = "无法读取双拼方案：${it.message}" }
         enabled = withContext(Dispatchers.IO) { SchemaManager.getEnabledSchemas(context).toSet() }
     }
+    // 「在方案栏显示」「九键版本」的开关自动应用（SchemaChangeApplier）；应用完在这里说结果，没生效的写出原因。
+    LaunchedEffect(Unit) {
+        com.kingzcheung.xime.rime.SchemaChangeApplier.finished.collect { usable ->
+            val (shown, problems) = withContext(Dispatchers.IO) {
+                val ids = SchemaManager.getEnabledSchemas(context).filter { DoublePinyinSchemes.find(it) != null }
+                ids to com.kingzcheung.xime.rime.RimeConfigHelper.schemaProblems(context).filterKeys { it in ids }
+                    .mapKeys { (id, _) -> SchemaManager.getSchemaDisplayName(context, id) ?: id }
+            }
+            message = when {
+                !usable -> "没有应用成功，原因见「已安装的方案」"
+                problems.isNotEmpty() -> problems.entries.joinToString("；") { (name, reason) -> "${name}没生效：$reason" }
+                shown.isNotEmpty() -> "已应用，可在「语言与方案」的方案一栏选择"
+                else -> "已应用"
+            }
+        }
+    }
     DisposableEffect(context) {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -131,6 +147,10 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                         DoublePinyinRawPreeditToggle()
                     }
                 }
+                // 辅助码（用户 11-15）：所有双拼 26 键方案共用，默认关。
+                Column(Modifier.settingsSearchAnchor("辅助码")) {
+                    SettingsSection(title = "辅助码") { DoublePinyinAuxCodeSetting(keyboardPrefs) }
+                }
                 Button(onClick = { edit(copyOf(DoublePinyinScheme.FLYPY)) }, enabled = !busy,
                     modifier = Modifier.testTag("double-pinyin-new")) { Text("新建双拼方案") }
                 schemes.forEach { scheme ->
@@ -141,10 +161,9 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                 scheme.collisions().size.let { if (it > 0) " · $it 组同码" else "" },
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DoublePinyinKeyMap(scheme)
-                            // 九键没有分号键，ing 在分号上的方案（微软双拼）没有九键版本。
-                            listOfNotNull(Triple(scheme.id, "在方案栏显示", "打开后可在「语言与方案」里选它"),
+                            // 九键没有分号键：ing 在分号上的方案（微软双拼）分号和 L 同在 5 键。
+                            listOf(Triple(scheme.id, "在方案栏显示", "打开后可在「语言与方案」里选它"),
                                 Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "用九键打${scheme.name}：每个字按两个双拼键所在的数字键")
-                                    .takeUnless { scheme.usesSemicolon }
                             ).forEach { (id, title, subtitle) ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {

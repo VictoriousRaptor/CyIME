@@ -120,6 +120,8 @@ class XimeApplication : Application(), ImageLoaderFactory {
             }
             
             PluginManager.loadEnabledPlugins()
+            // 装着的翻译、字幕这些随包插件比安装包里的旧：直接用包里的升级。
+            com.kingzcheung.xime.settings.XimeIndexSource.updateBundledPlugins(this@XimeApplication)
             // 字幕是插件：用过字幕的老用户升级时自动装上；每次启动按插件状态放出或收起字幕的入口。
             com.kingzcheung.xime.ui.caption.CaptionPlugin.migrateOnce(this@XimeApplication)
             // 日语也是插件（11-11）：开着日语的老用户升级时自动装上，轻量版缺的引擎马上补下载。

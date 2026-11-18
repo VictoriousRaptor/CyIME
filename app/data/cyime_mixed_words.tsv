@@ -8,3 +8,8 @@ AI漫剧	aimanju	5000
 PPT	ppt	5000
 PDF	pdf	5000
 Q币	qbi	5000
+# 产品名（2026-11-15「到现在这个输入法打不出来自己的名字 CyIME」）：公开语料里没有，同样给最低权重。
+# 只有字母的词还进英文单词方案（cyime_english），在那里按原样大小写出。
+CyIME	cyime	5000
+Cyletix	cyletix	5000
+CySync	cysync	5000

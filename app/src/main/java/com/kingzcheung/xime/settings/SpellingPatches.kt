@@ -141,6 +141,37 @@ object SpellingPatches {
         SettingsPreferences.getPrefsPublic(context).getBoolean(DOUBLE_PINYIN_CORRECTION_KEY, false)
 
     /**
+     * 双拼辅助码（用户 11-15：很多人要辅助码，「先做出来个能用的」）：双拼 26 键打完拼音，点「辅」（打字时左下角的 Shift 键，
+     * 实体键盘 `）再打这个字的形码，候选只留第一个字形码对得上的。默认关，关着时方案一点不改。
+     * 用的是雾凇双拼方案里现成的辅码筛选（lua/search.lua，引导符 key_binder/search 就是 `，已在 speller/alphabet 里、
+     * 不在 initials 里）：本来查的是部件拼音（radical_pinyin），开了就换成这里选的形码表，码表方案加进 schema/dependencies 一起编。
+     * 筛选是方案最后一道滤镜，纠错、模糊音、模型排序都在它前面照常做完，辅助码只从结果里挑，不进拼音解码。
+     */
+    const val AUX_CODE_KEY = "double_pinyin_aux_code"
+    /** 辅码引导符：雾凇双拼方案的 key_binder/search。屏幕上的「辅」送它。 */
+    const val AUX_CODE_TRIGGER = "`"
+
+    enum class AuxCode(val id: String, val title: String, val schemaId: String, val example: String) {
+        ZRM("zrm", "自然码辅助码", "cyime_aux_zrm", "取字头、字尾两个部件读音的声母，如“好”（女子）是 nz"),
+        FLYPY("flypy", "小鹤形码", "cyime_aux_flypy", "小鹤音形的形码，如“好”是 nz、“我”是 pd");
+
+        companion object {
+            fun of(id: String?): AuxCode? = entries.firstOrNull { it.id == id }
+            val schemaIds: Set<String> get() = entries.mapTo(linkedSetOf()) { it.schemaId }
+        }
+    }
+
+    fun auxCode(context: Context): AuxCode? =
+        AuxCode.of(SettingsPreferences.getPrefsPublic(context).getString(AUX_CODE_KEY, null))
+
+    /** null 关掉。改完照别的拼写设置一样调 [apply] 写补丁、重新部署。 */
+    fun setAuxCode(context: Context, code: AuxCode?) {
+        SettingsPreferences.getPrefsPublic(context).edit().apply {
+            if (code == null) remove(AUX_CODE_KEY) else putString(AUX_CODE_KEY, code.id)
+        }.apply()
+    }
+
+    /**
      * 中文全拼：雾凇拼音、内置字母排列、内置 14 键和自建布局。14 键和自建合并键布局把字母换成代表键的规则在拼写规则后面，
      * 模糊音排在最前，仍按拼音派生（fan 先派生出 fang，再合成 14 键的 DAB）。九键另外按自己的数字拼写规则处理。
      * 设置页把模糊音放在「九键与 14 键」页，14 键却一直没写规则，开了也不模糊（11-01 反馈）。
@@ -166,10 +197,17 @@ object SpellingPatches {
         .mapNotNull { file -> file.name.removeSuffix(".schema.yaml").takeIf { file.isFile && file.name.endsWith(".schema.yaml") } }
         .filter { DoublePinyinScheme.splitLayoutVariant(it) != null }.sorted()
 
+    /**
+     * 双拼的 14 键版本（小鹤随应用内置，其余由键位表生成）：和合并键布局一样只写模糊音和简拼，模糊音排在最前，
+     * 先派生出近音拼音再换成双拼键、合并键。以前只给 26 键双拼写，14 键双拼开了模糊音、简拼也不生效（11-15 实测）。
+     */
+    internal fun doublePinyinK14Schemas(context: Context): List<String> =
+        doublePinyinSchemas(context).map { DoublePinyinScheme.k14Id(it) }
+
     /** 模糊音设置据此提醒双拼用户打开「模糊音也用于双拼」。 */
     fun usingDoublePinyin(context: Context): Boolean {
         val id = SettingsPreferences.getCurrentSchema(context)
-        return id in doublePinyinSchemas(context) || DoublePinyinScheme.splitLayoutVariant(id) != null || DoublePinyinSchemes.isT9(id)
+        return id in doublePinyinSchemas(context) || DoublePinyinScheme.splitLayoutVariant(id) != null || DoublePinyinSchemes.isT9(id) || DoublePinyinSchemes.isK14(id)
     }
 
     /** 设置页改完开关后在后台线程调用：写补丁，有改动就通知输入法重新部署。 */
@@ -193,6 +231,7 @@ object SpellingPatches {
         val abbreviation = doublePinyinAbbreviation(context)
         val rawPreedit = doublePinyinRawPreedit(context)
         val typos = enabledTypos(context)
+        val auxCode = auxCode(context)
         var changed = false
         for (id in fullPinyinSchemas(context)) {
             changed = write(rimeDir, id) { schema ->
@@ -206,10 +245,11 @@ object SpellingPatches {
             changed = write(rimeDir, id) { schema ->
                 listOf(doublePinyinPart(schema, doublePinyinFuzzy, abbreviation, id) ?: return@write null,
                     Part(CORRECTION, if (correction) listOf("\"$CORRECTION\": true") else emptyList()),
-                    Part(PREEDIT_FORMAT, if (rawPreedit) rawPreeditLines(preeditFormatOf(schema()).orEmpty()) else emptyList()))
+                    Part(PREEDIT_FORMAT, if (rawPreedit) rawPreeditLines(preeditFormatOf(schema()).orEmpty()) else emptyList())) +
+                    auxCodeParts(if (auxCode == null) null else schema(), auxCode)
             } || changed
         }
-        for (id in doublePinyinLayoutVariants(rimeDir)) {
+        for (id in doublePinyinK14Schemas(context) + doublePinyinLayoutVariants(rimeDir)) {
             changed = write(rimeDir, id) { schema ->
                 listOf(doublePinyinPart(schema, doublePinyinFuzzy, abbreviation, id) ?: return@write null)
             } || changed
@@ -266,6 +306,40 @@ object SpellingPatches {
     private const val DOUBLED = "translator/cyime_doubled_letter_correction"
     private const val SWAP_SCHEMA = "cyime_edit_schema"
     private const val OMISSION_SCHEMA = "cyime_omission_schema"
+
+    private const val FILTERS = "engine/filters"
+    private const val DEPENDENCIES = "schema/dependencies"
+    /** 标记这个方案的辅助码开着、用的哪张表；输入法读它决定要不要把 ` 送进 Rime、Shift 键换不换成「辅」（RimeEngine.auxCodeActive）。 */
+    internal const val AUX_CODE_MARK = "cyime_aux_code/table"
+    /** 雾凇双拼方案原有的辅码筛选：查部件拼音。辅助码开着时换成形码表。 */
+    internal const val RADICAL_SEARCH = "lua_filter@*search@radical_pinyin"
+
+    /**
+     * 辅助码的三个补丁键。[schema] 为 null（辅助码关着）或方案里没有雾凇的辅码筛选（自己改过的方案）时三个都不写，方案保持原样。
+     * 滤镜整张表照抄，只把部件拼音那一项换成形码表；依赖表照抄再加上码表方案（Rime 部署时编出码表）。
+     */
+    internal fun auxCodeParts(schema: String?, code: AuxCode?): List<Part> {
+        val filters = schema?.let { stringListAt(it, "engine", "filters") }
+        val usable = code != null && filters != null && RADICAL_SEARCH in filters
+        if (!usable) return listOf(Part(FILTERS, emptyList()), Part(DEPENDENCIES, emptyList()), Part(AUX_CODE_MARK, emptyList()))
+        code!!
+        val dependencies = stringListAt(schema!!, "schema", "dependencies").orEmpty()
+        return listOf(
+            Part(FILTERS, listLines(FILTERS, filters!!.map { if (it == RADICAL_SEARCH) "lua_filter@*search@${code.schemaId}" else it })),
+            Part(DEPENDENCIES, listLines(DEPENDENCIES, (dependencies.filterNot { it in AuxCode.schemaIds } + code.schemaId).distinct())),
+            Part(AUX_CODE_MARK, listOf("\"$AUX_CODE_MARK\": ${code.id}")),
+        )
+    }
+
+    private fun listLines(key: String, items: List<String>): List<String> =
+        listOf("\"$key\":") + items.map { "  - " + quote(it) }
+
+    /** 方案里 [path] 这张字符串表；读不出（没有、不是表、有不是字符串的项）时为 null。 */
+    internal fun stringListAt(schema: String, vararg path: String): List<String>? {
+        var node: YamlNode = runCatching { SchemaManager.yaml.parseToYamlNode(schema) }.getOrNull() ?: return null
+        for (key in path) node = (node as? YamlMap)?.node(key) ?: return null
+        return (node as? YamlList)?.items?.map { (it as? YamlScalar)?.content ?: return null }
+    }
 
     private const val ALGEBRA = "speller/algebra"
     private const val PREEDIT_FORMAT = "translator/preedit_format"

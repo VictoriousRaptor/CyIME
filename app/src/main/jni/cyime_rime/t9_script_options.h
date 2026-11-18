@@ -93,6 +93,9 @@ struct T9ScriptOptions {
   // t9/initials_lead_margin (ln units): see T9RescoreSentences; how much higher a score must be to take the first
   // place from the dictionary's first word with these initials.
   double t9_initials_lead_margin_ = 0.0;
+  // t9/near_homophone_penalty (ln units): what a sentence pays for each word that is only the second dictionary
+  // word of its letters (translator/sentence_near_homophone_margin lets those in). See T9RescoreSentences.
+  double t9_near_homophone_penalty_ = 0.0;
   // t9/final_g_word_margin (ln units): a dictionary word that reads the whole input with the final g added
   // (translator/cyime_final_g_correction; yianzhuan: 已安装) leads the sentence of the typed letters (一按转) when the
   // word model finds its text more likely by more than this; 0 keeps the typed sentence first. Uses

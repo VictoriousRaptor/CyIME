@@ -33,8 +33,8 @@ internal fun RepeatingKeyActions.withSymbolSwipeDirection(reverse: Boolean): Rep
 internal fun symbolInputValue(value: String?, action: GestureAction?): String? =
     value?.takeIf { it.isNotBlank() && (action == null || action == GestureAction.COMMIT) }
 
-/** 「长按输入」原来写死的时长；设置项 [KeyboardInputPreferences.symbolLongPressSeconds] 的默认值。 */
-internal const val DEFAULT_SYMBOL_LONG_PRESS_MS = 300L
+/** 「长按输入」的默认时长；设置项 [KeyboardInputPreferences.symbolLongPressSeconds] 的默认值（用户 11-15 定 0.5 秒，原来 0.3 秒）。 */
+internal const val DEFAULT_SYMBOL_LONG_PRESS_MS = 500L
 
 /**
  * 「长按输入」（关闭角标滑动）：按满 [timeoutMillis] 立刻输入上方角标，不等松手；

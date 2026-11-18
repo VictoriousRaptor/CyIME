@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -21,7 +23,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** 设置 › 剪贴板与同步 › 剪贴板面板：剪贴板 ⋯ 菜单里的开关和面板设置在这一页，写的是面板读的同一个值。 */
+/** 设置 › 剪贴板：剪贴板 ⋯ 菜单里的开关和面板设置在这一页，写的是面板读的同一个值。 */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = android.app.Application::class, qualifiers = "zh-rCN-w400dp-h1400dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,5 +53,20 @@ class ClipboardPanelSettingsTest {
             File(out).mkdirs()
             File(out, "clipboard-panel-settings.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+    }
+
+    /** 用户 11-15：验证码、敏感内容、导出导入从「剪贴板与同步」挪到这一页；同步是插件，这里只有跳过去的入口。 */
+    @Test fun movedItemsAreHereAndSyncIsOneTapAway() {
+        var syncOpened = 0
+        rule.setContent {
+            XimeTheme(darkTheme = false) {
+                ClipboardPanelSettingsContent(onBack = {}, onNavigateToGroups = {}, onNavigateToSync = { syncOpened++ })
+            }
+        }
+        listOf("新短信验证码自动复制", "记录密码等敏感内容", "导出剪贴板", "导入剪贴板").forEach {
+            rule.onAllNodesWithText(it).onFirst().performScrollTo()
+        }
+        rule.onNodeWithText("剪贴板同步").performScrollTo().performClick()
+        assertEquals(1, syncOpened)
     }
 }

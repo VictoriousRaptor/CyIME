@@ -57,14 +57,19 @@ class SmartPredictionSettingsViewModel(application: Application) : AndroidViewMo
             profileSize = data.continuations.size) }
     }
 
+    /** 操作自己要换成功提示时写这里（比如导入的是文字文件），null 用 learningOperation 的默认提示。 */
+    @Volatile private var operationNote: String? = null
+
     private fun learningOperation(success: String, block: suspend () -> Unit) {
         if (_uiState.value.isSaving) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, learningStatus = "处理中…") }
             try {
+                operationNote = null
                 withContext(Dispatchers.IO) { block() }
                 updateLearningCounts()
-                _uiState.update { it.copy(learningStatus = success, toastMessage = success) }
+                val message = operationNote ?: success
+                _uiState.update { it.copy(learningStatus = message, toastMessage = message) }
             } catch (error: Exception) {
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 val message = "操作失败：${error.message}"
@@ -97,15 +102,25 @@ class SmartPredictionSettingsViewModel(application: Application) : AndroidViewMo
             output.toByteArray()
         }
         require(bytes.size <= com.kingzcheung.xime.association.PersonalLearningData.MAX_BYTES) { "学习文件超过 32 MB" }
-        // 常有人把讯飞、搜狗等词库或别的备份选到这里：不是学习文件时指到真正的词库导入入口，不显示报错原文。
-        val data = try {
+        val learning = try {
             com.kingzcheung.xime.association.PersonalLearningData.decode(bytes.toString(Charsets.UTF_8))
         } catch (_: org.json.JSONException) {
-            throw IllegalArgumentException("这不是学习文件。词库请在「词库」页的「导入词库」导入")
+            null
         } catch (_: com.kingzcheung.xime.association.NotLearningFileException) {
-            throw IllegalArgumentException("这不是学习文件。词库请在「词库」页的「导入词库」导入")
+            null
         }
-        AssociationManager.importLearningData(context, data, merge)
+        if (learning != null) {
+            AssociationManager.importLearningData(context, learning, merge)
+            return@learningOperation
+        }
+        // 不是学习文件就当自己的语料（txt、md、csv、srt…，不看扩展名，看内容是不是文字）：按打过这些字来学，只新增。
+        // 讯飞、搜狗等词库和别的二进制文件读不成文字，指到真正的词库导入入口，不显示报错原文。
+        val text = com.kingzcheung.xime.association.PersonalLearningData.textOf(bytes)
+            ?: throw IllegalArgumentException("这不是学习文件，也不是文字文件。词库请在「词库」页的「导入词库」导入")
+        val corpus = com.kingzcheung.xime.association.PersonalLearningData.fromText(text)
+        require(corpus.uniqueSequences > 0) { "文件里没有能学的文字" }
+        AssociationManager.importLearningData(context, corpus, merge = true)
+        operationNote = "已从文字学到 ${corpus.uniqueSequences} 组搭配" + if (merge) "" else "（文字文件只新增，没有替换）"
     }
     
     fun setEnabled(enabled: Boolean) {

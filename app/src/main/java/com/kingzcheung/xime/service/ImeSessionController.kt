@@ -149,7 +149,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             // 不实际消费 engineIndex，仅用于插件候选分流）
             val baseCands = display.displayCandidates
             val baseComments = display.displayComments
-            val byAnchor = t9PluginInjections.filter { it.contactName == null }.groupBy { it.anchorEngineIndex }
+            val byAnchor = t9PluginInjections.filter { it.contactName == null && it.glideInput == null }.groupBy { it.anchorEngineIndex }
             val mergedCands = ArrayList<String>(baseCands.size + t9PluginInjections.size)
             val mergedComments = ArrayList<String>(mergedCands.size)
             val mergedActions = ArrayList<CandidateAction>(mergedCands.size)
@@ -167,6 +167,15 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 mergedCands.add(inj.snapshot.text)
                 mergedComments.add(inj.snapshot.comment)
                 mergedActions.add(CandidateAction.plugin(inj.snapshot.text))
+            }
+            // 九键滑行的备选（#214）：插在首选之后；已经分段上屏了一部分时不给（这一笔已不是整个组合）。
+            if (service.t9PartialSegments.isEmpty() && mergedCands.isNotEmpty()) {
+                val glide = t9PluginInjections.filter { it.glideInput != null && it.snapshot.text !in mergedCands }
+                glide.forEachIndexed { i, inj ->
+                    mergedCands.add(1 + i, inj.snapshot.text)
+                    mergedComments.add(1 + i, inj.snapshot.comment)
+                    mergedActions.add(1 + i, CandidateAction.glide(inj.snapshot.text, inj.glideInput!!))
+                }
             }
             // 通讯录的人名、号码（不学习）：已经分段上屏了一部分时不给，免得只上屏名字丢了前面的字。
             val contacts = if (service.t9PartialSegments.isNotEmpty()) emptyList() else t9PluginInjections.mapNotNull { inj ->

@@ -97,6 +97,7 @@ fun CommonSymbolKeyboardLayout(
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     val liveKeyboardBounds = remember { LiveBounds() }
+    val longPressMenuKeyboard: () -> Rect = remember(liveKeyboardBounds) { { liveKeyboardBounds.current(keyboardBounds, "keyboard") } }
 
     fun processSwipeState(state: SwipeState, bounds: Rect) {
         // 按键和键盘都按这一刻的位置算，见 [LiveBounds]。
@@ -116,7 +117,8 @@ fun CommonSymbolKeyboardLayout(
     // 键缝动效的光层（默认关，关着时是 null）。
     val gapLight = rememberKeyGapLight()
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight) {
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
+        LocalKeyGapLight provides gapLight) {
     Box(
         modifier = bodyModifier
             .fillMaxWidth()

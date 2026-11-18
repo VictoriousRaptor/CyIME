@@ -34,23 +34,14 @@ class KeyboardSurfaceConsistencyTest {
             source(path).lines().mapIndexedNotNull { i, line -> if (fixed.containsMatchIn(line)) "$path:${i + 1}" else null }
         }
         assertEquals("面板底色写死了黑/白/灰，不跟主题", emptyList<String>(), scrims)
-        // 玻璃下面板底是透的：盖在按键上的覆盖层要么用 keyboardOverlayBackground 挡住，要么把下面的按键压淡，
-        // 否则按键和字叠在一起。光标调整走后一种（空格仍收拖动）。
+        // 玻璃下面板底是透的：盖在按键上的覆盖层要用 keyboardOverlayBackground 挡住，否则按键和字叠在一起。
         assertTrue(source("ui/keyboard/RejectedCommitOverlay.kt").contains("keyboardOverlayBackground("))
-        // 按键区任何时候都压淡；只有拼音放在键盘内且正在打字时，候选栏（拼音就在里面）不压淡（#162）。
+        // 按住空格移光标时键盘不压淡、不盖字（用户 11-15：那一层把键缝动效挡住了），提示写在空格自己上面。
         val keyboardView = source("ui/keyboard/KeyboardView.kt")
-        assertTrue("光标调整时键盘内容没压淡",
-            keyboardView.contains(".hiddenDuringCursorControl(cursorControlActive && !cursorKeepsBar)"))
-        assertTrue("拼音放在键盘内时，光标调整没压淡按键区",
-            keyboardView.contains(".hiddenDuringCursorControl(cursorKeepsBar).testTag(\"keyboard-underlay\")"))
-        assertTrue("候选栏不压淡的条件放宽了：只限光标调整中、拼音放在键盘内、正在打字",
-            Regex("""val cursorKeepsBar = cursorControlActive && inputPreferences\.preeditInsideKeyboard &&\s+candidateState\.value\.shownPreedit\(state\.inputProfile\)\.isNotEmpty\(\)""")
-                .containsMatchIn(keyboardView))
-        // 光标调整不铺底：键盘自己的背景（主题、渐变、图片、玻璃）照常显示。铺不透明主题底色时深色主题整个键盘变黑。
-        val cursorOverlay = source("ui/keyboard/CursorControlOverlay.kt")
-        assertTrue("光标调整遮罩又铺了底色", listOf("keyboardPanelBackground(", "keyboardOverlayBackground(", ".background(")
-            .none { cursorOverlay.contains(it) })
-        assertTrue("光标调整时按键被整个藏掉", cursorOverlay.contains("CURSOR_CONTROL_KEY_ALPHA = 0.22f"))
+        assertTrue("移光标时键盘又被压淡或盖住了",
+            listOf("hiddenDuringCursorControl", "CursorControlOverlay", "cursorControlActive").none { keyboardView.contains(it) })
+        val spaceKey = source("ui/keyboard/SpaceKeyButton.kt")
+        assertTrue("移光标时空格上没有提示", spaceKey.contains("} else if (cursorActive) {") && spaceKey.contains("testTag(\"space-cursor-hint\")"))
     }
 
     @Test fun cardsAndDimsOverTheKeyboardShareTheKeyboardCardColors() {

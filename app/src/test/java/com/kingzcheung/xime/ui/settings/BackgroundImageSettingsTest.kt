@@ -118,7 +118,7 @@ class BackgroundImageSettingsTest {
             .forEach { rule.onNodeWithTag("background-slide:$it").assertExists() }
         rule.onNodeWithTag("background-slides-add").assertExists()
         // 图片开着、动态背景开着时的提示；不对说明页面拿到的主题不是「我的图片」。
-        rule.onNodeWithText("共 3 张，背景每动完一圈换下一张；点第一张调整位置").assertExists()
+        rule.onNodeWithText("共 3 张，背景每动完一圈换下一张；点哪张就调哪张的位置").assertExists()
         listOf("遮罩", "动态背景", "组合").forEach { rule.onNodeWithText(it).assertExists() }
         rule.onNodeWithTag("background-motion-speed:FAST").assertExists()
         listOf("使用背景图片", "调整图片", "删除图片", "清空", "动态与轮播", "轮换").forEach {

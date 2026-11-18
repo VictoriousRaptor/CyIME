@@ -34,6 +34,8 @@ data class BackgroundMotionSettings(
     val speed: BackgroundMotionSpeed = BackgroundMotionSpeed.NORMAL,
     /** 「我的图片」之外再加的轮播图片（themes/… 路径，按加入顺序）；文件由 CustomImageTheme 管。 */
     val slides: List<String> = emptyList(),
+    /** 轮播图片各自调过的摆放（键是 [slides] 里的路径，值是 ThemeImagePlacement.encode()）；没调过的铺满居中，和以前一样。 */
+    val slidePlacements: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -45,7 +47,9 @@ object BackgroundMotionPreferences {
     const val KEY_EFFECT = "keyboard_background_motion_effect"
     const val KEY_SPEED = "keyboard_background_motion_speed"
     const val KEY_SLIDES = "keyboard_background_motion_slides"
-    val KEYS = setOf(KEY_ENABLED, KEY_EFFECT, KEY_SPEED, KEY_SLIDES)
+    /** 新加的一项（11-15）：轮播图片各自的摆放，一行一张「路径<TAB>摆放」。旧版本没有，读出来是空的。 */
+    const val KEY_SLIDE_PLACEMENTS = "keyboard_background_motion_slide_placements"
+    val KEYS = setOf(KEY_ENABLED, KEY_EFFECT, KEY_SPEED, KEY_SLIDES, KEY_SLIDE_PLACEMENTS)
     /** 连同「我的图片」最多 9 张一起轮播。 */
     const val MAX_SLIDES = 8
 
@@ -56,8 +60,39 @@ object BackgroundMotionPreferences {
             effect = BackgroundMotionEffect.of(prefs.getString(KEY_EFFECT, null)),
             speed = BackgroundMotionSpeed.of(prefs.getString(KEY_SPEED, null)),
             slides = decodeSlides(prefs.getString(KEY_SLIDES, null)),
+            slidePlacements = decodePlacements(prefs.getString(KEY_SLIDE_PLACEMENTS, null)).mapValues { it.value.encode() },
         )
     }
+
+    /** 记下一张轮播图片的摆放；铺满居中（默认）就不记。 */
+    internal fun setSlidePlacement(context: Context, src: String, placement: com.kingzcheung.xime.ui.theme.ThemeImagePlacement) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val map = decodePlacements(prefs.getString(KEY_SLIDE_PLACEMENTS, null)).toMutableMap()
+        if (placement == com.kingzcheung.xime.ui.theme.ThemeImagePlacement.DEFAULT) map.remove(src) else map[src] = placement
+        check(prefs.edit().putString(KEY_SLIDE_PLACEMENTS, encodePlacements(map)).commit()) { "无法保存设置" }
+    }
+
+    /** 去掉几张图的摆放（删图、清空、顶上去做主图时）。 */
+    internal fun forgetSlidePlacements(context: Context, sources: Collection<String>? = null) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        if (sources == null) { check(prefs.edit().remove(KEY_SLIDE_PLACEMENTS).commit()) { "无法保存设置" }; return }
+        val map = decodePlacements(prefs.getString(KEY_SLIDE_PLACEMENTS, null))
+        if (sources.none { it in map }) return
+        check(prefs.edit().putString(KEY_SLIDE_PLACEMENTS, encodePlacements(map - sources.toSet())).commit()) { "无法保存设置" }
+    }
+
+    internal fun encodePlacements(map: Map<String, com.kingzcheung.xime.ui.theme.ThemeImagePlacement>): String =
+        map.entries.filter { it.key.isNotBlank() && '\t' !in it.key && '\n' !in it.key }
+            .joinToString("\n") { "${it.key}\t${it.value.encode()}" }
+
+    /** 认不出的行跳过（摆放坏了的行当作没调过）。 */
+    internal fun decodePlacements(raw: String?): Map<String, com.kingzcheung.xime.ui.theme.ThemeImagePlacement> =
+        raw?.split('\n')?.mapNotNull { line ->
+            val src = line.substringBefore('\t', "").trim()
+            val value = line.substringAfter('\t', "")
+            if (src.isEmpty() || value.isEmpty()) null
+            else src to com.kingzcheung.xime.ui.theme.ThemeImagePlacement.decode(value)
+        }?.toMap() ?: emptyMap()
 
     fun setSlides(context: Context, slides: List<String>) {
         check(SettingsPreferences.getPrefsPublic(context).edit()

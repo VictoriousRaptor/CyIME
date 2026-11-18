@@ -16,6 +16,14 @@ import com.kingzcheung.xime.settings.DoublePinyinScheme
 object GlideLexicon {
     private const val FILE = "english.txt"
     private const val PINYIN_FILE = "glide_pinyin.txt"
+    private const val PINYIN_WORDS_FILE = "glide_pinyin_words.txt"
+    @Volatile private var pinyinWords: List<String>? = null
+    /** 九键编码 → 词表第几项（按 [T9Glide.codes] 的顺序）与同一条线的编码；全拼和各双拼方案各一份。 */
+    private val t9Codes = HashMap<Any, T9Codes>()
+
+    private class T9Codes(val index: LinkedHashMap<String, Int>) {
+        val lines: Map<String, List<String>> by lazy { T9Glide.lines(index.keys) }
+    }
     @Volatile private var words: List<String>? = null
     @Volatile private var pinyin: List<List<String>>? = null
     private const val CONTRACTIONS_FILE = "english_contractions.txt"
@@ -60,6 +68,12 @@ object GlideLexicon {
         }.also { pinyin = it }
     }
 
+    /** glide_pinyin.txt 每个编码最常用的词，一行对一行（同一脚本生成）。须在后台线程调用。 */
+    private fun pinyinWords(context: Context): List<String> = pinyinWords ?: synchronized(this) {
+        pinyinWords ?: context.applicationContext.assets.open(PINYIN_WORDS_FILE).bufferedReader()
+            .useLines { lines -> lines.map { it.trim() }.toList() }.also { pinyinWords = it }
+    }
+
     /** 布局变化（尺寸、错位、分体）时重建模板；同一布局复用。须在后台线程调用。 */
     fun decoder(context: Context, keyboard: GlideKeyboard): GlideDecoder = cachedDecoder("en", null, keyboard) { words(context) }
 
@@ -100,14 +114,51 @@ object GlideLexicon {
      * 认不出或不是拼音方案时只取起点、拐弯和终点的键。须在后台线程调用。
      */
     fun t9Digits(context: Context, keys: Map<Char, LetterKeyRect>, xs: FloatArray, ys: FloatArray,
-        dictionary: Boolean, doublePinyin: DoublePinyinScheme?): String {
+        dictionary: Boolean, doublePinyin: DoublePinyinScheme?): String =
+        t9Glide(context, keys, xs, ys, dictionary, doublePinyin, alternatives = 0).digits
+
+    /**
+     * 九键滑行：[t9Digits] 的数字串，再加同一笔排在其后的 [alternatives] 个编码各自最常用的词（#214）。
+     * 九键上只差连按同一个键的词划出来是同一条线（高兴 4269464 和 高中 42694664、晚安 92626 和 早餐 926226），
+     * 只能靠词频分先后，而几份词频在这几对上都不可靠；首选照常打入，这几个词放进候选栏首选之后，点了直接上屏。
+     * 词表读不出时没有备选，数字串照常。须在后台线程调用。
+     */
+    fun t9Glide(context: Context, keys: Map<Char, LetterKeyRect>, xs: FloatArray, ys: FloatArray,
+        dictionary: Boolean, doublePinyin: DoublePinyinScheme?, alternatives: Int = T9_ALTERNATIVES): T9GlideResult {
         if (dictionary) {
             val decoder = cachedDecoder(if (doublePinyin == null) "t9" else "t9sp", doublePinyin, T9Glide.keyboard(keys),
-                T9Glide.MAX_ENDPOINT) { T9Glide.codes(pinyin(context), doublePinyin) }
-            decoder.decode(xs, ys, limit = 1).firstOrNull()?.let { return it.word }
+                T9Glide.MAX_ENDPOINT) { t9Codes(context, doublePinyin).index.keys.toList() }
+            val found = decoder.decode(xs, ys, limit = 1 + alternatives.coerceAtLeast(0))
+            found.firstOrNull()?.let { first ->
+                val words = if (alternatives <= 0) emptyList() else runCatching {
+                    val codes = t9Codes(context, doublePinyin)
+                    T9Glide.alternatives(found.map { it.word }, { codes.lines[it].orEmpty() }, t9WordOf(context, doublePinyin))
+                        .take(alternatives)
+                }.getOrElse { emptyList() }
+                return T9GlideResult(first.word, words)
+            }
         }
-        return T9Glide.turnDigits(xs, ys, keys)
+        return T9GlideResult(T9Glide.turnDigits(xs, ys, keys), emptyList())
     }
+
+    /** 九键编码 → 它最常用的词；两份词表行数对不上（不是同一次生成的）时一律查不到。 */
+    private fun t9WordOf(context: Context, doublePinyin: DoublePinyinScheme?): (String) -> String? {
+        val index = t9Codes(context, doublePinyin).index
+        val words = pinyinWords(context)
+        if (words.size != pinyin(context).size) return { null }
+        return { code -> index[code]?.let { words.getOrNull(it) } }
+    }
+
+    private fun t9Codes(context: Context, doublePinyin: DoublePinyinScheme?): T9Codes =
+        synchronized(this) {
+            val key: Any = doublePinyin ?: "t9"
+            t9Codes[key] ?: T9Codes(LinkedHashMap<String, Int>().apply {
+                for ((code, entry) in T9Glide.codeEntries(pinyin(context), doublePinyin)) put(code, entry)
+            }).also { t9Codes[key] = it }
+        }
+
+    /** 九键滑行在首选之后给几个备选。 */
+    const val T9_ALTERNATIVES = 2
 
     private fun cachedDecoder(kind: String, source: Any?, keyboard: GlideKeyboard,
         maxEndpoint: Float = GlideDecoder.MAX_ENDPOINT, syllables: (() -> List<String>)? = null,
@@ -123,6 +174,9 @@ object GlideLexicon {
             keys.mapValues { (_, rect) -> (rect.x + rect.width / 2f) to (rect.y + rect.height / 2f) })
     }
 }
+
+/** 九键滑行一笔的结果：打入的数字串 [digits]，和同一笔其后几个编码最常用的词 [alternatives]（可为空）。 */
+data class T9GlideResult(val digits: String, val alternatives: List<String>)
 
 /** 词的音节连成要划的字母串；同一字母串只留最常用的一次（xi an 与 xian 划法相同，交给 Rime 区分）。 */
 internal fun pinyinCodes(entries: List<List<String>>, doublePinyin: DoublePinyinScheme?): List<String> =

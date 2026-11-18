@@ -7,6 +7,13 @@ local MAX_CHARACTER_STROKES = 52
 
 local M = {}
 
+-- lua 造的候选没有 preedit 时，Rime 拿原始字母当编码显示（#372：分词后编码显示成 h s p n z）。
+-- 和 stroke.schema.yaml 的 preedit_format 一样换成笔画（康熙部首）；分词号、通配符原样留着。
+local STROKE_GLYPHS = { h = "⼀", s = "⼁", p = "⼃", n = "⼂", z = "⼄" }
+local function stroke_preedit(code)
+  return (code:gsub("[hspnz]", STROKE_GLYPHS))
+end
+
 function M.init(env)
   env.mem = Memory(env.engine, env.engine.schema)
 end
@@ -56,7 +63,9 @@ function M.func(input, seg, env)
     return a.order < b.order
   end)
   for _, item in ipairs(found) do
-    yield(Candidate("stroke", seg.start, seg._end, item.text, ""))
+    local cand = Candidate("stroke", seg.start, seg._end, item.text, "")
+    cand.preedit = stroke_preedit(input)
+    yield(cand)
   end
   -- The character table cannot look up a whole word by its concatenated strokes.
   -- Keep the existing one-character results; if they run out, let the same Rime sentence decoder resolve the word.
@@ -74,7 +83,9 @@ function M.func(input, seg, env)
         for cand in translation:iter() do
           if cand.type == "sentence" and cand._end == seg._end and utf8.len(cand.text) == 2 and not seen[cand.text] then
             seen[cand.text] = true
-            yield(Candidate("stroke", seg.start, seg._end, cand.text, ""))
+            local word = Candidate("stroke", seg.start, seg._end, cand.text, "")
+            word.preedit = stroke_preedit(input)
+            yield(word)
           end
           -- The native table translator offers its composed sentence first, followed by single characters.
           break

@@ -600,6 +600,11 @@ class LuaScriptRuntime(
             LuaValue.valueOf(api.uuid())
         })
 
+        // 界面语言（zh、zh-Hant、en、ja…）：每次现读，用户在系统里换了应用语言也跟着变。翻译插件用它定「母语」。
+        host.set("uiLanguage", luaFunction { _ ->
+            LuaValue.valueOf(uiLanguageTag(java.util.Locale.getDefault()))
+        })
+
         // 二进制原语：大端 int32（帧序号，负数按补码输出）与 gzip 压缩/解压（火山等二进制协议需要）
         val bin = LuaTable()
         // LuaJ 3.0.1 uses CESU-8 internally for Java strings (surrogate pairs are six
@@ -1126,4 +1131,11 @@ class LuaScriptRuntime(
             override fun invoke(args: Varargs): Varargs = body(args)
         }
     }
+}
+
+/** 界面语言标签：中文分简繁（zh、zh-Hant），其他只给语言代码。 */
+internal fun uiLanguageTag(locale: java.util.Locale): String = when {
+    locale.language != "zh" -> locale.language.ifEmpty { "zh" }
+    locale.script == "Hant" || locale.script.isEmpty() && locale.country in setOf("TW", "HK", "MO") -> "zh-Hant"
+    else -> "zh"
 }

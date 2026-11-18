@@ -127,6 +127,24 @@ class GapLightNetTest {
         assertTrue(routes.any { maxOf(it.ay, it.by) > bottom })
     }
 
+    @Test fun `light crosses the split gap to the other half`() {
+        // #381: 分体键盘两半中间隔 200 像素，光原来走不到另一半。三排，每半五个键。
+        val split = FloatArray(30 * 4) { i ->
+            val key = i / 4; val row = key / 10; val column = key % 10
+            val x = column * 100f + if (column >= 5) 200f else 0f
+            when (i % 4) { 0 -> x; 1 -> row * 50f; 2 -> x + 100f; else -> row * 50f + 50f }
+        }
+        val keyboard = GapNet.build(split, 2f, 2f)
+        // 按左半最右边的键（第一排第 5 个），光走到右半。
+        val routes = keyboard.routes(4, 400f)
+        assertTrue(routes.any { it.ay == it.by && near(minOf(it.ax, it.bx), 500f) && near(maxOf(it.ax, it.bx), 700f) })
+        assertTrue(routes.any { maxOf(it.ax, it.bx) > 700f })
+        // 跨两排的高键里面不连：高键左右两边的点不隔着键帽连。
+        val tall = floatArrayOf(0f, 0f, 100f, 50f, 0f, 50f, 100f, 100f, 100f, 0f, 200f, 100f, 200f, 0f, 300f, 50f, 200f, 50f, 300f, 100f)
+        val tallNet = GapNet.build(tall, 2f, 2f)
+        assertTrue(tallNet.routes(0, 400f).none { it.ay == it.by && near(it.ay, 50f) && near(minOf(it.ax, it.bx), 100f) && near(maxOf(it.ax, it.bx), 200f) })
+    }
+
     @Test fun `voice bars sit in the gutters between rows, newest at the bottom`() {
         // 三排键（每排高 100）：两条排间键缝，从下往上；按键区最上最下的外沿不算。第三个键没进网（NaN），不参与。
         val grid = floatArrayOf(

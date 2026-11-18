@@ -116,6 +116,7 @@ fun NumberKeyboardLayout(
     val swipeBubble = rememberSwipeBubbleController()
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     val liveKeyboardBounds = remember { LiveBounds() }
+    val longPressMenuKeyboard: () -> Rect = remember(liveKeyboardBounds) { { liveKeyboardBounds.current(keyboardBounds, "keyboard") } }
 
     val isDarkTheme = keyTextColor == Color(0xFFE8EAED)
 
@@ -140,7 +141,8 @@ fun NumberKeyboardLayout(
     // 键缝动效的光层（默认关，关着时是 null）。
     val gapLight = rememberKeyGapLight()
 
-    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalKeyGapLight provides gapLight,
+    CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
+        LocalKeyGapLight provides gapLight,
         LocalKeyboardPunctuation provides LocalKeyboardPunctuation.current?.copy(numberPanel = true)) {
     Box(
         modifier = bodyModifier

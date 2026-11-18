@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.twotone.ContentPaste
 import androidx.compose.material.icons.twotone.Download
 import androidx.compose.material.icons.twotone.PushPin
 import androidx.compose.material.icons.twotone.Sync
@@ -57,7 +56,6 @@ import com.kingzcheung.xime.plugin.core.runtime.PluginManager
 fun ClipboardSyncSettingsContent(
     onBack: () -> Unit,
     onNavigateToPlugins: () -> Unit,
-    onNavigateToPanel: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -109,7 +107,7 @@ fun ClipboardSyncSettingsContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("剪贴板与同步") },
+                title = { Text("剪贴板同步") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -202,20 +200,7 @@ fun ClipboardSyncSettingsContent(
                 )
             })
             }
-            // 验证码自动复制是首页这一项的主要用途之一，直接显示，不再折叠。
-            VerificationCodeSettings()
-            ClipboardSensitiveSetting()
-            SettingsSection(title = "剪贴板", content = {
-                SettingsItem(
-                    icon = Icons.TwoTone.ContentPaste,
-                    title = "剪贴板面板",
-                    subtitle = "分组、卡片行数、最近截图、历史记录",
-                    onClick = onNavigateToPanel,
-                    showArrow = true,
-                )
-            })
-            ClipboardExportSetting()
-            ClipboardImportSetting()
+            // 用户 11-15：验证码、敏感内容、导出导入挪到「剪贴板」页，这页只管同步。
         }
     }
 }

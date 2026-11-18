@@ -109,8 +109,13 @@ fun DictionarySettingsContent(
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             PrimaryTabRow(selectedTabIndex = selectedDictTab, containerColor = MaterialTheme.colorScheme.surface) {
                 listOf("我的短语", "导入词库", "删掉的候选", "查词").forEachIndexed { index, title ->
-                    Tab(selected = selectedDictTab == index, onClick = { selectedDictTab = index },
-                        text = { Text(title, maxLines = 1) })
+                    // 四个标签平分一行，窄屏一格不到 90dp：文字标签自带左右各 16dp 留白，「删掉的候选」放不下
+                    // 被截成「删掉的候」（#352）。自己排内容，左右只留 4dp。
+                    Tab(selected = selectedDictTab == index, onClick = { selectedDictTab = index }) {
+                        Box(Modifier.height(48.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                            Text(title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
                 }
             }
             when (selectedDictTab) {

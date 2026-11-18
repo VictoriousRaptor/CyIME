@@ -31,13 +31,36 @@ object T9Glide {
      * 真人轨迹（11-10，38 人 161 条）首选从 70 条升到 140 条；常用单字合成轨迹从 267/293 降到 257/293。
      */
     internal fun codes(entries: List<List<String>>, doublePinyin: DoublePinyinScheme? = null): List<String> =
+        codeEntries(entries, doublePinyin).map { it.first }
+
+    /** [codes] 连同每个数字串取自词表的第几项（同一数字串只留排在最前的那项）；滑行的备选按它查要显示的词（#214）。 */
+    internal fun codeEntries(entries: List<List<String>>, doublePinyin: DoublePinyinScheme? = null): List<Pair<String, Int>> =
         entries.withIndex().sortedBy { (rank, syllables) ->
             if (syllables.size == 1) rank * SINGLE_SYLLABLE_RANK_FACTOR else rank.toDouble()
-        }.map { it.value }.mapNotNull { syllables ->
+        }.mapNotNull { (index, syllables) ->
             val letters = if (doublePinyin == null) syllables.joinToString("")
                 else syllables.map { doublePinyin.code(it) }.takeIf { null !in it }?.joinToString("") ?: return@mapNotNull null
-            digits(letters)
-        }.distinct()
+            (digits(letters) ?: return@mapNotNull null) to index
+        }.distinctBy { it.first }
+
+    /**
+     * 滑行的备选（#214）：识别结果前几名的数字串 [codes]，首选之后各编码最常用的词。
+     * 和首选划出来是同一条线的编码（只差连按同一个键，[sameLine] 按常用程度给出）排在前面：这些识别分不出来，
+     * 只能靠词频猜，最可能是要的词（英国 9464486 的同一条线上有 新婚 946486、中国 94664486）。
+     * 查不到的、和首选是同一个词的、重复的不要。
+     */
+    internal fun alternatives(codes: List<String>, sameLine: (String) -> List<String>, wordOf: (String) -> String?): List<String> {
+        val first = codes.firstOrNull() ?: return emptyList()
+        val firstWord = wordOf(first)
+        return (sameLine(GlideDecoder.collapseRepeats(first)).asSequence() + codes.asSequence().drop(1))
+            .filter { it != first }
+            .mapNotNull { code -> wordOf(code)?.takeIf { it.isNotEmpty() && it != firstWord } }
+            .distinct().toList()
+    }
+
+    /** 按 [codes] 的顺序，把划出来是同一条线（去掉连按的重复键后相同）的编码归到一起。 */
+    internal fun lines(codes: Iterable<String>): Map<String, List<String>> =
+        codes.groupBy { GlideDecoder.collapseRepeats(it) }.filterValues { it.size > 1 }
 
     /** 九键的键比宽高都不小，坐标单位取宽、高中位数的平均，横竖方向一样敏感。 */
     fun keyboard(keys: Map<Char, LetterKeyRect>): GlideKeyboard {

@@ -100,7 +100,47 @@ object HandwritingContribution {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("uploaded_lines", lines).apply()
     }
 
-    fun resetUploaded(context: Context) = setUploadedLines(context, 0)
+    fun resetUploaded(context: Context) {
+        setUploadedLines(context, 0)
+        setHeld(context, emptySet())
+    }
+
+    /** 已经传到服务器的条数：处理过的行里减去服务器当时收不了、留着下次再传的。 */
+    fun uploadedCount(context: Context): Int = (uploadedLines(context) - held(context).size).coerceAtLeast(0)
+
+    /** 服务器当时收不了（题目太长、笔画太多）而留下的样本 id，接收端放宽后下次上传补传。 */
+    internal fun held(context: Context): Set<String> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet("held_ids", null).orEmpty().toSet()
+
+    private fun setHeld(context: Context, ids: Set<String>) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet("held_ids", ids.toSet()).apply()
+    }
+
+    /**
+     * 接收端对每条样本的上限。线上接收端（11-03 起）题目最多 8 个字、60 笔、4000 点；
+     * 1.15.89 起能写公式、一段话，题目更长，一条超限整批都会被拒（「题目不对」），以后每次上传都卡在同一批。
+     * 新接收端在健康检查里报 max_label / max_strokes / max_points，没报就按旧上限。
+     */
+    internal data class Limits(val label: Int = 8, val strokes: Int = 60, val points: Int = 4000) {
+        fun accepts(line: String): Boolean {
+            val o = runCatching { JSONObject(line) }.getOrNull() ?: return false
+            if (o.optString("label").length > label) return false
+            val list = o.optJSONArray("strokes") ?: return true
+            if (list.length() > strokes) return false
+            var n = 0
+            for (i in 0 until list.length()) n += list.optJSONObject(i)?.optJSONArray("points")?.length() ?: 0
+            return n <= points
+        }
+    }
+
+    private fun limits(appVersion: String): Limits = runCatching {
+        val request = Request.Builder().url(endpoint.removeSuffix("upload")).header("User-Agent", "CyIME/$appVersion").get().build()
+        client.newCall(request).execute().use { r ->
+            val o = JSONObject(r.body.string())
+            val base = Limits()
+            Limits(o.optInt("max_label", base.label), o.optInt("max_strokes", base.strokes), o.optInt("max_points", base.points))
+        }
+    }.getOrElse { Limits() }
 
     /**
      * 自用包里「手写训练」一页两用：记住上次停在贡献题还是训练题库，下次进来接着写。
@@ -148,8 +188,8 @@ object HandwritingContribution {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("pos_${choice.name}", index).apply()
     }
 
-    /** 上传结果：[count] 是这次传了几条；没有新样本时为 0。 */
-    data class UploadResult(val count: Int)
+    /** 上传结果：[count] 是这次传了几条；没有新样本时为 0。[held] 是服务器暂时收不了、留着的条数（可改用分享）。 */
+    data class UploadResult(val count: Int, val held: Int = 0)
 
     /** 实际请求的地址；单元测试换成本机服务器。 */
     internal var endpoint: String = UPLOAD_URL
@@ -160,21 +200,40 @@ object HandwritingContribution {
     /**
      * 把样本文件里还没上传过的行 gzip 后分批上传。在 IO 线程调用。
      * 每批接收端确认后就记下已上传到哪一行；中途失败抛异常，已确认的批次不会重传，下次从没传的接着传。
+     * 服务器收不了的条目（[Limits]）不放进请求，记下 id 留着，不再让一条卡住后面所有的；接收端放宽后下次补传。
      */
     fun upload(context: Context, samples: File, appVersion: String): UploadResult {
         check(uploadAvailable()) { "还不能上传" }
         check(consented(context)) { "还没同意" }
         val lines = if (samples.isFile) samples.readLines(Charsets.UTF_8).filter { it.isNotBlank() } else emptyList()
+        val limits = limits(appVersion)
         var done = uploadedLines(context).coerceIn(0, lines.size)
-        val start = done
+        val held = held(context).toMutableSet()
+        var sent = 0
+        // 以前留下的，现在接收端收得了就补传
+        if (held.isNotEmpty()) {
+            for (batch in lines.subList(0, done).filter { idOf(it) in held && limits.accepts(it) }.chunked(UPLOAD_CHUNK_LINES)) {
+                post(context, batch, appVersion)
+                sent += batch.size
+                held -= batch.map(::idOf).toSet()
+                setHeld(context, held)
+            }
+        }
         while (done < lines.size) {
-            val batch = lines.subList(done, minOf(lines.size, done + UPLOAD_CHUNK_LINES))
-            post(context, batch, appVersion)
-            done += batch.size
+            val chunk = lines.subList(done, minOf(lines.size, done + UPLOAD_CHUNK_LINES))
+            val (fits, tooBig) = chunk.partition(limits::accepts)
+            if (fits.isNotEmpty()) post(context, fits, appVersion)
+            sent += fits.size
+            held += tooBig.map(::idOf)
+            setHeld(context, held)
+            done += chunk.size
             setUploadedLines(context, done)
         }
-        return UploadResult(done - start)
+        return UploadResult(sent, held.size)
     }
+
+    private fun idOf(line: String): String = runCatching { JSONObject(line).optString("id") }.getOrNull()
+        ?.takeIf { it.isNotEmpty() } ?: line.hashCode().toString()
 
     private fun post(context: Context, batch: List<String>, appVersion: String) {
         val body = gzip(batch.joinToString("\n", postfix = "\n", transform = ::licensedSample).toByteArray(Charsets.UTF_8))

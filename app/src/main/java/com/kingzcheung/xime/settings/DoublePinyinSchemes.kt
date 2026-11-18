@@ -105,8 +105,8 @@ object DoublePinyinSchemes {
         if (scheme.id != BASE) {
             writeIfChanged(File(rimeDir, "${scheme.id}.schema.yaml"), scheme.schema(base.readText()))
             val base14 = File(rimeDir, "${DoublePinyinScheme.k14Id(BASE)}.schema.yaml")
-            // 14 键、九键没有分号键，ing 在分号上的方案（微软双拼）不生成这两个版本。
-            if (base14.isFile && !scheme.usesSemicolon) writeIfChanged(File(rimeDir, "${DoublePinyinScheme.k14Id(scheme.id)}.schema.yaml"),
+            // 14 键、九键没有分号键：ing 在分号上的方案（微软双拼）把分号并到 L 键（DoublePinyinScheme.k14Schema、t9Schema）。
+            if (base14.isFile) writeIfChanged(File(rimeDir, "${DoublePinyinScheme.k14Id(scheme.id)}.schema.yaml"),
                 scheme.k14Schema(base14.readText()))
             val flypyTable = File(rimeDir, "en_dicts/cn_en_flypy.txt")
             if (flypyTable.isFile) {
@@ -114,15 +114,15 @@ object DoublePinyinSchemes {
                 writeIfChanged(table, scheme.cnEnTable(flypyTable.readText()))
             }
         }
-        if (!scheme.usesSemicolon) writeIfChanged(File(rimeDir, "${DoublePinyinScheme.t9Id(scheme.id)}.schema.yaml"), scheme.t9Schema())
+        writeIfChanged(File(rimeDir, "${DoublePinyinScheme.t9Id(scheme.id)}.schema.yaml"), scheme.t9Schema())
     }
 
     /**
      * 每个有合并键的自建布局各写一个本方案的版本，不再有合并键或已删除的布局的旧版本删掉。
-     * ing 在分号上的方案（微软双拼）和 14 键一样不生成：合并键布局不一定有分号键。
+     * 合并键布局不一定有分号键：ing 在分号上的方案（微软双拼）和 14 键一样把分号并到 L 键（DoublePinyinScheme.layoutSchema）。
      */
     private fun writeLayoutVariants(rimeDir: File, scheme: DoublePinyinScheme, flypyBase: String, layouts: List<CustomKeyboardLayout>) {
-        val wanted = if (scheme.usesSemicolon) emptyList() else layouts.filter { it.mergedGroups.isNotEmpty() }
+        val wanted = layouts.filter { it.mergedGroups.isNotEmpty() }
         val base26 by lazy { if (scheme.id == BASE) flypyBase else scheme.schema(flypyBase) }
         for (layout in wanted) {
             val id = DoublePinyinScheme.layoutVariantId(scheme.id, layout.id)
@@ -186,7 +186,8 @@ object DoublePinyinSchemes {
                 isOnLayout(it) && baseId(it) == id })
             SettingsPreferences.setCurrentSchema(context, updated.firstOrNull { InputProfiles.describe(it).language == InputLanguage.CHINESE } ?: updated.first())
         SchemaManager.setEnabledSchemas(context, updated)
-        notifyChanged(context)
+        // 和「已安装的方案」的开关同一条路自动应用（11-15）：以前只通知输入法，键盘没开着就一直等着用户去点部署。
+        com.kingzcheung.xime.rime.SchemaChangeApplier.request(context)
     }
 
     fun save(context: Context, scheme: DoublePinyinScheme) {

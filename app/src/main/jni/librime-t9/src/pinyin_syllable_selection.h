@@ -31,6 +31,8 @@ namespace pinyin_selection {
 // readings immediately so that clearing/retyping cannot revive an old selection.
 inline constexpr const char* kProperty = "_cyime_pinyin_syllable_lock_v1";
 inline constexpr const char* kAppliedProperty = "_cyime_pinyin_syllable_applied_v1";
+// Local sentence editing may choose a reading encoded as an abbreviation.
+inline constexpr const char* kAllowAbbreviationProperty = "_cyime_sentence_allow_abbreviation";
 
 // One chosen reading. Like nine-key choices, readings are chosen one after
 // another: each span starts where the previous one ended (after delimiters).
@@ -247,14 +249,15 @@ inline void RebuildIndices(rime::SyllableGraph* graph) {
 // Pure graph operation, also used by the native regression probe. Span ends
 // include any trailing speller delimiters, exactly as Rime's graph does.
 inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
-                           rime::SyllableId syllable) {
+                           rime::SyllableId syllable, bool allow_abbreviation = false) {
   if (!graph || start >= end || end > graph->input_length) return false;
   auto from = graph->edges.find(start);
   if (from == graph->edges.end()) return false;
   auto to = from->second.find(end);
   if (to == from->second.end()) return false;
   auto target = to->second.find(syllable);
-  if (target == to->second.end() || target->second.type >= rime::kAbbreviation) return false;
+  if (target == to->second.end() || (target->second.type >= rime::kAbbreviation &&
+      !(allow_abbreviation && target->second.type == rime::kAbbreviation))) return false;
   auto chosen = target->second;
   chosen.ambiguous_source_positions.clear();
 
@@ -305,7 +308,8 @@ inline bool ApplyGraphLock(rime::Context* context, rime::Schema* schema,
       lock_end <= segment_start + graph->input_length;
   for (size_t i = 0; applied && i < active; ++i) {
     applied = ConstrainGraph(graph, lock.spans[i].start - segment_start,
-                             lock.spans[i].end - segment_start, lock.spans[i].syllable);
+                             lock.spans[i].end - segment_start, lock.spans[i].syllable,
+                             context->get_property(kAllowAbbreviationProperty) == "1");
   }
   if (applied) {
     if (constrained) *constrained = true;
@@ -390,7 +394,8 @@ inline size_t BuildGraph(rime::Syllabifier& builder, const std::string& input,
     chosen[i].first = end;
     if (static_cast<size_t>(builder.BuildSyllableGraph(
             input.substr(end, chosen_length), prism, &chosen[i].second)) != chosen_length ||
-        !ConstrainGraph(&chosen[i].second, 0, chosen_length, lock.spans[i].syllable)) return fail();
+        !ConstrainGraph(&chosen[i].second, 0, chosen_length, lock.spans[i].syllable,
+                        context->get_property(kAllowAbbreviationProperty) == "1")) return fail();
     end = chosen_end;
   }
   rime::SyllableGraph after;
@@ -478,8 +483,10 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
     for (auto spelling = dictionary->prism()->QuerySpelling(match.value);
          !spelling.exhausted(); spelling.Next()) {
       const auto properties = spelling.properties();
-      if (properties.type >= rime::kAbbreviation || properties.is_correction ||
-          (strict && end == caret && properties.type != rime::kNormalSpelling)) continue;
+      const bool abbreviation = properties.type == rime::kAbbreviation &&
+          context->get_property(kAllowAbbreviationProperty) == "1";
+      if ((properties.type >= rime::kAbbreviation && !abbreviation) || properties.is_correction ||
+          (strict && end == caret && properties.type != rime::kNormalSpelling && !abbreviation)) continue;
       const auto syllable = spelling.syllable_id();
       if (!seen.emplace(end, syllable).second) continue;
       const auto pinyin = dictionary->primary_table()->GetSyllableById(syllable);

@@ -267,4 +267,16 @@ object EmojiData {
             )
         ),
     )
+
+    /**
+     * 只留系统字体画得出来的（#387：Android 12 的 iQOO 没有新版 emoji，面板里是空白方块，上屏也显示不了）。
+     * 判断不了时照旧留着。第一次用时算一次。
+     */
+    val drawableCategories: List<EmojiCategory> by lazy {
+        val paint = runCatching { android.graphics.Paint() }.getOrNull()
+        drawable(categories) { emoji -> paint == null || runCatching { paint.hasGlyph(emoji) }.getOrDefault(true) }
+    }
+
+    internal fun drawable(categories: List<EmojiCategory>, canDraw: (String) -> Boolean): List<EmojiCategory> =
+        categories.map { category -> category.copy(emojis = category.emojis.filter(canDraw)) }
 }

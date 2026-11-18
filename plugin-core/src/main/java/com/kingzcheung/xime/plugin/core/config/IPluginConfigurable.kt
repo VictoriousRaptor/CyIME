@@ -54,7 +54,30 @@ data class UiNode(
     val style: String? = null,
     val section: String? = null,
     val required: Boolean = false,
-)
+) {
+    /** Optional display names for stored SELECT values (such as a provider URL). */
+    var optionLabels: Map<String, String> = emptyMap()
+        internal set
+    /** SELECT key and stored value for a conditional form field. */
+    var visibleWhen: Pair<String, String>? = null
+        internal set
+}
+
+fun List<UiNode>.visibleSettingsFields(store: PluginConfigStore): List<UiNode> {
+    if (none { it.visibleWhen != null }) return this
+    val selections = mutableMapOf<String, String>()
+    return filter { field ->
+        field.visibleWhen?.let { (key, expected) ->
+            val selected = selections.getOrPut(key) {
+                val selector = firstOrNull { it.key == key && it.type == UiNodeType.SELECT }
+                val saved = store.get(key)
+                if (!saved.isNullOrBlank() && (selector?.options.isNullOrEmpty() || saved in selector.options)) saved
+                else selector?.defaultValue.orEmpty()
+            }
+            selected == expected
+        } ?: true
+    }
+}
 
 interface IPluginConfigurable {
     fun getSettingsSchema(): List<UiNode> = emptyList()

@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 private val BubbleBodyHeight = KeyboardDimensions.BubbleHeightDown
 private val BubbleCornerRadius = KeyboardDimensions.BubbleCornerRadius
-private val BubbleScreenMargin = 4.dp
+private val BubbleScreenMargin = KeyboardKeyMetrics.LongPressMenuMargin
 
 private val bubblePath = Path()
 private val bubbleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -258,14 +258,12 @@ internal fun measureSwipeBubble(swipeState: SwipeState, keyBounds: Rect, keyBack
     bubbleMeasurePaint.textSize = with(density) { 16.sp.toPx() } * bubbleScale
 
     // A single long-press choice (the digit of a nine-key flick key) is the round bubble too.
+    val menuCells = KeyboardKeyMetrics.longPressMenuCells(keyBounds.left, keyWidthPx, swipeState.longPressItems.size,
+        swipeState.longPressDrawableIds.isNotEmpty(), keyboardWidth, screenMarginPx)
     val bodyWidth = if (isLongPressMode && swipeState.longPressItems.size == 1 && swipeState.longPressDrawableIds.isEmpty()) {
         maxOf(bubbleMeasurePaint.measureText(swipeState.longPressItems.first()) + with(density) { 20.dp.toPx() } * bubbleScale, minBodyWidthPx)
     } else if (isLongPressMode) {
-        val cellMin = if (swipeState.longPressDrawableIds.isNotEmpty())
-            swipeState.longPressItems.size
-        else
-            maxOf(swipeState.longPressItems.size, 3)
-        KeyboardKeyMetrics.longPressMenuWidthPx(keyWidthPx, cellMin, keyboardWidth, screenMarginPx)
+        menuCells.width
     } else {
         maxOf(bubbleMeasurePaint.measureText(displayText!!) + with(density) { 20.dp.toPx() } * bubbleScale, minBodyWidthPx)
     }
@@ -276,7 +274,8 @@ internal fun measureSwipeBubble(swipeState: SwipeState, keyBounds: Rect, keyBack
     val selectedBgRadiusPx = with(density) { 6.dp.toPx() } * bubbleScale
 
     val pointerCenterX = keyBounds.left + keyBounds.width / 2f
-    val bodyLeft = (pointerCenterX - bodyWidth / 2f).coerceIn(
+    val bodyLeft = if (isLongPressMode && swipeState.longPressItems.size > 1) menuCells.left
+    else (pointerCenterX - bodyWidth / 2f).coerceIn(
         screenMarginPx,
         maxOf(screenMarginPx, keyboardWidth - bodyWidth - screenMarginPx)
     )

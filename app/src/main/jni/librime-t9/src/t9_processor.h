@@ -128,6 +128,9 @@ public:
 
     // 两种清理模式：mode=0 (CLEAR_COMPOSITION_ONLY), mode=1 (CLEAR_ALL)
     void ClearComposition(int mode);
+    void SaveClearUndo();
+    bool RestoreClearUndo();
+    void DiscardClearUndo();
 
     // ── 异步 flush（JNI 调用）──
     // 执行 SendToRime 标记的待发送引擎动作（set_input → compose / clear 等）。
@@ -248,6 +251,23 @@ private:
     // 导致 MemorizeEntry 读到时为空、词典词被误判为场景 B/C）。
     std::optional<std::vector<T9CommitCapture>>
         pending_fullcommit_capture_;
+    struct ClearUndoState {
+        T9Buffer input;
+        std::map<int, char> constraints;
+        std::vector<std::string> letter_commits;
+        T9StateMachine state;
+        T9UndoModel undo;
+        bool left_locked;
+        std::optional<std::string> separator_digits;
+        std::optional<std::string> choice_digits;
+        std::string last_input;
+        int undone_count;
+        std::string original_digits;
+        std::string last_commit_digits;
+        bool recall_valid;
+        std::optional<std::vector<T9CommitCapture>> pending_capture;
+    };
+    std::optional<ClearUndoState> clear_undo_;
     // 左侧候选区模式（2026-08-07，英文九键适配）：
     // 构造时按 engine/translators 是否含 script_translator 判定（auto），
     // 可被 t9/left_panel_mode: pinyin|none 显式覆盖。

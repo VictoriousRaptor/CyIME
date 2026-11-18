@@ -68,6 +68,7 @@ import com.kingzcheung.xime.plugin.core.config.IPluginConfigurable
 import com.kingzcheung.xime.plugin.core.config.PluginConfigStore
 import com.kingzcheung.xime.plugin.core.config.UiNode
 import com.kingzcheung.xime.plugin.core.config.UiNodeType
+import com.kingzcheung.xime.plugin.core.config.visibleSettingsFields
 import com.kingzcheung.xime.plugin.core.lua.ws.NetworkPolicy
 import com.kingzcheung.xime.plugin.core.runtime.PluginManager
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -91,10 +92,12 @@ fun PluginConfigFormScreen(
     val configStore = remember(pluginId) {
         PluginConfigStoreImpl(context.applicationContext as android.app.Application, pluginId)
     }
-    val fields = remember(schema, plugin) {
-        if (schema.isNotEmpty()) schema else {
-            runCatching { plugin.getSettingsSchema() }.getOrElse { emptyList() }
-        }
+    var selectionRevision by remember(plugin) { mutableStateOf(0) }
+    val definition = remember(schema, plugin) {
+        schema.ifEmpty { runCatching { plugin.getSettingsSchema() }.getOrDefault(emptyList()) }
+    }
+    val fields = remember(definition, configStore, selectionRevision) {
+        definition.visibleSettingsFields(configStore)
     }
     val groupedFields = remember(fields) { fields.groupBy { it.section.orEmpty() } }
 
@@ -143,6 +146,7 @@ fun PluginConfigFormScreen(
                                 field.key?.let { dynamicOptions[it].orEmpty() } ?: emptyList()
                             },
                             plugin = plugin,
+                            onSelectionChange = { if (definition.any { it.visibleWhen?.first == field.key }) selectionRevision++ },
                             // 点测试前先把填的接口地址授权，不用先点「保存」
                             beforeAction = { autoAuthorizeConfiguredHosts() }
                         )
@@ -158,7 +162,7 @@ fun PluginConfigFormScreen(
             onClick = {
                 var allValid = true
                 fields.forEach { field ->
-                    if (field.type == UiNodeType.SECRET && field.required && field.key != null) {
+                    if (field.required && field.key != null && (field.type == UiNodeType.SECRET || field.visibleWhen != null)) {
                         val current = configStore.get(field.key!!)
                         if (current.isNullOrBlank()) allValid = false
                     }
@@ -346,6 +350,7 @@ private fun UiNodeEditor(
     configStore: PluginConfigStore,
     options: List<String>,
     plugin: IPluginConfigurable,
+    onSelectionChange: () -> Unit,
     beforeAction: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -486,7 +491,7 @@ private fun UiNodeEditor(
                 onExpandedChange = { expanded = it }
             ) {
                 OutlinedTextField(
-                    value = value,
+                    value = field.optionLabels[value] ?: value,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text(field.label ?: "") },
@@ -516,10 +521,11 @@ private fun UiNodeEditor(
                 ) {
                     options.forEach { option ->
                         CompactMenuRow(
-                            label = option, selected = value == option,
+                            label = field.optionLabels[option] ?: option, selected = value == option,
                             onClick = {
                                 value = option
                                 persist()
+                                onSelectionChange()
                                 expanded = false
                             }
                         )

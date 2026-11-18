@@ -148,6 +148,23 @@ internal class GapNet private constructor(
                     }
                 }
             }
+            // 同一条横缝上隔着一段没有键的空当（分体键盘的中缝）：也连上，光能走过中缝到另一半（#381）。
+            // 键边已经连过的相邻点不重复连；只连同一条横线上紧挨着的两个点，穿过键帽里面的（跨两排的高键）不连。
+            fun insideKey(row: Int, from: Int, to: Int): Boolean = (0 until keys).any { key ->
+                val c0 = cells[key * 4]
+                c0 >= 0 && cells[key * 4 + 1] < row && row < cells[key * 4 + 3] && c0 < to && from < cells[key * 4 + 2]
+            }
+            for (row in 0 until rowCount) {
+                var previous = -1
+                var previousColumn = -1
+                for (column in 0 until columnCount) {
+                    val here = grid[column * rowCount + row]
+                    if (here < 0) continue
+                    if (previous >= 0 && !insideKey(row, previousColumn, column)) link(previous, here)
+                    previous = here
+                    previousColumn = column
+                }
+            }
             val nodes = nodeColumn.size
             val nodeX = FloatArray(nodes) { xs.values[nodeColumn[it]] }
             val nodeY = FloatArray(nodes) { ys.values[nodeRow[it]] }

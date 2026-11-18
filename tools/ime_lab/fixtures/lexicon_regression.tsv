@@ -1238,3 +1238,9 @@ mixed-neg-woaini	26	woaini	我爱你	1	群聊	2026-11-13	反例：ai 不读成 A
 name-guohaol	26	guohaol	过好了	1	用户反馈目标	2026-11-14	不知名人名 郭昊伦 从词库删掉后
 name-zhangsanl	26	zhangsanl	张三了	1	用户反馈目标	2026-11-14	张三禄 删掉后
 name-zhaoyunl	26	zhaoyunl	!赵云蕾	1	用户反馈目标	2026-11-14	赵云蕾 删掉后不再出现
+product-cyime	26	cyime	CyIME	1	用户反馈目标	2026-11-15	输入法打不出自己的名字
+product-cyletix	26	cyletix	Cyletix	1	用户反馈目标	2026-11-15	同上，作者名
+product-cysync	26	cysync	CySync	1	用户反馈目标	2026-11-15	同上，另一个产品
+product-cyime-14	14	CTUmE	CyIME	3	用户反馈目标	2026-11-15	同上，14 键
+product-cyime-win	win26	cyime	CyIME	1	用户反馈目标	2026-11-15	同上，电脑版
+product-cyletix-win	win26	cyletix	Cyletix	1	用户反馈目标	2026-11-15	同上，电脑版

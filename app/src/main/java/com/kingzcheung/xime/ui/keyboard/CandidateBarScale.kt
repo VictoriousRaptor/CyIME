@@ -35,14 +35,25 @@ internal fun candidateBarHeightDp(scale: Float): Float = CANDIDATE_BAR_BASE_HEIG
 /** 当前候选栏放大倍数；候选栏内部按屏宽限宽时要除掉它。 */
 internal val LocalCandidateBarScale = staticCompositionLocalOf { 1f }
 
+/**
+ * 「候选字大小」相对默认的倍数（用户 11-15：输入的拼音、候选栏图标都跟着这个字号走）。候选字本身直接用设置的 sp；
+ * 拼音、图标按这个倍数放大缩小，候选栏高度不变，所以收在 0.8～1.2 之间，大字时图标也放得进栏里。
+ */
+internal val LocalCandidateSizeFactor = staticCompositionLocalOf { 1f }
+
+internal fun candidateSizeFactor(candidateSp: Int): Float =
+    (candidateSp.toFloat() / com.kingzcheung.xime.settings.SettingsPreferences.DEFAULT_CANDIDATE_TEXT_SIZE).coerceIn(0.8f, 1.2f)
+
 /** 候选栏内容整体放大：dp 与 sp 一起乘倍数，栏内各尺寸保持原有比例。 */
 @Composable
 internal fun ScaledCandidateBar(scale: Float, content: @Composable () -> Unit) {
     val density = LocalDensity.current
+    val sizeFactor = candidateSizeFactor(rememberCandidateTextSize())
     // 倍数为 1 时也走同一层，跨过 1 时候选栏不会重建、丢掉滚动位置。
     CompositionLocalProvider(
         LocalDensity provides if (scale == 1f) density else Density(density.density * scale, density.fontScale),
         LocalCandidateBarScale provides scale,
+        LocalCandidateSizeFactor provides sizeFactor,
         content = content,
     )
 }

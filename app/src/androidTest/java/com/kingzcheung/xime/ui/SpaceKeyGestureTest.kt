@@ -3,9 +3,6 @@ package com.kingzcheung.xime.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,17 +35,15 @@ class SpaceKeyGestureTest {
         cursor: CursorGestureMode = if (mode == SpaceHoldAction.CURSOR) CursorGestureMode.SPACE else CursorGestureMode.NONE) {
         rule.setContent {
             density = LocalDensity.current.density
-            var cursorActive by remember { mutableStateOf(false) }
             CompositionLocalProvider(
                 LocalKeyboardInputPreferences provides KeyboardInputPreferences(spaceHold = mode, cursorGesture = cursor,
                     cursorStepDp = 10f, cursorHoldSeconds = cursorHoldSeconds.value),
-                LocalKeyboardInputActions provides KeyboardInputActions(onCursorMove = { moves += it }, onCursorMoveVertical = { rows += it }, onCursorModeChange = { cursorActive = it },
+                LocalKeyboardInputActions provides KeyboardInputActions(onCursorMove = { moves += it }, onCursorMoveVertical = { rows += it },
                     onVoiceToggle = { voices++ }, onVoiceHoldEnd = { voiceEnds++ }, isVoiceMode = voiceSticky, voiceSticky = voiceSticky),
             ) {
                 Box(Modifier.size(240.dp, 64.dp)) {
                     SpaceKeyButton(onClick = { spaces++ }, backgroundColor = Color.White, textColor = Color.Black,
                         modifier = Modifier.testTag("space"), onVoiceModeChange = { voices++ })
-                    if (cursorActive) CursorControlOverlay(Color.Black, Color.White, Modifier.matchParentSize())
                 }
             }
         }
@@ -71,10 +66,10 @@ class SpaceKeyGestureTest {
         rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("space").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(176L)
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         rule.onNodeWithTag("space").performTouchInput { up() }
         rule.mainClock.advanceTimeBy(320L)
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         rule.runOnIdle { assertEquals(1, spaces); assertTrue(moves.isEmpty()); assertEquals(0, voices) }
     }
 
@@ -90,9 +85,9 @@ class SpaceKeyGestureTest {
         rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("space").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(176L)
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         rule.mainClock.advanceTimeBy(48L)
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         rule.onNodeWithTag("space").performTouchInput {
             moveTo(center + Offset(6f * density, 0f))
             moveTo(center + Offset(12f * density, 0f))
@@ -110,7 +105,7 @@ class SpaceKeyGestureTest {
         rule.mainClock.autoAdvance = false
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(224L)
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         key.performTouchInput { up() }
 
         rule.runOnIdle { cursorHoldSeconds.value = 0.5f }
@@ -118,24 +113,24 @@ class SpaceKeyGestureTest {
         assertEquals("Preference changes must update the existing key", originalNodeId, key.fetchSemanticsNode().id)
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(320L)
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         key.performTouchInput { up() }
         rule.mainClock.advanceTimeBy(240L)
         rule.runOnIdle { assertEquals(1, spaces) }
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
 
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(528L)
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         key.performTouchInput { up() }
         rule.runOnIdle { cursorHoldSeconds.value = 0.1f }
         rule.mainClock.advanceTimeByFrame()
         assertEquals(originalNodeId, key.fetchSemanticsNode().id)
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(80L)
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         rule.mainClock.advanceTimeBy(48L)
-        rule.onNodeWithTag("cursor-control-overlay").assertExists()
+        rule.onNodeWithTag("space-cursor-hint").assertExists()
         key.performTouchInput { up() }
         rule.runOnIdle { assertEquals(1, spaces); assertTrue(moves.isEmpty()); assertEquals(0, voices) }
     }
@@ -154,10 +149,10 @@ class SpaceKeyGestureTest {
         rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("space").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(320L)
-        rule.onNodeWithText("光标调整").assertIsDisplayed()
+        rule.onNodeWithText("移动光标").assertIsDisplayed()
         rule.onNodeWithTag("space").performTouchInput { cancel() }
         rule.mainClock.advanceTimeByFrame()
-        rule.onNodeWithTag("cursor-control-overlay").assertDoesNotExist()
+        rule.onNodeWithTag("space-cursor-hint").assertDoesNotExist()
         rule.mainClock.advanceTimeBy(500L)
         rule.onNodeWithTag("space").performTouchInput { down(center); up() }
         rule.runOnIdle { assertEquals(1, spaces); assertTrue(moves.isEmpty()); assertEquals(0, voices) }

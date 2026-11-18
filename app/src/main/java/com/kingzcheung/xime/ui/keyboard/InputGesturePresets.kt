@@ -86,8 +86,8 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
         SYMBOL_INPUT_MODE, LETTER_LONG_PRESS_MENU, GLIDE_TYPING, CURSOR_GESTURE, T9_FLICK_LETTERS,
         /** 双拼键位提示 ↔ 上方/下方角标提示（两个开关都用 [CORNER_HINTS]）。 */
         DOUBLE_PINYIN_KEY_HINTS, CORNER_HINTS,
-        /** Shift 键分词 ↔ ing 放在 Shift 键上。 */
-        SHIFT_SYLLABLE_SPLIT, SEMICOLON_ON_SHIFT,
+        /** Shift 键分词 ↔ ing 放在 Shift 键上；Shift 键分词 ↔ 双拼辅助码（打字时 Shift 键变成「辅」）。 */
+        SHIFT_SYLLABLE_SPLIT, SEMICOLON_ON_SHIFT, DOUBLE_PINYIN_AUX_CODE,
         /** 字母键显示大写 ↔ 中文键盘字母显示大写。 */
         UPPERCASE_KEY_LABELS, CHINESE_UPPERCASE_KEY_LABELS,
     }
@@ -101,6 +101,7 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
  * - 英文、中文、九键滑行输入 ↔ 整个键盘滑动移光标：都是在字母上拖动。
  * - 角标“长按”时九键拂动必须开：长按被数字占了，不开拂动就没法指定字母。
  * - Shift 键分词 ↔ ing 放在 Shift 键上：打字时都把 Shift 键换成别的键。
+ * - Shift 键分词 ↔ 双拼辅助码：辅助码打字时把 Shift 键换成「辅」（ing 只占声母后等韵母那一下，和「辅」不冲突）。
  * 11-01 起这几对不再靠锁，设置页合成了一个选择（[CornerInputChoice]、[KeyLabelCaseChoice]）或自动处理：
  * 角标“长按” ↔ 字母气泡；字母键大写 ↔ 中文键盘大写；双拼键位提示 ↔ 上下角标提示（两个都开时自动分层显示，
  * 见 KeyButton 的 dpWithCorners）。对应的 [InputGestureLock.Option] 留着不删，旧代码引用照常编译，只是不再产生锁。
@@ -138,6 +139,11 @@ object InputGestureLocks {
             add(InputGestureLock(InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true, "ing 放在 Shift 键上"))
         } else if (settings.shiftSyllableSplit) {
             add(InputGestureLock(InputGestureLock.Option.SEMICOLON_ON_SHIFT, true, "Shift 键分词"))
+        }
+        if (settings.doublePinyinAuxCode) {
+            add(InputGestureLock(InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true, "双拼辅助码"))
+        } else if (settings.shiftSyllableSplit) {
+            add(InputGestureLock(InputGestureLock.Option.DOUBLE_PINYIN_AUX_CODE, true, "Shift 键分词"))
         }
     }
 

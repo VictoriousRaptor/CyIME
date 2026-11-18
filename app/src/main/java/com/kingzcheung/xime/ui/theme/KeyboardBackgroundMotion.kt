@@ -157,6 +157,8 @@ internal class KeyboardBackgroundMotion(
     val effect: BackgroundMotionEffect,
     private val shotMs: Long,
     val slides: List<String> = emptyList(),
+    /** 轮播图片各自的摆放（ThemeImagePlacement.encode()）；没有的铺满居中。 */
+    private val placements: Map<String, String> = emptyMap(),
 ) {
     private val elapsed = mutableLongStateOf(0L)
 
@@ -164,6 +166,9 @@ internal class KeyboardBackgroundMotion(
 
     /** 现在轮到的那张图（themes/…）；不轮播时 null。每圈才变一次，在组合里读也只在换图时重组。 */
     val slideSource: String? get() = if (slides.size < 2) null else slides[slide.intValue.coerceIn(0, slides.size - 1)]
+
+    /** 这张轮播图调过的摆放；没调过 null。 */
+    internal fun placementOf(src: String): ThemeImagePlacement? = placements[src]?.let(ThemeImagePlacement::decode)
 
     /** 面板、展开候选盖住了键盘：钟停下，不再出新帧。由 KeyboardView 设。 */
     var covered by mutableStateOf(false)
@@ -217,7 +222,7 @@ class BackgroundImageSlot {
 }
 
 /**
- * 轮播：「我的图片」换成现在轮到的那张（第一张是主图，按调整页的摆放；其余铺满居中）。
+ * 轮播：「我的图片」换成现在轮到的那张（第一张是主图，按调整页的摆放；其余按各自调过的摆放，没调过铺满居中）。
  * 别的背景、没开轮播时原样返回。只在键盘里起作用（设置页预览没有钟）。
  */
 @Composable
@@ -227,12 +232,17 @@ internal fun BackgroundConfig?.withCurrentSlide(): BackgroundConfig? =
 @Composable
 internal fun BackgroundConfig?.withCurrentSlide(motion: KeyboardBackgroundMotion?): BackgroundConfig? {
     val slide = motion?.slideSource ?: return this
-    return remember(this, slide) { withSlide(slide) }
+    val placement = motion.placementOf(slide)
+    return remember(this, slide, placement) { withSlide(slide, placement) }
 }
 
-internal fun BackgroundConfig?.withSlide(slide: String?): BackgroundConfig? =
-    if (slide == null || this == null || !CustomImageTheme.isCustomImage(this) || slide == src) this
-    else copy(src = slide, srcDark = null, fit = "cover", zoom = null, alignX = null, alignY = null)
+/** 轮播到的图按它自己调过的摆放画（11-15 起轮播图也能调）；没调过的铺满居中。 */
+internal fun BackgroundConfig?.withSlide(slide: String?, placement: ThemeImagePlacement? = null): BackgroundConfig? {
+    if (slide == null || this == null || !CustomImageTheme.isCustomImage(this) || slide == src) return this
+    val p = placement ?: ThemeImagePlacement.DEFAULT
+    return if (p == ThemeImagePlacement.DEFAULT) copy(src = slide, srcDark = null, fit = "cover", zoom = null, alignX = null, alignY = null)
+    else copy(src = slide, srcDark = null, fit = p.fit, zoom = p.zoom, alignX = p.alignX, alignY = p.alignY)
+}
 
 /** 按 [transform] 画 [frame] 里的背景图：不在独立图层里的背景（导航条、两侧留空、玻璃共用背景）用这个。 */
 internal inline fun DrawScope.withBackgroundMotion(transform: BackgroundMotionTransform?, frame: Rect, block: DrawScope.() -> Unit) {
@@ -319,8 +329,8 @@ internal fun rememberKeyboardBackgroundMotion(
     slides: List<String> = emptyList(),
 ): KeyboardBackgroundMotion? {
     if (!allowed) return null
-    val motion = remember(settings.effect, settings.speed, slides) {
-        KeyboardBackgroundMotion(settings.effect, settings.speed.shotMs, slides)
+    val motion = remember(settings.effect, settings.speed, slides, settings.slidePlacements) {
+        KeyboardBackgroundMotion(settings.effect, settings.speed.shotMs, slides, settings.slidePlacements)
     }
     LaunchedEffect(motion, running) {
         if (!running) return@LaunchedEffect

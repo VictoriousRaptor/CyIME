@@ -18,4 +18,14 @@ class SemicolonShiftKeyTest {
         assertTrue(awaitsDoublePinyinFinal("b;'g"))
         assertFalse(awaitsDoublePinyinFinal("b;'gr"))
     }
+
+    /** 11-15 双拼辅助码：打着拼音时 Shift 是「辅」；没打字、已经点过「辅」、或正等韵母（ing 在 Shift 上）时不是。 */
+    @Test
+    fun shiftBecomesAuxOnlyWhileComposingBeforeTheTrigger() {
+        assertFalse(auxCodeKeyShown("", ingShown = false))
+        assertTrue(auxCodeKeyShown("hc", ingShown = false))
+        assertFalse(auxCodeKeyShown("hc`", ingShown = false))
+        assertFalse(auxCodeKeyShown("hc`nz", ingShown = false))
+        assertFalse(auxCodeKeyShown("h", ingShown = true))
+    }
 }

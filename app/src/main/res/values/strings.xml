@@ -50,8 +50,8 @@
     <string name="item_handwriting_title">手写</string>
     <string name="item_handwriting_summary">停顿识别、公式标记、手写模型</string>
     <string name="section_system">系统</string>
-    <string name="item_clipboard_title">剪贴板与同步</string>
-    <string name="item_clipboard_summary">验证码自动复制、与电脑等设备同步剪贴板</string>
+    <string name="item_clipboard_title">剪贴板</string>
+    <string name="item_clipboard_summary">面板显示、历史记录、验证码自动复制、与电脑同步</string>
     <string name="item_extensions_title">扩展</string>
     <string name="item_extensions_summary">输入方案、模型和插件：下载、已安装、导入</string>
     <string name="item_backup_title">备份与恢复</string>

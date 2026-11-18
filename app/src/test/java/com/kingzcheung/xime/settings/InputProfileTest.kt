@@ -128,6 +128,19 @@ class InputProfileTest {
         assertTrue(thirdParty.selectionLabel.contains("external"))
     }
 
+    /** 11-15 小鹤音形：中文的形码方案，不算拼音、双拼，拼音的改读音、纠错这些不碰它；双拼辅助码的码表不当方案列出来。 */
+    @Test fun `Xiaohe shape code is Chinese external coding and aux tables stay hidden`() {
+        val flypy = InputProfiles.describe("flypy")
+        assertEquals(InputLanguage.CHINESE, flypy.language)
+        assertEquals(InputScheme.EXTERNAL, flypy.scheme)
+        assertFalse(flypy.capabilities.editablePinyin)
+        assertEquals("形码", InputProfiles.schemePreview(entry("flypy").profile))
+        assertEquals("自定义编码", InputProfiles.schemePreview(entry("external").profile))
+        for (id in SpellingPatches.AuxCode.schemaIds + listOf("flypydz", "flypyok")) {
+            assertTrue(id, id in CyimeInputDefaults.dependencies)
+        }
+    }
+
     @Test fun `configuration override reaches runtime state and layout routing`() {
         val files = temporary.newFolder()
         val rime = File(files, "rime").apply { mkdirs() }

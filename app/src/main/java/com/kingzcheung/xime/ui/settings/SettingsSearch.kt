@@ -119,8 +119,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
     val speech = "$smart › 语音转文本"
     val captionPage = "$system › 扩展 › 插件 › 字幕"
     val handwriting = "$smart › 手写"
-    val clipboard = "$system › 剪贴板与同步"
-    val clipboardPanel = "$clipboard › 剪贴板面板"
+    val clipboard = "$system › 剪贴板"
+    val clipboardSync = "$clipboard › 剪贴板同步"
     val other = "$system › 其他设置"
     val backup = "$other › 备份与恢复"
     val performance = "$other › 性能与省电"
@@ -147,7 +147,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         page("智能联想", smart, SettingsRoutes.SmartPrediction, "联想 预测 个人学习 模型增强 下一个词"),
         page("语音转文本", smart, SettingsRoutes.SpeechToText, "语音 识别 麦克风 说话 听写 在线 本地 语音输入 开关 字幕 语音在哪 语音输入在哪 怎么说话"),
         page("手写", smart, SettingsRoutes.Handwriting, "手写 写字 笔迹 公式 手写模型"),
-        page("剪贴板与同步", system, SettingsRoutes.ClipboardSync, "剪贴板 同步 验证码 短信 复制 电脑 Windows 互联"),
+        page("剪贴板", system, SettingsRoutes.ClipboardPanel, "剪贴板 剪贴板面板 剪贴板与同步 菜单 更多 设置 面板 验证码 短信 复制"),
         page("扩展", system, SettingsRoutes.Market, "下载 输入方案 模型 插件 商店 扩展商店"),
         page("其他设置", system, SettingsRoutes.Other, "其他 更多 备份 性能 省电 界面语言 显示语言 Language"),
         page("备份与恢复", other, SettingsRoutes.Backup, "备份 恢复 导出 导入 本地备份 换机 迁移"),
@@ -173,6 +173,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("双拼键位提示", theme, SettingsRoutes.Theme, "双拼 键位 提示 键位图 记不住 韵母 声母 显示 键盘上 主题 双拼主题 小鹤 自然码 角标 一起显示 和角标一起显示", section = "角标与气泡"),
         SettingsSearchEntry("ing 放在 Shift 键上", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "微软双拼 分号 ing Shift 大写键 分词键 L 最右边 布局 搜狗 讯飞 微信"),
         SettingsSearchEntry("双拼简拼", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "简拼 双拼简拼 首字母 声母 缩写 只打声母 全拼简拼 小鹤 自然码 微软双拼 zgrm", section = "通用"),
+        SettingsSearchEntry("辅助码", "$languages › 双拼方案", SettingsRoutes.DoublePinyin, "辅助码 辅码 形码 音形 自然码辅助码 小鹤形码 鹤形 双拼辅助码 手心 筛选 选字", section = "辅助码"),
         // 输入 › 键盘布局
         page("26 键", layouts, qwerty, "26键 全键盘 全拼 qwerty 中英混输"),
         page("九键与 14 键", layouts, nine, "九键 9键 14键 拂动 假名 触发距离"),
@@ -271,6 +272,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("玻璃效果", theme, SettingsRoutes.Theme, "玻璃 毛玻璃 透明 材质 磨砂", section = "材质效果"),
         SettingsSearchEntry("透明度与模糊", theme, SettingsRoutes.Theme, "透明度 模糊 模糊强度 背景不透明度 按键不透明度 玻璃", section = "材质效果"),
         SettingsSearchEntry("液态玻璃", theme, SettingsRoutes.Theme, "液态 液体 玻璃 高光 亮边 反光 iOS 苹果 Liquid Glass", section = "材质效果"),
+        SettingsSearchEntry("液态玻璃强度", theme, SettingsRoutes.Theme, "液态 液体 玻璃 强度 加强 最强 标准 更强 更明显 折射 厚度 高光 亮边", section = "材质效果"),
         SettingsSearchEntry("浅色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 发白 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 白天", section = "背景图片"),
         SettingsSearchEntry("深色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 黑夜 夜间", section = "背景图片"),
         SettingsSearchEntry("配色方案", theme, SettingsRoutes.Theme, "配色 颜色 主题色 皮肤 预览"),
@@ -299,6 +301,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("候选栏按钮按压高亮", candidates, candidatePage, "按住 反馈 取消键 关闭 展开箭头"),
         SettingsSearchEntry("候选注释", candidates, candidatePage, "注释 显示 自动 隐藏 候选显示"),
         SettingsSearchEntry("候选注释内容", candidates, candidatePage, "注释 拼音 释义 翻译 编码 中英 英文意思 词典 英文 单词 英文单词 选英文 出英文 上屏英文 打英文 中译英 下一项 长按下一项 shift"),
+        // 九键的「下一项」键：搜「下一项」时排在上面「候选注释内容」后面（同分按先后）
+        SettingsSearchEntry("去掉 0 键，回车加高", ninePath, nine, "九键 0键 零键 数字0 去掉0 大回车 回车加高 合并 下一项 上一项 回车键 确定键"),
         SettingsSearchEntry("显示纠错标记", candidates, candidatePage, "纠错 拼音 标注 红字 隐藏", section = "拼音显示"),
         SettingsSearchEntry("编码显示", candidates, candidatePage, "预编辑 输入框 候选栏 编码位置 拼音显示 拼音框 拼音浮框 拼音气泡"),
         SettingsSearchEntry("双拼编码显示全拼", candidates, candidatePage, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "拼音显示"),
@@ -364,28 +368,29 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("手写训练", handwriting, SettingsRoutes.HandwritingTraining, "手写 训练 训练模式 样本 假名 字母 公式 贡献 上传 分享 采集 数据采集 笔迹 标注 自己的文字", anchor = null),
         // 自用包里贡献题并进「手写训练」的题库菜单，搜索只留上面那条
         SettingsSearchEntry("贡献手写样本", handwriting, SettingsRoutes.HandwritingContribute, "手写 贡献 样本 上传 分享 训练 改进 认不出", anchor = null),
-        // 系统 › 剪贴板与同步
-        SettingsSearchEntry("连接状态", clipboard, SettingsRoutes.ClipboardSync, "扫码连接电脑 连接电脑 Windows 配对 连接码 二维码 互联"),
-        SettingsSearchEntry("同步剪贴板", clipboard, SettingsRoutes.ClipboardSync, "同步 剪贴板 电脑 Windows 我的设备", section = "连接状态"),
-        SettingsSearchEntry("让其他手机或平板连接本机", clipboard, SettingsRoutes.ClipboardSync, "手机 平板 互相同步 二维码 允许其他设备连接"),
-        SettingsSearchEntry("新短信验证码自动复制", clipboard, SettingsRoutes.ClipboardSync, "验证码 短信 自动复制 code"),
-        SettingsSearchEntry("验证码发到其他设备", clipboard, SettingsRoutes.ClipboardSync, "验证码 短信 电脑 平板 同步 发送 code"),
-        SettingsSearchEntry("记录密码等敏感内容", clipboard, SettingsRoutes.ClipboardSync, "密码 敏感 银行卡 密码管理器 剪贴板 password"),
-        page("剪贴板面板", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 菜单 更多 设置 面板"),
-        SettingsSearchEntry("上屏后自动关闭剪贴板", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
-        SettingsSearchEntry("卡片显示行数", clipboardPanel, SettingsRoutes.ClipboardPanel,
+        // 系统 › 剪贴板 › 剪贴板同步（同步插件的页面）
+        page("剪贴板同步", clipboard, SettingsRoutes.ClipboardSync, "剪贴板 同步 电脑 Windows 互联 插件"),
+        SettingsSearchEntry("连接状态", clipboardSync, SettingsRoutes.ClipboardSync, "扫码连接电脑 连接电脑 Windows 配对 连接码 二维码 互联"),
+        SettingsSearchEntry("同步剪贴板", clipboardSync, SettingsRoutes.ClipboardSync, "同步 剪贴板 电脑 Windows 我的设备", section = "连接状态"),
+        SettingsSearchEntry("让其他手机或平板连接本机", clipboardSync, SettingsRoutes.ClipboardSync, "手机 平板 互相同步 二维码 允许其他设备连接"),
+        // 系统 › 剪贴板
+        SettingsSearchEntry("新短信验证码自动复制", clipboard, SettingsRoutes.ClipboardPanel, "验证码 短信 自动复制 code"),
+        SettingsSearchEntry("验证码发到其他设备", clipboard, SettingsRoutes.ClipboardPanel, "验证码 短信 电脑 平板 同步 发送 code"),
+        SettingsSearchEntry("记录密码等敏感内容", clipboard, SettingsRoutes.ClipboardPanel, "密码 敏感 银行卡 密码管理器 剪贴板 password"),
+        SettingsSearchEntry("上屏后自动关闭剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
+        SettingsSearchEntry("卡片显示行数", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 卡片 行数 几行 显示 记录 折叠 最多显示 剪贴板卡片最多显示 卡片最多显示"),
-        SettingsSearchEntry("图片高度", clipboardPanel, SettingsRoutes.ClipboardPanel,
+        SettingsSearchEntry("图片高度", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 图片 高度 太矮 比例 长图 截图 卡片"),
-        SettingsSearchEntry("最近截图", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 截图 截屏 相册 图片 照片"),
-        SettingsSearchEntry("也显示相册照片", clipboardPanel, SettingsRoutes.ClipboardPanel, "剪贴板 相册 照片 最近 图片 不只截图"),
-        SettingsSearchEntry("剪贴板数量上限", clipboardPanel, SettingsRoutes.ClipboardPanel,
+        SettingsSearchEntry("最近截图", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 截图 截屏 相册 图片 照片"),
+        SettingsSearchEntry("也显示相册照片", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 相册 照片 最近 图片 不只截图"),
+        SettingsSearchEntry("剪贴板数量上限", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 条数 数量 最多 上限 保存 历史记录 不限 存文档", anchor = "数量上限", section = "历史记录"),
-        SettingsSearchEntry("剪贴板保留时间", clipboardPanel, SettingsRoutes.ClipboardPanel,
+        SettingsSearchEntry("剪贴板保留时间", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 定期清理 自动清理 自动删除 过期 天数 保留 历史记录", anchor = "保留时间", section = "历史记录"),
-        SettingsSearchEntry("导出剪贴板", clipboard, SettingsRoutes.ClipboardSync, "导出 剪贴板 记录 固定内容 备份"),
-        SettingsSearchEntry("导入剪贴板", clipboard, SettingsRoutes.ClipboardSync, "导入 剪贴板 记录 固定内容 分组 恢复 换机"),
-        SettingsSearchEntry("剪贴板分组", clipboardPanel, SettingsRoutes.ClipboardGroups,
+        SettingsSearchEntry("导出剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "导出 剪贴板 记录 固定内容 备份"),
+        SettingsSearchEntry("导入剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "导入 剪贴板 记录 固定内容 分组 恢复 换机"),
+        SettingsSearchEntry("剪贴板分组", clipboard, SettingsRoutes.ClipboardGroups,
             "分组 常用语 自定义分组 新建分组 分类 地址 图片 链接 电话 邮箱 话术 固定内容", anchor = null),
         page("插件市场", "$system › 扩展 › 插件", SettingsRoutes.MarketPlugins, "插件商店 下载 安装 API AI 翻译 帮写 回复 改写 润色 在线语音"),
         page("已安装的插件", "$system › 扩展 › 插件", SettingsRoutes.Plugins, "插件 已安装 插件管理 文件导入 xipk"),
@@ -410,6 +415,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("检查更新", about, SettingsRoutes.About, "更新 升级 新版本 最新版本 下载 安装 版本号"),
         SettingsSearchEntry("自动检查更新", about, SettingsRoutes.About, "自动 更新 升级 新版本 提醒"),
         SettingsSearchEntry("更新后提示更新内容", about, SettingsRoutes.About, "更新内容 更新日志 新功能 改了什么 公告 提示 首页"),
+        SettingsSearchEntry("启动广告（彩蛋）", about, SettingsRoutes.About, "广告 彩蛋 开屏 启动 全屏 假广告 玩笑"),
         page("更新内容", about, SettingsRoutes.ReleaseNotes, "更新内容 更新日志 更新说明 发布说明 新功能 改了什么 公告 changelog"),
         page("隐私策略", about, SettingsRoutes.Privacy, "隐私 数据 联网 收集"),
         page("鸣谢", about, SettingsRoutes.Credits, "致谢 感谢 鸣谢 上游 Xime 雾凇 参考 来源 作者 credits"),
