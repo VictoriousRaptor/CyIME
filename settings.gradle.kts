@@ -1,7 +1,6 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
-        mavenCentral()
+        // Resolve Android plugins from Google Maven before consulting the Plugin Portal.
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
