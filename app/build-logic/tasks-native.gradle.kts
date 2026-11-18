@@ -1,193 +1,51 @@
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.zip.ZipFile
+import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.PathSensitivity
 
-// 使用官方 Maven 预编译 onnxruntime-android AAR（内置 CPU + NNAPI EP），
-// 不再从源码自行编译（自行编译需 30-60 分钟且依赖网络/NDK 稳定性）。
-val onnxVersion = "1.28.0"
-val onnxAarUrl = "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/${onnxVersion}/onnxruntime-android-${onnxVersion}.aar"
-// 头文件不在 AAR 内，需从对应版本源码 raw 取（仅需 C API + provider factory 头）
-val onnxHeadersBase = "https://raw.githubusercontent.com/microsoft/onnxruntime/v${onnxVersion}/include/onnxruntime"
-
-// GitHub 加速镜像（按顺序尝试；不可用时请替换/删除）
-val ghMirrors = listOf(
-    "https://ghfast.top",
-    "https://gh-proxy.com",
-    "https://ghproxy.net",
-)
-
-// 纯 Java（HttpURLConnection）实现下载，跨平台且不依赖外部 curl/powershell：
-//  - 不依赖构建环境 PATH 中是否有 curl（F-Droid 构建服务器曾因找不到 curl 而构建失败）
-//  - 天然规避 Windows 下 curl/schannel TLS 握手失败（SSL error 35）问题
-// 单个 URL 下载，支持断点续传与自动重试
-fun downloadFile(url: String, target: File, workDir: File, desc: String): Boolean {
-    println("Downloading $desc: $url")
-    repeat(5) { attempt ->
-        try {
-            if (downloadOnce(url, target, desc)) {
-                if (target.exists() && target.length() == 0L) {
-                    target.delete()
-                    return false
-                }
-                println("Downloaded ${target.name} (${target.length()} bytes)")
-                return true
-            }
-        } catch (e: Exception) {
-            System.err.println("Download error for $desc: ${e.message}")
-        }
-        // 失败后清空残留半成品，避免续传污染下一源
-        target.delete()
-        if (attempt < 4) Thread.sleep(3000)
-    }
-    return false
-}
-
-// 单次下载；返回 true 表示 HTTP 成功且内容已写入，false 表示 HTTP 层失败（如 404/403）
-fun downloadOnce(url: String, target: File, desc: String): Boolean {
-    val resumeFrom = if (target.exists()) target.length() else 0L
-    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-    try {
-        conn.instanceFollowRedirects = true
-        conn.connectTimeout = 30_000
-        conn.readTimeout = 600_000
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64)")
-        if (resumeFrom > 0) {
-            conn.setRequestProperty("Range", "bytes=$resumeFrom-")
-        }
-        val code = conn.responseCode
-        if (code !in 200..299 && code != 206) {
-            System.err.println("Download failed for $desc (HTTP $code)")
-            return false
-        }
-        // 服务端支持 Range（206）才追加续传；否则（200）从头覆盖
-        val append = code == 206 && resumeFrom > 0
-        target.parentFile.mkdirs()
-        conn.inputStream.use { input ->
-            java.io.FileOutputStream(target, append).use { out ->
-                val buf = ByteArray(64 * 1024)
-                var n: Int
-                while (input.read(buf).also { n = it } != -1) {
-                    out.write(buf, 0, n)
-                }
-            }
-        }
-        return true
-    } finally {
-        conn.disconnect()
-    }
-}
-
-// 按顺序尝试多个 URL（镜像优先，最后官方源），成功即停止，失败自动切换到下一个
-fun downloadWithMirrors(urls: List<String>, target: File, workDir: File, desc: String): Boolean {
-    for (url in urls) {
-        // 已完整下载则跳过
-        if (target.exists() && target.length() > 0) return true
-        if (downloadFile(url, target, workDir, desc)) return true
-        // 失败后清空残留半成品，避免续传污染下一源
-        target.delete()
-    }
-    return false
-}
-
-fun githubUrls(url: String): List<String> = buildList {
-    ghMirrors.forEach { add("${it.trimEnd('/')}/$url") }
-    add(url) // 官方源兜底
-}
+// The official Android AAR contains the native libraries and matching C/C++ headers.
+val onnxRuntime = the<VersionCatalogsExtension>().named("libs").findLibrary("onnxruntime-android").get().get()
+val onnxModule = onnxRuntime.module
+val onnxAar = configurations.detachedConfiguration(
+    dependencies.create("${onnxModule.group}:${onnxModule.name}:${onnxRuntime.versionConstraint.requiredVersion}@aar"),
+).apply { isTransitive = false }
 
 val downloadOnnx by tasks.registering {
     val cppDir = file("src/main/jni/onnxruntime")
     val jniLibsDir = file("src/main/jniLibs")
-    val nnapiMarker = file("$buildDir/onnxruntime-nnapi-marker")
+    val libraries = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64").map { "$it/libonnxruntime.so" }
+    val jniEntries = libraries.map { "jni/$it" }
 
+    inputs.files(onnxAar).withPathSensitivity(PathSensitivity.NONE)
     outputs.dir(cppDir)
-    outputs.dir(jniLibsDir)
-    outputs.file(nnapiMarker)
+    outputs.files(libraries.map { File(jniLibsDir, it) })
 
     doLast {
-        val abis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-
-        // 已全部就绪则跳过
-        val allSoPresent = abis.all {
-            file("${jniLibsDir.absolutePath}/$it/libonnxruntime.so").exists() &&
-            file("${cppDir.absolutePath}/lib/$it/libonnxruntime.so").exists()
-        }
-        val headersPresent = file("$cppDir/include/onnxruntime_c_api.h").exists()
-        if (allSoPresent && headersPresent) {
-            println("ONNX Runtime (official AAR) already deployed for all ABIs, skipping")
-            return@doLast
-        }
-
-        // 1. 下载官方 AAR（含 4 ABI 的 libonnxruntime.so，内置 CPU + NNAPI EP）
-        val aar = File(buildDir, "onnxruntime-android-${onnxVersion}.aar")
-        if (!downloadWithMirrors(listOf(onnxAarUrl), aar, buildDir, "onnxruntime-android AAR")) {
-            throw GradleException("Failed to download ONNX Runtime Android AAR: $onnxAarUrl")
-        }
-        println("AAR downloaded: ${aar.length()} bytes")
-
-        // 2. 解压 AAR（zip），提取 jni/<abi>/libonnxruntime.so
-        val aarDir = File(buildDir, "onnxruntime-aar")
-        try {
-            copy {
-                from(zipTree(aar))
-                into(aarDir)
-            }
-        } catch (e: Exception) {
-            throw GradleException("Failed to extract AAR: ${e.message}")
-        }
-
-        for (abi in abis) {
-            val src = File(aarDir, "jni/$abi/libonnxruntime.so")
-            if (!src.exists()) throw GradleException("AAR missing jni/$abi/libonnxruntime.so")
-            val abiLib = File(cppDir, "lib/$abi")
-            val abiJni = File(jniLibsDir, abi)
-            abiLib.mkdirs(); abiJni.mkdirs()
-            src.copyTo(File(abiLib, "libonnxruntime.so"), overwrite = true)
-            src.copyTo(File(abiJni, "libonnxruntime.so"), overwrite = true)
-            println("Deployed libonnxruntime.so [$abi] (${src.length()} bytes)")
-        }
-
-        // 下载 v1.28 core/session/ 目录下全部头文件（c_api.h 依赖 ep_c_api.h、
-        // error_code.h 等，需完整覆盖以通过编译），统一提升到 include 顶层供 #include 直接命中。
-        val dstHeaders = File(cppDir, "include")
-        dstHeaders.mkdirs()
-        val headersToFetch = listOf(
-            "core/session/environment.h",
-            "core/session/experimental_onnxruntime_cxx_api.h",
-            "core/session/experimental_onnxruntime_cxx_inline.h",
-            "core/session/onnxruntime_c_api.h",
-            "core/session/onnxruntime_cxx_api.h",
-            "core/session/onnxruntime_cxx_inline.h",
-            "core/session/onnxruntime_env_config_keys.h",
-            "core/session/onnxruntime_ep_c_api.h",
-            "core/session/onnxruntime_ep_device_ep_metadata_keys.h",
-            "core/session/onnxruntime_error_code.h",
-            "core/session/onnxruntime_experimental_c_api.h",
-            "core/session/onnxruntime_experimental_c_api.inc",
-            "core/session/onnxruntime_experimental_cxx_api.h",
-            "core/session/onnxruntime_float16.h",
-            "core/session/onnxruntime_lite_custom_op.h",
-            "core/session/onnxruntime_run_options_config_keys.h",
-            "core/session/onnxruntime_session_options_config_keys.h",
-        )
-        // 旧源码编译残留的 v1.28 头文件会与官方 v1.27 .so 不匹配（ORT_API_VERSION 不同），
-        // 导致 GetApi(28) 失败。部署前清理 include 目录，确保头文件与 AAR 版本一致。
-        dstHeaders.listFiles()?.forEach { old ->
-            if (old.isFile) old.delete()
-        }
-        for (rel in headersToFetch) {
-            val target = java.io.File(dstHeaders, rel.substringAfterLast("/"))
-            val url = "$onnxHeadersBase/$rel"
-            if (downloadWithMirrors(githubUrls(url), target, buildDir, "onnxruntime header $rel")) {
-                println("Header ok: ${target.name}")
-            } else {
-                System.err.println("WARNING: failed to fetch header $rel")
+        val aar = onnxAar.singleFile
+        ZipFile(aar).use { archive ->
+            val requiredEntries = jniEntries + listOf("headers/onnxruntime_c_api.h", "headers/onnxruntime_cxx_api.h")
+            for (entry in requiredEntries) {
+                check((archive.getEntry(entry)?.size ?: 0) > 0) { "${aar.name} is missing $entry" }
             }
         }
 
-        // 4. Marker
-        nnapiMarker.parentFile.mkdirs()
-        nnapiMarker.writeText("ONNX Runtime v${onnxVersion} (official AAR, CPU+NNAPI) deployed on ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())}")
-        println("ONNX Runtime deployed to: ${abis.joinToString()}")
+        val archive = zipTree(aar)
+        // Sync the dedicated CMake directory to remove headers left by older ONNX Runtime versions.
+        sync {
+            from(archive) {
+                include("headers/**")
+                eachFile { path = "include/${path.removePrefix("headers/")}" }
+            }
+            from(archive) {
+                include(jniEntries)
+                eachFile { path = "lib/${path.removePrefix("jni/")}" }
+            }
+            includeEmptyDirs = false
+            into(cppDir)
+        }
+        copy {
+            from(File(cppDir, "lib")) { include(libraries) }
+            into(jniLibsDir)
+        }
     }
 }
 
