@@ -47,6 +47,26 @@ class HardwareKeyboardToolbarTest {
     private val floatingSuggestions = mutableStateOf(false)
     private val candidatesPending = mutableStateOf(false)
 
+    @Test fun onlyDockedToolbarReportsBottomOccupancy() {
+        val docked = mutableStateOf(false)
+        var occupiesBottom = false
+        rule.setContent {
+            if (visible.value) HardwareKeyboardToolbar({}, {}, {}, {}, Color.DarkGray, Color.White,
+                { bounds = it }, HardwareToolbarPosition(), {}, bottomDocked = docked.value,
+                onBottomDockChanged = { occupiesBottom = it })
+        }
+        rule.runOnIdle {
+            assertNotNull(bounds)
+            assertFalse(occupiesBottom)
+            docked.value = true
+        }
+        rule.runOnIdle {
+            assertTrue(occupiesBottom)
+            docked.value = false
+        }
+        rule.runOnIdle { assertFalse(occupiesBottom) }
+    }
+
     @Test fun idleEnglishShowsLanguageAndReservesCandidateSpaceWithoutEmptyActions() {
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f)) {

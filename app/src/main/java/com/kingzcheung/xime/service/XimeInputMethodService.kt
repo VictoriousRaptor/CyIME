@@ -473,6 +473,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 uiState.value.hardwareOptions.dockAtEdge)) 10 else 0
     }
     private val hardwareToolbarBounds = mutableStateOf<android.graphics.Rect?>(null)
+    private var hardwareToolbarBottomDocked = false
     /** 语音悬浮条正在拖动或归位：这期间 App 的留空停在拖动前，停稳后再按新位置改一次。 */
     private var voicePillMoving = false
     private var voicePillReserveTop: Int? = null
@@ -2569,6 +2570,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 avoidEditor = state.hardwareOptions.avoidEditor,
                                 dockAtEdge = state.hardwareOptions.dockAtEdge,
                                 positionLocked = state.hardwareOptions.lockPosition,
+                                onBottomDockChanged = { docked ->
+                                    hardwareToolbarBottomDocked = docked
+                                    keyboardContainer.requestLayout()
+                                },
                                 // 吸附底边时的样式：默认为现在的长条，可选三星式贴底通栏。
                                 samsungBottomBar = state.hardwareOptions.bottomBar,
                                 onHideKeyboard = { requestHideSelf(0) },
@@ -5634,16 +5639,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         if (state.isCompact || state.voiceCollapsed) {
             val height = window.window?.decorView?.height ?: resources.displayMetrics.heightPixels
-            // A toolbar resting on the bottom edge (Samsung bar or the Gboard pill) is reported as
-            // occupied space, so apps lift their input field above it rather than under it.
-            // 语音悬浮条靠边的竖条不占 App 底部；拖动和归位期间留空不变，免得 App 每帧跟着上下跳。
             val liveReserve = hardwareToolbarBounds.value?.takeIf {
-                !(state.voiceCollapsed && it.height() > it.width()) &&
-                ((state.voiceCollapsed && hardwareToolbarPosition.value.yFraction >= 1f) ||
+                if (state.isCompact) hardwareToolbarBottomDocked
+                else it.height() <= it.width() && (hardwareToolbarPosition.value.yFraction >= 1f ||
                     height - it.bottom <= (24 * resources.displayMetrics.density).roundToInt())
             }?.top ?: height
-            val bottomReserve = if (state.voiceCollapsed && voicePillMoving) voicePillReserveTop ?: liveReserve
-                else liveReserve.also { voicePillReserveTop = if (state.voiceCollapsed) it else null }
+            val bottomReserve = if (state.isCompact) liveReserve
+                else if (voicePillMoving) voicePillReserveTop ?: liveReserve
+                else liveReserve.also { voicePillReserveTop = it }
             outInsets.contentTopInsets = bottomReserve.coerceIn(0, height)
             outInsets.visibleTopInsets = bottomReserve.coerceIn(0, height)
             outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION

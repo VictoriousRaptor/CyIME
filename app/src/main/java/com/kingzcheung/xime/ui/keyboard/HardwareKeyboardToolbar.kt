@@ -123,6 +123,7 @@ internal fun HardwareKeyboardToolbar(
     capsLock: Boolean = false,
     /** 「锁定浮窗位置」：不能拖动，按钮照常能点。 */
     positionLocked: Boolean = false,
+    onBottomDockChanged: (Boolean) -> Unit = {},
 ) {
     val themeKey = com.kingzcheung.xime.ui.theme.LocalKeyboardPalette.current?.key ?: backgroundColor
     val shadowRadius = with(LocalDensity.current) { 1.dp.toPx() }
@@ -196,6 +197,12 @@ internal fun HardwareKeyboardToolbar(
         }
         val currentGeometry by rememberUpdatedState(geometry)
         var dragging by remember { mutableStateOf<HardwareToolbarOffset?>(null) }
+        if (bottomDocked && dragging == null) {
+            DisposableEffect(Unit) {
+                onBottomDockChanged(true)
+                onDispose { onBottomDockChanged(false) }
+            }
+        }
         val shape = if (samsungBottomBar && bottomDocked) androidx.compose.ui.graphics.RectangleShape
             else RoundedCornerShape(HardwareCandidateCornerRadius)
         val languageMenuActive = LocalSuppressCursorMove.current
