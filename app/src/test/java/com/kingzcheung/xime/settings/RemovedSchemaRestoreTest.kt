@@ -40,8 +40,9 @@ class RemovedSchemaRestoreTest {
         val menu = SchemaManager.keyboardMenuSchemas(app).map { it.schemaId }
         assertTrue("rime_ice" in menu)
         assertFalse(imported in menu)
-        val restored = selectableWithStored(imported, listOf(imported, "rime_ice"),
-            SchemaManager.getEnabledSchemas(app), { false }, { SchemaManager.isSchemaCompiled(app, it) })
+        val available = listOf(imported, "rime_ice").filter { File(build, "$it.schema.yaml").isFile }
+        val restored = selectableWithStored(imported, available,
+            { SchemaManager.getEnabledSchemas(app) }, { false }, { SchemaManager.isSchemaCompiled(app, it) })
         assertEquals(listOf("rime_ice"), restored)
     }
 }

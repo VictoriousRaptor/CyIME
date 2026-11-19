@@ -312,6 +312,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
             --tests com.kingzcheung.xime.keyboard.KeyboardModeNavigationTest \
             --tests com.kingzcheung.xime.settings.SettingsRoundTripTest \
+            --tests com.kingzcheung.xime.settings.RemovedSchemaRestoreTest \
             --tests com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferencesTest \
             --tests com.kingzcheung.xime.ui.keyboard.T9CtrlKeyTest \
             --tests com.kingzcheung.xime.ui.render.SymbolKeyCycleRenderTest \
