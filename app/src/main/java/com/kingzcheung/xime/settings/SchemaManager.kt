@@ -1133,14 +1133,21 @@ object SchemaManager {
         val result = SchemaManifestManager.uninstallWithManifest(context, packageId)
         if (!result.success) return result
         SettingsPreferences.removeInstalledMarketId(context, packageId)
-        val available = discoverSchemas(context).map { it.schemaId }.toSet()
+        val installed = discoverSchemas(context).associateBy { it.schemaId }
+        val available = installed.keys
         val previous = getEnabledSchemas(context)
         val remaining = previous.filter { it in available }
         if (remaining != previous) setEnabledSchemas(context, remaining)
         val current = SettingsPreferences.getCurrentSchema(context)
         if (current !in available) {
             val fallback = remaining.firstOrNull() ?: fallbackNativeSchema(available).firstOrNull()
-            if (fallback != null) SettingsPreferences.setCurrentSchema(context, fallback)
+            if (fallback != null) {
+                SettingsPreferences.setCurrentSchema(context, fallback)
+                val replacement = installed[fallback]
+                if (replacement != null && InputModes.selectedProfiles(context)[replacement.language] == current) {
+                    InputModes.selectProfile(context, replacement.toSchemaInfo())
+                }
+            }
         }
         return result
     }
