@@ -36,6 +36,16 @@ class StrokeSchemaBundleTest {
     }
 
     @Test
+    fun `a separator may follow a separator and codes show as letters by default`() {
+        // n 个分词号就是 n+1 个字（11-18）：分词号要能连着打、打在最后，不然第二个分词号把首选顶上屏。
+        val initials = Regex("""(?m)^  initials: "([^"]*)"""").find(schema)!!.groupValues[1]
+        for (key in listOf("h", "s", "p", "n", "z", "*", "'")) assertTrue("initials misses $key", key in initials)
+        // 编码默认显示 h s p n z；显示成笔画由设置写方案补丁（SpellingPatches.strokeGlyphParts）。
+        assertTrue(Regex("""(?m)^  preedit_format:""").find(schema) == null)
+        assertTrue(Regex("""(?m)^\s+- xlit/hspnz/""").find(schema) == null)
+    }
+
+    @Test
     fun `lua modules named by the schema are bundled`() {
         val modules = Regex("""lua_(?:translator|filter)@\*(\w+)""").findAll(schema).map { it.groupValues[1] }.toList()
         assertEquals(listOf("cyime_stroke_wildcard", "cyime_stroke_phrase", "cyime_stroke_rank"), modules)

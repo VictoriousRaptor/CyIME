@@ -67,14 +67,20 @@ internal fun <T> KeyboardPanelGrid(
         val lowWidePanel = maxWidth >= 560.dp && maxHeight < minimumRowHeight * 2 + 24.dp
         val menuColumns = ((maxWidth.value + 8f) / (64f * LocalDensity.current.fontScale + 8f))
             .toInt().coerceIn(1, if (lowWidePanel) 8 else 4)
-        val columns = minOf(items.size, if (twoRowModes) 2 else if (compactCards) 4 else menuColumns)
+        val inlineEditor = LocalInlineQuickActionEditor.current
+        // 菜单里直接编辑时格子大小固定：按满页的列数、行数和页码点的位置排，不随格子个数变。
+        // 原来只有一页时列数等于格子数、只排一行、不留页码点，格子被撑大，拖进菜单的预览也跟着变大，
+        // 拖动中格子数一变整块还会跳。
+        val fixedEditGrid = inlineEditor?.active == true && !compactCards
+        val columns = (if (twoRowModes) 2 else if (compactCards) 4 else menuColumns)
+            .let { if (fixedEditGrid) it else minOf(items.size, it) }
         val spacing = 8.dp
         val indicatorHeight = 16.dp
-        val rows = if (twoRowModes) 2 else if (items.size > columns &&
-            maxHeight - (if (preferSinglePage && items.size <= columns * 2) 0.dp else indicatorHeight) >= minimumRowHeight * 2 + spacing) 2 else 1
+        val rows = if (twoRowModes) 2 else if ((fixedEditGrid || items.size > columns) &&
+            maxHeight - (if (preferSinglePage && !fixedEditGrid && items.size <= columns * 2) 0.dp else indicatorHeight) >=
+                minimumRowHeight * 2 + spacing) 2 else 1
         val pages = items.chunked(rows * columns)
         val pagerState = rememberPagerState(pageCount = { pages.size })
-        val inlineEditor = LocalInlineQuickActionEditor.current
         val latestPageCount by androidx.compose.runtime.rememberUpdatedState(pages.size)
         val pageEdge = with(LocalDensity.current) { 28.dp.toPx() }
         LaunchedEffect(inlineEditor?.dragging, pagerState) {
@@ -96,7 +102,7 @@ internal fun <T> KeyboardPanelGrid(
                 }
             }
         }
-        val pageIndicatorHeight = if (pages.size == 1) 0.dp else indicatorHeight
+        val pageIndicatorHeight = if (pages.size == 1 && !fixedEditGrid) 0.dp else indicatorHeight
         val gridHeight = if (compactCards) minOf(maxHeight,
             maxOf(120.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight) else minOf(maxHeight,
             maxOf(104.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight)

@@ -95,15 +95,18 @@ word and word-pair frequencies derived (counts only, no text) by tools/glide_lab
   https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html
 
 ================================================================================
-Spanish, German, French, Italian and Russian word lists
+Spanish, German, French, Italian, Russian, Vietnamese and Malay word lists
 ================================================================================
 
-cyime-words-es-v1.txt, cyime-words-de-v1.txt, cyime-words-fr-v1.txt, cyime-words-it-v1.txt and
-cyime-words-ru-v1.txt are the completion word lists of the letter-by-letter languages (one word per line,
-most frequent first). They are optional market downloads, not part of the APK, built by tools/wordlists/build_words.py:
-- Word frequencies: Hermit Dave, FrequencyWords (content/2018/<es|de|fr|it|ru>/<lang>_50k.txt, from
+cyime-words-es-v1.txt, cyime-words-de-v1.txt, cyime-words-fr-v1.txt, cyime-words-it-v1.txt,
+cyime-words-ru-v1.txt, cyime-words-vi-v1.txt and cyime-words-ms-v1.txt are the completion word lists of the
+letter-by-letter languages (one word per line, most frequent first). They are optional market downloads, not part
+of the APK, built by tools/wordlists/build_words.py:
+- Word frequencies: Hermit Dave, FrequencyWords (content/2018/<es|de|fr|it|ru|vi|ms>/<lang>_50k.txt, from
   OpenSubtitles 2018), commit 525f9b560de45753a5ea01069454e72e9aa541c6. Code MIT; word lists CC-BY-SA-4.0.
   https://github.com/hermitdave/FrequencyWords
+  The Vietnamese and Malay lists are filtered with the en, id, es, fr, de, it, pt and nl lists of the same
+  commit (only to drop English words, Indonesian spellings and names; nothing from them is shipped).
 - Spelling filter only (not shipped): the LibreOffice spelling dictionaries as packaged in the npm modules
   dictionary-es 4.0.0, dictionary-de 3.0.0, dictionary-fr 3.0.0, dictionary-it 2.0.0 and dictionary-ru 3.0.0,
   checked with spylls.

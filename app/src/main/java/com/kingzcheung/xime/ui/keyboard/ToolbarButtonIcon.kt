@@ -1,7 +1,6 @@
 package com.kingzcheung.xime.ui.keyboard
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.twotone.AutoFixHigh
 import androidx.compose.material.icons.twotone.Quickreply
@@ -14,26 +13,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.kingzcheung.xime.keyboard.ToolbarButtonItem
 
 /**
- * 工具栏按钮图标统一渲染：内置按钮用 ImageVector 图标（简繁用「简」「繁」字）；
+ * 工具栏按钮图标统一渲染：内置按钮用 ImageVector 图标（简繁是画成矢量图标的「简」「繁」字）；
  * 自家 AI 回复、AI 改写、翻译插件用宿主的图标（[ownPluginButtonIcon]）；
  * 其它插件按钮优先显示其资源图标（本地文件，coil 加载），无图标用 label 文字兜底。
  */
@@ -49,9 +38,14 @@ fun ToolbarButtonIcon(
 ) {
     val ownPluginIcon = (item as? ToolbarButtonItem.Plugin)?.let { ownPluginButtonIcon(it.id) }
     when {
-        // 简繁：图标就是当前输出的字，「简」或「繁」（用户 2026-11-11）。
-        item is ToolbarButtonItem.Builtin && item.button == com.kingzcheung.xime.keyboard.ToolbarButton.TRADITIONAL ->
-            GlyphIcon(if (active) "繁" else "简", tint, modifier, contentDescription ?: item.stateLabel(active))
+        // 简繁：图标是当前输出的字「简」或「繁」（用户 2026-11-11），画成矢量图标，和旁边图标一样高（11-17）。
+        item is ToolbarButtonItem.Builtin && item.button == com.kingzcheung.xime.keyboard.ToolbarButton.TRADITIONAL -> Icon(
+            imageVector = if (active) com.kingzcheung.xime.keyboard.TraditionalGlyphIcon
+                else com.kingzcheung.xime.keyboard.SimplifiedGlyphIcon,
+            contentDescription = contentDescription ?: item.stateLabel(active),
+            tint = tint,
+            modifier = modifier,
+        )
         item is ToolbarButtonItem.Builtin -> Icon(
             imageVector = if (item.button == com.kingzcheung.xime.keyboard.ToolbarButton.FULL_SHAPE && active)
                 com.kingzcheung.xime.keyboard.FullWidthIcon else item.button.icon,
@@ -102,32 +96,6 @@ internal fun ownPluginButtonIcon(buttonId: String): ImageVector? = when (buttonI
     "com.kingzcheung.xime.plugin.ai_rewrite:open" -> Icons.TwoTone.AutoFixHigh
     "com.kingzcheung.xime.plugin.translate:open" -> Icons.TwoTone.Translate
     else -> null
-}
-
-/** 用一个字当图标：字高按图标框算（框的 0.78），和旁边的线条图标看起来一样大。 */
-@Composable
-private fun GlyphIcon(text: String, tint: Color, modifier: Modifier, description: String) {
-    BoxWithConstraints(
-        modifier = modifier.semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        val box = minOf(maxWidth, maxHeight).let { if (it == Dp.Infinity) 24.dp else it }
-        val fontSize = with(LocalDensity.current) { (box * 0.78f).toSp() }
-        Text(
-            text = text,
-            color = tint,
-            maxLines = 1,
-            style = TextStyle(
-                fontSize = fontSize,
-                lineHeight = fontSize,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                platformStyle = PlatformTextStyle(includeFontPadding = false),
-                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-            ),
-            modifier = Modifier.clearAndSetSemantics { },
-        )
-    }
 }
 
 /** 键盘上显示的名称：全角/半角、简繁开关按当前状态显示，其余按钮用原名称。 */

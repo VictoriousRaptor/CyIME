@@ -148,6 +148,9 @@ class EnglishContractions(lines: Sequence<String>) {
         return if (entry.form.startsWith("i'")) "I" + entry.form.drop(1) else entry.form
     }
 
+    /** 表里所有缩写的写法（I 开头的大写，i'm → I'm），按表里的顺序；打了撇号时的英文补全用（见 EnglishContractionCompletion.withApostrophe）。 */
+    fun forms(): List<String> = entries.values.map { if (it.form.startsWith("i'")) "I" + it.form.drop(1) else it.form }
+
     /** 原词也常用、只排进候选的缩写；没有为空。 */
     fun offer(word: String): String? = entries[word]?.takeIf { it.offerOnly }?.form
 }

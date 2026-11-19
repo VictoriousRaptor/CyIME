@@ -58,7 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -163,7 +163,7 @@ private fun CaptionPage(controller: CaptionController, onExit: () -> Unit) {
             ModelBanner("打电话、微信视频时也想看字幕？开启后通话中会自动在屏幕底部显示", "去开启通话字幕", ModelDownloadState.Idle,
                 onDismiss = {
                     controller.dismissCallCaptionCard()
-                    android.widget.Toast.makeText(context, "以后要用，可以在系统设置 → 无障碍里打开“CyIME 通话字幕”", android.widget.Toast.LENGTH_LONG).show()
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "以后要用，可以在系统设置 → 无障碍里打开“CyIME 通话字幕”", android.widget.Toast.LENGTH_LONG).show()
                 }) {
                 runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -175,7 +175,7 @@ private fun CaptionPage(controller: CaptionController, onExit: () -> Unit) {
     val transcript: @Composable (Modifier) -> Unit = { modifier ->
         NewSegmentPull(modifier.fadeTopEdge(), onNewSegment = {
             controller.newSegment()
-            android.widget.Toast.makeText(context, "已开始新的一段，刚才的字幕已保存", android.widget.Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "已开始新的一段，刚才的字幕已保存", android.widget.Toast.LENGTH_SHORT).show()
         }) {
             // Landscape: one track per speaker on a time axis. Portrait: a chat log of messages.
             RevealTicker(controller)
@@ -253,7 +253,7 @@ private fun SaveDialog(controller: CaptionController, onDismiss: () -> Unit) {
                     fontSize = 18.sp, lineHeight = 26.sp)
                 if (where != null) {
                     CaptionButton("复制全部", Modifier.fillMaxWidth()) {
-                        if (controller.copyAll()) android.widget.Toast.makeText(context, "已复制全部字幕", android.widget.Toast.LENGTH_SHORT).show()
+                        if (controller.copyAll()) com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "已复制全部字幕", android.widget.Toast.LENGTH_SHORT).show()
                         onDismiss()
                     }
                     CaptionButton("分享", Modifier.fillMaxWidth()) {
@@ -373,7 +373,7 @@ private fun SavedCaptionDialog(controller: CaptionController, saved: SavedCaptio
                     CaptionButton("复制全部", Modifier.weight(1f)) {
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("字幕", text))
-                        android.widget.Toast.makeText(context, "已复制全部字幕", android.widget.Toast.LENGTH_SHORT).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "已复制全部字幕", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     CaptionButton("分享", Modifier.weight(1f)) {
                         val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
@@ -631,7 +631,7 @@ private fun TurnRow(turn: Turn, fontSp: Int, onSpeakerTap: (SpeakerUi) -> Unit, 
                 color = if (speaker == null) Color.Gray else Color.Unspecified, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(time, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(turn.text + if (turn.live) "…" else "", fontSize = fontSp.sp, lineHeight = (fontSp * 1.3f).sp,
+        androidx.compose.material3.Text(turn.text + if (turn.live) "…" else "", fontSize = fontSp.sp, lineHeight = (fontSp * 1.3f).sp,
             modifier = Modifier.weight(1f).padding(top = 8.dp, bottom = 10.dp, end = 14.dp))
     }
 }
@@ -751,7 +751,7 @@ private fun ReassignDialog(turn: Turn, controller: CaptionController, onDismiss:
         Surface(Modifier.fillMaxWidth(.9f).padding(16.dp), shape = RoundedCornerShape(28.dp), color = captionDialogColor(), contentColor = MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("这句话是谁说的？", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text(turn.text, fontSize = 22.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                androidx.compose.material3.Text(turn.text, fontSize = 22.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     for (speaker in controller.speakers.filter { it.id != CaptionController.REPLY_SPEAKER && !it.ignored }) {
                         BigButton(speaker.name, outlined = speaker.id != turn.speaker?.id) { turn.segments.forEach { controller.reassign(it.id, speaker.id) }; onDismiss() }

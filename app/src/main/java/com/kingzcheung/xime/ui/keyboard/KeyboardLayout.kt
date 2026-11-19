@@ -161,10 +161,16 @@ fun KeyboardLayout(
     val fourteenKey = !isAsciiMode && uiState.inputProfile.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14
     // 逗号键分词（默认关）：中文全拼、双拼时标点键多一个 ' 角标，字母键角标里的 ' 打拼音时也是分词。
     val syllableSplit = syllableSplitActive(LocalKeyboardInputPreferences.current.syllableSplitKey, isAsciiMode, uiState.inputProfile)
+    // 英文和西、德、法、意语：同一个开关让标点键多一个 ' 角标，打单词时它接进词里（what's），见 apostropheSplitActive。
+    val apostropheKey = apostropheSplitActive(LocalKeyboardInputPreferences.current.syllableSplitKey, isAsciiMode, uiState.inputProfile)
     // Shift 键分词（默认关）：同样只管中文全拼、双拼；关着时 Shift 键原样不动。
     val shiftSplit = syllableSplitActive(LocalKeyboardInputPreferences.current.shiftSyllableSplit, isAsciiMode, uiState.inputProfile)
+    // 英文和西、德、法、意语：打单词时 Shift 键写 '，点一下打撇号（what's）；没在打词时照旧是 Shift。
+    val shiftApostrophe = apostropheSplitActive(LocalKeyboardInputPreferences.current.shiftSyllableSplit, isAsciiMode, uiState.inputProfile)
     val shiftComposingSplit: (() -> Boolean)? = if (shiftSplit && candidateState != null)
-        remember(candidateState) { { shiftTapTypesSeparator(true, candidateState.value.isComposing) } } else null
+        remember(candidateState) { { shiftTapTypesSeparator(true, candidateState.value.isComposing) } }
+        else if (shiftApostrophe && candidateState != null)
+        remember(candidateState) { { typingWord(candidateState.value.pendingEnglishText) } } else null
     // 双拼键位提示（默认关）：双拼 26 键每个键写出 zh/ch/sh 和韵母，和双拼方案页的键位图一样；14 键、九键不显示。
     // 自己排的合并键布局（一个键两个字母）也不显示：合并键写不下两个字母的提示，只有单字母键有会前后不一。
     val dpKeyHints = if (doublePinyin && !isAsciiMode && !fourteenKey && keyRows.all { row -> row.all { it.length <= 1 } } &&
@@ -277,14 +283,21 @@ fun KeyboardLayout(
         SplitKeyboardGeometry.splitStraddlingPairs(keyRows[1], splitRow1InsetDp.value / splitCellDp.coerceAtLeast(1f)),
         SplitKeyboardGeometry.splitStraddlingPairs(keyRows[2], letterSideKeyWeight),
     ) + keyRows.drop(3) else keyRows
-    val shiftSlideTargets = remember(uiState.currentSchemaId, isAsciiMode) { ShiftSlideTargets() }
+    // 按住 !@# 当 Ctrl：俄、韩语键盘的字母键按位置发 26 键同一格的 Ctrl+字母（用户 11-17）。
+    val shiftSlideTargets = remember(uiState.currentSchemaId, isAsciiMode) {
+        ShiftSlideTargets(ctrlLetterOf = KeysConfigHelper::ctrlLetter)
+    }
     val dragSpace = LocalKeyDragSpace.current
     val shiftMode by viewModel.shiftMode.collectAsStateWithLifecycle()
     // 14 键按住 Shift 拖动时，双字母键拆回单字母键，键帽显示手指实际停的那个字母；松开 Shift 恢复（用户 10-21）。
     // 按住符号键当 Ctrl 时同样拆开，每个字母各显示自己的快捷键（用户 10-24）；和键面一起等按满时限或拖出才拆，点一下开符号不闪（10-31）。
     // Shift 亮着（单次、锁定、按住）时也拆开：大写只能是一个确定的字母，点哪个出哪个，bn 不再只出 B（10-27）。
     // 按字母数定宽，拆开后每个字母的位置和宽度不变。
-    val renderRows = if (fourteenKey && (shiftSlideTargets.dragging || shiftSlideTargets.ctrlFaces || shiftMode.isShifted)) pairedRows.mapIndexed { index, row ->
+    // 自建布局的合并键（we、rt）按住 Ctrl 或 Shift 拖动时同样拆开，各显示自己的快捷键（用户 11-17）；大写不拆，点按照旧。
+    // 分体时左右两半按合并键的格数切，拆开会挪动切点，先不拆。
+    val customPairs = letterLayout != null && !honeycomb && !splitKeyboard && letterLayout.mergedGroups.isNotEmpty() &&
+        (shiftSlideTargets.dragging || shiftSlideTargets.ctrlFaces)
+    val renderRows = if (customPairs || fourteenKey && (shiftSlideTargets.dragging || shiftSlideTargets.ctrlFaces || shiftMode.isShifted)) pairedRows.mapIndexed { index, row ->
         if (index > 2) row else row.flatMap { key ->
             if (key.length == 2 && key.all { it.lowercaseChar() in 'a'..'z' }) listOf(key.take(1), key.drop(1)) else listOf(key)
         }
@@ -293,7 +306,9 @@ fun KeyboardLayout(
     val evenMergedKeys = (letterLayout != null || fourteenKey) && !splitKeyboard &&
         LocalKeyboardInputPreferences.current.evenMergedKeys
     // 14 键拆开时每个字母各占原合并键的一半，拆开前后不跳位；没拆或没打开时为 null，按键自己的份数。
-    val renderSpans: List<List<Float>>? = if (evenMergedKeys && fourteenKey && renderRows !== pairedRows)
+    val renderSpans: List<List<Float>>? = if (customPairs && letterLayout != null)
+        pairedRows.take(3).map { row -> splitPairSpans(row, evenMergedKeys, letterLayout.widths) }
+    else if (evenMergedKeys && fourteenKey && renderRows !== pairedRows)
         pairedRows.take(3).map { splitPairSpans(it, true) } else null
     val splitRow0 = renderRows.getOrElse(0) { listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p") }
     val splitRow1 = renderRows.getOrElse(1) { listOf("a", "s", "d", "f", "g", "h", "j", "k", "l") }
@@ -437,6 +452,7 @@ fun KeyboardLayout(
         if (glidePreview.gesture != gesture) {
             glidePreview.start(gesture)
             glidePreview.english = if (chineseGlide) null else runCatching { callbacks.glidePreviewer?.invoke() }.getOrNull()
+            glidePreview.left = if (chineseGlide) runCatching { callbacks.t9LeftContext() }.getOrNull() else null
         }
         glidePreview.points = points
         if (glidePreview.job?.isActive == true) { glidePreview.moved = true; return@progress }
@@ -444,6 +460,7 @@ fun KeyboardLayout(
         val doublePinyin = if (chinese && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
             com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
         val english = glidePreview.english
+        val left = glidePreview.left
         val shift = viewModel.shiftMode.value
         val case: (String) -> String = { word -> com.kingzcheung.xime.glide.glideCased(word, shift.isShifted,
             shift == com.kingzcheung.xime.viewmodel.ShiftMode.CAPS) }
@@ -457,7 +474,8 @@ fun KeyboardLayout(
                     runCatching {
                         val keyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
                         if (chinese) {
-                            com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys, limit = 1)
+                            (if (left.isNullOrEmpty()) com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys, limit = 1)
+                            else com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(glideContext, keyboard, true, doublePinyin, xs, ys, left))
                                 .firstOrNull()?.word?.let { it to null }
                         } else {
                             val candidates = com.kingzcheung.xime.glide.GlideLexicon.decoder(glideContext, keyboard).decode(xs, ys)
@@ -480,12 +498,18 @@ fun KeyboardLayout(
     }
     val onGlideTrace: (FloatArray, FloatArray) -> Unit = trace@{ xs, ys ->
         glidePreview.stop()
-        val heldPreview = if (chineseGlide) callbacks.onGlidePreviewHold?.invoke() else null
+        val heldPreview = if (chineseGlide) callbacks.onGlidePreviewHold?.invoke() else callbacks.onEnglishGlidePreviewHold?.invoke()
         if (heldPreview == null) callbacks.onGlidePreviewEnd?.invoke()
         val keys = geometry.snapshot()
-        if (keys.size < 26) { heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }; return@trace }
+        if (keys.size < 26) {
+            com.kingzcheung.xime.util.FileLogger.w("GlideDrop",
+                com.kingzcheung.xime.glide.glideDropNote("keys_lt_26", keys, xs, ys, heldPreview != null))
+            heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }; return@trace
+        }
         // 输入框归属在抬手时确定；识别完成前切换输入框则作废。
         val inputContext = runCatching { callbacks.captureInputContext() }.getOrNull() ?: run {
+            com.kingzcheung.xime.util.FileLogger.w("GlideDrop",
+                com.kingzcheung.xime.glide.glideDropNote("no_input_context", keys, xs, ys, heldPreview != null))
             heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }; return@trace
         }
         val shift = viewModel.shiftMode.value
@@ -493,17 +517,24 @@ fun KeyboardLayout(
         val doublePinyin = if (chineseGlide && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
             com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
         val chinese = chineseGlide
+        // 中文按前文选编码（组合为空时光标前已上屏的字，和九键组句同一个来源）；在主线程读，识别在后台。
+        // 这一笔开过实时预览就用预览开头那份：这时光标前已经有预览写进去的组合文字。
+        val left = if (!chinese) null else com.kingzcheung.xime.glide.ChineseGlideContext.leftAtRelease(
+            glideTrail.gesture, glidePreview.gesture, glidePreview.left) { runCatching { callbacks.t9LeftContext() }.getOrNull() }
         glideScope.launch {
             var handedOff = false
             try {
             val candidates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 // 词表读不出来时这一笔当没认出，不闪退（用户 11-12）。
                 com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(glideContext,
-                    com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys), chinese, doublePinyin, xs, ys)
+                    com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys), chinese, doublePinyin, xs, ys, left)
             }
             if (candidates.isEmpty()) {
                 // 很短又认不出词：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
-                com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString()?.let { key ->
+                val tapKey = com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString()
+                if (tapKey == null) com.kingzcheung.xime.util.FileLogger.w("GlideDrop",
+                    com.kingzcheung.xime.glide.glideDropNote("no_candidates", keys, xs, ys, heldPreview != null))
+                tapKey?.let { key ->
                     val value = com.kingzcheung.xime.rime.MergedLetterInput.tapValue(key,
                         KeysConfigHelper.getKeyCommitValue(key, isAsciiMode), false, shift.isShifted)
                     kotlinx.coroutines.withContext(inputContext) { onKeyPress(value) }
@@ -513,13 +544,14 @@ fun KeyboardLayout(
             viewModel.onCharacterTyped()
             if (chinese) {
                 kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideCode?.invoke(candidates.first().word,
-                    candidates.drop(1).map { it.word }, heldPreview) }
+                    com.kingzcheung.xime.glide.chineseGlideAlternatives(candidates), heldPreview) }
                 handedOff = true
                 return@launch
             }
             val case: (String) -> String = { word -> com.kingzcheung.xime.glide.glideCased(word, shift.isShifted,
                 shift == com.kingzcheung.xime.viewmodel.ShiftMode.CAPS) }
             kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideWord?.invoke(candidates, case) }
+            handedOff = heldPreview != null && callbacks.onGlideWord != null
             } finally {
                 if (!handedOff) heldPreview?.let { callbacks.onGlidePreviewFinish?.invoke(it, false) }
             }
@@ -879,6 +911,7 @@ fun KeyboardLayout(
                                 shadowElevation = shadowElevation,
                                 shadowShapeRadius = shadowShapeRadius,
                                 composingSplit = shiftComposingSplit,
+                                composingSplitLabel = if (shiftSplit) "分词" else SYLLABLE_SEPARATOR,
                                 tapKey = CHOONPU_INPUT.takeIf { choonpuOnShift },
                                 tapLabel = CHOONPU_KEY.takeIf { choonpuOnShift },
                             )
@@ -1083,7 +1116,7 @@ fun KeyboardLayout(
                         else (callbacks.onCommitExactText ?: onCommitText ?: onKeyPress)(text)
                     }
                     // 逗号键分词：有逗号键放逗号键左下角，只开句号键放句号键。
-                    val (leftSplit, rightSplit) = syllableSplitOnPunctuation(syllableSplit, leftPunctuation, rightPunctuation)
+                    val (leftSplit, rightSplit) = syllableSplitOnPunctuation(syllableSplit || apostropheKey, leftPunctuation, rightPunctuation)
                     @Composable
                     fun RowScope.PunctuationKey(key: SpacePunctuationKey, tag: String, split: Boolean = false,
                         colors: KeyboardKeyColors = KeyboardKeyColors(keyBackgroundColor, keyTextColor)) =
@@ -1855,8 +1888,10 @@ internal fun ShiftCapsKeyButton(
     shadowEnabled: Boolean = true,
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
-    /** Shift 键分词（默认关）：返回 true 时点按是分词 '，键面写「分词」；null 为普通 Shift。 */
+    /** Shift 键分词（默认关）：返回 true 时点按是分词 '，键面写 [composingSplitLabel]；null 为普通 Shift。 */
     composingSplit: (() -> Boolean)? = null,
+    /** 中文打拼音时写「分词」；英文等打单词时写 '（打的就是撇号）。 */
+    composingSplitLabel: String = "分词",
     /**
      * 点按送出的键（日语长音键「代替 Shift」：ー）；非 null 时键面写 [tapLabel]，按住满 [SHIFT_TAP_KEY_HOLD_MS] 才是按住 Shift，
      * 松手前没打别的键就照 Shift 的点按切换大小写（[shiftTapKeyLongPressAction]）。null 为普通 Shift。
@@ -2007,7 +2042,8 @@ internal fun ShiftCapsKeyButton(
     ) {
         // 空心箭头＝小写，实心＝下一个字母大写，实心加底横线＝大写锁定。
         // Shift 键分词开着并且在打拼音：键面写「分词」，点了就是它（印什么出什么）。
-        if (splitLabel) Text("分词", color = colors.foreground, fontSize = 14.sp, maxLines = 1,
+        if (splitLabel) Text(composingSplitLabel, color = colors.foreground,
+            fontSize = if (composingSplitLabel.length > 1) 14.sp else 20.sp, maxLines = 1,
             modifier = Modifier.testTag("shift-key-split"))
         else if (tapLabel != null) {
             // 长音键：中间是 ー，右上角小箭头表示长按是 Shift（实心、带横线同普通 Shift 键）。

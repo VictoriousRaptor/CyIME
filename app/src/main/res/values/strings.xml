@@ -67,7 +67,7 @@
     <string name="settings_app_language_summary">设置页的显示语言</string>
     <string name="settings_app_language_summary_old_android">跟随系统语言，点这里去系统设置</string>
     <string name="settings_app_language_system">跟随系统</string>
-    <string name="settings_app_language_note">目前只有设置首页已翻译，其余页面先显示简体中文，之后的版本补齐。只改界面文字，不影响输入语言和繁体输出。</string>
+    <string name="settings_app_language_note">English 已翻译设置各页；繁體中文、日本語目前只翻了设置首页，其余页面先显示简体中文。只改界面文字，不影响输入语言和繁体输出。</string>
     <string name="action_close">关闭</string>
     <string name="subtype_label_pinyin">拼音</string>
     <string name="call_caption_service_label">CyIME 通话字幕</string>

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.twotone.Lock
 import androidx.compose.material.icons.twotone.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,7 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -232,6 +233,24 @@ fun SmartPredictionSettingsContent(
                         onCheckedChange = {
                             unlearnRejected = it
                             SettingsPreferences.setUnlearnRejectedCommit(context, it)
+                        },
+                        lockMessage = if (toggles.incognito) "无痕模式开着时什么都不学，不需要这项" else null,
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    // 锁定词序（专业打字手，11-18，默认关）：候选顺序固定，每个位置都能盲打。
+                    var lockWordOrder by remember { mutableStateOf(SettingsPreferences.isLockWordOrder(context)) }
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.Lock,
+                        title = "锁定词序",
+                        subtitle = "不再按使用次数调整词权，候选顺序固定，新词也不自动记；置顶、忘记和我的短语照常",
+                        checked = lockWordOrder,
+                        onCheckedChange = {
+                            lockWordOrder = it
+                            SettingsPreferences.setLockWordOrder(context, it)
                         },
                         lockMessage = if (toggles.incognito) "无痕模式开着时什么都不学，不需要这项" else null,
                     )

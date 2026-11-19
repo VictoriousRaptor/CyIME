@@ -25,6 +25,7 @@ class LetterLanguagesTest {
     private val yaml by lazy { repoFile("src/main/assets/xime.yaml").readText() }
 
     @After fun reset() {
+        LetterLayouts.setForTest(InputLanguage.FRENCH, null)
         KeysConfigHelper.setActiveKeyboardSchema("")
         KeysConfigHelper.clearSchemaBindingsForTest()
     }
@@ -43,6 +44,8 @@ class LetterLanguagesTest {
         assertFalse(InputLanguage.JAPANESE.typesLettersDirectly)
         assertEquals("26键", InputProfiles.resolveLayout("qwerty_german").displayName)
         assertEquals("26键", InputProfiles.resolveLayout("qwerty_italian").displayName)
+        assertEquals("26键", InputProfiles.resolveLayout("qwerty_vietnamese").displayName)
+        assertEquals("26键", InputProfiles.resolveLayout("qwerty_malay").displayName)
         assertEquals("ЙЦУКЕН", InputProfiles.resolveLayout("jcuken_russian").displayName)
     }
 
@@ -104,6 +107,7 @@ class LetterLanguagesTest {
             "qwerty_german" to mapOf("a" to "ä", "o" to "ö", "u" to "ü", "s" to "ß"),
             "qwerty_french" to mapOf("e" to "é", "a" to "à", "c" to "ç", "o" to "ô", "u" to "ù", "i" to "î"),
             "qwerty_italian" to mapOf("a" to "à", "e" to "è", "i" to "ì", "o" to "ò", "u" to "ù"),
+            "qwerty_vietnamese" to mapOf("a" to "ă", "e" to "ê", "o" to "ô", "u" to "ư", "d" to "đ"),
             "jcuken_russian" to mapOf("е" to "ё", "ь" to "ъ"),
             "dubeolsik_korean" to mapOf("ㄱ" to "ㄲ", "ㅂ" to "ㅃ", "ㅔ" to "ㅖ"),
         )
@@ -121,6 +125,15 @@ class LetterLanguagesTest {
         }
         assertTrue(requireNotNull(KeysConfigHelper.parseKeyboardYamlSection(yaml, "qwerty_spanish"))["'"]
             ?.longPress?.values.orEmpty().map { it.label }.containsAll(listOf("¿", "¡")))
+        // 越南语 o 长按还有 ơ、a 还有 â；马来语没有特殊字母，逗号键长按里有叠词用的 -。
+        val vietnamese = requireNotNull(KeysConfigHelper.parseKeyboardYamlSection(yaml, "qwerty_vietnamese"))
+        assertEquals(listOf("ô", "ơ"), vietnamese["o"]?.longPress?.values.orEmpty().map { it.label })
+        assertEquals(listOf("ă", "â"), vietnamese["a"]?.longPress?.values.orEmpty().map { it.label })
+        val malay = requireNotNull(KeysConfigHelper.parseKeyboardYamlSection(yaml, "qwerty_malay"))
+        assertEquals(listOf("qwertyuiop", "asdfghjkl", "zxcvbnm"),
+            requireNotNull(KeysConfigHelper.parseKeyboardLayoutYamlText(yaml, "qwerty_malay")).map { it.joinToString("") })
+        assertTrue("abcdefghijklmnopqrstuvwxyz".all { malay[it.toString()]?.longPress == null })
+        assertTrue("-" in malay["'"]?.longPress?.values.orEmpty().map { it.label })
     }
 
     private fun loadKeyboards() {
@@ -137,7 +150,8 @@ class LetterLanguagesTest {
 
     @Test fun `latin letters carry the english corner symbols and always offer accents`() {
         loadKeyboards()
-        for (letters in listOf(LetterLanguage.SPANISH, LetterLanguage.GERMAN, LetterLanguage.FRENCH, LetterLanguage.ITALIAN)) {
+        for (letters in listOf(LetterLanguage.SPANISH, LetterLanguage.GERMAN, LetterLanguage.FRENCH, LetterLanguage.ITALIAN,
+                LetterLanguage.VIETNAMESE, LetterLanguage.MALAY)) {
             KeysConfigHelper.setActiveKeyboardSchema(letters.schemaId)
             for (key in QwertySwipeSymbols.keys.map(Char::toString)) {
                 val gesture = KeysConfigHelper.getKeyGesture(key, false)
@@ -174,5 +188,84 @@ class LetterLanguagesTest {
         KeysConfigHelper.setActiveKeyboardSchema(LetterLanguage.RUSSIAN.schemaId)
         assertEquals("1", KeysConfigHelper.getKeyGesture("й", false)?.swipeUp?.value)
         assertNull(KeysConfigHelper.getKeyGesture("х", false)?.swipeUp)
+    }
+
+    /** 法语 AZERTY（用户 11-16）：法语的第二个布局，默认不用；选了只换按键排列，长按、语言、方案都不变，角标跟着位置走。 */
+    @Test fun `french offers azerty as a second layout`() {
+        loadKeyboards()
+        // 不绑方案：法语方案照旧绑 qwerty_french，AZERTY 只在选了时用。
+        assertFalse(LetterLayouts.AZERTY_FRENCH in KeysConfigHelper.parseSchemaBindingsYamlText(yaml).values)
+        val rows = requireNotNull(KeysConfigHelper.parseKeyboardLayoutYamlText(yaml, LetterLayouts.AZERTY_FRENCH))
+        assertEquals(listOf("azertyuiop", "qsdfghjklm", "wxcvbn"), rows.map { it.joinToString("") })
+        // 按键、长按（é è ê ë、à â æ、ç、ù û ü、î ï、ô œ、ÿ）和逗号键都和 QWERTY 法语键盘一样。
+        assertEquals(KeysConfigHelper.parseKeyboardYamlSection(yaml, "qwerty_french"),
+            KeysConfigHelper.parseKeyboardYamlSection(yaml, LetterLayouts.AZERTY_FRENCH))
+        assertEquals("AZERTY", InputProfiles.resolveLayout(LetterLayouts.AZERTY_FRENCH).displayName)
+
+        val french = SchemaInfo("french", "法语", "", "", "")
+        val entries = listOf(SchemaInfo("rime_ice", "雾凇拼音", "", "", ""), french, SchemaInfo("italian", "意大利语", "", "", ""))
+        // 默认还是原来的 26 键。
+        assertEquals("qwerty_french", InputProfiles.current("french").layout.id)
+        assertEquals(listOf("qwerty_french", LetterLayouts.AZERTY_FRENCH),
+            InputProfileSelection.layoutsOf(french, entries).map { it.id })
+        assertEquals(listOf("26键", "AZERTY"), InputProfileSelection.languageLayouts(entries, french).map { it.displayName })
+        // 点 AZERTY 保持法语方案，只换按键排列；别的语言没有这个布局。
+        assertEquals(InputProfileSelection.LayoutSwitch(french, true),
+            InputProfileSelection.switchLayout(entries, french, LetterLayouts.AZERTY_FRENCH))
+        assertEquals(listOf("qwerty_italian"), InputProfileSelection.layoutsOf(entries[2], entries).map { it.id })
+
+        LetterLayouts.setForTest(InputLanguage.FRENCH, LetterLayouts.AZERTY_FRENCH)
+        val profile = InputProfiles.current("french")
+        assertEquals(InputLanguage.FRENCH, profile.language)
+        assertEquals(InputScheme.DIRECT, profile.scheme)
+        assertEquals(EngineProfile.Rime("french"), profile.engineProfile)
+        assertEquals(LetterLayouts.AZERTY_FRENCH, profile.layout.id)
+        assertEquals(LayoutKind.ALPHABETIC, profile.layout.kind)
+        KeysConfigHelper.setActiveKeyboardSchema("french")
+        assertEquals(rows, KeysConfigHelper.getKeyRows(false))
+        assertEquals(listOf("é", "è", "ê", "ë"), KeysConfigHelper.getKeyGesture("e", false)?.longPress?.values?.map { it.label })
+        assertEquals(listOf("ç"), KeysConfigHelper.getKeyGesture("c", false)?.longPress?.values?.map { it.label })
+        assertEquals(LetterLanguage.FRENCH.extraLetters, KeysConfigHelper.longPressLetters(isAsciiMode = false))
+        // 角标跟着位置：a 在 q 那一格、z 在 w 那一格、w 在 z 那一格；m 在 26 键之外，留 m 自己的。
+        val up = QwertySwipeSymbols.up(true)
+        for ((key, cell) in listOf("a" to "q", "z" to "w", "q" to "a", "w" to "z", "m" to "m", "n" to "n"))
+            assertEquals(key, up.getValue(cell), KeysConfigHelper.getKeyGesture(key, false)?.swipeUp?.value)
+        // 在法语上切到英文：英文键盘照旧是 QWERTY。
+        assertEquals(InputLayout.QWERTY.id, InputProfiles.current("french", asciiMode = true).layout.id)
+        // 别的语言不受影响。
+        assertEquals("qwerty_italian", InputProfiles.current("italian").layout.id)
+
+        // 选回 26 键：用回原来的键盘。
+        LetterLayouts.setForTest(InputLanguage.FRENCH, null)
+        assertEquals("qwerty_french", InputProfiles.current("french").layout.id)
+        KeysConfigHelper.setActiveKeyboardSchema("french")
+        assertEquals("qwertyuiop", KeysConfigHelper.getKeyRows(false)[0].joinToString(""))
+    }
+
+    /** 在布局栏点 AZERTY / 26 键：存进 letter_layout_fr（新键，旧设置不动）；点回 26 键删掉这一项。 */
+    @Test fun `picking azerty is stored per language and picking 26 keys clears it`() {
+        loadKeyboards()
+        val stored = mutableMapOf<String, String>()
+        val editor = mock<android.content.SharedPreferences.Editor>()
+        whenever(editor.putString(org.mockito.kotlin.any(), org.mockito.kotlin.any())).thenAnswer {
+            stored[it.getArgument(0)] = it.getArgument(1); editor }
+        whenever(editor.remove(org.mockito.kotlin.any())).thenAnswer { stored.remove(it.getArgument<String>(0)); editor }
+        val prefs = mock<android.content.SharedPreferences>()
+        whenever(prefs.edit()).thenReturn(editor)
+        val context = mock<android.content.Context>()
+        whenever(context.getSharedPreferences("kime_settings", android.content.Context.MODE_PRIVATE)).thenReturn(prefs)
+        val french = SchemaInfo("french", "法语", "", "", "")
+
+        LetterLayouts.selectFor(context, french, LetterLayouts.AZERTY_FRENCH)
+        assertEquals(mapOf("letter_layout_fr" to LetterLayouts.AZERTY_FRENCH), stored)
+        assertEquals(LetterLayouts.AZERTY_FRENCH, LetterLayouts.chosenSection(InputLanguage.FRENCH))
+        // 法语不借中文的字母排列（Colemak 等），chosen 仍是 null：英文、日语的排列不受影响。
+        assertNull(LetterLayouts.chosen(InputLanguage.FRENCH))
+        assertNull(LetterLayouts.chosenSection(InputLanguage.ENGLISH))
+
+        LetterLayouts.selectFor(context, SchemaInfo("french", "法语", "", "", ""), "qwerty_french")
+        assertTrue(stored.isEmpty())
+        assertNull(LetterLayouts.chosenSection(InputLanguage.FRENCH))
+        assertEquals("qwerty_french", InputProfiles.current("french").layout.id)
     }
 }

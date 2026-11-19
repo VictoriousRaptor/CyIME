@@ -137,6 +137,15 @@ class FeedbackManagerTest {
         org.junit.Assert.assertFalse(FeedbackManager.isSamsungTuned(com.kingzcheung.xime.platform.DeviceVendor.of(null)))
     }
 
+    @Test fun `enabled mode is marked as touch feedback except on samsung or with system haptics off`() {
+        // 11-16 魅族 21（Flyme 12.6）：「启用」不标用途时一下都不震。
+        org.junit.Assert.assertTrue(FeedbackManager.enabledUsesTouchUsage(enabled = true, samsungTuned = false, systemHapticEnabled = true))
+        // 三星按实测调过，照旧；系统触感关着时触摸反馈会被拦，「启用」照旧强制震。
+        org.junit.Assert.assertFalse(FeedbackManager.enabledUsesTouchUsage(enabled = true, samsungTuned = true, systemHapticEnabled = true))
+        org.junit.Assert.assertFalse(FeedbackManager.enabledUsesTouchUsage(enabled = true, samsungTuned = false, systemHapticEnabled = false))
+        org.junit.Assert.assertFalse(FeedbackManager.enabledUsesTouchUsage(enabled = false, samsungTuned = false, systemHapticEnabled = true))
+    }
+
     @Test fun `samsung, huawei and honor skip the system key haptic`() {
         org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("samsung")))
         org.junit.Assert.assertTrue(FeedbackManager.bypassesSystemKeyHaptic(com.kingzcheung.xime.platform.DeviceVendor.of("HUAWEI")))

@@ -5,7 +5,7 @@ import androidx.compose.material.icons.twotone.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.kingzcheung.xime.settings.SettingsPreferences

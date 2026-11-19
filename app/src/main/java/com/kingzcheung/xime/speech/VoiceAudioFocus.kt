@@ -110,7 +110,9 @@ internal class VoiceAudioFocus(private val context: Context) {
         SettingsPreferences.setSttMusicVolumeBeforeVoice(context, current)
         manager.setStreamVolume(AudioManager.STREAM_MUSIC, lowered, 0)
         volumeBefore = current
-        volumeLowered = lowered
+        // 有的系统会把音量档换算一下，实际落下的档和要的不一样（#322 压低后不恢复）：记实际读回来的档，
+        // 关麦时拿它判断用户有没有自己调过。读回来还是原来的档（系统还没落下）就按要的档记。
+        volumeLowered = manager.getStreamVolume(AudioManager.STREAM_MUSIC).takeIf { it != current } ?: lowered
     }
 
     fun release(owner: Any) { synchronized(lock) {

@@ -70,6 +70,22 @@ class KeyboardSurfaceConsistencyTest {
         }
     }
 
+    @Test fun symbolKeysUseTheSameLabelSizeAsLetterKeys() {
+        // 用户 11-18：符号和按键字号不一样。符号面板、数字键盘左栏、旧版常用符号页的符号和字母键同一基准 LabelSize，
+        // 同样乘「按键字号」（keyTextScale）；九键、笔画左栏跟「候选字大小」走，不在此列。
+        val symbol = source("ui/keyboard/SymbolKeyboardLayout.kt")
+        assertTrue("符号面板没用字母键的字号", symbol.contains("keyLabelSizeSp(\"中\", KeyboardKeyMetrics.LabelSize.value") &&
+            symbol.contains("LocalKeyboardInputPreferences.current.keyTextScale).sp"))
+        val number = source("ui/keyboard/NumberKeyboardLayout.kt")
+        assertTrue("数字键盘左栏和数字键字号不一样", number.contains("val symFontSize = if (compactMode) 16.sp else KeyboardKeyMetrics.LabelSize") &&
+            Regex("""keyLabelSizeSp\(text, fontSize\.value, maxWidth\.value, maxHeight\.value - 4f, density\.fontScale,\s*LocalKeyboardInputPreferences\.current\.keyTextScale\)""").containsMatchIn(number))
+        val fixed = Regex("""fontSize\s*(:\s*[\w.]+\s*)?=\s*20\.sp|20f \* keyContentScale""")
+        val found = listOf("ui/keyboard/SymbolKeyboardLayout.kt", "ui/keyboard/CommonSymbolKeyboardLayout.kt").flatMap { path ->
+            source(path).lines().mapIndexedNotNull { i, line -> if (fixed.containsMatchIn(line)) "$path:${i + 1}" else null }
+        }
+        assertEquals("符号键又写死了 20sp", emptyList<String>(), found)
+    }
+
     @Test fun noJapaneseTextOutsideJapaneseKeyboards() {
         // 中文键盘的面板里出现日文提示（颜文字页曾是「まだ履歴がありません」）。日文键盘自己的文字和模式名除外。
         val kana = Regex("[\\u3040-\\u309F\\u30A0-\\u30FF]")

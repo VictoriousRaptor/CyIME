@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,7 +29,7 @@ internal fun PluginsMarketTab(onInstalledDetail: (String) -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refreshInstalled() }
     LaunchedEffect(state.message) {
         state.message?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, it, Toast.LENGTH_LONG).show()
             model.clearMessage()
         }
     }

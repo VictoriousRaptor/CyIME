@@ -168,6 +168,70 @@ class DoublePinyinSchemeTest {
             .lines().takeWhile { it.startsWith("    - ") }.last())
     }
 
+    /** 停一下后的纠错索引：本方案的拼写规则后面，每个两键编码再读成少一个键、同一个键多按一下、两个键打反。 */
+    @Test fun pauseSchemaSpellsEachCodeWithOneSlip() {
+        for (scheme in DoublePinyinScheme.BUILTINS + custom) {
+            val id = DoublePinyinScheme.pauseId(scheme.id)
+            assertEquals("cyime_pause_" + scheme.id, id)
+            val text = scheme.pauseSchema()
+            assertTrue(text.startsWith(DoublePinyinScheme.GENERATED_MARK + id + "\n"))
+            assertTrue(text.contains("  schema_id: $id\n"))
+            assertTrue(text.contains("  dictionary: rime_ice\n  prism: $id\n  enable_user_dict: false\n  enable_correction: true\n"))
+            val rules = text.substringAfter("  algebra:\n").lines().takeWhile { it.startsWith("    - ") }
+                .map { it.removePrefix("    - \"").removeSuffix("\"").replace("\\\"", "\"").replace("\\\\", "\\") }
+            assertEquals(scheme.algebra() + scheme.separatorRules(), rules.dropLast(5))
+            val slips = rules.takeLast(5).map { it.split('/') }
+            assertTrue(slips.all { it[0] == "fuzz" })
+            val code = scheme.code("zhong")!!
+            assertEquals(setOf("${code[0]}", "${code[1]}", "${code[0]}${code[0]}${code[1]}", "${code[0]}${code[1]}${code[1]}", "${code[1]}${code[0]}"),
+                slips.map { Regex(it[1]).replace(code, it[2]) }.toSet())
+            // 三个键的拼写（已经是多按一下的）和带分号的编码不再派生。
+            assertTrue(slips.none { Regex(it[1]).containsMatchIn("${code}s") || Regex(it[1]).containsMatchIn("y;") })
+        }
+    }
+
+    /** 生成的双拼方案把依赖和索引名换成自己的那一份；自建布局（合并键）上不开停顿纠错。 */
+    @Test fun pauseCorrectionFollowsTheSchemeAndStaysOffMergedKeys() {
+        val base = """
+            schema:
+              schema_id: double_pinyin_flypy
+              name: 小鹤双拼
+              description: |
+                雾凇拼音 - 小鹤双拼
+              dependencies:
+                - cyime_pause_double_pinyin_flypy
+                - melt_eng
+
+            translator:
+              dictionary: rime_ice
+              prism: double_pinyin_flypy
+              preedit_format:
+                - xform/(\w)g/${'$'}1eng/
+
+            speller:
+              alphabet: zyxwvutsrqponmlkjihgfedcba
+              algebra:
+                - erase/^xx${'$'}/
+
+            cyime_omission_schema: cyime_pause_double_pinyin_flypy
+
+            cyime_pause_correction:
+              margin: 3.0
+              max_keys: 24
+            """.trimIndent() + "\n"
+        val pause = DoublePinyinScheme.pauseId(custom.id)
+        val text = custom.schema(base)
+        assertTrue(text.contains("  dependencies:\n    - $pause\n    - melt_eng\n"))
+        assertTrue(text.contains("\ncyime_omission_schema: $pause\n"))
+        assertTrue(text.contains("\ncyime_pause_correction:\n  margin: 3.0\n  max_keys: 24\n"))
+        assertFalse(text.contains(DoublePinyinScheme.pauseId(DoublePinyinScheme.FLYPY.id)))
+        val layout = DoublePinyinScheme.layoutVariantId(custom.id, "custom_pinyin_" + "2".repeat(32))
+        val merged = custom.layoutSchema(text, layout, "二十键", listOf("q", "we", "r"))
+        assertFalse(merged.contains(DoublePinyinScheme.PAUSE_PREFIX) || merged.contains("cyime_omission_schema") ||
+            merged.contains("cyime_pause_correction") || merged.contains("max_keys"))
+        assertTrue(merged.contains("  dependencies:\n    - melt_eng\n"))
+    }
+
     /** 带 derive 的拼写运算：derive（和 abbrev）保留原拼写并加上改写后的拼写；没匹配上的不算新拼写。 */
     private fun spellings(rules: List<String>, input: String): Set<String> = rules.fold(setOf(input)) { set, rule ->
         val parts = rule.split('/')
@@ -301,12 +365,14 @@ class DoublePinyinSchemeTest {
             assertFalse(text.contains("joint_decoder") || text.contains("cylm"))
             val rules = text.substringAfter("  algebra:\n").lines().takeWhile { it.startsWith("    - ") }
                 .map { it.removePrefix("    - \"").removeSuffix("\"").replace("\\\"", "\"").replace("\\\\", "\\") }
-            assertEquals(scheme.algebra().size + 8, rules.size)
+            assertEquals(scheme.algebra().size + scheme.separatorRules().size + 8, rules.size)
             for (syllable in DoublePinyinScheme.SYLLABLES) {
                 val code = scheme.code(syllable)!!
                 val result = spellings(rules, syllable)
                 assertTrue("$syllable $result", code in result && t9(code) in result)
-                assertTrue("$syllable $result", result.all { it.length == 2 })
+                // 分词键后的单个数字是这个键开头的字（4' 出好、吃），不按分词时拼写一个不多。
+                assertTrue("$syllable $result", t9(code.take(1)) + "'" in result)
+                assertTrue("$syllable $result", result.filterNot { it.endsWith("'") }.all { it.length == 2 })
             }
         }
         assertEquals("87", t9(DoublePinyinScheme.FLYPY.code("zhong")!!))

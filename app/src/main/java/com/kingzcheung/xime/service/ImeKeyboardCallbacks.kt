@@ -87,6 +87,7 @@ internal fun rememberImeKeyboardCallbacks(
             onGlidePreviewCode = service::showGlidePreviewCode,
             onGlidePreviewEnd = service::endGlidePreview,
             onGlidePreviewHold = service::holdGlidePreview,
+            onEnglishGlidePreviewHold = service::holdEnglishGlidePreview,
             onGlidePreviewFinish = service::finishGlidePreview,
             inputAdmissionTicket = {
                 (if (service.keyRouter.hasPendingCandidateCommit) null else service.inputReadiness.ticket())
@@ -132,9 +133,12 @@ internal fun rememberImeKeyboardCallbacks(
                     // 日语 26 键的长音键（键面 ー）送 -：和字母一样进罗马字转换（ko-hi- → コーヒー），不当标点直接上屏。
                     val choonpu = !numberPanel && japaneseChoonpuIsCode(key, service.uiState.value.isAsciiMode,
                         service.uiState.value.inputProfile)
+                    // 注音键盘的轻声 ˙ 是修饰符号，不能按标点上屏（见 zhuyinKeyIsCode）。
+                    val zhuyinKey = !numberPanel && zhuyinKeyIsCode(key, service.uiState.value.isAsciiMode,
+                        service.uiState.value.inputProfile)
                     if (schemeCode != null) {
                         service.keyRouter.handleKeyPress(schemeCode, false)
-                    } else if (choonpu) {
+                    } else if (choonpu || zhuyinKey) {
                         service.keyRouter.handleKeyPress(key, false)
                     } else if (!numberPanel && !separator && !semicolonCode && isLiteralPunctuation(key)) {
                         service.textCommit.commitLiteralText(key)
@@ -341,7 +345,7 @@ internal fun rememberImeKeyboardCallbacks(
                 } else if (!service.uiState.value.isVoiceMode && !service.uiState.value.isSttEnabled) {
                     // 「语音转文本」总开关关着：屏幕键盘也不开麦，与物理键盘 Alt+H 同一句提示。
                     android.widget.Toast.makeText(service, "请先在设置中启用语音输入", android.widget.Toast.LENGTH_SHORT).show()
-                } else if (!service.uiState.value.isVoiceMode && !service.editorInputPolicy.locksNativeInput) {
+                } else if (!service.uiState.value.isVoiceMode && !service.editorInputPolicy.field.blocksVoice) {
                     service.uiState.value = service.uiState.value.copy(
                         isVoiceMode = true,
                         voiceSticky = false,
@@ -367,7 +371,7 @@ internal fun rememberImeKeyboardCallbacks(
                 } else if (!state.isVoiceMode && !state.isSttEnabled) {
                     // 「语音转文本」总开关关着：工具栏麦克风和长按空格说话都不开麦（原来只有物理键盘 Alt+H 认这个开关）。
                     android.widget.Toast.makeText(service, "请先在设置中启用语音输入", android.widget.Toast.LENGTH_SHORT).show()
-                } else if (!state.isVoiceMode && !service.editorInputPolicy.locksNativeInput) {
+                } else if (!state.isVoiceMode && !service.editorInputPolicy.field.blocksVoice) {
                     // 工具栏独立语音组件，不占用空格或改变键盘页面。
                     service.feedbackManager.playKeySound("voice_start")
                     service.uiState.value = service.uiState.value.copy(

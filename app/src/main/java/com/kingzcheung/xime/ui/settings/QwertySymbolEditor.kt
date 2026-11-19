@@ -11,6 +11,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -74,8 +75,9 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     // 26 键之外的固定栏（九键、笔画、手写、常用符号、数字行）；null 表示正在编辑字母键。
-    var sideTarget by rememberSaveable { mutableStateOf(initialTarget?.takeIf { key ->
-        SideSymbolTarget.entries.any { it.key == key } }) }
+    // 手写展开栏和手写侧栏同在「手写」一页：从全屏手写那一排点进来也落到这一页。
+    var sideTarget by rememberSaveable { mutableStateOf(initialTarget?.let { key ->
+        SideSymbolTarget.entries.firstOrNull { it.key == key }?.let { sideSymbolPage(it).key } }) }
     var reload by remember { mutableStateOf(0) }
     var versions by remember { mutableStateOf<Map<String, Map<String, String>>>(emptyMap()) }
     var menu by remember { mutableStateOf(false) }
@@ -162,11 +164,12 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             busy = false
         }
     }
-    val sideTargets = SideSymbolTarget.entries
-    val side = sideTargets.firstOrNull { it.key == sideTarget }
+    // 一页一个页签；手写两条栏合成一页（用户 11-16：手写不该拆成两个）。
+    val sideTargets = SideSymbolTarget.entries.filter { sideSymbolPage(it) == it }
+    val side = SideSymbolTarget.entries.firstOrNull { it.key == sideTarget }?.let(::sideSymbolPage)
     // 布局版本存的是 26 键 52 个位置，中文26键、英文26键各存各的（11-09 用户：英文布局没设计完没法存）。
     val versionsAvailable = side == null && merged == null
-    val tabName = side?.label ?: customLayout?.name ?: if (fourteen) "中文14键"
+    val tabName = side?.let(::sideSymbolPageLabel) ?: customLayout?.name ?: if (fourteen) "中文14键"
         else "${if (english) "英文26键" else "中文26键"}（${variant.label}）"
     KeyboardSettingsScaffold("按键符号", ::back, preview = true, actions = {
         Box {
@@ -212,7 +215,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         }
     }) { modifier ->
     Column(modifier.settingsVerticalScroll().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    val sideIndex = sideTargets.indexOfFirst { it.key == sideTarget }
+    val sideIndex = sideTargets.indexOf(side)
     val customIndex = customLayouts.indexOfFirst { it.id == merged }
     PrimaryScrollableTabRow(selectedTabIndex = if (sideIndex >= 0) 3 + customLayouts.size + sideIndex
         else if (customIndex >= 0) 3 + customIndex else if (fourteen) 2 else if (english) 1 else 0,
@@ -229,8 +232,8 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                 text = { Text(layout.name) }, modifier = Modifier.testTag("symbol-target:${layout.id}"))
         }
         sideTargets.forEach { target ->
-            Tab(selected = sideTarget == target.key, onClick = { changeTab(english, target.key, merged) }, enabled = !busy,
-                text = { Text(target.label) }, modifier = Modifier.testTag("symbol-target:${target.key}"))
+            Tab(selected = side == target, onClick = { changeTab(english, target.key, merged) }, enabled = !busy,
+                text = { Text(sideSymbolPageLabel(target)) }, modifier = Modifier.testTag("symbol-target:${target.key}"))
         }
     }
     if (side != null) SideSymbolEditor(side, onResetReady = { sideReset = it })

@@ -316,9 +316,9 @@ fun HandwritingKeyboardLayout(
         val controlsOffset = if (expanded) expandedControlsOffsetX.toFloat().coerceIn(-travel, travel).dp else 0.dp
         // The footer material below sits inside nested layout scopes, where maxWidth needs an explicit receiver.
         val panelWidth = maxWidth
-        val bottom = QwertyBottomRowWeights.Standard
-        val functionKeyWidth = controlsWidth * (bottom.enter / bottom.total)
-        val footerHeight = if (expanded) normalControlHeight.dp.coerceAtMost(maxHeight / 3) else maxHeight / 5
+        val functionKeyWidth = controlsWidth * HandwritingFrame.sideKeyFraction
+        val footerHeight = if (expanded) normalControlHeight.dp.coerceAtMost(maxHeight / 3)
+            else maxHeight * HandwritingFrame.FOOTER_FRACTION
         if (!expanded) SideEffect {
             normalControlHeight = footerHeight.value
             normalControlScale = currentContentScale
@@ -437,13 +437,7 @@ fun HandwritingKeyboardLayout(
                 // bottom-row boundary stays in place when switching input modes.
                 val cycle = LocalKeyboardInputPreferences.current.symbolKeyCycle
                 val languageOnLeft = LocalKeyboardInputPreferences.current.languageKeyOnLeft
-                val keys = listOfNotNull("symbol" to bottom.mode,
-                    ("number" to bottom.mode).takeUnless { cycle },
-                    ("ime_switch" to bottom.language).takeIf { languageOnLeft },
-                    (if (expanded) "collapse" else "expand") to bottom.punctuation,
-                    "space" to (bottom.space + if (cycle) bottom.mode else 0f),
-                    ("ime_switch" to bottom.language).takeUnless { languageOnLeft }, "enter" to bottom.enter)
-                keys.forEach { (action, weight) ->
+                HandwritingFrame.bottomKeys(expanded, cycle, languageOnLeft).forEach { (action, weight) ->
                     val special = action != "space"
                     if (cycle && action == "symbol") KeyboardModeKey(slot = 1, onKeyPress = { press(it) },
                         backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
@@ -464,14 +458,18 @@ fun HandwritingKeyboardLayout(
     }
 }
 
+/** 手写键盘各键的名字（读屏用；「按键符号 › 手写」的布局示意也用它）。 */
+@Composable
+internal fun handwritingKeyLabel(action: String): String = when (action) {
+    "delete" -> "删除"; "enter" -> "回车"; "space" -> "空格"
+    "symbol" -> "!@#"; "number" -> "123"; "ime_switch" -> "语言切换"
+    "expand" -> "全屏手写"; "collapse" -> "收起全屏手写"; else -> punctuationKeyLabel(action)
+}
+
 @Composable
 private fun HandwritingFunctionKey(action: String, onClick: () -> Unit, background: Color, foreground: Color, modifier: Modifier,
     onClear: (() -> Unit)? = null, onUndo: (() -> Unit)? = null, spaceLabel: String = "") {
-    val label = when (action) {
-        "delete" -> "删除"; "enter" -> "回车"; "space" -> "空格"
-        "symbol" -> "!@#"; "number" -> "123"; "ime_switch" -> "语言切换"
-        "expand" -> "全屏手写"; "collapse" -> "收起全屏手写"; else -> punctuationKeyLabel(action)
-    }
+    val label = handwritingKeyLabel(action)
     val enter = LocalEnterKeyColors.current.takeIf { action == "enter" }
     val keyBackground = enter?.background ?: background
     val keyForeground = enter?.foreground ?: foreground

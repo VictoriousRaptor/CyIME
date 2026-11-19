@@ -137,7 +137,9 @@ class VoiceRecognitionHandler(
         val languages = getState().voiceKeyboardLanguages
         val language = languages.recognitionLanguage
         if (inputLanguage != null && inputLanguage != language) endInputSession()
-        // 上一次会话若还在收尾等待中（快速再次开始），直接废弃收尾状态
+        // 上一次会话若还在收尾等待中（快速再次开始），直接废弃收尾状态。那份最终结果会随新会话作废，先把已显示的字上屏，
+        // 免得它留在组字区里被这一次的临时结果盖掉（2026-11-16 用户：重按会盖掉前一次）。
+        if (finishing && !sessionAbandoned) commitPendingOnRelease()
         finishing = false
         mainHandler.removeCallbacks(finishTimeoutRunnable)
         suppressDuplicateFinal = false
@@ -556,7 +558,9 @@ class VoiceRecognitionHandler(
         if (toolbarSentencePrefix == null) {
             val preceding = if (lastToolbarFinal.isNotEmpty())
                 ic.getTextBeforeCursor(lastToolbarFinal.length, 0)?.toString() else null
-            toolbarSentencePrefix = if (preceding == lastToolbarFinal && !preceding.isNullOrEmpty()) " " else ""
+            // 「停顿处加空格」关掉时，挨着中文的两句之间也不加空格（英文两句之间照加）。
+            toolbarSentencePrefix = if (preceding == lastToolbarFinal && !preceding.isNullOrEmpty() &&
+                (SettingsPreferences.isSttPauseSpace(context) || !isCjkText(preceding.last()) && text.firstOrNull()?.let(::isCjkText) != true)) " " else ""
         }
         toolbarText.update(ic, toolbarSentencePrefix.orEmpty() + text)
         recentDictation = toolbarSentencePrefix.orEmpty() + text
@@ -608,7 +612,10 @@ class VoiceRecognitionHandler(
             val keep = automatic && (part.serverPunctuation || (localSentences && part.language == InputLanguage.CHINESE))
             normalizeVoiceText(part.text, language, keep, if (index == segments.lastIndex) marks else marks.copy(trailing = true),
                 arabicNumbers)
-        }.filter(String::isNotEmpty).joinToString(" ").let { traditional?.invoke(it) ?: it }.let { corrections?.apply(it) ?: it }
+        }.filter(String::isNotEmpty).joinToString(" ").let { traditional?.invoke(it) ?: it }
+            // 「停顿处加空格」关掉：中文里不留停顿和去掉的标点变成的空格，英文单词之间照常空格。在纠错之前做，纠错词表按看到的写。
+            .let { if (SettingsPreferences.isSttPauseSpace(context)) it else withoutCjkSpaces(it) }
+            .let { corrections?.apply(it) ?: it }
     }
 
     private fun voiceMarks() = VoiceMarks(comma = SettingsPreferences.isSttPunctuationComma(context),

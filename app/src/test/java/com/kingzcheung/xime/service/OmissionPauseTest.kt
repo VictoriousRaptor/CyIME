@@ -70,4 +70,24 @@ class OmissionPauseTest {
         pause.onRefined(35, 20L, 7L)
         assertTrue(pause.withinBudget(33, 8L))
     }
+
+    /** 停顿后要不要让引擎补查：全拼看漏键、顺序两个开关；双拼少打一个键跟漏键，多按一下、打反要先开着邻键纠错。 */
+    @Test fun pauseLookupFollowsTheTypoSwitches() {
+        val omission = com.kingzcheung.xime.settings.SpellingPatches.Typo.OMISSION
+        val swap = com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION
+        val extra = com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA
+        fun wanted(doublePinyin: Boolean, neighbor: Boolean, vararg on: com.kingzcheung.xime.settings.SpellingPatches.Typo) =
+            pauseLookupWanted(doublePinyin, neighbor) { it in on }
+        // 26 键全拼和原来一样：漏键、顺序有一个开着就查，多键不在停顿后查。
+        assertTrue(wanted(false, false, omission))
+        assertTrue(wanted(false, false, swap))
+        assertFalse(wanted(false, true, extra))
+        assertFalse(wanted(false, true))
+        // 双拼：漏键不看邻键纠错；多键、顺序在邻键纠错关着时不起作用。
+        assertTrue(wanted(true, false, omission))
+        assertTrue(wanted(true, true, extra))
+        assertTrue(wanted(true, true, swap))
+        assertFalse(wanted(true, false, extra, swap))
+        assertFalse(wanted(true, true))
+    }
 }

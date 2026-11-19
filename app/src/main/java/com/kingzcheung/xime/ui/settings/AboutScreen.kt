@@ -47,7 +47,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -357,8 +357,8 @@ fun AboutContent(
                             )
                             SettingsToggleItem(
                                 icon = Icons.TwoTone.EmojiEmotions,
-                                title = "启动广告（彩蛋）",
-                                subtitle = "每次打开设置先看 5 秒假广告，可以跳过。画着玩的，不联网。",
+                                title = "启用开屏广告",
+                                subtitle = "",
                                 checked = launchAdEgg,
                                 onCheckedChange = { enabled ->
                                     launchAdEgg = enabled

@@ -983,9 +983,13 @@ object SchemaManager {
 
     internal fun fallbackNativeSchema(available: Set<String>): List<String> = listOfNotNull(
         CyimeInputDefaults.recommended.firstOrNull { it in available }
-            ?: available.firstOrNull { it !in CyimeInputDefaults.dependencies && it != InputModes.ENGLISH }
+            ?: available.firstOrNull { !CyimeInputDefaults.isDependency(it) && it != InputModes.ENGLISH }
             ?: available.firstOrNull()
     )
+
+    /** 部署过程中界面暂用内置列表，迁移只能读取用户实际保存的顺序。 */
+    internal fun readSavedEnabledSchemas(context: Context): List<String>? =
+        getCustomYamlFile(context).takeIf { it.isFile }?.let { readEnabledSchemaList(it.readText()) }
 
     fun getEnabledSchemas(context: Context): List<String> {
         val customFile = getCustomYamlFile(context)

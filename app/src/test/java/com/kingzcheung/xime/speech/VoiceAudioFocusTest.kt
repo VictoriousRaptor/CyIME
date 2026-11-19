@@ -110,6 +110,19 @@ class VoiceAudioFocusTest {
         verify(audio, never()).adjustStreamVolume(any(), any(), any())
     }
 
+    @Test fun duckRestoresWhenTheSystemLandsOnAnotherStep() {
+        // #322：要 2 档，系统换算后落在 3 档；关麦时读到 3 不能当成用户自己调过。
+        SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.DUCK)
+        focusAnswers(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(10, 3)
+        val focus = VoiceAudioFocus(context)
+        val owner = Any()
+        focus.acquire(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
+        focus.release(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 10, 0)
+    }
+
     @Test fun duckLeavesMutedOrFixedVolumeAlone() {
         SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.DUCK)
         whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(10)

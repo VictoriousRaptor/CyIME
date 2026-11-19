@@ -146,10 +146,13 @@ fun JapaneseKanaKeyboardLayout(
                                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
                         } else {
                             val key = japaneseKanaKeys[row * 3 + column]
+                            // 按住 !@# 当 Ctrl：あ…ら 九个键和九键数字键同一张表（あ 是 1，ら 是 9），用户 11-17。
                             KanaFlickButton(key, onKanaAction, keyBackgroundColor, keyTextColor,
                                 Modifier.weight(1f).testTag("kana-key:${key.center.romaji}"),
                                 onPress = { onKeyPressDown?.invoke(key.center.label) },
-                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+                                ctrlTargets = ctrlTargets.takeIf { onCtrlShortcut != null },
+                                ctrlLetter = com.kingzcheung.xime.keyboard.CtrlShortcuts.t9Letter('1' + row * 3 + column))
                         }
                     }
                 }
@@ -230,8 +233,26 @@ internal fun KanaFlickButton(
     shadowEnabled: Boolean = true,
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
+    /** 按住 !@# 当 Ctrl 时这个键发 Ctrl+[ctrlLetter]（同九键数字键）；null 时不是 Ctrl 目标。 */
+    ctrlTargets: ShiftSlideTargets? = null,
+    ctrlLetter: Char? = null,
 ) {
     val currentAction by rememberUpdatedState(onAction)
+    val dragSpace = LocalKeyDragSpace.current
+    var ctrlBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    val ctrlToken = remember { Any() }
+    DisposableEffect(ctrlTargets, ctrlToken) { onDispose { ctrlTargets?.remove(ctrlToken) } }
+    SideEffect {
+        if (ctrlLetter != null && ctrlBounds != androidx.compose.ui.geometry.Rect.Zero) ctrlTargets?.putCtrl(ctrlToken, ctrlLetter, ctrlBounds)
+        else ctrlTargets?.remove(ctrlToken)
+    }
+    // 快捷键键面同九键：按满时限或拖出 !@# 才渐变出来，松手立刻换回。
+    val ctrlFace = ctrlLetter?.takeIf { ctrlTargets?.ctrlFaces == true }
+    val ctrlFade = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(ctrlFace != null) {
+        if (ctrlFace != null) ctrlFade.animateTo(1f, androidx.compose.animation.core.tween(CTRL_FACE_FADE_MS))
+        else ctrlFade.snapTo(0f)
+    }
     val currentPress by rememberUpdatedState(onPress)
     var pressed by remember { mutableStateOf(false) }
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
@@ -253,7 +274,9 @@ internal fun KanaFlickButton(
     val threshold = normalizeLetterSwipeDistance(inputPreferences.fourteenLetterSwipeDp)
     val gestureActions = KeyGestureActions(
         text = key.center.label,
-        onTap = { currentAction(JapaneseKanaAction.Input(key.center.romaji)) },
+        // 按住 !@# 时另一根手指点这个键：发 Ctrl+字母，不打假名。
+        onTap = { if (ctrlLetter == null || ctrlTargets?.ctrlTap(ctrlLetter.toString()) != true)
+            currentAction(JapaneseKanaAction.Input(key.center.romaji)) },
         onPress = { pressed = true; suppressCursorMove.value = true; currentPress?.invoke() },
         onRelease = { pressed = false; suppressCursorMove.value = false },
         onPreview = { state ->
@@ -280,6 +303,7 @@ internal fun KanaFlickButton(
     val currentActions by rememberUpdatedState(gestureActions)
     BoxWithConstraints(
         modifier.fillMaxSize()
+            .onGloballyPositioned { ctrlBounds = dragSpace.bounds(it) }
             .semantics {
                 contentDescription = key.center.label
                 role = Role.Button
@@ -317,7 +341,7 @@ internal fun KanaFlickButton(
         if (pressed && disc) KanaDirectionIndicator(direction, MaterialTheme.colorScheme.primary.copy(alpha = .6f))
         val keyWidthDp = maxWidth.value
         val keyHeightDp = maxHeight.value
-        Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - flickFade.strongest },
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = (1f - flickFade.strongest) * (1f - if (ctrlFace != null) ctrlFade.value else 0f) },
             contentAlignment = Alignment.Center) {
         if (inputPreferences.kanaDirectionHints) {
             val centerSp = keyLabelSizeSp(key.center.label, KeyboardKeyMetrics.LabelSize.value,
@@ -331,5 +355,10 @@ internal fun KanaFlickButton(
         // Default: the chosen kana grows from its side into the key, as 26-key symbols do.
         KeyFlickLabels(flickFade, foreground, keyWidthDp, keyHeightDp, 10f * contentScale, fontSp)
         if (pressed && disc) KanaFlickPreview(key, direction, background, foreground, contentScale)
+        // 左上角写这个键的假名（九键写数字）。
+        if (ctrlFace != null) Box(Modifier.matchParentSize().graphicsLayer { alpha = ctrlFade.value }) {
+            CtrlShortcutFace(ctrlFace, foreground, frostedGlass, fontSp, (10f * contentScale).sp, true, keyWidthDp,
+                AppFonts.keyFontFamily, cornerLabel = key.center.label)
+        }
     }
 }

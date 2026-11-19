@@ -22,6 +22,8 @@ data class CandidateState(
     /** 候选词变换映射（插件 candidate_transform 能力）：与 [candidates] 平行；
      *  空列表 = 纯引擎语义（显示 index 即引擎 index）。见 CandidateAction。 */
     val candidateActions: List<CandidateAction> = emptyList(),
+    /** 当前引擎候选中用户以前打过的词（按文字），候选右上角画学习标记。 */
+    val learnedCandidates: Set<String> = emptySet(),
     /** 当前引擎候选中纠错来的词（按文字）→ 引擎给的逐音节纠正，候选旁标出怎么改的。 */
     val correctedCandidates: Map<String, String> = emptyMap(),
     /** 跨页全量候选（仅候选展开态时由服务层填充，供本地分页与单字筛选）。

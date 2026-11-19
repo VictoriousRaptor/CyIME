@@ -155,13 +155,22 @@ data class CustomKeyboardLayout(
                 val hint = if (honeycomb) source.swipeUp else base[referenceRows()[rowIndex][column].toString()]?.swipeUp
                 result[key] = source.copy(
                     tap = GestureDef(label = key, value = key.first().toString()), swipeUp = hint,
-                    longPress = if (key.length == 1) source.longPress else LongPressConfig("bubble", key.map { GestureDef(label = it.toString(), value = it.toString()) })
+                    longPress = if (key.length == 1) source.longPress else mergedLongPress(key, base)
                 )
                 column += key.length
             }
         }
         return result
     }
+    /**
+     * 合并键长按气泡：键上每个字母自己的长按项依次排开（we 键是 w W e E ē é ě è ê ë），和单字母键长按出的一样，
+     * 带声调的字母、大写都在（用户 11-17：长按合并键只有 w、e 两个拼音字母，声调字母出不来）。
+     */
+    private fun mergedLongPress(key: String, base: Map<String, KeyGestureConfig>): LongPressConfig =
+        LongPressConfig("bubble", key.flatMap { c ->
+            base[c.toString()]?.longPress?.values?.takeIf { it.isNotEmpty() }
+                ?: listOf(GestureDef(label = c.toString(), value = c.toString()), GestureDef(label = c.uppercase(), value = c.uppercase()))
+        }.distinctBy { it.label })
     /** Generate an independent prism; the base dictionary, translator and all other options are reused. */
     fun schema(base: String): String {
         require(valid())

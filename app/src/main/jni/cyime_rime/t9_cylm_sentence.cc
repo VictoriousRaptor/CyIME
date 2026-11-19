@@ -128,6 +128,7 @@ class CylmWorker {
   // learned text the layer is written to `file` (set by LearnInto), so a restart keeps it.
   void Learn(CylmModel* model, const string& text) {
     std::lock_guard<std::mutex> lock(mutex_);
+    learners_.insert(model);
     learn_.emplace_back(model, text);
     wake_.notify_one();
   }
@@ -140,6 +141,32 @@ class CylmWorker {
   void LearnInto(CylmModel* model, const string& file) {
     std::lock_guard<std::mutex> lock(mutex_);
     learn_file_[model] = file;
+    learners_.insert(model);
+  }
+  // Long-press 忘记, on the calling (Rime) thread: a commit of `text` not learned yet is dropped from the queue, and
+  // each model that learns forgets it under the model lock (no decode runs meanwhile), its layer saved at once.
+  int Forget(const string& text, int wait_ms) {
+    std::set<CylmModel*> models;
+    std::map<CylmModel*, string> files;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      learn_.erase(std::remove_if(learn_.begin(), learn_.end(), [&](const auto& item) { return item.second == text; }),
+                   learn_.end());
+      models = learners_;
+      files = learn_file_;
+    }
+    if (models.empty()) return 0;
+    std::unique_lock<std::timed_mutex> model_lock(ModelMutex(), std::chrono::milliseconds(wait_ms));
+    if (!model_lock.owns_lock()) return -1;
+    int removed = 0;
+    for (auto* model : models) {
+      const int n = cylm_forget(model, text.c_str());
+      if (n <= 0) continue;
+      removed += n;
+      const auto file = files.find(model);
+      if (file != files.end()) cylm_adapt_save(model, file->second.c_str());
+    }
+    return removed;
   }
   // Starts decoding (session, input, context) unless that is already the newest request.
   void Prefetch(CylmSession* session, const string& in, bool digits, const string& context) {
@@ -237,6 +264,7 @@ class CylmWorker {
   vector<std::pair<CylmModel*, string>> learn_;
   vector<std::function<void()>> tasks_;
   std::map<CylmModel*, string> learn_file_;
+  std::set<CylmModel*> learners_;  // models that learn (cylm_learn): 忘记 reaches each; models live for the process
   long learned_ = 0;  // texts learned, on the worker only
   string in_, context_;
   bool digits_ = false;
@@ -354,6 +382,11 @@ void T9CylmLearn(CylmModel* model, const string& text) {
 }
 
 void T9CylmLearnInto(CylmModel* model, const string& file) { CylmWorker::Instance().LearnInto(model, file); }
+
+int T9CylmForget(const string& text, int wait_ms) {
+  if (text.empty() || !std::any_of(text.begin(), text.end(), [](char c) { return c & 0x80; })) return 0;
+  return CylmWorker::Instance().Forget(text, wait_ms);
+}
 
 void T9CylmSyncWords(CylmModel* model, const string& dir) {
   // The user's own words (个人词库 user_*.dict.yaml, 我的短语 custom_phrase*.txt in the Rime user directory) are

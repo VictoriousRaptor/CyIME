@@ -348,6 +348,8 @@ class BackupManagerTest {
         val kept = org.json.JSONObject(BackupManager.keepKeys(json, BackupManager.PARTIAL_PREFS.getValue("clipboard_board")))
         assertEquals(setOf("card_max_lines"), kept.keys().asSequence().toSet())
         assertEquals(8, kept.getJSONObject("card_max_lines").getInt("v"))
+        // 「显示几张图片」（11-17）也跟着备份走。
+        assertTrue("recent_image_count" in BackupManager.PARTIAL_PREFS.getValue("clipboard_board"))
 
         val filesDir = tempDir.newFolder("files")
         val bytes = zipOfText(mapOf("${BackupManager.META_PREFIX}prefs/clipboard_board.json" to json))

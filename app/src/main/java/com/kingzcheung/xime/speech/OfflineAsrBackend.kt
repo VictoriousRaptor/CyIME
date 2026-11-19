@@ -171,6 +171,9 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
         }
     }
 
+    /** 只取消正在结束的那一次（按它的回调认），不会碰到之后开始的新会话。 */
+    override fun abandonFinishing() = client.abandonStop()
+
     override fun cancel() {
         sessionGeneration.incrementAndGet()
         if (initialized) {

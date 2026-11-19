@@ -15,20 +15,112 @@
 --]]
 local OPTION = "cyime_rare_chars"
 
--- 粤语常用字（GitHub #72）：开着生僻字时排到第一、二页（主词库同音字之后，约第 10–14 个），不沉到整表最后。
--- 冇 在主词库里读 mao，这里补上粤语读音 mou。只在这个开关开着时出现，默认不变。
+-- 粤语常用字（GitHub #72）：开着生僻字时排在主词库所有同音字之后、其他生僻字之前，不沉到整表最后。
+-- 原来给了固定分 2.2005（本想排第 10 个左右），但同音字的分数随学习变化，有人小鹤双拼打 qu 时「佢」到了第 2
+-- （2026-11-18），所以改成垫底。冇 在主词库里读 mao，这里补上粤语读音 mou。只在这个开关开着时出现，默认不变。
 local COMMON = { qu = "佢", ge = "嘅", zuo = "咗", mou = "冇" }
-local COMMON_QUALITY = 2.2005
+local COMMON_QUALITY = -999
+local rare_quality  -- defined below with the learned counts
 local function yield_common(syllable, seg, comment)
   local text = COMMON[syllable]
   if not text then return nil end
   local cand = Candidate("rare", seg.start, seg._end, text, comment)
-  cand.quality = COMMON_QUALITY
+  cand.quality = rare_quality(text, COMMON_QUALITY)
   yield(cand)
   return text
 end
 
 local KEYPAD = "22233344455566677778889999"
+
+-- 常用字少收的读音（不看开关，2026-11-17 B 站评论：打 mo 找不到「么」）：只在整段输入正好是这个读音时
+-- （26 键 mo，九键 66 或左栏选 mo）补进单字候选，排在主词库同音字之后。不进主词库：整句按字打分时
+-- 「么」作语气词分数很高，加了 mo 读音后九键回放里句尾冒出「么」（我昨天没 → 我昨天么，14 处）。
+-- 双拼、14 键不补（同一串字母在那里是别的读音）。
+local EXTRA = { mo = "么" }
+-- 26 键整段候选的质量在 2 上下（2.2005 排在 mo 的第 16 个左右）；九键的在 1.000x，取同样的位置（沫 之后）。
+local EXTRA_QUALITY = 2.2005
+local EXTRA_T9_QUALITY = 1.0005
+local function yield_extra(input, seg, nine_key)
+  local typed = input:lower()
+  for syllable, text in pairs(EXTRA) do
+    local keys = syllable:gsub("%l", function(c) local i = c:byte() - 96; return KEYPAD:sub(i, i) end)
+    if typed == syllable or input == keys then
+      local cand = Candidate("rare", seg.start, seg._end, text, input == keys and syllable or "")
+      cand.quality = nine_key and EXTRA_T9_QUALITY or EXTRA_QUALITY
+      yield(cand)
+    end
+  end
+end
+
+-- 用过的生僻字往前排（11-16 用户反馈：名字里的生僻字打多少次都上不了首位）。主词库的动态词频管不到这些字
+-- （它们不进用户词库，见文件头），这里自己记：选过一次排到第一、二页，选过两次起排第一。
+-- 记在用户目录的 cyime_rare_learned.txt（一行「字\t次数」），只在开关开着时读写；无痕模式不记。
+local LEARNED_FILE = "/cyime_rare_learned.txt"
+local LEARNED_MAX = 2000
+local learned  -- 字 → 选过几次
+local function load_learned()
+  if learned then return learned end
+  learned = {}
+  local dir = rime_api.get_user_data_dir()
+  local f = dir and io.open(dir .. LEARNED_FILE, "r")
+  if not f then return learned end
+  for line in f:lines() do
+    local text, count = line:match("^([^\t]+)\t(%d+)$")
+    if text then learned[text] = tonumber(count) end
+  end
+  f:close()
+  return learned
+end
+
+local function save_learned()
+  local dir = rime_api.get_user_data_dir()
+  if not dir or not learned then return end
+  local rows = {}
+  for text, count in pairs(learned) do rows[#rows + 1] = { text, count } end
+  table.sort(rows, function(a, b) return a[2] > b[2] end)
+  local tmp = dir .. LEARNED_FILE .. ".tmp"
+  local f = io.open(tmp, "w")
+  if not f then return end
+  for i = 1, math.min(#rows, LEARNED_MAX) do f:write(rows[i][1], "\t", rows[i][2], "\n") end
+  f:close()
+  if not os.rename(tmp, dir .. LEARNED_FILE) then
+    os.remove(dir .. LEARNED_FILE)
+    os.rename(tmp, dir .. LEARNED_FILE)
+  end
+end
+
+-- 选过一次进前两页（主词库同音字之后约第 10–16 个）。
+local LEARNED_ONCE_QUALITY = 2.2005
+local LEARNED_QUALITY = 1000
+
+function rare_quality(text, default)
+  local count = load_learned()[text]
+  if not count then return default end
+  return count >= 2 and LEARNED_QUALITY or math.max(default, LEARNED_ONCE_QUALITY)
+end
+
+-- 上屏时数一下这次选中的生僻字（整段里每一节各自选的候选，组词时先选常用字再选生僻字也算）。
+local function remember_commit(ctx)
+  if not ctx:get_option(OPTION) or ctx:get_option("_cyime_incognito") then return end
+  local segments = ctx.composition:toSegmentation():get_segments()
+  local changed = false
+  for _, seg in ipairs(segments) do
+    local cand = seg:get_selected_candidate()
+    local genuine = cand and (cand:get_genuine() or cand)
+    if genuine and genuine.type == "rare" then
+      local map = load_learned()
+      map[genuine.text] = (map[genuine.text] or 0) + 1
+      changed = true
+    end
+  end
+  if changed then save_learned() end
+end
+
+-- 分词符（' 和空格）不算读音：组词时先选了前面的字，剩下那一节从分词符开始（aaa'bbb 选完 aaa 剩 'bbb），
+-- 原来整段对不上读音，生僻字一个也不补（11-16 用户反馈）。
+local function reading(input)
+  return (input:gsub("^[' ]+", ""):gsub("[' ]+$", ""))
+end
 
 -- Loaded once per Lua state, only after the option is first on. Each list is one string, not a table per character:
 -- librime-lua runs a full garbage collection every 256 Lua translations, and with 2 万 small tables each one stalled
@@ -142,14 +234,14 @@ local function merged_syllables(map, input)
 end
 
 local function merged_translate(input, seg, env)
-  local syllables = merged_syllables(merged_map(env), input)
+  local syllables = merged_syllables(merged_map(env), reading(input))
   for _, syllable in ipairs(syllables) do
     local comment = #syllables > 1 and syllable or ""
     local common = yield_common(syllable, seg, comment)
     for text in (chars[syllable] or ""):gmatch(utf8.charpattern) do
       if text == common then goto next_char end
       local cand = Candidate("rare", seg.start, seg._end, text, comment)
-      cand.quality = -1000
+      cand.quality = rare_quality(text, -1000)
       yield(cand)
       ::next_char::
     end
@@ -157,12 +249,21 @@ local function merged_translate(input, seg, env)
 end
 
 local function translator(input, seg, env)
-  if not env.engine.context:get_option(OPTION) then return end
+  input = reading(input)
+  if input == "" then return end
   if env.rare_merged_keys == nil then
     local config = env.engine.schema.config
     env.rare_merged_keys = config:get_bool("cyime_rare_merged_keys") == true or
       config:get_bool("cyime_rare_double_pinyin") == true
+    -- 九键方案带 t9_processor（rime_ice 也有 t9: 配置段，不能按它判断）。
+    env.rare_nine_key = false
+    local processors = config:get_list("engine/processors")
+    for i = 0, (processors and processors.size or 0) - 1 do
+      if processors:get_value_at(i).value == "t9_processor" then env.rare_nine_key = true end
+    end
   end
+  if not env.rare_merged_keys then yield_extra(input, seg, env.rare_nine_key) end
+  if not env.engine.context:get_option(OPTION) then return end
   if env.rare_merged_keys then return merged_translate(input, seg, env) end
   local list = load_chars()[input:lower()]
   local common = yield_common(input:lower(), seg, "")
@@ -170,8 +271,9 @@ local function translator(input, seg, env)
     for text in (list or ""):gmatch(utf8.charpattern) do
       if text == common then goto next_char end
       local cand = Candidate("rare", seg.start, seg._end, text, "")
-      -- Rime orders whole-input candidates by quality: below every dictionary word of this reading.
-      cand.quality = -1000
+      -- Rime orders whole-input candidates by quality: below every dictionary word of this reading,
+      -- unless the user has picked this character before (rare_quality).
+      cand.quality = rare_quality(text, -1000)
       yield(cand)
       ::next_char::
     end
@@ -179,9 +281,17 @@ local function translator(input, seg, env)
   end
   for text, code in (digits[input] or ""):gmatch("([^\t]+)\t(%l+)\n") do
     local cand = Candidate("rare", seg.start, seg._end, text, code)
-    cand.quality = -1000
+    cand.quality = rare_quality(text, -1000)
     yield(cand)
   end
 end
 
-return translator
+local function init(env)
+  env.rare_commit = env.engine.context.commit_notifier:connect(remember_commit)
+end
+
+local function fini(env)
+  if env.rare_commit then env.rare_commit:disconnect() end
+end
+
+return { init = init, func = translator, fini = fini }

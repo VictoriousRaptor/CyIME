@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +25,7 @@ import com.kingzcheung.xime.util.FileLogger
 internal fun changeAppearance(context: Context, onChanged: () -> Unit, change: () -> Unit) {
     try { change(); onChanged() } catch (e: RuntimeException) {
         FileLogger.e("Appearance", "Appearance change failed", e)
-        Toast.makeText(context, "图标切换失败，未保存此次选择，请重试", Toast.LENGTH_LONG).show()
+        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "图标切换失败，未保存此次选择，请重试", Toast.LENGTH_LONG).show()
     }
 }
 

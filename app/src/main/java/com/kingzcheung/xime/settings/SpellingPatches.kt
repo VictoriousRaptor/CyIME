@@ -35,6 +35,12 @@ object SpellingPatches {
      * 14 键和自建合并键布局上的双拼本来就显示双拼键，不受影响。
      */
     const val DOUBLE_PINYIN_RAW_PREEDIT_KEY = "double_pinyin_raw_preedit"
+    /**
+     * 笔画编码显示成 一丨丿丶乛（11-18 贡献者：编码要么全是笔画、要么全是 hspnz，偏向 hspnz）。默认关：方案本身显示 h s p n z，
+     * 打开时给笔画方案写补丁，编码和候选后面的剩余笔画换成笔画（康熙部首，折是乛，#412），
+     * 还没对上候选的那段字母在 [com.kingzcheung.xime.rime.RimeEngine] 显示层换，整串一样。
+     */
+    const val STROKE_GLYPH_PREEDIT_KEY = "stroke_glyph_preedit"
     /** 与 KeyboardInputPreferences.doublePinyinCorrection 同一个键：键盘按它决定是否把键位邻接表交给纠错。 */
     const val DOUBLE_PINYIN_CORRECTION_KEY = "double_pinyin_neighbor_correction"
     /**
@@ -137,6 +143,12 @@ object SpellingPatches {
         SettingsPreferences.getPrefsPublic(context).edit().putBoolean(DOUBLE_PINYIN_RAW_PREEDIT_KEY, enabled).apply()
     }
 
+    fun strokeGlyphPreedit(context: Context): Boolean =
+        SettingsPreferences.getPrefsPublic(context).getBoolean(STROKE_GLYPH_PREEDIT_KEY, false)
+    fun setStrokeGlyphPreedit(context: Context, enabled: Boolean) {
+        SettingsPreferences.getPrefsPublic(context).edit().putBoolean(STROKE_GLYPH_PREEDIT_KEY, enabled).apply()
+    }
+
     fun doublePinyinCorrection(context: Context): Boolean =
         SettingsPreferences.getPrefsPublic(context).getBoolean(DOUBLE_PINYIN_CORRECTION_KEY, false)
 
@@ -230,14 +242,18 @@ object SpellingPatches {
         val t9Digits = fuzzyT9Digits(context)
         val abbreviation = doublePinyinAbbreviation(context)
         val rawPreedit = doublePinyinRawPreedit(context)
+        val strokeGlyphs = strokeGlyphPreedit(context)
         val typos = enabledTypos(context)
         val auxCode = auxCode(context)
+        val lead = TypoStrength.lead(context)
+        val digit = TypoStrength.digit(context)
         var changed = false
         for (id in fullPinyinSchemas(context)) {
             changed = write(rimeDir, id) { schema ->
                 // 三种都开着（默认）时不读方案文件：什么都不写，同以前。
                 listOf(fuzzyPart(schema, fuzzy) ?: return@write null) +
-                    if (typos.size == Typo.entries.size) emptyList<Part>() else typoParts(schema(), typos)
+                    (if (typos.size == Typo.entries.size) emptyList<Part>() else typoParts(schema(), typos)) +
+                    Part(LEAD_BIAS, leadLines(schema, lead))
             } || changed
         }
         // 双拼：拼写规则先按全拼派生模糊音，再换成双拼编码（同雾凇双拼方案注释里的位置），所以两段写在同一个文件里。
@@ -254,6 +270,8 @@ object SpellingPatches {
                 listOf(doublePinyinPart(schema, doublePinyinFuzzy, abbreviation, id) ?: return@write null)
             } || changed
         }
+        // 笔画：关着（默认）时什么都不写，方案自己显示 h s p n z。
+        changed = write(rimeDir, STROKE_SCHEMA) { _ -> strokeGlyphParts(strokeGlyphs) } || changed
         for (file in rimeDir.listFiles().orEmpty()) {
             if (!file.isFile || !file.name.endsWith(".schema.yaml")) continue
             val id = file.name.removeSuffix(".schema.yaml")
@@ -273,7 +291,8 @@ object SpellingPatches {
                     algebraLines(nineKeyRules(algebra, groups, near, t9Digits))
                 }
                 listOf(Part(ALGEBRA, lines), Part("t9/left_panel_mode",
-                    if (doubleScheme != null && groups.isNotEmpty()) listOf("\"t9/left_panel_mode\": pinyin") else emptyList()))
+                    if (doubleScheme != null && groups.isNotEmpty()) listOf("\"t9/left_panel_mode\": pinyin") else emptyList()),
+                    Part(DIGIT_MARGIN, if (doubleScheme == null) digitLines(schema, digit) else emptyList()))
             } || changed
         }
         return changed
@@ -301,6 +320,22 @@ object SpellingPatches {
         Part(key, if (present && typo !in enabled) listOf("\"$key\": $off") else emptyList())
     }
 
+    /**
+     * 邻键纠错的强度（[TypoStrength.Lead]）：和出厂方案里的一样（默认档）时不写、不读方案文件；方案里没有这个键的
+     * （14 键等不纠错的方案）不写。
+     */
+    internal fun leadLines(schema: () -> String, lead: TypoStrength.Lead): List<String> =
+        if (lead == TypoStrength.LEAD_DEFAULT || !hasKey(schema(), LEAD_BIAS)) emptyList() else listOf("\"$LEAD_BIAS\": ${lead.bias}")
+
+    /** 九键停一下后数字纠错的门槛（[TypoStrength.Digit]），规则同 [leadLines]。 */
+    internal fun digitLines(schema: () -> String, digit: TypoStrength.Digit): List<String> =
+        if (digit == TypoStrength.DIGIT_DEFAULT || !hasKey(schema(), DIGIT_MARGIN)) emptyList() else listOf("\"$DIGIT_MARGIN\": ${digit.margin}")
+
+    private fun hasKey(schema: String, key: String): Boolean =
+        Regex("(?m)^\\s*" + Regex.escape(key.substringAfterLast('/')) + ":[ \\t]*\\S").containsMatchIn(schema)
+
+    private const val LEAD_BIAS = "t9/correction_lead_bias"
+    private const val DIGIT_MARGIN = "t9/digit_edit_margin"
     private const val TRANSPOSITION = "translator/cyime_transposition_correction"
     private const val EXTRA = "translator/cyime_extra_letter_correction"
     private const val DOUBLED = "translator/cyime_doubled_letter_correction"
@@ -343,6 +378,17 @@ object SpellingPatches {
 
     private const val ALGEBRA = "speller/algebra"
     private const val PREEDIT_FORMAT = "translator/preedit_format"
+    private const val COMMENT_FORMAT = "translator/comment_format"
+    internal const val STROKE_SCHEMA = "stroke"
+    /** 横竖撇点折换成康熙部首，折用键面上的乛（#412）；和 lua 里的 STROKE_GLYPHS 一致。 */
+    internal const val STROKE_GLYPH_XLIT = "xlit/hspnz/⼀⼁⼃⼂乛/"
+
+    /** 笔画编码显示成笔画时的补丁：编码和候选注释（剩余笔画）都换；comment_format 里方案原有的 xform/~// 照样留着。 */
+    internal fun strokeGlyphParts(glyphs: Boolean): List<Part> = listOf(
+        Part(PREEDIT_FORMAT, if (glyphs) listOf("\"$PREEDIT_FORMAT\":", "  - " + quote(STROKE_GLYPH_XLIT)) else emptyList()),
+        Part(COMMENT_FORMAT, if (glyphs) listOf("\"$COMMENT_FORMAT\":", "  - " + quote("xform/~//"),
+            "  - " + quote(STROKE_GLYPH_XLIT)) else emptyList()),
+    )
     /** 原来的编码显示规则抄在这里：希腊字母（cyime_greek_letters.lua）按它把双拼键换回全拼再比对名字。 */
     internal const val DOUBLE_PINYIN_READING = "cyime_double_pinyin_reading"
     private const val CORRECTION = "translator/enable_correction"

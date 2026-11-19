@@ -10,11 +10,17 @@ import com.kingzcheung.xime.settings.IncognitoState
  */
 internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) {
     private var applied: Boolean? = null
+    private var lockWordOrder = false
 
     /** The saved switch at start-up; the first field applies it to the engine. */
     fun loadManual(on: Boolean) { IncognitoState.manual = on }
 
     fun setManual(on: Boolean) { IncognitoState.manual = on; apply() }
+
+    /** 「锁定词序」：只关引擎的学习（同无痕的那个开关），不算无痕，剪贴板和联想照常。启动时同样等第一个输入框。 */
+    fun loadLockWordOrder(on: Boolean) { lockWordOrder = on }
+
+    fun setLockWordOrder(on: Boolean) { lockWordOrder = on; apply() }
 
     /** A new field: password fields and fields asking for no personalized learning stay private. */
     fun beginEditor(attribute: EditorInfo?) {
@@ -30,7 +36,7 @@ internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) 
     fun setClipboardSearch(open: Boolean) { IncognitoState.clipboardSearch = open; apply() }
 
     private fun apply() {
-        val active = IncognitoState.active
+        val active = IncognitoState.active || lockWordOrder
         if (applied == active) return
         applied = active
         applyEngine(active)

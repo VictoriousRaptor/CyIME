@@ -2,7 +2,7 @@ package com.kingzcheung.xime.ui.caption
 
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue

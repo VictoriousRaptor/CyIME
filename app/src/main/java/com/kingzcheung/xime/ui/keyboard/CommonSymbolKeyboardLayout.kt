@@ -202,7 +202,7 @@ fun CommonSymbolKeyboardLayout(
                                     shadowEnabled = shadowEnabled,
                                     shadowElevation = shadowElevation,
                                     shadowShapeRadius = shadowShapeRadius,
-                                    fontSize = 20.sp,
+                                    fontSize = KeyboardKeyMetrics.LabelSize,
                                 )
                             }
                         }
@@ -224,7 +224,7 @@ fun CommonSymbolKeyboardLayout(
                                     shadowEnabled = shadowEnabled,
                                     shadowElevation = shadowElevation,
                                     shadowShapeRadius = shadowShapeRadius,
-                                    fontSize = 20.sp,
+                                    fontSize = KeyboardKeyMetrics.LabelSize,
                                 )
                             }
                         }
@@ -258,7 +258,7 @@ fun CommonSymbolKeyboardLayout(
                                     shadowEnabled = shadowEnabled,
                                     shadowElevation = shadowElevation,
                                     shadowShapeRadius = shadowShapeRadius,
-                                    fontSize = 20.sp,
+                                    fontSize = KeyboardKeyMetrics.LabelSize,
                                 )
                             }
                             SwipeableIconKeyButton(

@@ -33,6 +33,13 @@ data class ClipboardImage(val uri: String, val mimeType: String, val timestamp: 
     val source: String? = null, val sha256: String? = null)
 data class ImagePasteFailure(val image: ClipboardImage, val packageName: String)
 
+/** One atomic render snapshot: a source toggle and its refreshed items arrive together. */
+data class ClipboardImageBoardSnapshot(
+    val images: List<ClipboardImage> = emptyList(),
+    val screenshotsEnabled: Boolean = false,
+    val galleryPhotosEnabled: Boolean = false,
+)
+
 /** Copied images stay local; the optional gallery feed contains screenshots, and the newest few photos only when asked. */
 class ClipboardImages private constructor(private val context: Context) {
     companion object {
@@ -61,6 +68,8 @@ class ClipboardImages private constructor(private val context: Context) {
     val preview = previewState.preview
     private val _recentScreenshotsEnabled = MutableStateFlow(false)
     val photoAccess = _recentScreenshotsEnabled.asStateFlow()
+    private val _boardSnapshot = MutableStateFlow(ClipboardImageBoardSnapshot())
+    val boardSnapshot = _boardSnapshot.asStateFlow()
     // 最近截图默认开（11-02：用户找不到截图）；还没给相册权限时剪贴板里出一行「允许」，关掉或拒绝权限后不再出。
     private val _screenshotsNeedAccess = MutableStateFlow(false)
     val screenshotsNeedAccess = _screenshotsNeedAccess.asStateFlow()
@@ -272,16 +281,7 @@ class ClipboardImages private constructor(private val context: Context) {
                 val retained = history.mapNotNull { Uri.parse(it.uri).lastPathSegment }.toSet()
                 directory.listFiles()?.filter { it.name !in retained && it.lastModified() < System.currentTimeMillis() - 24 * 60 * 60_000L }
                     ?.forEach { it.delete() }
-                // Keep the whole cache within its budget: the oldest unfixed copies go first.
-                val pinnedNames = pinnedKeys().mapNotNull { key ->
-                    key.removePrefix("image:").takeIf { it != key }?.let { Uri.parse(it).lastPathSegment } }.toSet()
-                val evicted = clipboardImageEvictions(directory.listFiles().orEmpty().filter { it.isFile }
-                    .map { CachedImageFile(it.name, it.length(), it.lastModified()) }, pinnedNames + file.name).toSet()
-                if (evicted.isNotEmpty()) {
-                    evicted.forEach { File(directory, it).delete() }
-                    history = history.filterNot { Uri.parse(it.uri).lastPathSegment in evicted }
-                    cachedSources.entries.removeAll { Uri.parse(it.value.uri).lastPathSegment in evicted }
-                }
+                evictOverBudget(keep = setOf(file.name))
                 save()
                 publish()
                 cached
@@ -311,6 +311,31 @@ class ClipboardImages private constructor(private val context: Context) {
     }
     private fun rememberDismissedCopy() {
         prefs.edit().putString("last_dismissed_preview_copy_v2", previewState.lastCopyKey).apply()
+    }
+
+    /** 「图片占用上限」（MB），见 [CLIPBOARD_IMAGE_CACHE_MB_OPTIONS]。 */
+    fun cacheLimitMb(): Int = clipboardImageCacheMb(boardPrefs.getInt(CLIPBOARD_IMAGE_CACHE_MB_KEY, DEFAULT_CLIPBOARD_IMAGE_CACHE_MB))
+
+    /** 改「图片占用上限」：存下来，马上按新上限删最旧的没固定的图片。 */
+    fun setCacheLimitMb(mb: Int) {
+        boardPrefs.edit().putInt(CLIPBOARD_IMAGE_CACHE_MB_KEY, clipboardImageCacheMb(mb)).apply()
+        scope.launch { mutex.withLock {
+            if (evictOverBudget(keep = emptySet())) { save(); publish() }
+        } }
+    }
+
+    /** Keep the whole cache within 「图片占用上限」: the oldest unfixed copies go first. Call under [mutex]. */
+    private fun evictOverBudget(keep: Set<String>): Boolean {
+        val pinnedNames = pinnedKeys().mapNotNull { key ->
+            key.removePrefix("image:").takeIf { it != key }?.let { Uri.parse(it).lastPathSegment } }.toSet()
+        val evicted = clipboardImageEvictions(directory.listFiles().orEmpty().filter { it.isFile }
+            .map { CachedImageFile(it.name, it.length(), it.lastModified()) }, pinnedNames + keep,
+            clipboardImageCacheMb(boardPrefs.getInt(CLIPBOARD_IMAGE_CACHE_MB_KEY, DEFAULT_CLIPBOARD_IMAGE_CACHE_MB)) * 1024L * 1024).toSet()
+        if (evicted.isEmpty()) return false
+        evicted.forEach { File(directory, it).delete() }
+        history = history.filterNot { Uri.parse(it.uri).lastPathSegment in evicted }
+        cachedSources.entries.removeAll { Uri.parse(it.value.uri).lastPathSegment in evicted }
+        return true
     }
 
     fun clearHistory() {
@@ -347,7 +372,8 @@ class ClipboardImages private constructor(private val context: Context) {
             // Disabling the automatic feed does not discard explicitly pinned images.
             val includeRecent = recentScreenshotsEnabled()
             media = if (hasPhotoAccess()) runCatching { queryRecentScreenshots(includeRecent) }
-                .getOrElse { clipboardMediaAfterRefreshFailure(media, includeRecent, pinnedKeys(), hidden) }
+                .getOrElse { clipboardMediaAfterRefreshFailure(media, includeRecent, pinnedKeys(), hidden,
+                    includeGalleryPhotos = includeRecent && recentPhotosWanted()) }
                 else emptyList()
             // A screenshot taken in the last minute gets the same paste hint as a copied image.
             // It is read locally only; it enters clipboard history only if the user pastes it.
@@ -459,9 +485,13 @@ class ClipboardImages private constructor(private val context: Context) {
     }
 
     private fun publish() {
-        _recentScreenshotsEnabled.value = recentScreenshotsEnabled()
+        val screenshotsEnabled = recentScreenshotsEnabled()
+        val publishedImages = retainedClipboardImages(history, media, pinnedKeys(), hidden)
+        _boardSnapshot.value = ClipboardImageBoardSnapshot(
+            publishedImages, screenshotsEnabled, screenshotsEnabled && recentPhotosWanted())
+        _recentScreenshotsEnabled.value = screenshotsEnabled
         _screenshotsNeedAccess.value = recentScreenshotsWanted() && !hasPhotoAccess()
-        _images.value = retainedClipboardImages(history, media, pinnedKeys(), hidden)
+        _images.value = publishedImages
         // 历史和最近截图只供手动浏览，不从列表挑一张图片反复弹出。
         previewState.expire(System.currentTimeMillis())
         val image = preview.value

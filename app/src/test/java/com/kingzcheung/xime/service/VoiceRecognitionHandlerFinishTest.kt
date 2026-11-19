@@ -271,6 +271,27 @@ class VoiceRecognitionHandlerFinishTest {
         verify(mockInputConnection, never()).commitText(any(), anyInt())
     }
 
+    @Test fun `pressing voice again while the last one is finishing commits its visible text first`() {
+        // 2026-11-16：上一次还在等最终结果（整段重识别）时又按了开始，上一次的字留在组字区，被这一次的临时结果盖掉。
+        val committed = StringBuilder()
+        var composing = ""
+        whenever(mockInputConnection.setComposingText(any(), anyInt())).thenAnswer {
+            composing = it.getArgument<CharSequence>(0).toString(); true
+        }
+        whenever(mockInputConnection.finishComposingText()).thenAnswer { committed.append(composing); composing = ""; true }
+        whenever(mockInputConnection.commitText(any(), anyInt())).thenAnswer {
+            composing = ""; committed.append(it.getArgument<CharSequence>(0)); true
+        }
+        handler.startRecognition()
+        onPartial("今天下午开会")
+        handler.finishRecognition()
+        handler.startRecognition() // pressed again before the final arrived
+        onPartial("别迟到")
+        assertEquals("今天下午开会", committed.toString())
+        assertEquals("别迟到", composing)
+        verify(mockManager, times(2)).startRecognition(any())
+    }
+
     private val editor = StringBuilder()
 
     private fun segmentedResult(vararg parts: SpeechSegment) {

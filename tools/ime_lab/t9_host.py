@@ -283,24 +283,49 @@ def run_host(args):
         # The engine reads its deployed dictionaries from the replay root. A mounted Windows drive (9p/drvfs)
         # pages them in slowly and unevenly, so the root lives on the Linux filesystem during the replay
         # and is moved into the result afterwards.
-        live_root = cache / "replay-roots" / (output.name + "-" + uuid.uuid4().hex[:8])
-        live_root.parent.mkdir(parents=True, exist_ok=True)
         root = output / "native-run"
-        manifest["replay_root"] = dict(path=str(live_root), filesystem=filesystem_type(live_root.parent),
-                                       kept_as="native-run")
-        save(output / "run.json", manifest)
         print(f"Replaying {len(fixture['cases'])} cases locally; immediate and settled candidates.", flush=True)
-        try:
-            commands.run([build.get("java", "java"), "-cp", str(classes) + os.pathsep + str(jar),
-                          "com.cyime.audit.ChatReplay", "--host", "--resources", resources,
-                          "--lib-dir", library_dir, "--root", live_root, "--corpus", output / "fixture.json",
-                          "--output", output / "replay.jsonl", "--modes", "continuous,paused",
-                          "--key-delay-ms", args.key_delay_ms,
-                          *(["--schema-patch-file", output / "schema.custom.yaml"] if schema_patch_file else []),
-                          *(["--user-dict", output / "user-dict.userdb.txt"] if user_dict is not None else [])])
-        finally:
-            if live_root.exists():
-                shutil.move(str(live_root), str(root))
+        # On Windows a user database (leveldb) sometimes cannot replace its temporary file while another process
+        # (a virus scanner) still holds it: "Error opening db". The engine then replays without that user
+        # dictionary and reports nothing (2026-11-16 baselines ran without the preset user dictionary this way and
+        # made 89 false regressions). Such a replay is discarded and run again in a fresh root.
+        for attempt in range(1, 4):
+            live_root = cache / "replay-roots" / (output.name + "-" + uuid.uuid4().hex[:8])
+            live_root.parent.mkdir(parents=True, exist_ok=True)
+            manifest["replay_root"] = dict(path=str(live_root), filesystem=filesystem_type(live_root.parent),
+                                           kept_as="native-run", attempt=attempt)
+            save(output / "run.json", manifest)
+            logged = commands.log.stat().st_size if commands.log.exists() else 0
+            try:
+                commands.run([build.get("java", "java"), "-cp", str(classes) + os.pathsep + str(jar),
+                              "com.cyime.audit.ChatReplay", "--host", "--resources", resources,
+                              "--lib-dir", library_dir, "--root", live_root, "--corpus", output / "fixture.json",
+                              "--output", output / "replay.jsonl", "--modes", "continuous,paused",
+                              "--key-delay-ms", args.key_delay_ms,
+                              *(["--schema-patch-file", output / "schema.custom.yaml"] if schema_patch_file else []),
+                              *(["--user-dict", output / "user-dict.userdb.txt"] if user_dict is not None else [])])
+                with commands.log.open("rb") as log:
+                    log.seek(logged)
+                    failed_db = re.search(rb"Error opening db '([^']+)'", log.read())
+            except RuntimeError:
+                with commands.log.open("rb") as log:
+                    log.seek(logged)
+                    failed_db = re.search(rb"Error opening db '([^']+)'", log.read())
+                if not failed_db or attempt == 3:
+                    if live_root.exists():
+                        shutil.rmtree(root, ignore_errors=True)
+                        shutil.move(str(live_root), str(root))
+                    raise
+            if not failed_db:
+                if live_root.exists():
+                    shutil.move(str(live_root), str(root))
+                break
+            name = failed_db.group(1).decode("utf-8", "replace")
+            if attempt == 3:
+                raise RuntimeError(f"User database {name} could not be opened in 3 replays; see {commands.log}")
+            print(f"User database {name} could not be opened; replaying again ({attempt + 1}/3).", flush=True)
+            shutil.rmtree(live_root, ignore_errors=True)
+            (output / "replay.jsonl").unlink(missing_ok=True)
         if {p.name: file_digest(p) for p in sorted(library_dir.glob(NATIVE_GLOB))} != libraries:
             raise ValueError("Host engine libraries changed during replay")
         shutil.copyfile(root / "user/build/t9_pinyin.schema.yaml", output / "deployed-schema.yaml")

@@ -11,7 +11,7 @@
 schema:
   schema_id: stroke
   name: "笔画"
-  version: "0.6-cyime3"
+  version: "0.6-cyime4"
   dependencies:
     - stroke_phrase
   author:
@@ -59,17 +59,18 @@ engine:
 speller:
   alphabet: "abcdefghijklmnopqrstuvwxyz*"
   delimiter: " '"
+  # 分词号也能连着打、打在最后：n 个分词号就是 n+1 个字，没打笔画的段代表任意一个字（11-18）。
+  # 不列进 initials 时，紧跟在分词号后面的分词号不收，Rime 把首选顶上屏。
+  initials: "abcdefghijklmnopqrstuvwxyz*'"
 
 translator:
   enable_sentence: false
   dictionary: stroke
-  preedit_format:
-#   - xlit/hspnz/㇐㇑㇒㇏㇠/   # 中日韓筆畫（橫豎撇捺折）
-    - xlit/hspnz/⼀⼁⼃⼂⼄/   # 康熙部首（橫豎撇點折）
+  # 编码和候选后面的剩余笔画默认显示字母 h s p n z（11-18 贡献者：全用字母，不要一半字母一半笔画）。
+  # 设置「笔画编码显示成 一丨丿丶乛」打开时，方案补丁（SpellingPatches）在这里加
+  # xlit/hspnz/⼀⼁⼃⼂乛/（康熙部首，折用键面上的乛，#412），lua 造的候选也跟着换。
   comment_format:
     - xform/~//
-#   - xlit/hspnz/㇐㇑㇒㇏㇠/   # 中日韓筆畫（橫豎撇捺折）
-    - xlit/hspnz/⼀⼁⼃⼂⼄/   # 康熙部首（橫豎撇點折）
 
 # 通配符跨两个字时沿用笔画方案的组词，查询器只读，不重复学习上屏文字。
 stroke_word_lookup:

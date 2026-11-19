@@ -50,7 +50,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -906,7 +906,7 @@ private fun HandwritingTrainingBody(
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
-                is TrainingEvent.Message -> snackbarHostState.showSnackbar(event.text)
+                is TrainingEvent.Message -> snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, event.text))
                 is TrainingEvent.Share -> {
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "application/octet-stream"

@@ -206,6 +206,20 @@ class LuaTranslatePluginTest {
     }
 
     @Test
+    fun `栏上和列表里每种语言只显示一个字，存的还是全名，单字之间不撞`() {
+        val (adapter, _, store) = setup()
+        val selects = adapter.getPanelState("").ui!!.filter { it.type == UiNodeType.SELECT }
+        val source = selects[0]
+        assertEquals(mapOf("自动检测" to "自", "英文" to "英", "日文" to "日", "韩文" to "韩", "简体中文" to "中"),
+            source.optionLabels)
+        assertEquals(selects[1].options.associateWith { source.optionLabels.getValue(it) }, selects[1].optionLabels)
+        assertTrue("每个都是一个字", source.optionLabels.values.all { it.codePointCount(0, it.length) == 1 })
+        assertEquals("不撞", source.optionLabels.size, source.optionLabels.values.toSet().size)
+        adapter.onPanelAction("select:targetLang:日文")
+        assertEquals("设置里存的还是全名", "日文", store.get("targetLang"))
+    }
+
+    @Test
     fun `选源语言和目标语言：存进设置，提示词带原文语言`() {
         val (adapter, sse, store) = setup()
         adapter.onPanelAction("select:targetLang:日文")

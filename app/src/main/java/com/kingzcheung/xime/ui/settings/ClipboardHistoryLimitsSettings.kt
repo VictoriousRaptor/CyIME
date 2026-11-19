@@ -12,7 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,14 +26,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.kingzcheung.xime.clipboard.CLIPBOARD_IMAGE_CACHE_MB_OPTIONS
 import com.kingzcheung.xime.clipboard.ClipboardHistoryLimits
+import com.kingzcheung.xime.clipboard.ClipboardImages
+import com.kingzcheung.xime.clipboard.clipboardImageCacheMbLabel
 import com.kingzcheung.xime.clipboard.ClipboardManager
 import com.kingzcheung.xime.clipboard.ClipboardRetention
 import kotlinx.coroutines.launch
 
 /**
  * 剪贴板历史的「数量上限」和「保留时间」(用户 11-03)：选项和叫法同 Windows 版，另加「5000 条」「不限」给拿剪贴板存文档的人。
- * 固定的和分组里的不计入、不删除，图片另有上限。改小后会删记录时先说删几条，确认后才删。
+ * 固定的和分组里的不计入、不删除，图片另有「图片占用上限」。改小后会删记录时先说删几条，确认后才删。
  */
 @Composable
 internal fun ClipboardHistoryLimitsSetting() {
@@ -62,6 +65,14 @@ internal fun ClipboardHistoryLimitsSetting() {
         HistoryLimitChoices("保留时间", "到期自动删除，固定和分组的不过期", ClipboardRetention.DAY_OPTIONS,
             shown.keepDays, ClipboardRetention::daysLabel, "clipboard-keep-days", enabled = limits != null) {
             choose(shown.copy(keepDays = it))
+        }
+        // 用户 11-17：剪贴板图片限制大小，默认 200 MB，可以调。
+        val images = remember(context) { ClipboardImages.getInstance(context) }
+        var imageMb by remember { mutableStateOf(images.cacheLimitMb()) }
+        HistoryLimitChoices("图片占用上限", "复制的图片最多占这么多空间，超出后先删最早的，固定的不删", CLIPBOARD_IMAGE_CACHE_MB_OPTIONS,
+            imageMb, ::clipboardImageCacheMbLabel, "clipboard-image-cache", enabled = true) {
+            imageMb = it
+            images.setCacheLimitMb(it)
         }
     })
     pending?.let { (next, removed) ->

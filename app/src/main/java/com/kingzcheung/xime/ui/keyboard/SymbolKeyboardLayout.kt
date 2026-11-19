@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -138,7 +139,10 @@ fun SymbolKeyboardLayout(
         ) {
             val grid = symbolGridGeometry(maxWidth.value, maxHeight.value)
             val columns = grid.columns
-            val symbolFontSize = (20f * keyContentScale(maxWidth.value / columns, grid.rowHeightDp)).sp
+            // 和字母键同一个字号：同一基准、同一键帽尺度，也跟「按键字号」走（用户 11-18：符号和按键字号不一样）。
+            val symbolFontSize = keyLabelSizeSp("中", KeyboardKeyMetrics.LabelSize.value, maxWidth.value / columns,
+                grid.rowHeightDp, LocalDensity.current.fontScale,
+                LocalKeyboardInputPreferences.current.keyTextScale).sp
             // 符号网格自成一格：按网格自身格宽算度量（不套主体键宽上限/gutter）
             val gridMetrics = keyVisualMetrics(
                 policy = KeyVisualPolicy.Qwerty.copy(maxKeyWidth = Float.MAX_VALUE, minGutter = 0f),
@@ -301,7 +305,7 @@ private fun SymbolButton(
     textColor: Color = Color.Unspecified,
     backgroundColor: Color,
     preserveWidth: Boolean = false,
-    fontSize: androidx.compose.ui.unit.TextUnit = 20.sp,
+    fontSize: androidx.compose.ui.unit.TextUnit = KeyboardKeyMetrics.LabelSize,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()

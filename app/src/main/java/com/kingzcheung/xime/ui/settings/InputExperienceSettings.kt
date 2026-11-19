@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -79,8 +80,8 @@ internal fun InputExperienceSettings(
                     Text("上下滑输入符号", style = MaterialTheme.typography.titleSmall)
                     Text(if (settings.cornerSymbolInput) "上下滑动按键输入角标里的符号和数字。键上显不显示角标由最下面两个开关管。"
                         else if (settings.glideTyping || settings.chineseGlideTyping || settings.t9GlideTyping)
-                            "上下滑、长按都不输入角标符号。"
-                        else "上下滑、长按都不输入角标符号。按住在键盘上滑，滑到哪个键就按下哪个键，松手输入。",
+                            "上下滑、长按都不输入角标符号，键上也不画。"
+                        else "上下滑、长按都不输入角标符号，键上也不画。按住在键盘上滑，滑到哪个键就按下哪个键，松手输入。",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(checked = settings.cornerSymbolInput, colors = settingsSwitchColors(), modifier = Modifier.testTag("corner-symbol-input"),

@@ -27,7 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -130,7 +130,7 @@ fun DictContributeScreen(onBack: () -> Unit) {
                                 throw cancelled
                             } catch (e: Exception) {
                                 FileLogger.e(TAG, "share failed", e)
-                                snackbarHostState.showSnackbar("分享失败：${e.message ?: "未知错误"}")
+                                snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "分享失败：${e.message ?: "未知错误"}"))
                             } finally { busy = false }
                         }
                     }
@@ -151,7 +151,7 @@ fun DictContributeScreen(onBack: () -> Unit) {
                                     FileLogger.e(TAG, "upload failed", e)
                                     "上传失败：${e.message ?: "未知错误"}"
                                 } finally { busy = false }
-                                snackbarHostState.showSnackbar(message)
+                                snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, message))
                             }
                         }
                     }) { Text("上传") }
@@ -178,8 +178,9 @@ fun DictContributeScreen(onBack: () -> Unit) {
             itemsIndexed(words, key = { _, w -> w.text + "\t" + w.pinyin }) { row, word ->
                 val checked = word !in unchecked
                 fun toggle() { unchecked = if (checked) unchecked + word else unchecked - word }
-                SettingsGroupRow(row, words.size) {
-                    SettingsListRow(word.text, listOf(word.pinyin, "${word.count} 次").filter { it.isNotEmpty() }.joinToString(" · "),
+                val countText = com.kingzcheung.xime.ui.i18n.tr("${word.count} 次")
+                SettingsGroupRow(row, words.size) { com.kingzcheung.xime.ui.i18n.UntranslatedContent {
+                    SettingsListRow(word.text, listOf(word.pinyin, countText).filter { it.isNotEmpty() }.joinToString(" · "),
                         Modifier.clickable(enabled = !busy) { toggle() }) {
                         Checkbox(checked = checked, enabled = !busy, onCheckedChange = { toggle() })
                         IconButton(enabled = !busy, onClick = {
@@ -190,7 +191,7 @@ fun DictContributeScreen(onBack: () -> Unit) {
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                }
+                } }
             }
             if (deletedCount > 0) item {
                 TextButton(enabled = !busy, modifier = Modifier.padding(top = 4.dp), onClick = {

@@ -44,6 +44,8 @@ internal class GlidePreviewJob {
     var moved = false
     var points: (() -> Pair<FloatArray, FloatArray>)? = null
     var english: ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> GlideEnglishPreview)? = null
+    /** 中文：这一笔开头取的前文，预览和抬手后按同一前文选编码。 */
+    var left: String? = null
 
     fun start(gesture: Int) {
         job?.cancel(); job = null
@@ -51,12 +53,13 @@ internal class GlidePreviewJob {
         moved = false
         points = null
         english = null
+        left = null
     }
 
     fun stop() { job?.cancel(); job = null; points = null }
 }
 
-data class GlideEnglishPreview(val text: String, val candidates: List<String>)
+data class GlideEnglishPreview(val text: String, val candidates: List<String>, val sentenceStart: Boolean? = null)
 
 /** 实时预览两次识别之间至少隔这么久；手机上一次中文识别约十几到三十毫秒。 */
 internal const val GLIDE_PREVIEW_INTERVAL_MS = 60L

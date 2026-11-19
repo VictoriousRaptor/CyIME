@@ -25,8 +25,18 @@ class GlideKeyboard(val keyUnit: Float, val centers: Map<Char, Pair<Float, Float
     }
 }
 
-/** [cost] 含词频先验，用来排序；[shape] 只算轨迹（形状与起止点），按上下文重排时与双词表相加。 */
-data class GlideCandidate(val word: String, val cost: Float, val shape: Float = cost)
+/**
+ * [cost] 含词频先验，用来排序；[shape] 只算轨迹（形状与起止点），按上下文重排时与双词表相加。
+ * [listed]：编码在滑行词表里（雾凇常用词）；按音节拼出来的词表外编码为假。
+ */
+data class GlideCandidate(val word: String, val cost: Float, val shape: Float = cost, val listed: Boolean = true)
+
+/**
+ * 中文滑行首选之后给的备选编码：只要词表里的（11-16：「你吗斯里克」「你吗思路个」这种按音节拼出来、
+ * 词库里没有的串，Rime 只能逐字凑句，不能当备选）。首选照旧交给 Rime，和点按打字一样。
+ */
+fun chineseGlideAlternatives(candidates: List<GlideCandidate>): List<String> =
+    candidates.drop(1).filter { it.listed }.map { it.word }
 
 /**
  * [maxEndpoint]：起点、终点离词的首末键中心最远多少（单位：键宽）；九键的键大、键少，收紧到不含上下相邻键，
@@ -139,7 +149,7 @@ class GlideDecoder(
             val dtw = shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
             if (dtw > MAX_SHAPE) return@forEachIndexed
             val geometry = dtw + (start + end) / 2f * ENDPOINT_WEIGHT
-            results += GlideCandidate(code, geometry + UNLISTED_PRIOR * PRIOR_WEIGHT + rank * SYLLABLE_RANK_COST, geometry)
+            results += GlideCandidate(code, geometry + UNLISTED_PRIOR * PRIOR_WEIGHT + rank * SYLLABLE_RANK_COST, geometry, listed = false)
         }
         return results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(limit)
     }

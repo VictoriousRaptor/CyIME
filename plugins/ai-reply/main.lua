@@ -41,6 +41,23 @@ end
 
 local SPARK = "https://spark-api-open.xf-yun.com/x2"
 local function usesSpark() return host.config.get("provider") == SPARK end
+
+-- 自定义请求头（11-16）：设置里每行一个「名字: 值」，加在默认请求头上；同名的（不分大小写）替换默认的，
+-- 值留空就不发这个头，# 开头的行不算。只用于自定义兼容接口；值不写进日志和错误提示。
+local KEY_CUSTOM_HEADERS = "customHeaders"
+local function withCustomHeaders(headers)
+  if usesSpark() then return headers end
+  for line in (host.config.get(KEY_CUSTOM_HEADERS) or ""):gmatch("[^\r\n]+") do
+    local name, value = line:match("^%s*([%w!$%%&'*+.^_`|~-][%w!#$%%&'*+.^_`|~-]*)%s*:%s*(.-)%s*$")
+    if name ~= nil then
+      for k in pairs(headers) do
+        if k:lower() == name:lower() then headers[k] = nil end
+      end
+      if value ~= "" then headers[name] = value end
+    end
+  end
+  return headers
+end
 local function providerKey()
   return trim(host.config.get(usesSpark() and "sparkPassword" or KEY_API_KEY) or "")
 end
@@ -142,6 +159,13 @@ function plugin.getSettingsSchema()
         type = "text",
         defaultValue = DEFAULTS.model,
         helpText = "例：gpt-4o-mini、deepseek-chat、Qwen/Qwen2.5-7B-Instruct",
+      },
+      {
+        key = KEY_CUSTOM_HEADERS,
+        label = "自定义请求头",
+        type = "textarea",
+        placeholder = "X-Title: CyIME",
+        helpText = "可不填。每行一个「名字: 值」；和默认的同名就替换（如 Authorization），值留空就不发这个头",
       },
     } },
     { value = SPARK, fields = {
@@ -287,10 +311,10 @@ local function requestReplies(context)
   local prompt = configOr(KEY_PROMPT, DEFAULTS.prompt)
   prompt = prompt:gsub("{context}", function() return context end)
 
-  local headers = {
+  local headers = withCustomHeaders({
     ["Content-Type"] = "application/json",
     ["Authorization"] = "Bearer " .. apiKey,
-  }
+  })
   local url = baseUrl .. "/chat/completions"
   local endpoint = baseUrl .. "|" .. model
   local function send(withTemperature)

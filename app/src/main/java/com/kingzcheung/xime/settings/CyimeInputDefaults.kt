@@ -27,6 +27,9 @@ object CyimeInputDefaults {
         "cyime_digit_edit", "cyime_digit_tap", "melt_eng", "radical_pinyin", "numbers", "handwriting", "stroke_phrase",
         "cyime_aux_zrm", "cyime_aux_flypy", "flypydz", "flypyok")
 
+    /** 只给别的方案当索引或词表、自己不是输入方式的方案：上面固定的几个，加每个双拼方案停顿纠错用的索引。 */
+    fun isDependency(id: String) = id in dependencies || id.startsWith(DoublePinyinScheme.PAUSE_PREFIX)
+
     /**
      * 方案 × 布局的组合配置：所需的方案和布局都启用时自动启用，不作为独立条目单独开关。
      * 例如启用了小鹤双拼（或自然码、自定义双拼）和 14 键，就同时提供这个双拼方案的 14 键版本。
@@ -81,7 +84,7 @@ object CyimeInputDefaults {
 
     fun canonicalIds(ids: List<String>, available: Set<String>): List<String> = ids.mapNotNull { id ->
         when {
-            id in dependencies || id == InputModes.ENGLISH -> null
+            isDependency(id) || id == InputModes.ENGLISH -> null
             id == "pinyin_simp" && "rime_ice" in available -> "rime_ice"
             id == "t9" && "t9_pinyin" in available -> "t9_pinyin"
             id == "jaroomaji" && "japanese" in available -> "japanese"
@@ -90,7 +93,7 @@ object CyimeInputDefaults {
     }.distinct()
 
     fun visibleSchema(id: String, available: Set<String>): Boolean =
-        id !in dependencies && canonicalIds(listOf(id), available).singleOrNull() == id
+        !isDependency(id) && canonicalIds(listOf(id), available).singleOrNull() == id
 
     fun hasIndependentToggle(id: String, available: Set<String>) = !isCompanion(id) && visibleSchema(id, available)
 

@@ -83,4 +83,27 @@ class WordLexiconTest {
         assertTrue("привет" in russian.complete("прив", 10))
         assertTrue("Привет" in russian.complete("Прив", 10))
     }
+
+    /** 用户 11-16 要的越南语：不打声调也能补全；打了变音还没打声调时带声调的也算，打了声调就只认这个声调。 */
+    @Test fun `vietnamese tones do not have to be typed`() {
+        val vietnamese = words("vi")
+        assertTrue(vietnamese.complete("nguoi", 5).contains("người"))
+        assertTrue(vietnamese.complete("duoc", 5).contains("được"))
+        assertTrue(vietnamese.complete("viet", 5).contains("việt"))
+        assertTrue(vietnamese.complete("viê", 10).contains("việt"))
+        for (word in vietnamese.complete("việ", 10)) assertTrue(word, word.startsWith("việ"))
+        // 词表统一成键盘打出来的老写法：只有 hòa，没有 hoà。
+        assertTrue(vietnamese.complete("hoa", 20).contains("hòa"))
+        assertFalse(vietnamese.complete("hoa", 20).contains("hoà"))
+    }
+
+    @Test fun `malay list keeps malay words and chat particles`() {
+        val malay = words("ms")
+        assertEquals("terima", malay.complete("teri", 5).first())
+        assertTrue(malay.complete("bol", 5).contains("boleh"))
+        assertTrue(malay.complete("la", 20).contains("lah"))
+        // 印尼拼法和片名人名不在里面。
+        assertFalse(malay.complete("karen", 20).contains("karena"))
+        assertFalse(malay.complete("katnis", 20).contains("katniss"))
+    }
 }

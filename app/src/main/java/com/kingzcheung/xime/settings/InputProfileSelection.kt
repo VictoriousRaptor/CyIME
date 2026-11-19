@@ -43,6 +43,12 @@ object InputProfileSelection {
      */
     fun layoutsOf(entry: SchemaInfo, entries: List<SchemaInfo>): List<InputLayout> {
         val base = entry.baseProfile
+        // 法语：自己的 26 键和 AZERTY 两个布局（xime.yaml 里各一个 section）。
+        val sections = LetterLayouts.sectionChoices(base.language)
+        if (sections.isNotEmpty() && base.layout.kind == LayoutKind.ALPHABETIC) {
+            val own = KeysConfigHelper.ownSectionForSchema(entry.schemaId) ?: LetterLanguage.ofSchema(entry.schemaId)?.keyboard
+            return (listOfNotNull(own) + sections).distinct().map { InputProfiles.resolveLayout(it) }
+        }
         if (base.layout.kind != LayoutKind.ALPHABETIC || !LetterLayouts.appliesTo(base.language, base.scheme))
             return listOf(entry.profile.layout)
         return listOf(base.layout) + LetterLayouts.choices(entries, base.language).map(InputProfiles::customLayout)

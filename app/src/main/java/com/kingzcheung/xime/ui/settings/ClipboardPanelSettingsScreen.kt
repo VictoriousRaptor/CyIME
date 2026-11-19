@@ -24,7 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -48,6 +48,9 @@ import com.kingzcheung.xime.settings.PerformanceCosts
 import com.kingzcheung.xime.clipboard.CLIPBOARD_IMAGE_HEIGHT_KEY
 import com.kingzcheung.xime.clipboard.ClipboardImageHeight
 import com.kingzcheung.xime.clipboard.clipboardImageHeight
+import com.kingzcheung.xime.clipboard.CLIPBOARD_RECENT_IMAGE_COUNT_KEY
+import com.kingzcheung.xime.clipboard.ClipboardRecentImageCounts
+import com.kingzcheung.xime.clipboard.clipboardRecentImageCount
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_MAX_LINES_KEY
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CLOSE_AFTER_PASTE_KEY
 import com.kingzcheung.xime.ui.menubar.clipboardCardMaxLines
@@ -113,6 +116,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     var lines by remember { mutableStateOf(clipboardCardMaxLines(prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))) }
     var imageHeight by remember { mutableStateOf(clipboardImageHeight(prefs.getString(CLIPBOARD_IMAGE_HEIGHT_KEY, null))) }
+    var imageCount by remember { mutableStateOf(clipboardRecentImageCount(prefs.getInt(CLIPBOARD_RECENT_IMAGE_COUNT_KEY, 4))) }
     val groups by remember(context) { ClipboardGroupStore.getInstance(context) }.state.collectAsState()
     val images = remember(context) { ClipboardImages.getInstance(context) }
     // Same value as 启用/关闭最近截图 in the clipboard's ⋯ menu; the permission answer comes back on resume.
@@ -161,6 +165,23 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
                         Text(option.caption, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            }
+        }
+        // 用户 11-17：一打开剪贴板全是图片。「全部」只放最新几张，其余在「图片」里。
+        Column(Modifier.settingsSearchAnchor("显示几张图片").fillMaxWidth().padding(16.dp)) {
+            Text("显示几张图片", style = MaterialTheme.typography.titleSmall)
+            Text("「全部」里只显示最新的几张没固定的图片，其余在「图片」里看", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ClipboardRecentImageCounts.forEach { option ->
+                Row(Modifier.fillMaxWidth().testTag("clipboard-image-count:$option")
+                    .selectable(imageCount == option, role = Role.RadioButton) {
+                        imageCount = option
+                        prefs.edit().putInt(CLIPBOARD_RECENT_IMAGE_COUNT_KEY, option).apply()
+                    }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = imageCount == option, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(if (option == 0) "不限" else "$option 张", style = MaterialTheme.typography.titleSmall)
                 }
             }
         }

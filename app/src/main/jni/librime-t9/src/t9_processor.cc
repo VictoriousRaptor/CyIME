@@ -85,6 +85,11 @@ T9Processor::T9Processor(const Ticket& ticket) : Processor(ticket) {
             bool double_pinyin = false;
             config->GetBool("t9/double_pinyin", &double_pinyin);
             full_pinyin_ = has_script_translator && !double_pinyin;
+            double_pinyin_ = has_script_translator && double_pinyin;
+            if (double_pinyin_) {
+                auto algebra = std::make_shared<Projection>();
+                if (algebra->Load(config->GetList("speller/algebra"))) double_pinyin_algebra_ = algebra;
+            }
         }
     }
 
@@ -875,7 +880,7 @@ bool T9Processor::UndoLetterCommit() {
     return true;
 }
 
-bool T9Processor::MatchesLetterConstraints(size_t rime_start, const std::string& comment) const {
+bool T9Processor::MatchesLetterConstraints(size_t rime_start, size_t rime_end, const std::string& comment) const {
     if (letter_constraints_.empty() || comment.empty()) return true;
     // 候选覆盖的是 RIME input 里的未分配数字段；其前面的字符（已选拼音字母、分隔符）不算。
     const std::string rime_input = engine_->context()->input();
@@ -888,6 +893,57 @@ bool T9Processor::MatchesLetterConstraints(size_t rime_start, const std::string&
         else if (rime_input[i] != '\'' && rime_input[i] != ' ' && in_unassigned) return true;  // 不覆盖数字段，放行
     }
     if (rime_start < rime_input.size() && !(rime_input[rime_start] >= '0' && rime_input[rime_start] <= '9')) return true;
+    if (double_pinyin_) {
+        int covered = 0;
+        for (size_t i = rime_start; i < rime_end && i < rime_input.size(); ++i)
+            if (rime_input[i] >= '0' && rime_input[i] <= '9') ++covered;
+        return MatchesDoublePinyinConstraints(unassigned_offset + digits_before, covered, comment);
+    }
+    // 注释写的是整个读音，简拼的字只占一个键（6687455 出「谋起来了 mou qi lai le」，来、了各按一个 5）。
+    // 以前按注释第 j 个字母对第 j 个键，第 7 个键对上 lai 的 a，拂出的 l 就把这类候选全拦掉，
+    // 只剩分词前那截短候选，后面打什么都不变（11-18 手机复现）。改成按音节对齐：每个字占整个读音、
+    // 只占声母（zh ch sh 可占两个），最后一个字还可以只打了开头；有一种占法让拂出的字母都对上就留下。
+    {
+        int first = unassigned_offset + digits_before;
+        int covered = 0;
+        for (size_t i = rime_start; i < rime_end && i < rime_input.size(); ++i)
+            if (rime_input[i] >= '0' && rime_input[i] <= '9') ++covered;
+        std::vector<std::string> syllables(1);
+        for (char c : comment) {
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+            if (c >= 'a' && c <= 'z') syllables.back() += c;
+            else if (!syllables.back().empty()) syllables.emplace_back();
+        }
+        if (syllables.back().empty()) syllables.pop_back();
+        auto align = [&](bool check) {
+            std::vector<char> reach(covered + 1, 0);
+            reach[0] = 1;
+            for (size_t s = 0; s < syllables.size(); ++s) {
+                const std::string& reading = syllables[s];
+                const int len = static_cast<int>(reading.size());
+                const bool last = s + 1 == syllables.size();
+                const bool retroflex = len >= 2 && reading[1] == 'h' &&
+                    (reading[0] == 'z' || reading[0] == 'c' || reading[0] == 's');
+                std::vector<char> next(covered + 1, 0);
+                for (int p = 0; p <= covered; ++p) {
+                    if (!reach[p]) continue;
+                    for (int k = 1; k <= len && p + k <= covered; ++k) {
+                        if (!(k == len || k == 1 || (k == 2 && retroflex) || last)) continue;
+                        bool ok = true;
+                        for (int t = 0; ok && check && t < k; ++t) {
+                            const auto it = letter_constraints_.find(first + p + t);
+                            ok = it == letter_constraints_.end() || it->second == reading[t];
+                        }
+                        if (ok) next[p + k] = 1;
+                    }
+                }
+                reach.swap(next);
+            }
+            return reach[covered] != 0;
+        };
+        // 对不齐的注释（模糊音等读音和键数不一致）照旧按字母逐个对。
+        if (covered > 0 && !syllables.empty() && align(false)) return align(true);
+    }
     int j = 0;
     for (char c : comment) {
         if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
@@ -896,6 +952,80 @@ bool T9Processor::MatchesLetterConstraints(size_t rime_start, const std::string&
         if (it != letter_constraints_.end() && it->second != c) return false;
         ++j;
     }
+    return true;
+}
+
+// 读音 → 本方案的双拼键（只要全是字母的两键拼写；数字和半字母半数字的派生是给按键用的）。
+const std::vector<std::string>& T9Processor::DoublePinyinCodes(const std::string& syllable) const {
+    auto cached = double_pinyin_codes_.find(syllable);
+    if (cached != double_pinyin_codes_.end()) return cached->second;
+    std::vector<std::string> codes;
+    if (double_pinyin_algebra_) {
+        Script script;
+        script.AddSyllable(syllable);
+        double_pinyin_algebra_->Apply(&script);
+        for (const auto& entry : script) {
+            const std::string& code = entry.first;
+            if (code.size() != 2) continue;
+            bool letters = true;
+            for (char c : code) letters = letters && ((c >= 'a' && c <= 'z') || c == ';');
+            if (letters) codes.push_back(code);
+        }
+    }
+    return double_pinyin_codes_.emplace(syllable, std::move(codes)).first->second;
+}
+
+// 双拼九键：读音每个字占两个键位，分词键前单个键的字（4' 出好）只占一个，最后一个字可以只打了第一个键；
+// 拂动固定的字母要对上这个字的某个双拼键。有一种占法全对上就留下。推不出双拼键（不是方案里的读音）的字不拦。
+// 以前一律按每字两键数，分词后的简拼字让后面的键位整体错开，拂出的字母对不上，候选被拦光（11-18）。
+bool T9Processor::MatchesDoublePinyinConstraints(int first_pos, int covered, const std::string& comment) const {
+    std::vector<std::string> readings(1);
+    for (char c : comment) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        if (c >= 'a' && c <= 'z') readings.back() += c;
+        else if (!readings.back().empty()) readings.emplace_back();
+    }
+    if (readings.back().empty()) readings.pop_back();
+    if (readings.empty()) return true;
+    // 这个字从 pos 起占 keys 个键时，拂出的字母能不能对上它的某个双拼键。
+    auto fits = [&](const std::string& reading, int pos, int keys) -> bool {
+        const auto first = letter_constraints_.find(pos);
+        const auto second = keys == 2 ? letter_constraints_.find(pos + 1) : letter_constraints_.end();
+        const bool has_first = first != letter_constraints_.end();
+        const bool has_second = second != letter_constraints_.end();
+        if (!has_first && !has_second) return true;
+        const auto& codes = DoublePinyinCodes(reading);
+        if (codes.empty()) return true;
+        for (const auto& code : codes) {
+            if ((!has_first || code[0] == first->second) && (!has_second || code[1] == second->second)) return true;
+        }
+        return false;
+    };
+    if (covered <= 0) covered = 2 * static_cast<int>(readings.size());
+    auto align = [&](bool check) {
+        std::vector<char> reach(covered + 1, 0);
+        reach[0] = 1;
+        const auto& separators = input_buffer_.separator_positions;
+        for (size_t r = 0; r < readings.size(); ++r) {
+            const bool last = r + 1 == readings.size();
+            std::vector<char> next(covered + 1, 0);
+            for (int p = 0; p <= covered; ++p) {
+                if (!reach[p]) continue;
+                for (int keys = 1; keys <= 2 && p + keys <= covered; ++keys) {
+                    // 一个键的字只在分词符前（或最后一个字没打完）。
+                    if (keys == 1 && !last && std::find(separators.begin(), separators.end(), first_pos + p + 1) == separators.end())
+                        continue;
+                    if (!check || fits(readings[r], first_pos + p, keys)) next[p + keys] = 1;
+                }
+            }
+            reach.swap(next);
+        }
+        return reach[covered] != 0;
+    };
+    if (align(false)) return align(true);
+    // 键数对不上（模糊音等）时照旧每字两键。
+    for (size_t k = 0; k < readings.size(); ++k)
+        if (!fits(readings[k], first_pos + 2 * static_cast<int>(k), 2)) return false;
     return true;
 }
 

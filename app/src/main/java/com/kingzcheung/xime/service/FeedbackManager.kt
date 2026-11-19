@@ -121,6 +121,15 @@ class FeedbackManager(private val context: Context) {
         ): Boolean = !bypassSystem && duration == 0L && amplitude == 0 && systemHapticEnabled &&
             (!custom || !primitivesSupported)
 
+        /**
+         * 「启用」模式的振动标成触摸反馈（USAGE_TOUCH）。不标时系统按「未知用途」处理，原生 Android 把它归到
+         * 媒体振动的强度；媒体振动关着或很弱的机型就一下都不震（用户反馈 11-16：魅族 21，Flyme 12.6，
+         * 「启用」并调振幅 80 后完全不震，「跟随系统」能震。原因未真机确认）。
+         * 系统触感关着时触摸反馈会被系统拦掉，这时照旧不标，「启用」仍能强制震。三星按实测调过，不改。
+         */
+        fun enabledUsesTouchUsage(enabled: Boolean, samsungTuned: Boolean, systemHapticEnabled: Boolean): Boolean =
+            enabled && !samsungTuned && systemHapticEnabled
+
         /** 删除音连发时只保留最新一层；其他按键音照常可以重叠。 */
         fun chokesPrevious(keyType: String): Boolean = keyType == "delete"
 
@@ -385,11 +394,9 @@ class FeedbackManager(private val context: Context) {
             return
         }
         if (duration != 0L) {
-            if (hasAmplitudeControl && amplitude != 0) {
-                vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
-            } else {
-                vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
-            }
+            // 自定义时长只在「启用」里有；和上面一样经 vibrateTouch 标用途（三星照旧不标）。
+            vibrateTouch(VibrationEffect.createOneShot(duration,
+                if (hasAmplitudeControl && amplitude != 0) amplitude else VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
             view.performHapticFeedback(hfc, systemHapticFlags())
         }
@@ -465,9 +472,14 @@ class FeedbackManager(private val context: Context) {
         return true
     }
 
-    /** 跟随系统时标记为触摸反馈，随系统“触摸互动”强度；强制启用时不受系统开关影响。 */
+    /**
+     * 跟随系统时标记为触摸反馈，随系统“触摸互动”强度；强制启用时不受系统开关影响。
+     * 「启用」在非三星机型上、系统触感开着时也标成触摸反馈（[enabledUsesTouchUsage]）。
+     */
     private fun vibrateTouch(effect: VibrationEffect) {
-        if (hapticMode == HapticMode.FollowingSystem && AndroidPlatform.touchVibrationUsage) {
+        val touchUsage = hapticMode == HapticMode.FollowingSystem ||
+            enabledUsesTouchUsage(hapticMode == HapticMode.Enabled, samsungTuned, systemHapticEnabled())
+        if (touchUsage && AndroidPlatform.touchVibrationUsage) {
             vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
         } else {
             vibrator.vibrate(effect)

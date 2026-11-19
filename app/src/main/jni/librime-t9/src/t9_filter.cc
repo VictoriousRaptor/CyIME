@@ -415,10 +415,18 @@ T9Translation::T9Translation(an<Translation> translation,
 
 bool T9Translation::Next() {
     if (exhausted()) return false;
-    if (!translation_->Next()) {
-        set_exhausted(true);
-        return false;
+    if (!pending_.empty()) {
+        pending_.pop_front();
+        if (!pending_.empty()) {
+            cand_ = pending_.front();
+            ConvertCurrent();
+            return true;
+        }
+        // 补出的候选给完了，接着给原来停在那里的候选（还没从 translation_ 取走）。
+        Advance();
+        return !exhausted();
     }
+    translation_->Next();
     Advance();
     return !exhausted();
 }
@@ -432,16 +440,37 @@ void T9Translation::Advance() {
         }
         // 拂动固定的字母：只保留该位置拼音字母一致的候选。
         if (cand_) {
+            const size_t end = cand_->end();
+            if (longest_end_ == 0) longest_end_ = end;
             if (auto* proc = T9ProcessorRequire()) {
                 if (proc->HasLetterConstraints()) {
                     auto genuine = Candidate::GetGenuineCandidate(cand_);
-                    if (genuine && !proc->MatchesLetterConstraints(genuine->start(), genuine->comment())) {
+                    if (genuine && !proc->MatchesLetterConstraints(genuine->start(), genuine->end(), genuine->comment())) {
+                        if (end >= longest_end_ && !longest_shown_ && fallback_.size() < 3) fallback_.push_back(cand_);
                         translation_->Next();
                         continue;
                     }
                 }
             }
+            if (end < longest_end_ && !longest_shown_ && !fallback_.empty()) {
+                // 最长一档一个都没对上：先给出它被拦下的前几个，当前这个短候选留在 translation_ 里稍后再给。
+                longest_shown_ = true;
+                pending_.assign(fallback_.begin(), fallback_.end());
+                fallback_.clear();
+                cand_ = pending_.front();
+                ConvertCurrent();
+                return;
+            }
+            if (end >= longest_end_) longest_shown_ = true;
         }
+        ConvertCurrent();
+        return;
+    }
+    if (!longest_shown_ && !fallback_.empty()) {
+        longest_shown_ = true;
+        pending_.assign(fallback_.begin(), fallback_.end());
+        fallback_.clear();
+        cand_ = pending_.front();
         ConvertCurrent();
         return;
     }

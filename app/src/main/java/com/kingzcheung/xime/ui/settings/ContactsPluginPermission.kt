@@ -24,7 +24,7 @@ internal fun rememberContactsPermissionGate(pluginId: String): (Boolean, () -> U
         val proceed = pending
         pending = null
         if (granted) proceed?.invoke()
-        else Toast.makeText(context, CONTACTS_DENIED, Toast.LENGTH_LONG).show()
+        else com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, CONTACTS_DENIED, Toast.LENGTH_LONG).show()
     }
     return { turnOn, proceed ->
         if (!turnOn || ContactSuggestions.hasPermission(context) || !ContactSuggestions.isContactsPlugin(pluginId)) proceed()

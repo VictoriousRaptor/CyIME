@@ -311,6 +311,24 @@ struct Adapt {
     Freeze();
     if (n1 == 0) n1 = 1;
   }
+  // cylm_forget: every trigram with one of `ids` or among `keys` is taken out; the lower orders are rebuilt from the
+  // rest as Decay does. Returns the number taken out.
+  size_t Forget(const std::unordered_set<int32_t>& ids, const std::unordered_set<uint64_t>& keys) {
+    std::vector<std::pair<uint64_t, float>> kept;
+    size_t removed = 0;
+    c3.Each([&](uint64_t k, float c) {
+      const int32_t a = int32_t(k >> 42), b = int32_t((k >> 21) & 0x1FFFFF), w = int32_t(k & 0x1FFFFF);
+      if (keys.count(k) || ids.count(a) || ids.count(b) || ids.count(w)) { ++removed; return; }
+      kept.push_back({k, c});
+    });
+    if (!removed) return 0;
+    c3.Clear(); h3.Clear(); t3.Clear(); cont2.Clear(); h2.Clear(); t2.Clear(); cont1.Clear(); n1 = 0; vocab = 1;
+    for (auto& [k, c] : kept) AddTrigram(int32_t(k >> 42), int32_t((k >> 21) & 0x1FFFFF), int32_t(k & 0x1FFFFF), c);
+    Freeze();
+    if (n1 == 0) n1 = 1;
+    ++version;
+    return removed;
+  }
   size_t Trigrams() const { return c3.Size(); }
   bool Save(const char* path) const {  // the counts file Load reads (cylm_adapt)
     std::ofstream out(path, std::ios::binary); if (!out) return false;
@@ -1481,6 +1499,32 @@ int cylm_learn(CylmModel* m, const char* text, double count) {
   int words = 0;
   for (auto& run : LearnRuns(m, text)) { m->adapt.Add(run, count > 0 ? count : 1.0, m->p.adapt_cap); words += int(run.size()); }
   return words;
+}
+// cylm_forget on the words of a text (LearnRuns): the trigrams to take out, see cylm.h.
+static size_t ForgetRuns(Adapt& adapt, const std::vector<std::vector<std::string>>& runs) {
+  if (!adapt.loaded) return 0;
+  size_t words = 0;
+  for (const auto& run : runs) words += run.size();
+  std::unordered_set<int32_t> ids;
+  std::unordered_set<uint64_t> keys;
+  const int32_t start = adapt.Lookup("<s>"), end = adapt.Lookup("</s>");
+  for (const auto& run : runs) {
+    int32_t a = start, b = start;
+    bool known = start >= 0;
+    for (const auto& w : run) {
+      const int32_t x = adapt.Lookup(w);
+      if (x >= 0 && (words == 1 || Utf8Decode(w).size() >= 2)) ids.insert(x);
+      known = known && x >= 0;
+      if (known) keys.insert(Adapt::K3(a, b, x));
+      a = b; b = x;
+    }
+    if (known && end >= 0) keys.insert(Adapt::K3(a, b, end));
+  }
+  return adapt.Forget(ids, keys);
+}
+int cylm_forget(CylmModel* m, const char* text) {
+  if (!m || !text) return -1;
+  return m->adapt.loaded ? int(ForgetRuns(m->adapt, LearnRuns(m, text))) : 0;
 }
 int cylm_add_word(CylmModel* m, const char* word, const char* pinyin, long long weight) {
   if (!m || !word || !pinyin) return -1;

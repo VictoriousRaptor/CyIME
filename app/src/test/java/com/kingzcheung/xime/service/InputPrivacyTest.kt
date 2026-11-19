@@ -98,4 +98,13 @@ class InputPrivacyTest {
         assertFalse(IncognitoState.passwordField)
         assertTrue(IncognitoState.active)
     }
+
+    @Test fun lockedWordOrderStopsEngineLearningWithoutIncognito() {
+        privacy.beginEditor(field(text))
+        privacy.setLockWordOrder(true)
+        assertFalse("剪贴板和联想照常", IncognitoState.active)
+        privacy.beginEditor(field(text))
+        privacy.setLockWordOrder(false)
+        assertEquals(listOf(false, true, false), engine)
+    }
 }

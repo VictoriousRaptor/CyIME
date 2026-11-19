@@ -21,6 +21,19 @@ import kotlinx.coroutines.withContext
 /** CyIME 引擎补丁里的选项：全角默认只换全角标点表；开着时上屏的字母、数字、空格也改成全角（日文全角英数）。 */
 internal const val FULL_SHAPE_ASCII_OPTION = "cyime_full_shape_ascii"
 
+/**
+ * 字母键盘停一下后要不要让引擎补查一遍。26 键全拼补漏键和打反两种，各跟自己的开关（关掉时方案补丁已让引擎不查）；
+ * 双拼补少打一个键、同一个键多按一下、两个键打反，后两种和设置页一样要先开着邻键纠错。
+ */
+internal fun pauseLookupWanted(
+    doublePinyin: Boolean, neighbor: Boolean, typo: (com.kingzcheung.xime.settings.SpellingPatches.Typo) -> Boolean,
+): Boolean {
+    val omission = typo(com.kingzcheung.xime.settings.SpellingPatches.Typo.OMISSION)
+    val swap = typo(com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)
+    return if (!doublePinyin) omission || swap
+        else omission || (neighbor && (swap || typo(com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
+}
+
 /** 方案里也有、但由设置页开关决定的 Rime 开关：不从 user.yaml 恢复，见 [ImeSessionController.applyCandidateOptions]。 */
 private val SETTING_SWITCHES = setOf("traditionalization", "emoji")
 
@@ -46,15 +59,18 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         omissionPause.onComposition(state.inputText.length, android.os.SystemClock.uptimeMillis())
         val ui = service.uiState.value
         val profile = ui.inputProfile
+        // 双拼 26 键（11-16）停一下后也补：少打一个键、同一个键多按一下、两个键打反。
+        val doublePinyin = profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
         if (ascii || !service.isChineseMode || !state.isComposing || state.hasPrevPage ||
             profile.language != InputLanguage.CHINESE ||
-            profile.scheme != com.kingzcheung.xime.settings.InputScheme.PINYIN ||
+            (profile.scheme != com.kingzcheung.xime.settings.InputScheme.PINYIN && !doublePinyin) ||
             profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC ||
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
             state.inputText.length !in 4..80 || state.inputText.any { it !in 'a'..'z' }) return
-        // 停顿后只补漏键和打反两种读法：两个都关了就不再算一遍（方案补丁已让引擎不查，这里省掉这次重算）。
-        if (!com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.OMISSION) &&
-            !com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)) return
+        // 停顿后只补漏键和打反两种读法（双拼还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
+        if (!pauseLookupWanted(doublePinyin, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
+                com.kingzcheung.xime.settings.SpellingPatches.typo(service, it)
+            }) return
         val length = state.inputText.length
         omissionJob = service.serviceScope.launch(Dispatchers.Main.immediate) {
             // 停顿按自己的打字节奏算，打字途中不补算；补算占着引擎时退格和下一键都得等（见 OmissionPause）。
@@ -213,6 +229,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             preeditText = displayText,
             candidates = displayCandidates,
             candidateComments = displayComments,
+            learnedCandidates = candidatesWithComments.filter { it.learned }.mapTo(HashSet()) { it.text },
             correctedCandidates = candidatesWithComments.filter { it.correction.isNotEmpty() }.associate { it.text to it.correction },
             isComposing = isComposing,
             // 刚打 @ 给的邮箱后缀（默认关）不是英文补全，跟着这次刷新留着。
@@ -380,6 +397,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             preeditText = displayText,
             candidates = displayCandidates,
             candidateComments = displayComments,
+            learnedCandidates = candidatesWithComments.filter { it.learned }.mapTo(HashSet()) { it.text },
             correctedCandidates = candidatesWithComments.filter { it.correction.isNotEmpty() }.associate { it.text to it.correction },
             isComposing = isComposing,
             // 刚打 @ 给的邮箱后缀（默认关）不是英文补全，跟着这次刷新留着。
@@ -609,6 +627,22 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             val cylmAlternative = prefs.getBoolean(KeyboardInputPreferences.CYLM_LONG_ALTERNATIVE_KEY, false)
             if (persist || cylmAlternative) add("cyime_cylm_alternative" to cylmAlternative)
             add("cyime_rare_chars" to prefs.getBoolean(KeyboardInputPreferences.RARE_CHARACTERS_KEY, false))
+            // 九键停一下后的数字纠错跟「拼音纠错」的开关走：按到上下左右的键跟邻键纠错，两个数字按反跟顺序纠错
+            // （设置页里它要先开邻键纠错），少按一个跟漏键纠错。选项为真 = 关，没写过时都开。
+            val neighbor = prefs.getBoolean("neighbor_correction", true)
+            add("_cyime_digit_tap_off" to !neighbor)
+            add("_cyime_digit_swap_off" to
+                !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)))
+            add("_cyime_digit_omission_off" to
+                !com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.OMISSION))
+            // 双拼停一下后的纠错跟同样三个开关走：少打一个键跟漏键纠错，同一个键多按一下跟多键纠错，两个键打反跟顺序纠错
+            // （后两个在设置页里要先开邻键纠错）。
+            add("_cyime_pause_omission_off" to
+                !com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.OMISSION))
+            add("_cyime_pause_extra_off" to
+                !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
+            add("_cyime_pause_swap_off" to
+                !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)))
             add("_cyime_l_letter" to lLetter)
         }
         var changed = false

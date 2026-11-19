@@ -204,9 +204,10 @@ private fun NumberRows(
     specialKeyTextColor: Color = Color.White,
     enterKeyText: String = "确定",
 ) {
-    val modeWeight = 0.8f
+    val modeWeight = NineGridFrame.BOTTOM_MODE
     val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(LocalKeyboardInputPreferences.current.symbolKeyCycle)
-    val symFontSize = if (compactMode) 14.sp else 18.sp
+    // 左栏符号和数字键同一个字号（用户 11-18：符号和按键字号不一样）。
+    val symFontSize = if (compactMode) 16.sp else KeyboardKeyMetrics.LabelSize
     val keyFontSize = if (compactMode) 16.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     val ctrlFontSize = if (compactMode) 12.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     // 左栏符号可在「按键符号 → 数字侧栏」改（用户 11-09）；没改过仍是 + - * /。四格一屏，多出的上下滑，末尾一格「编辑」。
@@ -217,11 +218,11 @@ private fun NumberRows(
             NumberSymbolRail(symbols = symbols, onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor, fontSize = symFontSize,
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
-                modifier = Modifier.weight(0.8f).fillMaxHeight().testTag("number-operators")
+                modifier = Modifier.weight(NineGridFrame.SIDE).fillMaxHeight().testTag("number-operators")
                     .padding(scaledKeyVisualPadding())
                     // 键缝动效：左栏不是键，按它不画；登记位置是为了线能绕着它走。
                     .then(keyGapLightSource(GapLightKind.NONE)))
-            Column(Modifier.weight(3.4f).fillMaxHeight()) {
+            Column(Modifier.weight(NineGridFrame.MAIN).fillMaxHeight()) {
                 listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) {
                         row.forEach { key ->
@@ -234,7 +235,7 @@ private fun NumberRows(
                     }
                 }
             }
-            Column(Modifier.weight(0.8f).fillMaxHeight().testTag("number-actions")) {
+            Column(Modifier.weight(NineGridFrame.ACTION).fillMaxHeight().testTag("number-actions")) {
                 SwipeableIconKeyButton(
                     icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
                     onClick = { onKeyPress("delete") }, backgroundColor = specialKeyBackgroundColor,
@@ -270,7 +271,7 @@ private fun NumberRows(
                 shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
             KeyButton(text = "0", onClick = { onKeyPress("0") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(3.4f - modeCount * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
+                modifier = Modifier.weight(NineGridFrame.MAIN - modeCount * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：
@@ -278,7 +279,7 @@ private fun NumberRows(
             val bottomSwipeUp = LocalKeyboardInputPreferences.current.bottomPunctuationSwipeUp
             SwipeableKeyButton(text = ".", onClick = { onKeyPress(".") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(0.8f).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
+                modifier = Modifier.weight(NineGridFrame.ACTION).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
                 swipeText = NUMBER_DOT_ALTERNATE, symbolInputText = NUMBER_DOT_ALTERNATE,
                 onSwipe = { onKeyPress(NUMBER_DOT_ALTERNATE) }, onSwipeStateChange = onSwipeStateChange,
                 followSymbolSwipeDirection = !bottomSwipeUp, keepSymbolSwipeOnLongPress = bottomSwipeUp,
@@ -286,7 +287,7 @@ private fun NumberRows(
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             ActionKeyButton(text = enterKeyText, onClick = { onKeyPress("enter") },
                 backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                modifier = Modifier.weight(0.8f), onPress = { onKeyPressDown?.invoke("enter") },
+                modifier = Modifier.weight(NineGridFrame.ACTION), onPress = { onKeyPressDown?.invoke("enter") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = ctrlFontSize)
         }
@@ -330,7 +331,7 @@ private fun NumberSymbolRail(
         .then(shadowModifier)
         .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
         .background(frostedKeyColor(backgroundColor, textColor, frostedGlass))) {
-        val rowHeight = maxHeight / 4
+        val rowHeight = maxHeight / NineGridFrame.SIDE_VISIBLE_SLOTS
         val railState = rememberLazyListState()
         LazyColumn(state = railState, modifier = Modifier.fillMaxSize().testTag("number-symbol-rail")
             .railScrollIndicator(railState, textColor.copy(alpha = 0.35f))) {
@@ -358,7 +359,7 @@ private fun NumberSymbolKey(
     textColor: Color,
     modifier: Modifier = Modifier,
     onPress: (() -> Unit)? = null,
-    fontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
+    fontSize: androidx.compose.ui.unit.TextUnit = KeyboardKeyMetrics.LabelSize,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
@@ -378,7 +379,8 @@ private fun NumberSymbolKey(
                 }, onTap = { currentOnClick() })
             }, contentAlignment = Alignment.Center
     ) {
-        val fittedSize = keyLabelSizeSp(text, fontSize.value, maxWidth.value, maxHeight.value - 4f, density.fontScale)
+        val fittedSize = keyLabelSizeSp(text, fontSize.value, maxWidth.value, maxHeight.value - 4f, density.fontScale,
+            LocalKeyboardInputPreferences.current.keyTextScale)
         Text(
             text = punctuationKeyLabel(text),
             color = textColor,

@@ -295,4 +295,39 @@ class SpellingPatchesTest {
         assertNull(SpellingPatches.AuxCode.of("off"))
         assertEquals("`", SpellingPatches.AUX_CODE_TRIGGER)
     }
+
+    /** 纠错强度（11-16）：和出厂方案一样的档不写也不读方案文件，没有这个键的方案不写，别的档写成方案补丁。 */
+    @Test fun correctionStrengthIsWrittenOnlyWhenItDiffersFromTheShippedScheme() {
+        val ice = "t9:\n  slip_correction_margin: 9.2\n  correction_lead_bias: ${TypoStrength.LEAD_DEFAULT.bias}\n"
+        var read = 0
+        assertTrue(SpellingPatches.leadLines({ read++; ice }, TypoStrength.LEAD_DEFAULT).isEmpty())
+        assertEquals(0, read)
+        assertEquals(listOf("\"t9/correction_lead_bias\": 99.0"), SpellingPatches.leadLines({ ice }, TypoStrength.Lead.NEVER))
+        assertEquals(listOf("\"t9/correction_lead_bias\": 0.0"), SpellingPatches.leadLines({ ice }, TypoStrength.Lead.STANDARD))
+        assertEquals(listOf("\"t9/correction_lead_bias\": -2.3"), SpellingPatches.leadLines({ ice }, TypoStrength.Lead.EAGER))
+        // 14 键等不纠错的方案没有这个键，什么都不写。
+        assertTrue(SpellingPatches.leadLines({ schema }, TypoStrength.Lead.NEVER).isEmpty())
+        val nine = "t9:\n  joint_decoder: true\n  digit_edit_margin: ${TypoStrength.DIGIT_DEFAULT.margin}\n"
+        assertTrue(SpellingPatches.digitLines({ nine }, TypoStrength.DIGIT_DEFAULT).isEmpty())
+        assertEquals(listOf("\"t9/digit_edit_margin\": 6.0"), SpellingPatches.digitLines({ nine }, TypoStrength.Digit.STRICT))
+        assertTrue(SpellingPatches.digitLines({ schema }, TypoStrength.Digit.STRICT).isEmpty())
+        // 写出来是合法补丁，Rime 读到的是数。
+        val custom = SpellingPatches.patch("", SpellingPatches.leadLines({ ice }, TypoStrength.Lead.EAGER))!!
+        val patch = (SchemaManager.yaml.parseToYamlNode(custom) as YamlMap).entries.entries.single { it.key.content == "patch" }.value as YamlMap
+        assertEquals("-2.3", (patch.entries.entries.single { it.key.content == "t9/correction_lead_bias" }.value as YamlScalar).content)
+        // 存的档名认不出来时回到默认档。
+        assertEquals(TypoStrength.LEAD_DEFAULT, TypoStrength.Lead.of("gone"))
+        assertEquals(TypoStrength.LEAD_DEFAULT, TypoStrength.Lead.of(null))
+        assertEquals(TypoStrength.DIGIT_DEFAULT, TypoStrength.Digit.of(null))
+    }
+
+    /** 默认档就是出厂方案里写的数：改了一边忘了另一边，默认档的人会拿到别的强度。 */
+    @Test fun defaultStrengthMatchesTheShippedSchemes() {
+        val gradle = java.io.File("build-logic/tasks-chinese.gradle.kts").readText()
+        assertTrue(gradle.contains("\"  correction_lead_bias: ${TypoStrength.LEAD_DEFAULT.bias}\\n\""))
+        val nine = java.io.File("src/main/assets/rime_chinese/t9_pinyin.schema.yaml").readText()
+        assertTrue(nine.contains("\n  digit_edit_margin: ${TypoStrength.DIGIT_DEFAULT.margin}\n"))
+        assertTrue(nine.contains("\ncyime_edit_schema: cyime_digit_edit\n"))
+        assertTrue(nine.contains("    - cyime_digit_edit\n    - cyime_digit_tap\n"))
+    }
 }

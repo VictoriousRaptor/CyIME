@@ -42,7 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -206,7 +206,7 @@ fun SchemaSettingsContent(
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             viewModel.clearToast()
         }
     }
@@ -214,7 +214,7 @@ fun SchemaSettingsContent(
     LaunchedEffect(localUiState.toastMessage) {
         localUiState.toastMessage?.let { message ->
             if ('\n' in message) viewModel.reportImport(message)
-            else Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            else com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             localViewModel.clearToast()
         }
     }
@@ -308,6 +308,19 @@ fun SchemaSettingsContent(
                         }
                     }
                 }
+                // 启用着、这台设备上却没有方案文件的（从备份恢复了启用记录，导入方案的文件没跟过来）：
+                // 列表里没有它那一行，没生效的原因写在这里，可以直接停用。
+                uiState.schemaProblems.filterKeys { it in enabledIds && it !in installedIds && it != InputModes.ENGLISH }
+                    .forEach { (id, reason) ->
+                        item(key = "schema-missing-$id") {
+                            Row(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("schema-missing-$id"),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text("$id：$reason", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = { viewModel.toggleSchema(SchemaMeta(id, id)) }) { Text("停用") }
+                            }
+                        }
+                    }
                 item {
                     SettingsGroupTitle("已启用的输入组合", Modifier.padding(top = 8.dp))
                 }

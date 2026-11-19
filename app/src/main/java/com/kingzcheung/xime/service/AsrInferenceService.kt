@@ -23,6 +23,7 @@ import com.kingzcheung.xime.util.FileLogger
 import com.kingzcheung.xime.settings.InputLanguage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import com.kingzcheung.xime.speech.SherpaLibrary
 
 /** Model weights and both decode workers live in :asr, never on the keyboard UI thread. */
 class AsrInferenceService : Service() {
@@ -162,6 +163,7 @@ class AsrInferenceService : Service() {
                 val manager = AsrModelManager(this@AsrInferenceService)
                 val chosen = manager.selection(modelId, language)
                 check(chosen.ready) { "所选语音模型尚未完整下载" }
+                check(SherpaLibrary.available(this@AsrInferenceService)) { SherpaLibrary.MISSING }
                 // 整句定稿只用于中文（规则见 SpeechModelSelection.wholeSentenceApplies，设置页同一条）：
                 // X-ASR 已下载时用它定稿（代替 SenseVoice），没下载照旧用 SenseVoice。
                 val wholeSentence = wholeSentenceFinal &&
@@ -327,6 +329,7 @@ class AsrInferenceService : Service() {
                     else -> base.copy(recognitionLanguage = "zh")
                 }
                 check(selection.ready) { "所选语音模型尚未完整下载" }
+                check(SherpaLibrary.available(this@AsrInferenceService)) { SherpaLibrary.MISSING }
                 val tracker = if (speakerModelPath.isNotEmpty() && java.io.File(speakerModelPath).isFile) {
                     loadSpeakerModel(speakerModelPath)
                     readSelfPrint()?.let(speakerTracker::seedSelf)
@@ -423,6 +426,12 @@ class AsrInferenceService : Service() {
     }
 
     override fun onBind(intent: Intent): IBinder = if (intent.action == ACTION_CAPTION) captionBinder else binder
+    override fun onCreate() {
+        super.onCreate()
+        // 轻量版的语音引擎是下载的：sherpa 的类加载库前要知道去哪找（speech/SherpaLibrary.kt）。
+        SherpaLibrary.attach(this)
+    }
+
     override fun onDestroy() {
         generation.incrementAndGet()
         captionGeneration.incrementAndGet()

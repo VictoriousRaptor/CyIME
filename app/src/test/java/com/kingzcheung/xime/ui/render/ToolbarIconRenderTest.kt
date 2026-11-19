@@ -36,7 +36,7 @@ import java.io.File
 
 /**
  * 工具栏、菜单里的 AI 回复、AI 改写、翻译用线条图标，不再显示插件的单字（应、改、译）；
- * 简繁开关的图标就是「简」或「繁」字（用户 2026-11-11）。设置了 CYIME_RENDER_OUT 时另出浅色、深色图。
+ * 简繁开关的图标是「简」或「繁」字（用户 2026-11-11），画成矢量图标、不排文字，和旁边图标一样高（11-17）。设置了 CYIME_RENDER_OUT 时另出浅色、深色图。
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = android.app.Application::class, qualifiers = "w360dp-h640dp-mdpi")
@@ -91,7 +91,7 @@ class ToolbarIconRenderTest {
             }
         }
         rule.waitForIdle()
-        for (glyph in listOf("应", "改", "译")) rule.onAllNodesWithText(glyph, useUnmergedTree = true).assertCountEquals(0)
+        for (glyph in listOf("应", "改", "译", "简", "繁")) rule.onAllNodesWithText(glyph, useUnmergedTree = true).assertCountEquals(0)
         assertEquals(2, rule.onAllNodesWithContentDescription("简体", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(2, rule.onAllNodesWithContentDescription("繁体", useUnmergedTree = true).fetchSemanticsNodes().size)
 

@@ -31,6 +31,9 @@ class StrokeWordEngineTest {
                 assertEquals(input, "笔画", typeAndCommit(input))
                 assertEquals("", engine.getInput())
             }
+            // n 个分词号出 n+1 个字，分词号后面、中间没打笔画也算一个字（11-18 贡献者）。
+            assertEquals("骆驼", typeAndCommit("zzhpzns'"))
+            assertEquals("吉祥如意", typeAndCommit("hshszh'nzsnnphhhs''"))
         } finally {
             engine.clearQueuedComposition()
             if ("stroke" !in enabled) {

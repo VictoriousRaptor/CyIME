@@ -245,4 +245,14 @@ class CustomKeyboardLayoutTest {
         // A rime_ice that is not CyIME's own (market or hand-written) never overwrites layout schemas.
         assertNull(CustomKeyboardLayouts.refreshedSchema(base.replace("cyime_neighbor_correction: true", ""), old, null))
     }
+    @Test fun mergedKeyLongPressListsEachLettersOwnChoices() {
+        // 用户 11-17：长按自建合并键只出 w、e 两个字母，带声调的字母、大写出不来。
+        val layout = CustomKeyboardLayout.fresh().merge("w")
+        assertEquals("we", layout.rows.first()[1])
+        val e = listOf("e", "E", "é", "è").map { GestureDef(label = it, value = it) }
+        val base = mapOf("e" to KeyGestureConfig(longPress = LongPressConfig("bubble", e)))
+        val longPress = layout.gestures(base)["we"]?.longPress
+        assertEquals("bubble", longPress?.display)
+        assertEquals(listOf("w", "W", "e", "E", "é", "è"), longPress?.values?.map { it.label })
+    }
 }

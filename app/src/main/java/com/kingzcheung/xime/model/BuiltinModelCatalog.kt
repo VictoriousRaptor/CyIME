@@ -10,6 +10,11 @@ object BuiltinModelCatalog {
     const val OCR_MODEL = "ocr-ppocr-v5"
     /** 拍照识别引擎（OpenCV 原生库）。轻量版不带，和拍照识别模型一起下载（ocr/OcrEngine.kt）。 */
     const val OCR_ENGINE = "ocr-engine"
+    /** 语音引擎（sherpa-onnx 原生库）。轻量版不带，和语音模型一起下载（speech/SherpaLibrary.kt、SpeechEnginePack.kt）。 */
+    const val SPEECH_ENGINE = "speech-engine"
+    /** 手写生僻字模板、日语手写模板（assets/handwriting 里的几份大文件）。轻量版不带，和手写模型、「日语」插件一起下载（handwriting/HandwritingAssets.kt）。 */
+    const val HANDWRITING_RARE = "handwriting-rare"
+    const val JAPANESE_HANDWRITING = "japanese-handwriting"
     /** 日语词库（azooKey 词典 zip）和日语转换引擎（libCyAzooKey.so）。轻量版不带，装「日语」插件时下载（settings/JapanesePack.kt）。 */
     const val JAPANESE_DICTIONARY = "japanese-dictionary"
     const val JAPANESE_ENGINE = "japanese-engine"
@@ -68,6 +73,50 @@ object BuiltinModelCatalog {
                     archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-arm64-v8a.tar.bz2"),
                     files = listOf(ModelFile("libopencv_java4.so", "", "144bbc9ad0b0bac4ba58f7d53198aead64379e5314f68200968c703d2c1c14ab", 23465088L)))
             })),
+        // 语音引擎：sherpa-onnx 1.13.8（静态链接 onnxruntime 的 AAR，tasks-speech.gradle.kts 固定哈希）里的 libsherpa-onnx-jni.so，
+        // 和以前打进安装包的逐字节相同，每个 ABI 打成一个 tar.bz2 传到 Release `models` 和魔搭。轻量版和语音模型一起下载；
+        // 完整版、离线包仍在安装包里。32 位 x86 那份要安装包里的 libonnxruntime.so（和以前一样）。
+        ModelInfo(SPEECH_ENGINE, "语音引擎", "语音输入和字幕识别用的程序库（sherpa-onnx）。轻量版下载语音模型时一起下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(when (NativeAbi.current) {
+                "armeabi-v7a" -> ModelVersion(version = "1.13.8", size = "7.3 MB",
+                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-armeabi-v7a.tar.bz2", sha256 = "7894451dbe5b40aa4d9aeba0037a7863a4ea32aa9c4c332c71ff770405348882",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-armeabi-v7a.tar.bz2"),
+                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "2c0350f9c23dda60318c0d195fcc02d505f05cdbfba89492a4468d2c4276be28", 16437284L)))
+                "x86_64" -> ModelVersion(version = "1.13.8", size = "8.6 MB",
+                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-x86_64.tar.bz2", sha256 = "13559cfcf1ec2935a72eb0541fff99531a6fd60e696c51df36c34b108c66d217",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-x86_64.tar.bz2"),
+                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "968e24f61d1e4dae0d5e7860aded42fee45b0f804e1c5a42dfa49186864cefc4", 27359872L)))
+                "x86" -> ModelVersion(version = "1.13.8", size = "1.9 MB",
+                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-x86.tar.bz2", sha256 = "abeaf9f3acb91535b1a72fa180fa0a2f183ef4f5602671ae0cfb623ad1ba49ce",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-x86.tar.bz2"),
+                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "914ce3d8e77c4ec13b178a8657b2bb9d6187ea6deddbdd519be0373c71eb681d", 5540732L)))
+                else -> ModelVersion(version = "1.13.8", size = "7.8 MB",
+                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-arm64-v8a.tar.bz2", sha256 = "038427c68909fae26c5c2a4ceb080b13e75a6d3c0f688700915530c019761f74",
+                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-arm64-v8a.tar.bz2"),
+                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "b4a53d915c19cb6d09b1cdc9a8084be54419b647aab9097ffdfb46f30c3c4dd8", 24169352L)))
+            })),
+        // 手写生僻字模板、日语手写模板：app/src/main/assets/handwriting 里的原文件（scripts/packs/make_packs.py 打包，
+        // 换了文件重跑它并改这里，HandwritingPackCatalogTest 对得上才过）。轻量版不带，完整版、离线包仍在安装包里。
+        ModelInfo(HANDWRITING_RARE, "手写生僻字", "手写时认字表外的生僻字用的笔顺模板。轻量版下载手写模型时一起下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(ModelVersion(version = "c2f28f4e", size = "3.8 MB",
+                archiveUrl = RELEASE + "handwriting-rare-c2f28f4e.tar.bz2", sha256 = "c2f28f4eefede9b70f844d2db84083b26ddbd76e9ec3f85525d559e98826438d",
+                archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "handwriting-rare-c2f28f4e.tar.bz2"),
+                files = listOf(
+                    ModelFile("hanzi_rare_och.bin", "", "b901f5d89eedcd6614adb606a08926af2c035281e384964376e79595ac6dc26c", 4797590L),
+                    ModelFile("hanzi_rare_och.json", "", "f31e0a2396092aea18d0440f5911d8cce2e64cdbbb13f44c94dd74e221f2356b", 60370L),
+                )))),
+        ModelInfo(JAPANESE_HANDWRITING, "日语手写", "日语手写认假名和日本汉字用的模板。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
+            versions = listOf(ModelVersion(version = "ae50e784", size = "3.0 MB",
+                archiveUrl = RELEASE + "japanese-handwriting-ae50e784.tar.bz2", sha256 = "ae50e7840fead3b94733f5fd9f50fedf682d9a342799dda510de979cc4b76150",
+                archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-handwriting-ae50e784.tar.bz2"),
+                files = listOf(
+                    ModelFile("kana_default_strokes.json", "", "2b82e9b4ee2c463909e385904f604709af411a02463bda0e46cfd66c801870ab", 1087267L),
+                    ModelFile("kana_default_och.bin", "", "d906eab4c82fed3450496a155b1e007429946dcc4e850f0493b97db32485fa4c", 2027520L),
+                    ModelFile("kana_default_och.json", "", "24396db84969ea66e4d3338e9872dd99ed2badb5f52dcc35d01d89fe5057bb8b", 9606L),
+                    ModelFile("japanese_kanji_strokes.json", "", "d3fd183315af5e4e9f5b6c171acbc3e0d31f3689c94870c092fe934ecc71529b", 1450736L),
+                    ModelFile("japanese_kanji_och.bin", "", "5cd4ec8bb303905c767d819f0afefb725e135e7c38f88f5dbadc27847dedc6a9", 1013760L),
+                    ModelFile("japanese_kanji_och.json", "", "0bac23cf96a695c4b5af96a19ad0058c55c55f3933348c21cf3d1b5a7744e390", 4863L),
+                )))),
         // 日语词库：tasks-japanese.gradle.kts 生成的 azooKey 词典 zip（上游固定提交 + Mozc 名词，内容哈希 7776faa0…，
         // 和以前打进安装包的 assets/azookey/dictionary.zip 逐字节相同），原样传到 Release `models` 和魔搭。
         // 轻量版装「日语」插件时下载，解到 rime/azookey/dictionary；完整版、离线包仍在安装包里。
@@ -167,6 +216,14 @@ object BuiltinModelCatalog {
             versions = listOf(ModelVersion(version = "v1", size = "0.62 MB",
                 files = listOf(ModelFile("cyime-words-ru-v1.txt", RELEASE + "cyime-words-ru-v1.txt", "7a818abbe5e85670b76cdac369453848c664540122cf33112365eae749728177", 654612L,
                     mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "cyime-words-ru-v1.txt")))))),
+        ModelInfo("words-vi", "越南语补全词表", "越南语键盘的音节补全，约 6 千个常用音节。不打声调也能补全：nguoi → người、duoc → được。", ModelCategory.OTHER,
+            versions = listOf(ModelVersion(version = "v1", size = "0.03 MB",
+                files = listOf(ModelFile("cyime-words-vi-v1.txt", RELEASE + "cyime-words-vi-v1.txt", "ba0b904e941d1f60826b54a36b8b272aa866bfeec97cd1b2b836636a36b0aa22", 35000L,
+                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "cyime-words-vi-v1.txt")))))),
+        ModelInfo("words-ms", "马来语补全词表", "马来语键盘的单词补全，约 2 万个常用词。叠词打 kanak- 就补 kanak-kanak，马来语词不够时补英文词。", ModelCategory.OTHER,
+            versions = listOf(ModelVersion(version = "v1", size = "0.20 MB",
+                files = listOf(ModelFile("cyime-words-ms-v1.txt", RELEASE + "cyime-words-ms-v1.txt", "df3794541aa76d58bdd9bf5cd3e1534b355c6c9eb091bb63879ceb09ed510e64", 199430L,
+                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "cyime-words-ms-v1.txt")))))),
         // 日语转换引擎：tools/azookey/build-android.sh 编译的 libCyAzooKey.so（和 tasks-japanese.gradle.kts 登记的哈希相同），
         // 每个 ABI 一个 tar.bz2。Swift 不支持 32 位 x86，那里没有这一项（日语照旧只显示罗马字）。
         // 日语翻译器（jni/cyime_azookey）先找安装包里的，再找这里下载的 files/models/japanese-engine。

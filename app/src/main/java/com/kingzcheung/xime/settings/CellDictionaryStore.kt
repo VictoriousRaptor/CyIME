@@ -179,7 +179,8 @@ class CellDictionaryStore(val directory: File) {
 
     /**
      * A file picked by the user, copied to disk first (bounded, hashed on the way) instead of into memory. A plain
-     * or Rime list is converted line by line, up to [TxtCellDictionary.MAX_BYTES] (万象's base list is 49 MB);
+     * or Rime list (also inside a Gboard zip, or from a Microsoft Pinyin .dctx: [DictionaryImportFormats]) is
+     * converted line by line, up to [TxtCellDictionary.MAX_BYTES] (万象's base list is 49 MB);
      * SCEL and JSON stay at 16 MB and go through [install].
      */
     fun installFile(input: InputStream): InstalledCellDictionary {
@@ -216,7 +217,12 @@ class CellDictionaryStore(val directory: File) {
                 require(source.length() <= ScelDictionary.MAX_BYTES) { "SCEL 和 JSON 词库最大 16 MB" }
                 return install(source.readBytes())
             }
-            return installText(source, digest.digest().joinToString("") { "%02x".format(it) })
+            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            // Gboard's zip and Microsoft Pinyin's .dctx are unpacked to plain lines first.
+            DictionaryImportFormats.toText(source)?.let { text ->
+                try { return installText(text, hash) } finally { text.delete() }
+            }
+            return installText(source, hash)
         } finally { source.delete() }
     }
 

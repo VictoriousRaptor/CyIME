@@ -14,7 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -107,7 +107,7 @@ internal fun AppUpdateSection() {
                     is AppUpdateState.Available -> startDownload(current.release)
                     is AppUpdateState.Downloading -> AppUpdater.cancelDownload()
                     is AppUpdateState.ReadyToInstall -> if (!AppUpdater.install(context, current.file)) {
-                        Toast.makeText(context, "请允许 CyIME 安装应用，回来后再点一次「检查更新」", Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "请允许 CyIME 安装应用，回来后再点一次「检查更新」", Toast.LENGTH_LONG).show()
                     }
                     is AppUpdateState.Failed -> current.release?.let { startDownload(it) } ?: AppUpdater.check(context)
                     else -> AppUpdater.check(context)

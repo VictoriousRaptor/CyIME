@@ -43,7 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -672,7 +672,7 @@ private fun LayoutDisplayPage(
                                 insideKeyboard, { insideKeyboard = it; SettingsPreferences.setInlinePreeditPreview(context, it) })
                         }
                     }
-                    // 拼音气泡底色可调透明（用户 11-01「我就喜欢透明度」）；只在键盘上方会浮出气泡时显示。
+                    // 拼音气泡底色可调透明（用户 11-01「我就喜欢透明度」）；点开的编辑条用同一个值（11-16）。只在键盘上方会浮出气泡时显示。
                     val bubblePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
                     // 选「显示在输入框」时没有气泡；页面上的选择先于键盘偏好刷新，所以也看本页的选择。
                     if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR &&
@@ -689,7 +689,7 @@ private fun LayoutDisplayPage(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "键盘上方拼音气泡的底色。100% 是实底，后面有画面也看得清；调低更透。",
+                                text = "键盘上方拼音气泡和点开后编辑条的底色。默认 80%，隐约看到下面，拼音照样清楚；100% 是实底，调低更透。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

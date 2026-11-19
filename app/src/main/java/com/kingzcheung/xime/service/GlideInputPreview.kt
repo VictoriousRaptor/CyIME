@@ -1,6 +1,9 @@
 package com.kingzcheung.xime.service
 
 import android.view.inputmethod.InputConnection
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.UnderlineSpan
 
 /** Routes transient glide text without changing the engine's candidate state. */
 internal class GlidePreviewRouter(
@@ -60,10 +63,27 @@ internal class GlideInputPreview(
         val separator = if (prefix.isNotEmpty() && !prefix.last().isWhitespace() && !text.first().isWhitespace()) " " else ""
         val preview = if (complete) text else prefix + separator + text
         if (preview == written) return
-        if (runCatching { ic.setComposingText(preview, 1) }.getOrDefault(false)) {
+        // A styled CharSequence prevents editors from underlining the entire
+        // composing range; leave the automatically inserted leading space plain.
+        val leading = if (!complete) preview.indexOfFirst { !it.isWhitespace() } else 0
+        val shown: CharSequence = if (leading > 0) SpannableString(preview).apply {
+            setSpan(UnderlineSpan(), leading, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        } else preview
+        if (runCatching { ic.setComposingText(shown, 1) }.getOrDefault(false)) {
             written = preview
             mark(preview)
         }
+    }
+
+    /** Read the editor context before our temporary text, only while we still own it. */
+    fun textBeforePreview(limit: Int): String? {
+        val ic = owner ?: return null
+        val preview = written ?: return null
+        if (original != null || connection() !== ic || session() != ownerSession || !owns(preview) ||
+            !runCatching { ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(false)) return null
+        val before = runCatching { ic.getTextBeforeCursor(limit + preview.length, 0)?.toString() }.getOrNull() ?: return null
+        if (!before.endsWith(preview)) return null
+        return before.dropLast(preview.length).takeLast(limit)
     }
 
     fun end() {

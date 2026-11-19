@@ -1,7 +1,9 @@
 #ifndef RIME_T9_FILTER_H_
 #define RIME_T9_FILTER_H_
 
+#include <deque>
 #include <string>
+#include <vector>
 #include "t9_suppression.h"
 
 #ifndef T9_ALGO_ONLY_BUILD
@@ -97,6 +99,12 @@ private:
     bool double_pinyin_ = false;
     std::shared_ptr<T9SuppressionStore> suppression_;
     std::string schema_;
+    // 拂动固定字母时，最长一档（菜单最前面那一档）的候选一个都对不上，就把被拦下的前几个照常给出，
+    // 不让菜单只剩前一截短候选、后面打什么都不变（11-18）。
+    size_t longest_end_ = 0;
+    bool longest_shown_ = false;
+    std::vector<an<Candidate>> fallback_;
+    std::deque<an<Candidate>> pending_;
 };
 
 class T9Filter : public Filter {

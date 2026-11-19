@@ -77,4 +77,29 @@ class ZhuyinKeysTest {
         assertEquals("ㄋㄧˇㄏㄠˇ", rawCompositionCommitText("su3cl3", "ㄋㄧˇ ㄏㄠˇ", t9 = false,
             merged14 = usesMergedLetterKeys(InputLayout.ZHUYIN)))
     }
+
+    /** 实体键盘照大千键位打（用户 11-18 jp4wu = ㄨㄣˋㄊㄧ 問題）：数字行和 , . / ; - 都是方案里的注音键码，字母不在这一组。 */
+    @Test fun `hardware symbol keys are all zhuyin codes of the schema`() {
+        val preedit = preeditMap()
+        for (c in "1234567890,./;-") {
+            assertTrue("$c", ZhuyinKeys.isHardwareSymbolCode(c.toString()))
+            assertTrue("方案要认 $c", c in preedit)
+        }
+        assertTrue(ZhuyinKeys.isTone('4'))
+        assertFalse(ZhuyinKeys.isHardwareSymbolCode("j"))
+        assertFalse(ZhuyinKeys.isHardwareSymbolCode("="))
+        assertFalse(ZhuyinKeys.isHardwareSymbolCode("44"))
+    }
+
+    /** 用户 11-18：轻声 ˙ 是修饰符号，以前被当标点，打 ㄉㄜ 再按 ˙ 把「ㄉㄜ˙」原样上屏。每个注音键帽都要进按键队列，不按标点上屏。 */
+    @Test fun `every zhuyin key cap goes to the engine, not the punctuation path`() {
+        val zhuyin = InputProfiles.describe("cyime_zhuyin")
+        assertTrue(isLiteralPunctuation("˙"))
+        assertTrue(zhuyinKeyIsCode("˙", false, zhuyin))
+        val rows = KeysConfigHelper.parseKeyboardLayoutYamlText(repoFile("src/main/assets/xime.yaml").readText(), "zhuyin")!!
+        for (key in rows.flatten()) assertTrue(key, zhuyinKeyIsCode(key, false, zhuyin))
+        assertFalse(zhuyinKeyIsCode("˙", true, zhuyin))
+        assertFalse(zhuyinKeyIsCode("˙", false, InputProfiles.describe("rime_ice")))
+        assertFalse(zhuyinKeyIsCode("，", false, zhuyin))
+    }
 }

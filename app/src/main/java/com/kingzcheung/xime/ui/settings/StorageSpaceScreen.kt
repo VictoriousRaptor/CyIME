@@ -39,7 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -92,7 +92,7 @@ fun StorageSpaceScreen(
 
     LaunchedEffect(message) {
         if (message != null) {
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message.orEmpty(), android.widget.Toast.LENGTH_SHORT).show()
             viewModel.consumeMessage()
         }
     }

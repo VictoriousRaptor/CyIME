@@ -146,7 +146,25 @@ data class DoublePinyinScheme(
         check(prism.containsMatchIn(text)) { "小鹤双拼方案缺少 prism" }
         text = text.replace(prism, "  prism: $id")
         text = text.replace("user_dict: en_dicts/cn_en_flypy", "user_dict: en_dicts/${cnEnName(id)}")
+        // 停一下后的纠错索引按本方案的键位另有一份（[pauseSchema]），依赖和 cyime_omission_schema 都指过去。
+        text = text.replace(pauseId(FLYPY.id), pauseId(id))
         return "$GENERATED_MARK$id\n$text"
+    }
+
+    /**
+     * 停一下后的纠错索引（11-16）：本方案每个两键编码再读成少打一个键、同一个键多按一下、两个键打反的样子，只在停顿后查，
+     * 引擎按词模型的门槛决定给不给（candidate_policy.cc 的 cyime_pause_correction）。内置小鹤双拼打包时生成同样的一份
+     * （tasks-chinese.gradle.kts）。带分号的编码（微软双拼的 ing）不派生，输入里有分号时停顿后也不查。
+     */
+    fun pauseSchema(): String {
+        require(this == FLYPY || valid())
+        val pause = pauseId(id)
+        return "$GENERATED_MARK$pause\nschema:\n  schema_id: $pause\n  name: 双拼停顿纠错索引\n  version: '1'\n" +
+            "translator:\n  dictionary: rime_ice\n  prism: $pause\n  enable_user_dict: false\n  enable_correction: true\n" +
+            "speller:\n  alphabet: zyxwvutsrqponmlkjihgfedcba\n  delimiter: \" '\"\n  algebra:\n" +
+            (algebra() + separatorRules() + PAUSE_RULES).joinToString("") {
+                "    - \"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\"\n"
+            }
     }
 
     /**
@@ -158,7 +176,9 @@ data class DoublePinyinScheme(
         require(this == FLYPY || valid())
         val t9 = t9Id(id)
         // ing 在分号上的方案（微软双拼）：分号和 L 同在 5 键上（键盘上分号紧挨着 L）。
-        val algebra = algebra() + t9Digits().map { (letters, digit) -> "derive/[$letters]/$digit/" }
+        // 分词键（1）跟 26 键一样认单个键加 '（4' 是这个键开头的字）：以前没有这几条，单个数字后按分词，
+        // 那一段一个拼写都对不上，候选只到分词前，后面打什么都不变，看着像卡死（11-18）。
+        val algebra = algebra() + separatorRules() + t9Digits().map { (letters, digit) -> "derive/[$letters]/$digit/" }
         val laiLe = listOfNotNull(code("lai"), code("le")).takeIf { it.size == 2 }?.joinToString("")
             ?.takeIf { keys -> keys.all { it in 'a'..'z' } }
             ?.map { key -> t9Digits().first { key in it.first }.second }?.joinToString("")
@@ -321,6 +341,10 @@ data class DoublePinyinScheme(
             .replace(Regex("(?m)^  preedit_format:[^\\n]*\\n(?:    [^\\n]*\\n)*"), "  preedit_format: []\n")
             .replaceFirst(prism, "  prism: $layoutVariantId\n  spelling_hints: 8\n  always_show_comments: true")
         text = text.replaceRange(translator.range, translatorBlock)
+        // 停顿后的纠错和邻键纠错一样不开：合并键上一个键是几个字母，少一个键、两键打反的读法太多。
+        text = text.replace(Regex("(?m)^    - ${Regex.escape(PAUSE_PREFIX)}\\S+[ \\t]*\\n"), "")
+            .replace(Regex("(?m)^cyime_omission_schema:.*\\n"), "")
+            .replace(Regex("(?m)^cyime_pause_correction:[ \\t]*\\n(?:  .*\\n)*"), "")
         return "$GENERATED_MARK$layoutVariantId\n$text"
     }
 
@@ -397,6 +421,11 @@ data class DoublePinyinScheme(
         private fun String.upperCircled() = map { it.upperCircled() }.joinToString("")
         private fun String.lowerCircled() = map { LOWER_CIRCLED[it - 'a'] }.joinToString("")
         fun cnEnName(id: String) = "cn_en_$id"
+        /** 停一下后的纠错索引（[pauseSchema]）：每个 26 键双拼方案一个，名字是这个前缀加方案 id。不是输入方式。 */
+        const val PAUSE_PREFIX = "cyime_pause_"
+        fun pauseId(id: String) = PAUSE_PREFIX + id
+        /** 两键编码的另外五种读法：只留第一键、只留第二键、第一键多按一下、第二键多按一下、两键打反。 */
+        private val PAUSE_RULES = listOf("\$1", "\$2", "\$1\$1\$2", "\$1\$2\$2", "\$2\$1").map { "fuzz/^([a-z])([a-z])\$/$it/" }
         const val T9_SUFFIX = "_t9"
         fun t9Id(id: String) = id + T9_SUFFIX
         /** 14 键版本，与 14 键小鹤双拼 double_pinyin_flypy_14jian 同样的后缀。 */

@@ -65,6 +65,18 @@ internal fun syllableSplitActive(setting: Boolean, ascii: Boolean, profile: com.
         profile.capabilities.editablePinyin
 
 /**
+ * 英文（含中文键盘的英文状态）和西、德、法、意语也用「逗号键分词」「Shift 键分词」这两个开关（用户 11-16：英文打 what's 时撇号不顺手）：
+ * 打单词时它们打的是撇号 '，接进这个词（what's、l'eau，见 apostropheJoinsWord）。英文单词方案（字母先进组字区）、俄语、韩语、越南语不算。
+ */
+internal fun apostropheSplitActive(setting: Boolean, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
+    setting && (ascii || profile.typesLettersDirectly && profile.language != com.kingzcheung.xime.settings.InputLanguage.RUSSIAN &&
+        profile.language != com.kingzcheung.xime.settings.InputLanguage.KOREAN &&
+        profile.language != com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE)
+
+/** 正在打一个英文（西、德、法、意…）词：光标前是这个词的字母，Shift 键这时是撇号。 */
+internal fun typingWord(pending: String): Boolean = pending.lastOrNull()?.isLetter() == true
+
+/**
  * 字母键帽这次显示大写吗（只管显示，送出的字母不变）：「字母键显示大写」一律大写；
  * 「中文键盘字母显示大写」只在中文（非英文模式）时大写，英文照 Shift，一看键帽就知道是中文还是英文。
  */

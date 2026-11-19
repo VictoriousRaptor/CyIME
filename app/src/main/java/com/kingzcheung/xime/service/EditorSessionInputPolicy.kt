@@ -16,11 +16,15 @@ internal data class EditorFieldPolicy(
     val numberPanel: Boolean get() = kind in setOf(Kind.NUMBER_PASSWORD, Kind.NUMBER, Kind.PHONE, Kind.DATE, Kind.TIME, Kind.DATETIME)
     /**
      * 可见密码（VISIBLE_PASSWORD）先给英文，但语言键能切回中文，只在这个框里有效（用户 11-13：写代码的软件被锁成英文切不回中文）。
-     * 不少代码编辑器（关掉联想、自动改正）用这个类型，真正的密码框用 PASSWORD / WEB_PASSWORD，照旧锁英文。
-     * 无论切没切，仍按密码框处理：不学词、不联想（EditorInfoClassifier.isSecretEditor 不变）。
+     * 文字密码框（PASSWORD / WEB_PASSWORD）也一样（用户 11-16：压缩包的密码是中文，密码框里切不了中文）：
+     * 进框还是英文 26 键，切到中文只在这个框里有效，离开就回原来的语言。数字密码照旧只给数字。
+     * 无论切没切，仍按密码框处理：不学词、不联想、不进剪贴板历史（EditorInfoClassifier.isSecretEditor、
+     * IncognitoState 不变）；文字密码框也不开语音（[blocksVoice]）。
      */
-    val allowsNativeInput: Boolean get() = isAddressField || kind == Kind.VISIBLE_PASSWORD
+    val allowsNativeInput: Boolean get() = isAddressField || kind == Kind.VISIBLE_PASSWORD || kind == Kind.PASSWORD
     val locksNativeInput: Boolean get() = scoped && !allowsNativeInput
+    /** 密码框不开麦：说出来的密码会经过识别（可能是在线识别）。可见密码（代码编辑器）照旧能说。 */
+    val blocksVoice: Boolean get() = locksNativeInput || kind == Kind.PASSWORD
 
     /** Only a newly typed key is converted. Existing content and explicit paste never enter here. */
     fun typedLiteral(text: String): String {
@@ -85,7 +89,7 @@ internal data class EditorFieldPolicy(
             return when (inputType and InputType.TYPE_MASK_CLASS) {
                 InputType.TYPE_CLASS_TEXT -> when (variation) {
                     // 多行的「密码框」是借密码类型关掉联想、自动改正的代码编辑器（真正的密码框只有一行）：
-                    // 和可见密码一样先给英文、能切中文（用户 11-13：写代码、命令行一类的应用都要能打中文）。
+                    // 和可见密码一样先给英文、能切中文、能说话（用户 11-13：写代码、命令行一类的应用都要能打中文）。
                     InputType.TYPE_TEXT_VARIATION_PASSWORD,
                     InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(
                         if (inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0) Kind.VISIBLE_PASSWORD else Kind.PASSWORD)

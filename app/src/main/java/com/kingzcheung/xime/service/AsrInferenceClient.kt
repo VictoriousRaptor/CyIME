@@ -40,6 +40,8 @@ class AsrInferenceClient(context: Context) {
     private val callbackGeneration = java.util.concurrent.atomic.AtomicLong()
     private data class Session(val generation: Long, val callback: IInferenceAsrCallback)
     @Volatile private var session: Session? = null
+    /** 正在 [stopAsr] 里等结果的那一次会话；[abandonStop] 只取消它。 */
+    @Volatile private var stopping: Session? = null
 
     private fun callbackStub(callback: AsrCallback, token: Long) = object : IInferenceAsrCallback.Stub() {
         override fun onPartialResult(text: String) { if (token == callbackGeneration.get()) callback.onPartialResult(text) }
@@ -151,15 +153,27 @@ class AsrInferenceClient(context: Context) {
 
     suspend fun stopAsr(): String = withContext(Dispatchers.IO) {
         val token = callbackGeneration.get()
+        val active = session
+        stopping = active
         try {
             sessionFailure?.let { throw IllegalStateException(it) }
-            session?.let { requireService().stopAsr(it.callback.asBinder()) } ?: ""
+            active?.let { requireService().stopAsr(it.callback.asBinder()) } ?: ""
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
         } catch (error: Exception) {
             throw IllegalStateException("语音识别未能完成，请重新录音", error)
         } finally {
+            stopping = null
             callbackGeneration.compareAndSet(token, token + 1)
         }
+    }
+
+    /**
+     * 让正在 [stopAsr] 里等结果的那一次不再做整段重识别，尽快返回（:asr 按停顿定稿的文字照旧返回）。
+     * 服务按回调认会话：来晚了、那一次已经结束或新会话已经开始时，什么都不会被取消。
+     */
+    fun abandonStop() {
+        val active = stopping ?: return
+        try { requireService().cancelAsr(active.callback.asBinder()) } catch (_: Exception) {}
     }
 
     fun cancelAsr() {

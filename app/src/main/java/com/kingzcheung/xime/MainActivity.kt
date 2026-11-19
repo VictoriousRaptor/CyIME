@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
             android.os.SystemClock.uptimeMillis() - permissionAskedAt < NO_DIALOG_MS
         if (noDialog) {
             PermissionHelper.onSentToAppSettings()
-            Toast.makeText(this, "麦克风权限之前被拒绝过，请在设置的「权限」里允许麦克风", Toast.LENGTH_LONG).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(this, "麦克风权限之前被拒绝过，请在设置的「权限」里允许麦克风", Toast.LENGTH_LONG).show()
             try {
                 // Its own task: finishAndRemoveTask below must not take the settings page with it.
                 startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -125,9 +125,9 @@ class MainActivity : ComponentActivity() {
         } else {
             PermissionHelper.onRecordAudioResult(isGranted)
             if (isGranted) {
-                Toast.makeText(this, "麦克风权限已授权", Toast.LENGTH_SHORT).show()
+                com.kingzcheung.xime.ui.i18n.UiToast.makeText(this, "麦克风权限已授权", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "麦克风权限被拒绝，无法使用语音输入", Toast.LENGTH_SHORT).show()
+                com.kingzcheung.xime.ui.i18n.UiToast.makeText(this, "麦克风权限被拒绝，无法使用语音输入", Toast.LENGTH_SHORT).show()
             }
         }
         finishAndRemoveTask()
@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.kingzcheung.xime.ui.settings.SettingsRefreshRate.apply(this)
         
         // The Application owns engine preparation, including installation and deployment.
         prewarmKeyboardConfig()
@@ -164,7 +165,7 @@ class MainActivity : ComponentActivity() {
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             } else {
                 PermissionHelper.onRecordAudioResult(true)
-                Toast.makeText(this, "麦克风权限已授权", Toast.LENGTH_SHORT).show()
+                com.kingzcheung.xime.ui.i18n.UiToast.makeText(this, "麦克风权限已授权", Toast.LENGTH_SHORT).show()
                 finishAndRemoveTask()
             }
             return
@@ -179,7 +180,7 @@ class MainActivity : ComponentActivity() {
 
         com.kingzcheung.xime.model.DefaultModelInstaller.start(applicationContext)
 
-        setContent {
+        setContent { com.kingzcheung.xime.ui.i18n.ProvideUiTranslations {
             val context = this
             val setupCompleted = SettingsPreferences.isSetupCompleted(context)
             var showWizard by remember { mutableStateOf(!setupCompleted) }
@@ -296,7 +297,7 @@ class MainActivity : ComponentActivity() {
                     com.kingzcheung.xime.ui.settings.LaunchAdEasterEgg(launchAdAllowed, blocked = showWizard || showGuide)
                 }
             }
-        }
+        }}
     }
     
     private fun handleSharedIntent(intent: Intent?) {
@@ -332,13 +333,13 @@ class MainActivity : ComponentActivity() {
                         // 同名文件确认在「已安装的方案」页；装好的方案由 ImportManager 自动应用（#340）。
                         val msg = if (result.pendingPackageId != null) "${result.message}：到「已安装的方案」页确认"
                             else result.message
-                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                     }
                 }
                 is ImportManager.ImportResult.Plugin -> {
                     com.kingzcheung.xime.plugin.core.runtime.PluginManager.loadEnabledPlugins()
                     launch(Dispatchers.Main) {
-                        Toast.makeText(
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(
                             this@MainActivity,
                             "插件「${result.pluginInfo?.name}」安装成功",
                             Toast.LENGTH_LONG
@@ -347,12 +348,12 @@ class MainActivity : ComponentActivity() {
                 }
                 is ImportManager.ImportResult.Failed -> {
                     launch(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "导入失败：${result.reason}", Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(this@MainActivity, "导入失败：${result.reason}", Toast.LENGTH_LONG).show()
                     }
                 }
                 is ImportManager.ImportResult.Unsupported -> {
                     launch(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "不支持的文件类型", Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(this@MainActivity, "不支持的文件类型", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -384,10 +385,10 @@ class MainActivity : ComponentActivity() {
             }
             launch(Dispatchers.Main) {
                 if (result == null) {
-                    Toast.makeText(this@MainActivity, "背景图导入失败", Toast.LENGTH_LONG).show()
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(this@MainActivity, "背景图导入失败", Toast.LENGTH_LONG).show()
                 } else {
                     copyThemeConfigTemplate(result)
-                    Toast.makeText(
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(
                         this@MainActivity,
                         "背景图已导入 rime/themes/$result，配置模板已复制到剪贴板",
                         Toast.LENGTH_LONG,

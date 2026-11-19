@@ -117,13 +117,38 @@ class ClipboardImageRetentionTest {
         assertEquals((14..limit + 13).reversed().map { image(it) }, published)
     }
 
+    @Test fun failedRefreshCannotBringBackDisabledGalleryPhotos() {
+        val screenshot = image(10).copy(label = "截图")
+        val gallery = image(11).copy(label = ScreenshotImageSource.PHOTO_LABEL)
+        val pinnedGallery = image(12).copy(label = ScreenshotImageSource.PHOTO_LABEL)
+        val pins = setOf("image:${pinnedGallery.uri}")
+        val actual = clipboardMediaAfterRefreshFailure(
+            listOf(screenshot, gallery, pinnedGallery), true, pins, emptySet(),
+            includeGalleryPhotos = false)
+        assertEquals(listOf(screenshot, pinnedGallery), actual)
+    }
+
     @Test fun cacheOverBudgetEvictsOldestUnfixedCopiesOnly() {
         val mb = 1024L * 1024
         val files = (1..12).map { CachedImageFile("f$it.png", 50 * mb, it.toLong()) }
         // 600 MB in 12 files; the two oldest are fixed and must stay.
-        val evicted = clipboardImageEvictions(files, setOf("f1.png", "f2.png"))
+        val evicted = clipboardImageEvictions(files, setOf("f1.png", "f2.png"), maxBytes = 500 * mb)
         assertEquals(listOf("f3.png", "f4.png"), evicted)
-        assertTrue(files.filterNot { it.name in evicted }.sumOf { it.bytes } <= CLIPBOARD_IMAGE_CACHE_BYTES)
+        assertTrue(files.filterNot { it.name in evicted }.sumOf { it.bytes } <= 500 * mb)
+    }
+
+    @Test fun defaultImageLimitIs200MbAndAdjustable() {
+        val mb = 1024L * 1024
+        assertEquals(200 * mb, CLIPBOARD_IMAGE_CACHE_BYTES)
+        assertEquals(200, clipboardImageCacheMb(0))
+        assertEquals(200, clipboardImageCacheMb(123))
+        assertEquals(1000, clipboardImageCacheMb(1000))
+        assertEquals("1 GB", clipboardImageCacheMbLabel(1000))
+        assertEquals("100 MB", clipboardImageCacheMbLabel(100))
+        // 600 MB in 12 files at the default limit: the oldest unfixed go until 200 MB is left.
+        val files = (1..12).map { CachedImageFile("f$it.png", 50 * mb, it.toLong()) }
+        val evicted = clipboardImageEvictions(files, setOf("f1.png", "f2.png"))
+        assertEquals((3..10).map { "f$it.png" }, evicted)
     }
 
     @Test fun cacheWithinBudgetOrOnlyFixedFilesEvictsNothing() {

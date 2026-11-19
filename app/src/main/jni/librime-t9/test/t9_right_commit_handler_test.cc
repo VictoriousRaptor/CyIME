@@ -1862,5 +1862,37 @@ TEST(T9RightCommitHandlerTest, FuzzySingleCharacterConsumesOneWholeSelectedSylla
     }
 }
 
+TEST(T9RightCommitHandlerTest, FuzzyReadingYinXiaoConsumesBothSelections_94649426) {
+    // 模糊音 in/ing：输入 9464 9426，左栏选 ying、xiao，右选「音效」(yin xiao)。
+    // 读音 yin 比选的 ying 少一个字母，曾只消费第一个音节，xiao 留在输入里多出一个字。
+    std::vector<SyllableOption> sels{SyllableOption("ying", 4), SyllableOption("xiao", 4)};
+    std::vector<SyllableOption> history{sels[0], sels[1]};
+    auto ctx = MakeContext({
+        .digits = "94649426",
+        .selections = sels,
+        .consumed_count = 8,
+        .state = T9StateMachine::State::kSelection,
+        .selected_option = sels[1],
+        .selection_candidate_digits = std::optional<std::string>("9426"),
+        .confirmed_pinyin = "ying",
+        .selection_history = history
+    });
+    T9RightCommitHandler handler;
+    bool result = handler.HandleRightCommit(ctx, std::optional<std::string>("yin xiao"), 2);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(ctx.input_buffer.is_empty());
+    EXPECT_TRUE(ctx.state_machine.is_idle());
+}
+
+TEST(T9RightCommitHandlerTest, FuzzyReadingInUnassignedDigitsConsumesWholeSyllable_94649426) {
+    // 没选左栏，直接右选模糊音候选「音效」(yin xiao)，打的是 9464 9426（ying xiao）。
+    auto ctx = MakeContext({"94649426", {}, 0, T9StateMachine::State::kInput});
+    T9RightCommitHandler handler;
+    bool result = handler.HandleRightCommit(ctx, std::optional<std::string>("yin xiao"), 2,
+                                            /*rime_consumed_digits=*/-1);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(ctx.input_buffer.is_empty());
+}
+
 }  // namespace
 }  // namespace rime

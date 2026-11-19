@@ -4,6 +4,7 @@ package com.kingzcheung.xime.settings
 enum class InputLanguage(val id: String, val displayName: String) {
     CHINESE("zh", "中文"), JAPANESE("ja", "日语"), ENGLISH("en", "英文"), SPANISH("es", "西班牙语"),
     GERMAN("de", "德语"), FRENCH("fr", "法语"), ITALIAN("it", "意大利语"), RUSSIAN("ru", "俄语"), KOREAN("ko", "韩语"),
+    VIETNAMESE("vi", "越南语"), MALAY("ms", "马来语"),
     UNSPECIFIED("und", "未标注语言");
 
     /** Languages typed letter by letter straight into the editor (see [LetterLanguage]), with word completions above. */
@@ -12,7 +13,7 @@ enum class InputLanguage(val id: String, val displayName: String) {
     companion object {
         /** The elder package offers only Chinese and English; see docs/development/elder-pack-spec.md. */
         val supported = if (com.kingzcheung.xime.BuildConfig.ELDER) listOf(CHINESE, ENGLISH)
-            else listOf(CHINESE, JAPANESE, ENGLISH, SPANISH, GERMAN, FRENCH, ITALIAN, RUSSIAN, KOREAN)
+            else listOf(CHINESE, JAPANESE, ENGLISH, SPANISH, GERMAN, FRENCH, ITALIAN, RUSSIAN, KOREAN, VIETNAMESE, MALAY)
         /** Languages a shipped speech recognizer can transcribe. The [LetterLanguage]s have none yet. */
         val speech: List<InputLanguage> get() = supported.filter { LetterLanguage.of(it) == null }
         fun fromId(id: String): InputLanguage? = entries.firstOrNull { it.id == id }
@@ -203,11 +204,12 @@ object InputProfiles {
     /** Actual layout bindings win over built-in defaults, including an explicitly unbound schema. */
     fun resolveLayout(section: String?, custom: CustomKeyboardLayout? = null): InputLayout = when (section) {
         "qwerty", "qwerty_japanese", "qwerty_spanish", "qwerty_german", "qwerty_french",
-        "qwerty_italian" ->
+        "qwerty_italian", "qwerty_vietnamese", "qwerty_malay" ->
             InputLayout(section, "26键", LayoutKind.ALPHABETIC)
         // 英文单词方案用英文键盘的键帽和角标，和英文直接输入是同一个 26 键：布局栏里不出两个「26键」。
         "qwerty_en" -> InputLayout.QWERTY
         "jcuken_russian" -> InputLayout(section, "ЙЦУКЕН", LayoutKind.ALPHABETIC)
+        LetterLayouts.AZERTY_FRENCH -> InputLayout(section, "AZERTY", LayoutKind.ALPHABETIC)
         "dubeolsik_korean" -> InputLayout(section, "두벌식", LayoutKind.ALPHABETIC)
         // 仓颉只是键帽换成字根，仍是中文的 26 键：同一个布局，方案行里与拼音、双拼、五笔并列。
         "qwerty_cangjie" -> InputLayout.QWERTY

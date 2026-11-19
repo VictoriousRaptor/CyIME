@@ -465,6 +465,27 @@ class HardwareCandidateNavigationTest {
         assertFalse(navigation.moveWindow(tenOnOnePage, -1))
     }
 
+    // 用户 11-16：平板接蓝牙键盘输 yi，一行放得下 9 个，原来按 9、9、2 分组，第三组空一大片，每页循环。
+    @Test fun aPageThatDoesNotDivideEvenlyIsSplitIntoEvenGroups() {
+        assertEquals(listOf(7, 7, 6), generateSequence(20) { it - hardwareWindowSize(it, 9) }
+            .takeWhile { it > 0 }.map { hardwareWindowSize(it, 9) }.toList())
+        assertEquals(10, hardwareWindowSize(20, 10))
+        assertEquals(5, hardwareWindowSize(5, 9))
+        val navigation = HardwareCandidateNavigation()
+        navigation.reportShown(twentyCandidates.candidates.take(10), 9)
+        val first = HardwareCandidateSnapshot(1, pinyin26, twentyCandidates, false, windowStep = navigation.step(twentyCandidates))
+        assertEquals((1..7).map { "候选$it" }, first.words)
+        val sizes = mutableListOf(first.words.size)
+        while (navigation.moveWindow(twentyCandidates, 1)) {
+            val start = navigation.windowStart(twentyCandidates)
+            val shown = HardwareCandidateSnapshot(1, pinyin26, twentyCandidates, false,
+                windowStart = start, windowStep = navigation.step(twentyCandidates, start))
+            sizes += shown.words.size
+            navigation.reportShown(shown.words, shown.words.size)
+        }
+        assertEquals(listOf(7, 7, 6), sizes)
+    }
+
     @Test fun anUnmeasuredRowKeepsTheNumberedTen() {
         val navigation = HardwareCandidateNavigation()
         assertEquals(HARDWARE_PAGE_SIZE, navigation.step(twentyCandidates))

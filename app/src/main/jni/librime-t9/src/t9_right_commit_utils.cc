@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 
 #include "t9_log.h"
 
@@ -205,6 +206,172 @@ bool ShouldFullCommitInSelection(int consumed_from_non_selected,
         }
     }
     return false;
+}
+
+namespace {
+
+void SplitInitial(const std::string& syl, std::string* initial, std::string* fin) {
+    static const char* kTwo[] = {"zh", "ch", "sh"};
+    for (const char* two : kTwo) {
+        if (syl.compare(0, 2, two) == 0) {
+            *initial = two;
+            *fin = syl.substr(2);
+            return;
+        }
+    }
+    static const std::string kOne = "bpmfdtnlgkhjqxrzcsyw";
+    if (!syl.empty() && kOne.find(syl[0]) != std::string::npos) {
+        *initial = syl.substr(0, 1);
+        *fin = syl.substr(1);
+        return;
+    }
+    initial->clear();
+    *fin = syl;
+}
+
+std::vector<std::string> InitialSwaps(const std::string& initial) {
+    if (initial == "z") return {"zh"};
+    if (initial == "zh") return {"z"};
+    if (initial == "c") return {"ch"};
+    if (initial == "ch") return {"c"};
+    if (initial == "s") return {"sh"};
+    if (initial == "sh") return {"s"};
+    if (initial == "n") return {"l"};
+    if (initial == "l") return {"n", "r"};
+    if (initial == "r") return {"l"};
+    if (initial == "f") return {"h"};
+    if (initial == "h") return {"f"};
+    return {};
+}
+
+bool EndsWith(const std::string& s, const std::string& tail) {
+    return s.size() >= tail.size() &&
+           s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+std::vector<std::string> FinalSwaps(const std::string& fin) {
+    // ang/eng/ing（含 iang/uang）去 g；an/en/in（含 ian/uan）加 g。
+    if (EndsWith(fin, "ang") || EndsWith(fin, "eng") || EndsWith(fin, "ing")) {
+        return {fin.substr(0, fin.size() - 1)};
+    }
+    if (EndsWith(fin, "an") || EndsWith(fin, "en") || EndsWith(fin, "in")) {
+        return {fin + "g"};
+    }
+    return {};
+}
+
+bool StartsWith(const std::string& s, const std::string& head) {
+    return s.size() >= head.size() && s.compare(0, head.size(), head) == 0;
+}
+
+std::string JoinSyllables(const std::vector<std::string>& syllables) {
+    std::string out;
+    for (const auto& syl : syllables) {
+        if (!out.empty()) out += ' ';
+        out += syl;
+    }
+    return out;
+}
+
+}  // namespace
+
+std::vector<std::string> FuzzyPinyinVariants(const std::string& syllable) {
+    std::vector<std::string> out;
+    std::string initial, fin;
+    SplitInitial(syllable, &initial, &fin);
+    std::vector<std::string> initials = {initial};
+    for (auto& i : InitialSwaps(initial)) initials.push_back(i);
+    std::vector<std::string> finals = {fin};
+    for (auto& f : FinalSwaps(fin)) finals.push_back(f);
+    const auto& pmap = T9PinyinMap::Instance();
+    for (const auto& i : initials) {
+        for (const auto& f : finals) {
+            std::string v = i + f;
+            if (v == syllable) continue;
+            if (!pmap.PinyinToDigitCode(v).has_value()) continue;
+            if (std::find(out.begin(), out.end(), v) == out.end()) out.push_back(v);
+        }
+    }
+    return out;
+}
+
+std::optional<std::string> AlignFuzzyReadingToTyped(
+    const std::optional<std::string>& candidate_pinyin,
+    const std::vector<SyllableOption>& selections,
+    const std::string& unassigned) {
+    if (!candidate_pinyin.has_value() || candidate_pinyin->empty()) {
+        return candidate_pinyin;
+    }
+    auto syllables = ParseSyllables(*candidate_pinyin);
+    if (syllables.empty()) return candidate_pinyin;
+    for (const auto& syl : syllables) {
+        for (char ch : syl) {
+            if (!std::islower(static_cast<unsigned char>(ch))) return candidate_pinyin;
+        }
+    }
+
+    const auto& pmap = T9PinyinMap::Instance();
+    bool changed = false;
+    size_t i = 0;
+    for (; i < syllables.size() && i < selections.size(); ++i) {
+        const std::string& typed = selections[i].pinyin;
+        if (typed.empty() || syllables[i] == typed) continue;
+        const auto variants = FuzzyPinyinVariants(syllables[i]);
+        if (std::find(variants.begin(), variants.end(), typed) != variants.end()) {
+            syllables[i] = typed;  // 左栏选的完整音节（ying）和读音（yin）互为模糊音
+            changed = true;
+            continue;
+        }
+        if (StartsWith(syllables[i], typed)) continue;  // 只选了声母等前半截
+        std::string best;
+        for (const auto& v : variants) {
+            if (StartsWith(v, typed)) { best = v; break; }
+        }
+        if (best.empty()) return candidate_pinyin;  // 对不上不是模糊音造成的，不动
+        syllables[i] = best;
+        changed = true;
+    }
+
+    // 其余音节对 unassigned：逐音节找能接上的拼法（原读音优先），
+    // 一条路走不通时回头换前面音节的变体（yin 本身也能接上 946，但接完后 xiao 对不上）。
+    // 取对上音节最多、替换最少的一种。
+    if (i < syllables.size() && !unassigned.empty()) {
+        struct Best { size_t matched = 0; int swaps = 0; std::vector<std::string> picks; };
+        Best best;
+        std::vector<std::string> picks;
+        std::function<void(size_t, size_t, int)> search =
+            [&](size_t k, size_t pos, int swaps) {
+                size_t matched = k - i;
+                if (matched > best.matched || (matched == best.matched && swaps < best.swaps)) {
+                    best = {matched, swaps, picks};
+                }
+                if (k >= syllables.size() || pos >= unassigned.size()) return;
+                const std::string rest = unassigned.substr(pos);
+                std::vector<std::string> options{syllables[k]};
+                for (auto& v : FuzzyPinyinVariants(syllables[k])) options.push_back(v);
+                for (size_t o = 0; o < options.size(); ++o) {
+                    auto code = pmap.PinyinToDigitCode(options[o]);
+                    if (!code.has_value() || code->empty()) continue;
+                    size_t used = 0;
+                    if (StartsWith(rest, *code)) used = code->size();
+                    else if (StartsWith(*code, rest)) used = rest.size();  // 只打了前半截
+                    if (used == 0) continue;
+                    picks.push_back(options[o]);
+                    search(k + 1, pos + used, swaps + (o == 0 ? 0 : 1));
+                    picks.pop_back();
+                }
+            };
+        search(i, 0, 0);
+        for (size_t n = 0; n < best.picks.size(); ++n) {
+            if (syllables[i + n] != best.picks[n]) {
+                syllables[i + n] = best.picks[n];
+                changed = true;
+            }
+        }
+    }
+
+    if (!changed) return candidate_pinyin;
+    return JoinSyllables(syllables);
 }
 
 }  // namespace rime

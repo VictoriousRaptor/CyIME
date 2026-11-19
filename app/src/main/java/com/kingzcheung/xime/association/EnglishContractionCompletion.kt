@@ -30,6 +30,20 @@ internal object EnglishContractionCompletion {
         return result.take(limit)
     }
 
+    /**
+     * 打的词里已经有撇号（what'、don't）：缩写表里以它开头的写法（[forms]，I'm 开头已大写）跟着大小写给出，
+     * 和打的一模一样的不再重复（候选栏最前面就是打的原词）。
+     */
+    fun withApostrophe(typed: String, forms: List<String>, limit: Int): List<String> {
+        if (typed.isEmpty() || limit <= 0) return emptyList()
+        val key = typed.lowercase()
+        // 只打了一个字母加撇号（I'、i'）看不出是不是全大写，只跟首字母。
+        val oneLetter = typed.count(Char::isLetter) <= 1
+        return forms.filter { it.lowercase().startsWith(key) && it.lowercase() != key }
+            .map { if (!oneLetter) cased(it, typed) else if (typed.first().isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it }
+            .distinct().take(limit)
+    }
+
     /** 跟着打的大小写：全大写 → DON'T，首字母大写 → Don't。 */
     private fun cased(form: String, typed: String): String = when {
         typed.length > 1 && typed.all { !it.isLetter() || it.isUpperCase() } -> form.uppercase()

@@ -215,10 +215,13 @@ class KeyboardT9StrokeGestureTest {
     }
 
     @Test
-    fun `内置 stroke side_symbols 与历史硬编码一致`() {
+    fun `内置 stroke side_symbols 和九键侧栏同一套，前四个是逗号句号问号叹号`() {
+        // 11-18 贡献者：笔画左栏要像九键一样能上下滑，默认前四个 ，。？！。
         val text = repoFile("src/main/assets/xime.yaml").readText()
         val partial = KeysConfigHelper.parseKeyboardStrokeYamlPartial(text)
-        assertEquals(listOf("。", "？", "！", "~"), partial?.sideSymbols)
+        assertEquals(KeysConfigHelper.DEFAULT_T9_SIDE_SYMBOLS, partial?.sideSymbols)
+        assertEquals(KeysConfigHelper.DEFAULT_T9_SIDE_SYMBOLS, KeysConfigHelper.DEFAULT_STROKE_SIDE_SYMBOLS)
+        assertEquals(listOf("，", "。", "？", "！"), partial?.sideSymbols?.take(4))
     }
 
     @Test

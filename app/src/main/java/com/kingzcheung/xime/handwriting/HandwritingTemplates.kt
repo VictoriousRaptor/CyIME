@@ -107,8 +107,9 @@ object HandwritingTemplates {
      */
     private class BuiltinSet(val strokes: String, val vectors: String, val meta: String)
     private val BUILTIN_SETS = listOf(
-        BuiltinSet("handwriting/kana_default_strokes.json", "handwriting/kana_default_och.bin", "handwriting/kana_default_och.json"),
-        BuiltinSet("handwriting/japanese_kanji_strokes.json", "handwriting/japanese_kanji_och.bin", "handwriting/japanese_kanji_och.json"),
+        // assets/handwriting 下的文件名；轻量版装「日语」插件时下载（HandwritingAssets）。
+        BuiltinSet("kana_default_strokes.json", "kana_default_och.bin", "kana_default_och.json"),
+        BuiltinSet("japanese_kanji_strokes.json", "japanese_kanji_och.bin", "japanese_kanji_och.json"),
     )
     private const val DEFAULT_CACHE = "kana_default_och_v2.json"
     private const val LATIN_DEFAULT_STROKES = "handwriting/latin_default_strokes.json"
@@ -252,14 +253,13 @@ object HandwritingTemplates {
         val list = cached ?: runCatching {
             val sha = sha256(model)
             BUILTIN_SETS.flatMap { set ->
-                decodePrecomputed(context.assets.open(set.meta).bufferedReader(Charsets.UTF_8).use { it.readText() },
-                    context.assets.open(set.vectors).use { it.readBytes() }, sha)
+                decodePrecomputed(HandwritingAssets.readText(context, set.meta), HandwritingAssets.readBytes(context, set.vectors), sha)
                     ?.map { (label, feat) -> Entry(label, feat, "builtin") } ?: return@runCatching null
             }
         }.onFailure { Log.w(TAG, "precomputed kana templates unreadable", it) }.getOrNull() ?: runCatching {
             val out = mutableListOf<Entry>()
             for (set in BUILTIN_SETS) {
-            val chars = JSONObject(context.assets.open(set.strokes).bufferedReader(Charsets.UTF_8).use { it.readText() })
+            val chars = JSONObject(HandwritingAssets.readText(context, set.strokes))
                 .getJSONObject("chars")
             for (label in chars.keys()) {
                 val variants = chars.getJSONArray(label)

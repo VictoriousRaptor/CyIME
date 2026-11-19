@@ -8,6 +8,8 @@ import java.util.concurrent.locks.ReentrantLock
 data class RimeCandidate(
     val text: String,
     val comment: String,
+    /** 用户以前打过的词（用户词库里上屏过的整词，两字以上），候选右上角标记。 */
+    val learned: Boolean = false,
     /** 纠错候选逐音节的“实际敲的=正确拼音”，非纠错为空；见 [CorrectionMarks]。 */
     val correction: String = "",
 )
@@ -565,6 +567,8 @@ class RimeEngine {
         val spelling = top?.comment.orEmpty()
         val schema = nativeGetCurrentSchema().orEmpty()
         val profile = com.kingzcheung.xime.settings.InputProfiles.describe(schema)
+        if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE)
+            return if (strokeGlyphPreedit && !nativeIsAsciiMode()) strokeGlyphs(preedit) else preedit
         if (profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9 &&
             profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN &&
             top != null && input.isNotEmpty() && preedit == input && spelling == input && input.all { it in '2'..'9' }) {
@@ -598,6 +602,12 @@ class RimeEngine {
      * 双拼九键在这里把显示的读音换成双拼键（[t9DoublePinyinKeys]）；26 键由方案补丁清空编码显示规则，不经过这里。
      */
     @Volatile var doublePinyinKeysPreedit = false
+
+    /**
+     * 「笔画编码显示成 一丨丿丶乛」打开时由输入法服务写入。对上候选的那段由方案补丁换成笔画，
+     * 没对上候选的那段 Rime 照原样给字母，这里一起换，整串不会一半字母一半笔画（11-18）。
+     */
+    @Volatile var strokeGlyphPreedit = false
 
     /** 已选定的中文原样留着，后面的数字按首选读音换成双拼键；换不了时照原来显示。 */
     private fun t9DoublePinyinPreedit(input: String, preedit: String, spelling: String, schema: String): String {
@@ -1738,12 +1748,12 @@ class RimeEngine {
 
     /**
      * 长按首选时拆出的词：首选是引擎组出来的整句（两个词以上）才有，否则 null。
-     * 主线程调用，拿不到锁不等待。
+     * 候选栏的首选不一定是引擎第 0 个（11-17 平板：14 键长句显示在第一，引擎里排第 2，卡片写「固定当前位置(2)」，
+     * 拆词因此整个不出），所以在引擎前几个候选里按文字找这句。主线程调用，拿不到锁不等待。
      */
     internal fun firstSentenceWords(shown: String): List<String>? = tryLocked(null) {
         if (!isInitialized || !nativeHasSession() || nativeIsMaintaining() || nativeIsAsciiMode()) return@tryLocked null
-        val row = nativeInspectCandidates(1).firstOrNull() ?: return@tryLocked null
-        if (row.getOrNull(0) != shown) return@tryLocked null
+        val row = nativeInspectCandidates(SENTENCE_ROW_SEARCH).firstOrNull { it.getOrNull(0) == shown } ?: return@tryLocked null
         splitSentenceWords(shown, row.getOrNull(9).orEmpty())
     }
 
@@ -1772,7 +1782,8 @@ class RimeEngine {
                 !nativeHasSession() || nativeIsMaintaining() || nativeIsAsciiMode()) return@editPinyinAndReadState false
             val input = nativeGetInput().orEmpty()
             if (nativePinyinEditSnapshot().getOrNull(1)?.toIntOrNull() != input.length) return@editPinyinAndReadState false
-            if (nativeInspectCandidates(1).firstOrNull()?.getOrNull(0) != words.joinToString("")) return@editPinyinAndReadState false
+            val sentence = words.joinToString("")
+            if (nativeInspectCandidates(SENTENCE_ROW_SEARCH).none { it.getOrNull(0) == sentence }) return@editPinyinAndReadState false
             candidateRevision.incrementAndGet()
             reselectCaret = -1
             for (i in 0 until target) {
@@ -2016,3 +2027,5 @@ internal inline fun backspaceComposition(
 
 /** 重选整句里的词时，在前多少个候选里找这个词。 */
 private const val SENTENCE_WORD_SEARCH = 200
+/** 长按拆词时在引擎前几个候选里找候选栏首选那句（见 [RimeEngine.firstSentenceWords]）。 */
+private const val SENTENCE_ROW_SEARCH = 10

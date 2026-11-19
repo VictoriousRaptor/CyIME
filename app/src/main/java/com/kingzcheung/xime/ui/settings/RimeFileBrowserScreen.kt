@@ -42,7 +42,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -132,7 +132,7 @@ fun RimeFileBrowserContent(onBack: () -> Unit) {
         }
         showDeleteDialog = null
         refresh()
-        Toast.makeText(context, "已删除: ${file.name}", Toast.LENGTH_SHORT).show()
+        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "已删除: ${file.name}", Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(currentDir) { refresh() }
@@ -208,7 +208,7 @@ fun RimeFileBrowserContent(onBack: () -> Unit) {
                                 if (entry.isDirectory) {
                                     currentDir = entry.file
                                 } else if (entry.name.endsWith(".bin") || entry.name.endsWith(".gram")) {
-                                    Toast.makeText(context, "不支持打开二进制文件", Toast.LENGTH_SHORT).show()
+                                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "不支持打开二进制文件", Toast.LENGTH_SHORT).show()
                                 } else {
                                     viewingFile = entry.file
                                 }
@@ -297,18 +297,18 @@ fun RimeFileBrowserContent(onBack: () -> Unit) {
                             exportInProgress = false
                             result.fold(
                                 onSuccess = { exportResult ->
-                                    snackbarHostState.showSnackbar("已保存到 Downloads/${exportResult.fileName}")
+                                    snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "已保存到 Downloads/${exportResult.fileName}"))
                                 },
                                 onFailure = { error ->
                                     val kept = (error as? com.kingzcheung.xime.settings.ExportSaveException)?.kept
                                     if (kept != null) {
                                         // 没存进「下载」：说清楚，并让用户把留在应用里的备份包分享出去
                                         val action = snackbarHostState.showSnackbar(
-                                            "没能保存到「下载」文件夹，备份包已留在应用里", actionLabel = "分享",
+                                            com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "没能保存到「下载」文件夹，备份包已留在应用里"), actionLabel = com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "分享"),
                                             duration = androidx.compose.material3.SnackbarDuration.Long)
                                         if (action == androidx.compose.material3.SnackbarResult.ActionPerformed)
                                             runCatching { RimeExportManager.shareSingleFile(context, kept) }
-                                    } else snackbarHostState.showSnackbar("导出失败: ${error.message}")
+                                    } else snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "导出失败: ${error.message}"))
                                 }
                             )
                         }
@@ -372,9 +372,9 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
             file.writeText(content, Charsets.UTF_8)
             isModified = false
             reloadKeyboardConfig()
-            Toast.makeText(context, if (keyboardConfig) "已保存，键盘已更新" else "已保存", Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, if (keyboardConfig) "已保存，键盘已更新" else "已保存", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -388,7 +388,7 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
                     showDeleteConfirm = false
                     file.delete()
                     reloadKeyboardConfig()
-                    Toast.makeText(context, "已删除: ${file.name}", Toast.LENGTH_SHORT).show()
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "已删除: ${file.name}", Toast.LENGTH_SHORT).show()
                     onDeleted()
                 }) {
                     Text("删除", color = MaterialTheme.colorScheme.error)

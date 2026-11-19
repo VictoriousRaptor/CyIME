@@ -260,6 +260,8 @@ private fun cleanSpeechTextOnly(text: String): String {
                 '%', '％' -> left?.isDigit() == true
                 '(', '（' -> startsNumber(i + 1)
                 ')', '）' -> left?.isDigit() == true || left == '%' || left == '％' || left == ')' || left == '）'
+                // 英文缩写里的撇号是词的一部分（you'd、can't、I'll，#325），只在两边都是字母时留着。
+                '\'', '’' -> before?.isLetter() == true && after?.isLetter() == true
                 else -> false
             }
             append(if (numeric) c else ' ')
@@ -294,8 +296,14 @@ internal fun cleanSenseVoiceText(text: String, detectedLanguage: String = "", ke
     return cleanSpeechText(joined, keepMarks)
 }
 
-/** Identified regions allow late second-pass results to replace exactly their preview. */
-internal class SpeechTranscript(private val keepMarks: Boolean = false) {
+/**
+ * Identified regions allow late second-pass results to replace exactly their preview.
+ * [pauseMarks] = false (按停顿定稿时显示的文字): the second pass sees one pause segment alone and always ends it with
+ * a mark, so that mark says nothing about the sentence. It is dropped at every pause or forced cut (？！ stay);
+ * marks inside a segment stay, and the end-of-input re-read puts the real sentence marks back
+ * (2026-11-18 用户：断句太碎导致全是逗号句号).
+ */
+internal class SpeechTranscript(private val keepMarks: Boolean = false, private val pauseMarks: Boolean = true) {
     private data class Region(var text: String = "", var boundary: SpeechBoundary = SpeechBoundary.STOP)
     private val regions = sortedMapOf<Long, Region>()
     fun update(id: Long, text: String, boundary: SpeechBoundary? = null): String {
@@ -304,10 +312,14 @@ internal class SpeechTranscript(private val keepMarks: Boolean = false) {
         if (boundary != null) region.boundary = boundary
         return text()
     }
+    private fun shown(region: Region): String =
+        if (keepMarks && !pauseMarks && region.boundary != SpeechBoundary.STOP) region.text.trimEnd(*pauseOnlyMarks)
+        else region.text
     fun text(): String = buildString {
         var previous = SpeechBoundary.STOP
         for (region in regions.values) {
-            if (region.text.isNotEmpty()) {
+            val regionText = shown(region)
+            if (regionText.isNotEmpty()) {
                 // The second pass ends every pause segment with a full stop, but most pauses fall inside a
                 // sentence (on the user's recordings the whole re-read keeps a stop at 108 of 397). Once more
                 // speech follows, the stop reads as a comma; ？！ stay, and the end-of-input re-read decides
@@ -319,15 +331,18 @@ internal class SpeechTranscript(private val keepMarks: Boolean = false) {
                 }
                 // A kept mark already separates the sentences: no space, and never two marks in a row.
                 if (keepMarks && isNotEmpty() && last() in "，。？！、；：") {
-                    append(region.text.trimStart('，', '。', '？', '！', '、', '；', '：'))
+                    append(regionText.trimStart('，', '。', '？', '！', '、', '；', '：'))
                     previous = region.boundary
                     continue
                 }
                 if (isNotEmpty() && (previous != SpeechBoundary.LIMIT ||
-                    last().isLetterOrDigit() && last().code < 128 && region.text.first().code < 128)) append(' ')
-                append(region.text)
+                    last().isLetterOrDigit() && last().code < 128 && regionText.first().code < 128)) append(' ')
+                append(regionText)
             }
             previous = region.boundary
         }
     }
 }
+
+/** Marks a lone pause segment always ends with; ？！ depend on the words, so they stay. */
+private val pauseOnlyMarks = charArrayOf('，', '。', '、', '；', '：', ',', '.', ';', ':')

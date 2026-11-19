@@ -163,10 +163,12 @@ internal class HardwareCandidateNavigation {
     @Volatile private var shown: Shown? = null
 
     /** The row drew [words] and [count] of them fit completely. Called from composition. */
-    fun reportShown(words: List<String>, count: Int) {
-        if (words.isEmpty() || count <= 0) return
+    fun reportShown(words: List<String>, count: Int): Boolean {
+        if (words.isEmpty() || count <= 0) return false
         val next = Shown(words.take(HARDWARE_PAGE_SIZE), count.coerceAtMost(words.size))
-        if (shown != next) shown = next
+        if (shown == next) return false
+        shown = next
+        return true
     }
 
     /** Latest row's count, for windows not measured yet (paging back into the previous page). */
@@ -203,7 +205,8 @@ internal class HardwareCandidateNavigation {
         val history = window?.takeIf { it.revision == state.engineRevision && it.candidates == state.candidates }
             ?.previousStarts.orEmpty()
         val (next, previous) = when {
-            direction > 0 -> current + (stride ?: step(state, current)).coerceAtLeast(1) to history + current
+            direction > 0 -> current + (stride ?: hardwareWindowSize(state.candidates.size - current, step(state, current)))
+                .coerceAtLeast(1) to history + current
             history.isNotEmpty() -> history.last() to history.dropLast(1)
             // 没走过的窗口（从下一页翻回来）：前面那几个还没量过，按最近一行的个数往前退。
             current > 0 -> (current - (stride ?: estimate())).coerceAtLeast(0) to emptyList()

@@ -239,4 +239,30 @@ TEST(ShouldFullCommitInSelectionTest, NullCandidatePinyinPreventsFullCommit) {
 }
 
 }  // namespace
+TEST(AlignFuzzyReadingToTypedTest, SelectionSpellingReplacesFuzzyReading) {
+    std::vector<SyllableOption> sels{SyllableOption("ying", 4), SyllableOption("xiao", 4)};
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("yin xiao"), sels, ""),
+              std::optional<std::string>("ying xiao"));
+}
+
+TEST(AlignFuzzyReadingToTypedTest, UnassignedDigitsPickTheTypedVariant) {
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("yin xiao"), {}, "94649426"),
+              std::optional<std::string>("ying xiao"));
+    // zh/z：打 9426（zao），读音 zhao 对不上，换成 zao
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("zhao"), {}, "926"),
+              std::optional<std::string>("zao"));
+}
+
+TEST(AlignFuzzyReadingToTypedTest, NonFuzzyReadingsStayUnchanged) {
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("ji hua"), {}, "54482"),
+              std::optional<std::string>("ji hua"));
+    // 只打了声母（9 = x/y/z）不做替换
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("xiao"), {SyllableOption("x", 1)}, ""),
+              std::optional<std::string>("xiao"));
+    // 选的拼法和读音不是模糊音关系时不动
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::string("ma"), {SyllableOption("ji", 2)}, ""),
+              std::optional<std::string>("ma"));
+    EXPECT_EQ(AlignFuzzyReadingToTyped(std::nullopt, {}, "54"), std::nullopt);
+}
+
 }  // namespace rime

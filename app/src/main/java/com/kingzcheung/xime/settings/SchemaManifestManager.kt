@@ -430,6 +430,9 @@ object SchemaManifestManager {
                         registry.put("files", entries)
                         saveRegistry(context, registry)
                         deleteManifest(context, schemeId)
+                        // 删掉的方案、词库在 build 里的编译产物一起删（11-17 平板卸载万象后 build 里还剩 17 个）。
+                        val cleaned = removeBuildArtifacts(SchemaManager.getRimeDir(context), changes.filterValues { it == null }.keys)
+                        if (cleaned > 0) Log.i(TAG, "Removed $cleaned build artifacts of $schemeId")
                     } catch (failure: Exception) {
                         for ((name, hash) in backups) {
                             val target = safeTarget(SchemaManager.getRimeDir(context), name)
@@ -446,6 +449,33 @@ object SchemaManifestManager {
                 }
             }
         }
+
+    /**
+     * [removedSources] 是卸载时删掉的源文件（rime 目录下的相对路径）。按文件名去掉 .schema.yaml / .dict.yaml / .yaml
+     * 得到名字，删掉 build 里同名的编译产物。rime 目录顶层同名的方案、词库、配置还在（别的包也在用）时不删。
+     */
+    internal fun removeBuildArtifacts(rimeDir: File, removedSources: Collection<String>): Int {
+        val build = File(rimeDir, "build")
+        if (!build.isDirectory) return 0
+        var removed = 0
+        for (path in removedSources) {
+            // 词库常放在子目录（dicts/xxx.dict.yaml），编译产物按文件名落在 build 顶层。
+            val name = path.substringAfterLast('/')
+            val stem = when {
+                name.endsWith(".schema.yaml") -> name.removeSuffix(".schema.yaml")
+                name.endsWith(".dict.yaml") -> name.removeSuffix(".dict.yaml")
+                name.endsWith(".custom.yaml") -> continue
+                name.endsWith(".yaml") -> name.removeSuffix(".yaml")
+                else -> continue
+            }
+            if (stem.isEmpty() || stem == "default" || listOf(".schema.yaml", ".dict.yaml", ".yaml").any { File(rimeDir, stem + it).exists() }) continue
+            for (suffix in listOf(".schema.yaml", ".yaml", ".prism.bin", ".table.bin", ".reverse.bin")) {
+                val artifact = File(build, stem + suffix)
+                if (artifact.isFile && artifact.delete()) removed++
+            }
+        }
+        return removed
+    }
 
     /** 检查一个文件是否列入受保护列表（不被方案覆盖和追踪）。 */
     fun isProtectedSystemFile(name: String): Boolean {

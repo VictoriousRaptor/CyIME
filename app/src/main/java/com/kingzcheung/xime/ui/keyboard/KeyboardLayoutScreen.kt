@@ -217,6 +217,9 @@ fun KeyboardLayoutScreen(
                     isFloatingMode = uiState.isFloatingMode,
                     specialKeyTextColor = specialKeyTextColor,
                     onGestureAction = onGestureAction,
+                    candidateState = candidateState,
+                    callbacks = callbacks,
+                    inputProfile = uiState.inputProfile,
                 )
             }
 

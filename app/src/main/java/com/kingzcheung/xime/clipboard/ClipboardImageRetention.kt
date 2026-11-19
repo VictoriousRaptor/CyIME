@@ -3,8 +3,22 @@ package com.kingzcheung.xime.clipboard
 /** One recent-image budget shared by copied images and the optional screenshot feed. */
 internal const val RECENT_CLIPBOARD_IMAGE_LIMIT = 50
 
-/** Copied images kept in the app cache may use at most this much space in total. */
-internal const val CLIPBOARD_IMAGE_CACHE_BYTES = 500L * 1024 * 1024
+/**
+ * 「图片占用上限」（用户 11-17：剪贴板图片限制大小，默认 200 MB，可以调），存在 clipboard_board 里，单位 MB。
+ * 以前写死 500 MB。
+ */
+internal const val CLIPBOARD_IMAGE_CACHE_MB_KEY = "image_cache_mb"
+internal const val DEFAULT_CLIPBOARD_IMAGE_CACHE_MB = 200
+internal val CLIPBOARD_IMAGE_CACHE_MB_OPTIONS = listOf(100, 200, 500, 1000)
+
+/** 存着的值不在选项里（没设过、旧版本写的）时用默认。 */
+internal fun clipboardImageCacheMb(stored: Int): Int =
+    stored.takeIf { it in CLIPBOARD_IMAGE_CACHE_MB_OPTIONS } ?: DEFAULT_CLIPBOARD_IMAGE_CACHE_MB
+
+internal fun clipboardImageCacheMbLabel(mb: Int): String = if (mb >= 1000) "${mb / 1000} GB" else "$mb MB"
+
+/** Copied images kept in the app cache may use at most this much space in total (default 「图片占用上限」). */
+internal const val CLIPBOARD_IMAGE_CACHE_BYTES = DEFAULT_CLIPBOARD_IMAGE_CACHE_MB * 1024L * 1024
 
 internal data class CachedImageFile(val name: String, val bytes: Long, val lastModified: Long)
 
@@ -29,8 +43,11 @@ internal fun clipboardImageEvictions(files: List<CachedImageFile>, protectedName
 internal fun clipboardMediaAfterRefreshFailure(
     previous: List<ClipboardImage>, includeRecent: Boolean,
     pinnedKeys: Set<String>, hiddenUris: Set<String>,
+    includeGalleryPhotos: Boolean = true,
 ): List<ClipboardImage> = previous.filter {
-    it.uri !in hiddenUris && (includeRecent || "image:${it.uri}" in pinnedKeys)
+    val pinned = "image:${it.uri}" in pinnedKeys
+    it.uri !in hiddenUris && (includeRecent || pinned) &&
+        (includeGalleryPhotos || it.label != ScreenshotImageSource.PHOTO_LABEL || pinned)
 }
 
 internal fun isMediaImageUri(uri: String): Boolean = uri.startsWith("content://media/")

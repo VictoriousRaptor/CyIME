@@ -951,6 +951,21 @@ internal class KeyGapLightField {
             path.addRect(Rect(left, cells[index * 4 + 1], cells[index * 4 + 2], cells[index * 4 + 3]))
             path.addRoundRect(RoundRect(caps[index * 4], caps[index * 4 + 1], caps[index * 4 + 2], caps[index * 4 + 3], radius))
         }
+        // 分体键盘的中缝：同一排两个键中间隔着一段没有键的空当，也算键缝，方框、菱形扩开时能走过中缝（#428，接 #381）。
+        // 只补同一排左右都有键的空当；一排两头没有键的地方（第二排两头）照旧不画。
+        for (index in 0 until capCount) {
+            val left = cells[index * 4]
+            if (left.isNaN()) continue
+            val top = cells[index * 4 + 1]; val right = cells[index * 4 + 2]; val bottom = cells[index * 4 + 3]
+            var next = Float.POSITIVE_INFINITY
+            for (other in 0 until capCount) {
+                val otherLeft = cells[other * 4]
+                if (other == index || otherLeft.isNaN() || otherLeft < right - .5f) continue
+                if (kotlin.math.abs(cells[other * 4 + 1] - top) < 1f && kotlin.math.abs(cells[other * 4 + 3] - bottom) < 1f)
+                    next = min(next, otherLeft)
+            }
+            if (next.isFinite() && next - right > 1f) path.addRect(Rect(right, top, next, bottom))
+        }
         mask = path
         return path
     }
@@ -1018,6 +1033,8 @@ internal fun keyGapLightSource(
     holdMillis: Long? = null,
     /** 键自己报「点了一下并且生效了」、移光标；给了它，就不再靠旁观触摸判断点按。 */
     trigger: KeyGapLightTrigger? = null,
+    /** 滑到哪个键按哪个键：手指滑到这个键上（用户 11-16），像按下一样走一次线。 */
+    slideLit: Boolean = false,
 ): Modifier {
     val field = LocalKeyGapLight.current ?: return Modifier
     val token = remember(field) { Any() }
@@ -1043,6 +1060,7 @@ internal fun keyGapLightSource(
         SideEffect { trigger.kind = kind }
     }
     DisposableEffect(field, token) { onDispose { field.remove(token) } }
+    if (slideLit) LaunchedEffect(field, token) { field.press(token, currentKind) }
     if (caseAnchor) SideEffect { field.anchorCase(token) }
     return Modifier
         .onGloballyPositioned { field.place(token, it, currentPads) }

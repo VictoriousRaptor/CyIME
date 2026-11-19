@@ -26,7 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -183,7 +183,7 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
             // 「测试中…」至少停留一下，不然一闪而过看不到。
             kotlinx.coroutines.delay((CPU_RUNNING_MIN_MS - (android.os.SystemClock.uptimeMillis() - started)).coerceAtLeast(0L))
             cpuSkipped = (outcome as? CpuBenchmarkRunner.Outcome.Skipped)?.reason
-            if (force) cpuSkipped?.let { android.widget.Toast.makeText(context, cpuSkipToast(it), android.widget.Toast.LENGTH_SHORT).show() }
+            if (force) cpuSkipped?.let { com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, cpuSkipToast(it), android.widget.Toast.LENGTH_SHORT).show() }
             cpuRetested = force && outcome is CpuBenchmarkRunner.Outcome.Measured
             device = DeviceCapabilityProbe.read(context)
             cpuRunning = false

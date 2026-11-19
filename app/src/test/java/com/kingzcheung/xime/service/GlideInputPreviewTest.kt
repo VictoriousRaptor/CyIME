@@ -60,6 +60,40 @@ class GlideInputPreviewTest {
         ic.commitText("hello", 1)
         assertEquals("before hello", editable.toString())
     }
+    @Test fun automaticLeadingSpaceIsOutsideTheUnderlineAndStillReplaced() {
+        val editable = SpannableStringBuilder("before")
+        Selection.setSelection(editable, editable.length)
+        val view = android.view.View(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        val ic = object : BaseInputConnection(view, true) { override fun getEditable(): Editable = editable }
+        var written: String? = null
+        val preview = GlideInputPreview({ ic }, { 1L }, { null }, { true }, { written = it },
+            { written == it }, { ic.setComposingText("", 1); ic.finishComposingText(); written = null })
+        preview.show(" hel", 1L)
+        assertEquals("before hel", editable.toString())
+        val underline = editable.getSpans(0, editable.length, android.text.style.UnderlineSpan::class.java).single()
+        assertEquals(7, editable.getSpanStart(underline))
+        preview.show(" hello", 1L)
+        assertEquals("before hello", editable.toString())
+        preview.end()
+        assertEquals("before", editable.toString())
+    }
+
+    @Test fun finalWordCanReplacePreviewWithoutDeletingItFirst() {
+        val editable = SpannableStringBuilder("before")
+        Selection.setSelection(editable, editable.length)
+        val view = android.view.View(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        val ic = object : BaseInputConnection(view, true) { override fun getEditable(): Editable = editable }
+        var written: String? = null
+        val preview = GlideInputPreview({ ic }, { 1L }, { null }, { true }, { written = it },
+            { written == it }, { ic.setComposingText("", 1); ic.finishComposingText(); written = null })
+        preview.show(" hello", 1L)
+        assertEquals("before", preview.textBeforePreview(64))
+        ic.commitText(" hello", 1)
+        written = null
+        preview.end()
+        assertEquals("before hello", editable.toString())
+    }
+
     @Test fun previewReplacesItselfAndClearsOnEnd() {
         val ic = mock<InputConnection>()
         whenever(ic.setComposingText(any(), eq(1))).thenReturn(true)

@@ -480,9 +480,7 @@ fun CandidateBar(
     ) {
         PreeditBubbleHost(showPreedit && !previewPrefs.preeditInsideKeyboard) { hidden ->
             PreeditPreview(preeditText, protectedVisuals, onEditPreedit,
-                preeditBubbleColor(themeSurface, visuals.preeditBackgroundColor,
-                    blurBehind = glass.enabled && glass.normalized().blurRadiusDp >= 1f,
-                    opacity = previewPrefs.preeditBubbleOpacity), hidden)
+                floatingPreeditColor(themeSurface, visuals.preeditBackgroundColor), hidden)
         }
 
         if (state is CandidateBarState.ClipboardDisplay) {
@@ -688,6 +686,7 @@ fun CandidateBar(
                             fontSize = candidateTextSize.sp,
                             candidateFontFamily = candidateFontFamily,
                             commentFontFamily = commentFontFamily,
+                            learned = state is CandidateBarState.ChineseCandidates && candidate in LocalLearnedCandidates.current,
                             correction = if (showComments && state is CandidateBarState.ChineseCandidates) LocalCorrectedCandidates.current[candidate].orEmpty() else "",
                             modifier = if (showDividers && index > 0) Modifier.candidateLeadingDivider(itemDividerColor,
                                 4.dp, candidateTextSize.sp) else Modifier,
@@ -1119,6 +1118,8 @@ internal fun candidatePrimaryTextStyle(
 internal fun candidateTwoLineTextStyle(primary: TextStyle, fontSize: androidx.compose.ui.unit.TextUnit) =
     primary.copy(fontSize = fontSize, lineHeight = (fontSize.value * CANDIDATE_TWO_LINE_SPACING).sp)
 
+/** 当前候选中用户以前打过的词（按文字），由键盘根部提供。 */
+internal val LocalLearnedCandidates = androidx.compose.runtime.compositionLocalOf<Set<String>> { emptySet() }
 internal val LocalCorrectedCandidates = androidx.compose.runtime.compositionLocalOf<Map<String, String>> { emptyMap() }
 internal val LocalCorrectionFullScheme = androidx.compose.runtime.compositionLocalOf<com.kingzcheung.xime.settings.DoublePinyinScheme?> { null }
 
@@ -1163,6 +1164,8 @@ fun CandidateItem(
     onSentenceSelectionEnd: (() -> Unit)? = null,
     opaqueComment: Boolean = false,
     textShadow: androidx.compose.ui.graphics.Shadow? = null,
+    /** 用户以前打过的词：文字右上角画一个小编辑图标。 */
+    learned: Boolean = false,
     /** 纠错来的候选：引擎给的逐音节纠正，代替拼音注释标出怎么改的。 */
     correction: String = "",
     /** Shift 拖动指着别的候选时由候选栏统一画底色，这里先不画，保证只亮一个。 */
@@ -1263,6 +1266,15 @@ fun CandidateItem(
             style = primaryStyle,
             overflow = TextOverflow.Ellipsis,
         )
+        if (learned) {
+            androidx.compose.material3.Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.Edit,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.align(Alignment.Top).size(with(LocalDensity.current) { learnedMarkSize(fontSize).toDp() })
+                    .testTag("candidate-learned:$index"),
+            )
+        }
         if (correction.isNotEmpty() || comment.isNotEmpty()) {
             Spacer(modifier = Modifier.width(3.dp))
             val commentColor = if (isSelected) selectedTextColor.copy(alpha = if (opaqueComment) 1f else 0.6f) else textColor.copy(alpha = if (opaqueComment) 1f else 0.5f)
@@ -1281,6 +1293,10 @@ fun CandidateItem(
         }
     }
 }
+
+/** 「打过的词」小图标的边长：画图标和量候选宽度共用，量少了最后一个候选会被挤到栏外。 */
+internal fun learnedMarkSize(fontSize: androidx.compose.ui.unit.TextUnit): androidx.compose.ui.unit.TextUnit =
+    (fontSize.value * 0.45f).sp
 
 /** 候选后面那段小字：有纠错显示纠错，否则显示注释（和 [CandidateItem] 一致）。 */
 internal fun candidateSecondaryText(comment: String, correction: String,
@@ -1455,7 +1471,7 @@ private fun PreeditPreview(text: String, visuals: CandidateBarVisuals, onEdit: (
         }
     }
     val glass = LocalKeyboardInputPreferences.current.frostedGlass.normalized()
-    if (glass.enabled && glass.blurRadiusDp >= 1f) {
+    if (floatingPreeditBlurBehind(glass)) {
         // 气泡内容最少 44dp 高、上下各留 6dp，真正的底色块在中间，圆角 4dp（见下面 PreeditLabel）。
         val inset = with(density) { 6.dp.roundToPx() }
         PreeditBubbleBlur(bubbleBounds.value?.let { IntRect(it.left, it.top + inset, it.right, it.bottom - inset) },
@@ -1494,6 +1510,10 @@ private const val PREEDIT_BUBBLE_CLEAR_FRAMES = 3
 /** 透明且没有语义节点：测试和无障碍都当气泡已经没了。 */
 private val HiddenPreeditBubble = Modifier.alpha(0f).clearAndSetSemantics {}
 
+/** 半透明拼音底色上的字要不要垫光晕：实底或没有底色时不垫。 */
+internal fun floatingPreeditHalo(text: Color, background: Color?): GlassTextHalo? =
+    background?.takeIf { it.alpha < 1f }?.let { glassTextHalo(listOf(text), it.copy(alpha = 1f), it.alpha) }
+
 /** 拼音气泡最多排几行；再长就在气泡里上下滚，始终露出光标所在的那行（没有光标时露出最后一行）。 */
 private const val PREEDIT_BUBBLE_MAX_LINES = 3
 
@@ -1512,6 +1532,20 @@ internal fun preeditBubbleColor(surface: Color, key: Color, blurBehind: Boolean,
 
 internal const val PREEDIT_BUBBLE_GLASS_ALPHA = 0.9f
 
+/** 开着玻璃且模糊半径够大时，浮在应用上的拼音气泡、拼音编辑条下面都垫一块实时模糊。 */
+internal fun floatingPreeditBlurBehind(glass: com.kingzcheung.xime.settings.FrostedGlassConfig): Boolean =
+    glass.normalized().let { it.enabled && it.blurRadiusDp >= 1f }
+
+/**
+ * 浮在应用上面的拼音底色：键盘上方的拼音气泡和点开后的拼音编辑条用同一个颜色、同一个不透明度
+ * （设置里的「拼音气泡不透明度」，默认 80%），点拼音编辑时不会从实底忽然变透（用户 11-16）。
+ */
+@Composable
+internal fun floatingPreeditColor(surface: Color, key: Color): Color {
+    val prefs = LocalKeyboardInputPreferences.current
+    return preeditBubbleColor(surface, key, floatingPreeditBlurBehind(prefs.frostedGlass), prefs.preeditBubbleOpacity)
+}
+
 /**
  * 编码清空、气泡变透明的那几帧里模糊窗口的透明度。模糊也是单独的小窗口，原来这一刻就拆掉，
  * 系统拿它最后一帧放退出动画，模糊比拼音晚一拍才没（用户 11-08 转来的反馈）。现在同一帧调成全透明，
@@ -1521,7 +1555,7 @@ internal fun preeditBubbleBlurAlpha(hidden: Boolean): Float = if (hidden) 0f els
 
 /** 拼音气泡下面的实时模糊：和键盘卡片的玻璃同一种子窗口，放在输入法窗口下面，只模糊气泡那一块应用画面。 */
 @Composable
-private fun PreeditBubbleBlur(region: IntRect?, blurRadiusDp: Float, cornerRadiusPx: Float, hidden: Boolean = false) {
+internal fun PreeditBubbleBlur(region: IntRect?, blurRadiusDp: Float, cornerRadiusPx: Float, hidden: Boolean = false) {
     val view = LocalView.current
     val context = LocalContext.current
     // 模糊半径按屏幕真实密度算，和键盘卡片那块一样；候选栏放大只放大气泡，不改模糊强度。
@@ -1607,7 +1641,9 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
     } ?: Modifier.preeditSurface(background)
     val textColor = solidBackground?.let { readableThemeText(visuals.textColor, it.copy(alpha = 1f)) }
         ?: visuals.textColor.copy(alpha = if (visuals.opaqueComments) 1f else 0.9f)
-    Box(modifier.then(surface)
+    // 半透明的气泡：后面是白是黑都按最坏情况算，拼音不够 4.5:1 时垫和候选栏玻璃同一种柔光托底。
+    val halo = remember(textColor, solidBackground) { floatingPreeditHalo(textColor, solidBackground) }
+    Box(modifier.then(surface).glassTextHalo(halo)
         .testTag("candidate-preedit")
         .then(if (onEdit != null) Modifier.clickable(role = Role.Button,
             onClickLabel = "编辑拼音", onClick = onEdit) else Modifier),
@@ -1774,17 +1810,20 @@ internal fun FixedCandidateStrip(
         val all = candidates + associations
         val focused = highlightIndex.takeIf { it in candidates.indices } ?: 0
         val viewport = remember(candidates, shownComments) { CandidateStripViewport() }
-        // 纠错和画出来的一样算进宽度，否则放不下的最后一个候选也算「显示了」，「下一项」移到它时被栏边切掉。
+        // 小图标、纠错和画出来的一样算进宽度，否则放不下的最后一个候选也算「显示了」，「下一项」移到它时被栏边切掉。
+        val learnedCandidates = LocalLearnedCandidates.current
         val correctedCandidates = shownCorrections(LocalCorrectedCandidates.current, commentsShown)
         val fullCorrectionScheme = LocalCorrectionFullScheme.current
-        val window = remember(viewport, all, candidates.size, shownComments, commentsAreGlosses, scrollable, focused, fontSize, density, measurer, textWidths, inheritedTextStyle, showNumberLabels, itemSpacing, itemPadding, constraints.maxWidth, AppFonts.candidateFontFamily, AppFonts.commentFontFamily, localGap, correctedCandidates, fullCorrectionScheme) {
+        val window = remember(viewport, all, candidates.size, shownComments, commentsAreGlosses, scrollable, focused, fontSize, density, measurer, textWidths, inheritedTextStyle, showNumberLabels, itemSpacing, itemPadding, constraints.maxWidth, AppFonts.candidateFontFamily, AppFonts.commentFontFamily, localGap, learnedCandidates, correctedCandidates, fullCorrectionScheme) {
             val bodyWidths = HashMap<Int, Int>()
             fun bodyWidth(index: Int): Int = bodyWidths.getOrPut(index) {
                 val numbered = index < candidates.size
                 val text = candidateNumberedText(all[index], index, showNumberLabels && numbered)
                 val primary = textWidths.of(text,
                     candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily, index == focused))
-                primary + with(density) { 2 * itemPadding.roundToPx() }
+                val learnedMark = if (numbered && all[index] in learnedCandidates)
+                    with(density) { learnedMarkSize(fontSize).toDp().roundToPx() } else 0
+                primary + learnedMark + with(density) { 2 * itemPadding.roundToPx() }
             }
             val fullWidths = HashMap<Int, Int>()
             fun widthAt(index: Int): Int = fullWidths.getOrPut(index) {
@@ -1923,6 +1962,7 @@ internal fun FixedCandidateStrip(
                     onSentenceSelection = callbacks.onSentenceSelection.takeIf { index == 0 && !showNumberLabels },
                     onSentenceSelectionChange = callbacks.onSentenceSelectionChange.takeIf { index == 0 && !showNumberLabels },
                     onSentenceSelectionEnd = callbacks.onSentenceSelectionEnd.takeIf { index == 0 && !showNumberLabels },
+                    learned = index < candidates.size && all[index] in learnedCandidates,
                     correction = if (index < candidates.size) correctedCandidates[all[index]].orEmpty() else "",
                     selectionFill = shiftDragFree && !highlightShown, horizontalPadding = itemPadding, fit = window.fits[index])
                 }
@@ -2055,6 +2095,7 @@ private fun ScrollableCandidateRow(
                 onSentenceSelection = callbacks.onSentenceSelection.takeIf { index == 0 && !showNumberLabels },
                     onSentenceSelectionChange = callbacks.onSentenceSelectionChange.takeIf { index == 0 && !showNumberLabels },
                     onSentenceSelectionEnd = callbacks.onSentenceSelectionEnd.takeIf { index == 0 && !showNumberLabels },
+                learned = numbered && all[index] in LocalLearnedCandidates.current,
                 correction = if (numbered) corrections[all[index]].orEmpty() else "",
                 selectionFill = selectionFill,
                 interactive = !hidden, horizontalPadding = itemPadding, fit = fits[index])

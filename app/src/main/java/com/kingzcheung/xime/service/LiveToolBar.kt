@@ -276,5 +276,6 @@ internal fun toolPanelQuickNode(nodes: List<com.kingzcheung.xime.plugin.core.con
         it.type == com.kingzcheung.xime.plugin.core.config.UiNodeType.SELECT && it.style == "quick" &&
             !it.key.isNullOrBlank() && it.options.isNotEmpty()
     } ?: return null
-    return com.kingzcheung.xime.keyboard.PressMenuOptions(node.key!!, node.label.orEmpty(), node.options, node.value)
+    return com.kingzcheung.xime.keyboard.PressMenuOptions(node.key!!, node.label.orEmpty(), node.options, node.value,
+        node.optionLabels)
 }

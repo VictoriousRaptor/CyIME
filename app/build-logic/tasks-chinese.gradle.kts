@@ -724,6 +724,12 @@ val prepareChineseDictionaries by tasks.registering {
             // 能找到, tuolaile 拖来了 -> 过来了). Swept on the short-sentence patches: ln 2000 broke 7 of them
             // (zaipushang 再铺上 -> 在路上) for 528 clauses, ln 100000 none for 509. 0 = off.
             "  slip_correction_margin: 9.2\n" +
+            // correction_lead_bias: the keyboard's 邻键纠错强度 (TypoStrength.Lead; ln units), added to the three margins a
+            // corrected reading must win by before it leads what was typed: the 2000 times of a corrected word
+            // (candidate_policy.cc), slip_correction_margin and tail_correction_margin above. Not applied on the
+            // omission prism read after a pause. 2.3 (ten times each) is the shipped default since 2026-11-16
+            // (「不要把纠错的词组放到前面」): figures per level in assets/typo_effects.json.
+            "  correction_lead_bias: 2.3\n" +
             // initials_choices: input typed as initials only (wmjs, xydj) kept the dictionary's order and made no sentence
             // when a dictionary word had those initials. With a count above 0 the leading whole words and the sentences
             // made of words are ordered by the same score as full input (word model + rescore_rime_weight of Rime's
@@ -888,6 +894,26 @@ val prepareChineseDictionaries by tasks.registering {
                     "\nt9:\n  sentence_rescore: true\n  rescore_keys_per_syllable: 2\n  ngram_model: t9_ngram\n" +
                     "  ngram_sentence_start: false\n  rescore_rime_weight: 0\n"
             })
+        // Double pinyin after a pause (2026-11-16): one key left out, a key pressed twice, two keys swapped. A helper
+        // prism spells every two-key code those ways as well; it is read only after a pause, and candidate_policy.cc
+        // offers one of its readings when the word model finds it likelier than the first candidate by
+        // cyime_pause_correction/margin (without the gate 22 of 670 correctly typed inputs gained a made-up sentence,
+        // with 3.0 none; of 670 slips each, wanted word in the first three: key left out 1% -> 43%, swapped 0 -> 91%,
+        // pressed twice 2% -> 96%). max_keys: the lookup grows with the input. The keyboard's 漏键, 多键, 顺序 switches
+        // reach it as session options. DoublePinyinScheme.pauseSchema writes the same file for the generated schemes.
+        val pauseId = "cyime_pause_double_pinyin_flypy"
+        val flypyAlgebra = doublePinyin.readText().substringAfter("\nspeller:\n").substringAfter("  algebra:\n")
+            .lineSequence().takeWhile { it.isBlank() || it.startsWith("    ") || it.trimStart().startsWith("#") }
+            .filter { it.startsWith("    - ") }.joinToString("") { it + "\n" }
+        check(flypyAlgebra.contains("xlit/") && flypyAlgebra.contains("\$1'/")) { "Upstream double_pinyin_flypy algebra changed" }
+        File(root, "$pauseId.schema.yaml").writeText(
+            "schema:\n  schema_id: $pauseId\n  name: 双拼停顿纠错索引\n  version: '1'\n" +
+            "translator:\n  dictionary: rime_ice\n  prism: $pauseId\n  enable_user_dict: false\n  enable_correction: true\n" +
+            "speller:\n  alphabet: zyxwvutsrqponmlkjihgfedcba\n  delimiter: \" '\"\n  algebra:\n" + flypyAlgebra +
+            listOf("\$1", "\$2", "\$1\$1\$2", "\$1\$2\$2", "\$2\$1").joinToString("") { "    - fuzz/^([a-z])([a-z])\$/$it/\n" })
+        check(doublePinyin.readText().split("  dependencies:\n").size == 2) { "Upstream double_pinyin_flypy dependencies changed" }
+        doublePinyin.writeText(doublePinyin.readText().replace("  dependencies:\n", "  dependencies:\n    - $pauseId\n") +
+            "\ncyime_omission_schema: $pauseId\n\ncyime_pause_correction:\n  margin: 3.0\n  max_keys: 24\n")
         // Built-in letter arrangements (settings/BuiltinLetterLayouts.kt): same schema, own ID and name.
         for ((id, name) in listOf("pinyin_qwjrtk" to "QWJRTK（双拇指）", "pinyin_cyletix10" to "Cyletix10（实验）",
                 "pinyin_colemak" to "Colemak", "pinyin_typewise" to "Typewise")) {

@@ -59,6 +59,16 @@ class BaseAssociationModel private constructor(
         return emptyList()
     }
 
+    /**
+     * How many trailing characters of [context] the row used for it covers (0: no row). The table holds contexts
+     * of one or two characters; a longer word the context ends with is looked up in [WordContinuationTable].
+     */
+    fun contextLength(context: String): Int {
+        val tail = context.takeLastWhile { it in '一'..'鿿' }.takeLast(4)
+        for (size in tail.length downTo 1) if (contexts.binarySearch(tail.takeLast(size)) >= 0) return size
+        return 0
+    }
+
     companion object {
         const val ASSET = "association/lccc-base-v1.bin"
         const val WORD_COMPLETIONS_ASSET = "association/lccc-base-v1.completions.gz"

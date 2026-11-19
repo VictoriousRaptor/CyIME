@@ -137,11 +137,12 @@ internal val LocalDeleteDrag = staticCompositionLocalOf<(() -> DeleteDragSession
 internal const val DEPLOY_NOTICE_DELAY_MS = 600L
 
 /**
- * 首选上拖选改局部（PR #363）目前只接了 26 键双拼；九键、14 键和全拼等其它方案
- * 照旧用长按首选里的拆词重选，两种入口不同时出现。
+ * 首选上拖选改局部（PR #363）：26 键全拼和双拼都有（11-18 全拼也接上，原来只有双拼，全拼上找不到）；
+ * 九键、14 键等其它方案照旧用长按首选里的拆词重选，两种入口不同时出现。
  */
 internal fun usesSentenceDragEdit(profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
-    profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN &&
+    (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN ||
+        profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN) &&
         profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC
 
 /** Keep choices for the unconfirmed suffix when an earlier candidate is selected. */
@@ -1490,6 +1491,7 @@ fun KeyboardView(
                 }
             }
             androidx.compose.runtime.CompositionLocalProvider(
+                LocalLearnedCandidates provides cs.learnedCandidates,
                 LocalCorrectedCandidates provides correctionMarks,
                 LocalSentenceSelection provides sentenceDragOwner,
                 LocalSentenceCandidateHighlight provides sentenceEdit?.let { owner ->
@@ -3049,7 +3051,7 @@ private class SentenceParts(val words: List<String>, val reselect: (Int) -> Unit
 
 /**
  * 首选是引擎组出来的整句（两个词以上）时拆成词；其它候选、拿不到（引擎正忙）都不拆。
- * 26 键双拼用首选上的拖选改局部（PR #363），不再出拆词；其它方案还没有拖选，照旧出拆词。
+ * 26 键全拼和双拼用首选上的拖选改局部（PR #363），不再出拆词；其它方案还没有拖选，照旧出拆词。
  */
 private fun sentenceParts(callbacks: KeyboardCallbacks, cs: com.kingzcheung.xime.service.CandidateState,
     word: String, first: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): SentenceParts? {

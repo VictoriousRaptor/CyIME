@@ -176,4 +176,55 @@ class EnglishLiteralInputTest {
         assertFalse(takesWordsAutoSpace("123"))
         assertFalse(takesWordsAutoSpace("hello "))
     }
+
+    /** 用户 11-16：英文打 what's 时撇号接进词里，补全按整个词接着出。 */
+    @Test fun apostropheJoinsTheWordBeingTyped() {
+        val english = com.kingzcheung.xime.settings.InputLanguage.ENGLISH
+        assertTrue(apostropheJoinsWord(english, "what"))
+        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.FRENCH, "l"))
+        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.ITALIAN, "dell"))
+        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.GERMAN, "geht"))
+        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.SPANISH, "d"))
+        // 反例：没在打词、刚打过撇号（第二个照旧是标点）、俄语韩语不用撇号、中文日语不走这里。
+        assertFalse(apostropheJoinsWord(english, ""))
+        assertFalse(apostropheJoinsWord(english, "what'"))
+        assertFalse(apostropheJoinsWord(english, "3"))
+        for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.RUSSIAN, com.kingzcheung.xime.settings.InputLanguage.KOREAN,
+                com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE,
+                com.kingzcheung.xime.settings.InputLanguage.CHINESE, com.kingzcheung.xime.settings.InputLanguage.JAPANESE))
+            assertFalse(language.id, apostropheJoinsWord(language, "abc"))
+
+        val editor = StringBuilder()
+        var state = CandidateState()
+        for (key in listOf("W", "h", "a", "t", "'", "s")) {
+            state = requireNotNull(commitEnglishLetter(state, key, key == "W", { true }) { editor.append(it); true })
+        }
+        assertEquals("What's", editor.toString())
+        assertEquals("What's", state.pendingEnglishText)
+        // 撇号不会被当成大写，也不补空格。
+        val glided = CandidateState(pendingEnglishText = "don", glidedWord = "don")
+        assertEquals("don'", requireNotNull(commitEnglishLetter(glided, "'", true, { true }) { true }).pendingEnglishText)
+    }
+
+    /** 用户 11-16 要的马来语：叠词 kanak-kanak 的连字符接进正在打的词，补全接着出；别的语言连字符照旧是标点。 */
+    @Test fun malayHyphenJoinsTheWordBeingTyped() {
+        val malay = com.kingzcheung.xime.settings.InputLanguage.MALAY
+        assertTrue(markJoinsWord(WORD_HYPHEN, malay, "kanak"))
+        assertTrue(markJoinsWord(WORD_APOSTROPHE, malay, "don"))
+        // 反例：没在打词、刚打过连字符、别的语言。
+        assertFalse(markJoinsWord(WORD_HYPHEN, malay, ""))
+        assertFalse(markJoinsWord(WORD_HYPHEN, malay, "kanak-"))
+        for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.ENGLISH, com.kingzcheung.xime.settings.InputLanguage.FRENCH,
+                com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE, com.kingzcheung.xime.settings.InputLanguage.CHINESE))
+            assertFalse(language.id, markJoinsWord(WORD_HYPHEN, language, "well"))
+        assertFalse(markJoinsWord("?", malay, "kanak"))
+
+        val editor = StringBuilder()
+        var state = CandidateState()
+        for (key in listOf("k", "a", "n", "a", "k", "-", "k")) {
+            state = requireNotNull(commitEnglishLetter(state, key, false, { true }) { editor.append(it); true })
+        }
+        assertEquals("kanak-k", editor.toString())
+        assertEquals("kanak-k", state.pendingEnglishText)
+    }
 }

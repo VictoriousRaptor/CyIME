@@ -623,8 +623,11 @@ object KeysConfigHelper {
     val DEFAULT_T9_SIDE_SYMBOLS: List<String> = listOf("，", "。", "？", "！", "…", "～", "、", "：",
         "“", "”", "；", "（", "）")
 
-    /** 笔画键盘左侧符号列内置默认（与历史硬编码一致）。 */
-    val DEFAULT_STROKE_SIDE_SYMBOLS: List<String> = listOf("。", "？", "！", "~")
+    /**
+     * 笔画键盘左侧符号列内置默认：和九键侧栏同一套，前四个是 ，。？！，超过 4 个上下滑（11-18 贡献者）。
+     * 原来只有 。？！~ 四个、滑不动，也没有逗号。自己改过的（设置里的「笔画侧栏」、xime.custom.yaml）照旧。
+     */
+    val DEFAULT_STROKE_SIDE_SYMBOLS: List<String> = DEFAULT_T9_SIDE_SYMBOLS
     
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
     
@@ -716,7 +719,14 @@ object KeysConfigHelper {
 
     /** 合并键方案（pinyin_14jian 等）对应的 xime.yaml 键盘 section，非合并键方案返回 null。 */
     internal fun mergedSectionForSchema(schemaId: String): String? =
-        resolveMergedSection(schemaId, _schemaSectionBindings) ?: generatedSection(schemaId)
+        chosenSection(schemaId) ?: resolveMergedSection(schemaId, _schemaSectionBindings) ?: generatedSection(schemaId)
+
+    /** 语言换用的另一套键盘（法语 AZERTY，[LetterLayouts.chosenSection]）；没选或那个 section 没读到时 null。 */
+    private fun chosenSection(schemaId: String): String? = LetterLanguage.ofSchema(schemaId)
+        ?.let { LetterLayouts.chosenSection(it.language) }?.takeIf { it in _mergedRows }
+
+    /** 方案自己在 xime.yaml / xime.custom.yaml 里绑的 section，不看语言另选的键盘。 */
+    fun ownSectionForSchema(schemaId: String): String? = _schemaSectionBindings[schemaId]
 
     /**
      * 绑定解析：仅认 schemas 声明（xime.yaml / xime.custom.yaml keyboard.<section>.schemas），
@@ -727,7 +737,7 @@ object KeysConfigHelper {
         bindings[schemaId]?.takeIf { it !in CODE_LAYOUT_SECTIONS }
 
     /** 查询方案声明的键盘 section（任意类型，含代码布局），未声明返回 null。 */
-    fun boundSectionForSchema(schemaId: String): String? = _schemaSectionBindings[schemaId]
+    fun boundSectionForSchema(schemaId: String): String? = chosenSection(schemaId) ?: _schemaSectionBindings[schemaId]
         ?: "t9".takeIf { DoublePinyinSchemes.isT9(schemaId) } ?: generatedSection(schemaId)
 
     /**
@@ -987,7 +997,9 @@ object KeysConfigHelper {
             // 代码布局 section（t9/stroke）无行数据，走各自的专属配置解析，不在此加载
             val mergedRowsMap = mutableMapOf<String, List<List<String>>>()
             val mergedGesturesMap = mutableMapOf<String, Map<String, KeyGestureConfig>>()
-            for (section in _schemaSectionBindings.values.filter { it !in CODE_LAYOUT_SECTIONS }.distinct()) {
+            // 语言自带的另一套键盘（法语 AZERTY）不绑方案，也一起读，选了就能用。
+            for (section in (_schemaSectionBindings.values.filter { it !in CODE_LAYOUT_SECTIONS } +
+                    LetterLayouts.sectionLayoutIds).distinct()) {
                 parseLayoutSection(context, section)?.let { mergedRowsMap[section] = it }
                 mergedGesturesMap[section] = parseGesturesSection(context, section)
             }
@@ -1912,17 +1924,20 @@ object KeysConfigHelper {
         if (isAsciiMode) "" else LetterLanguage.of(InputLanguage.forSchema(_activeSchemaId))?.extraLetters.orEmpty()
 
     /**
-     * 不在 26 格里的字母键（俄语 й、韩语 ㅂ、西班牙语 ñ）：角标跟着位置走，取 26 键同一行同一格那个字母的角标；
-     * 那一格超出 26 键的（ñ、х）不带角标。
+     * 字母语言键盘上的键（俄语 й、韩语 ㅂ、西班牙语 ñ、法语 AZERTY 的 a）：角标跟着位置走，取 26 键同一行同一格那个字母的角标；
+     * 那一格超出 26 键的不带角标（ñ、х），a–z 超出时保留自己的（AZERTY 第二排末尾的 m）。QWERTY 排法的字母就在自己那一格，和以前一样。
      */
     private fun cornerCellOwner(key: String, letters: LetterLanguage?, isAsciiMode: Boolean): String? {
-        if (letters == null || isAsciiMode || key in QwertySwipeSymbols.keys.map(Char::toString)) return null
+        if (letters == null || isAsciiMode) return null
         _zhRows.forEachIndexed { row, keys ->
             val column = keys.indexOf(key)
             if (column >= 0) return QwertySwipeSymbols.rows.getOrNull(row)?.getOrNull(column)?.toString() ?: key
         }
         return null
     }
+
+    /** 按住 !@# 当 Ctrl 时这个字母键发 Ctrl+几（俄、韩语键盘按位置），见 [LetterLanguage.ctrlLetter]。 */
+    fun ctrlLetter(key: Char): Char? = LetterLanguage.ctrlLetter(key, _zhRows)
 
     /** 获取某个按键的手势配置。 */
     fun getKeyGesture(key: String): KeyGestureConfig? = getKeyGesture(key, false)

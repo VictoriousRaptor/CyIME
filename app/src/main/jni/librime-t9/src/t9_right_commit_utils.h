@@ -78,6 +78,26 @@ bool ShouldFullCommitInSelection(int consumed_from_non_selected,
 // 对应 Kotlin comment.trim().split("\\s+".toRegex()).filter { it.any { c -> c.isLetter() } }
 std::vector<std::string> ParseSyllables(const std::string& comment);
 
+// 模糊音读音对齐到实际输入的拼法。
+//
+// 开了模糊音后，候选的读音可能和用户打的不一样：左栏选了 ying、xiao，
+// 候选「音效」的读音是 yin xiao。消费计算按读音数字母、匹配数字码时，
+// yin 比 ying 少一位，后面的 xiao 就对不上，只算消费了第一个音节，
+// 上屏后 xiao 留在输入里，多出一个字。
+//
+// 这里把每个音节换回用户实际打的拼法：
+// - 前 selections.size() 个音节：若不以选中拼音开头，而某个模糊变体以它开头，换成该变体；
+// - 其余音节：逐个对 unassigned 数字段，原拼法数字码对不上而模糊变体对得上时换成变体。
+// 没有需要替换的音节时原样返回。
+std::optional<std::string> AlignFuzzyReadingToTyped(
+    const std::optional<std::string>& candidate_pinyin,
+    const std::vector<SyllableOption>& selections,
+    const std::string& unassigned);
+
+// 拼音音节的模糊音变体（声母 z/zh c/ch s/sh n/l f/h r/l，
+// 韵母 an/ang en/eng in/ing ian/iang uan/uang，含声韵同时替换），不含自身。
+std::vector<std::string> FuzzyPinyinVariants(const std::string& syllable);
+
 }  // namespace rime
 
 #endif  // T9_RIGHT_COMMIT_UTILS_H_

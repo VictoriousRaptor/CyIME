@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +50,7 @@ internal fun InputProfileSelectors(
             // 与键盘里的选择面板一致：没有当前方案的布局标灰，点了换成它有的方案并提示。
             switches[id]?.let { switch ->
                 if (!switch.keepsScheme) layouts.firstOrNull { it.id == id }?.let { layout ->
-                    android.widget.Toast.makeText(context, InputProfileSelection.switchHint(layout, selected, switch.entry),
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, InputProfileSelection.switchHint(layout, selected, switch.entry),
                         android.widget.Toast.LENGTH_LONG).show()
                 }
                 LetterLayouts.selectFor(context, switch.entry, id)

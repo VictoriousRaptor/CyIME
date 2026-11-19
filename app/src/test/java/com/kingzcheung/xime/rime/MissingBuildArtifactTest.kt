@@ -28,9 +28,19 @@ class MissingBuildArtifactTest {
 
     @Test
     fun `没编译出方案文件`() {
-        val dir = build()
+        val rime = build()
+        val dir = File(rime, "build").apply { mkdirs() }
+        File(rime, "double_pinyin_sogou.schema.yaml").writeText("schema:\n  schema_id: double_pinyin_sogou\n")
         assertEquals("没有编译出 double_pinyin_sogou.schema.yaml", RimeConfigHelper.missingBuildArtifact(dir, "double_pinyin_sogou"))
-        dir.deleteRecursively()
+        rime.deleteRecursively()
+    }
+
+    @Test
+    fun `方案文件本身不在时提示重新导入`() {
+        val rime = build()
+        val dir = File(rime, "build").apply { mkdirs() }
+        assertEquals("这台设备上没有 wanxiang.schema.yaml，请重新导入这个方案", RimeConfigHelper.missingBuildArtifact(dir, "wanxiang"))
+        rime.deleteRecursively()
     }
 
     @Test

@@ -4,9 +4,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 
-/** Actual laid-out letter cells, including custom and split QWERTY rows. */
-internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = CandidateDropTargets.shared) {
-    data class Target(val key: String, val bounds: Rect, val commit: () -> Unit)
+/**
+ * Actual laid-out letter cells, including custom and split QWERTY rows.
+ * [ctrlLetterOf]：按住 !@# 当 Ctrl 时字母键发 Ctrl+几；默认只认 a–z，26 键按当前键盘换成按位置（俄、韩语，用户 11-17）。
+ */
+internal class ShiftSlideTargets(
+    private val candidates: CandidateDropTargets = CandidateDropTargets.shared,
+    private val ctrlLetterOf: (Char) -> Char? = { it.lowercaseChar().takeIf { c -> c in 'a'..'z' } },
+) {
+    /** [ctrl]：按住 !@# 拖到这里松手发 Ctrl+几；null 的键（俄语 х、ñ、候选）按住 !@# 时不是目标。 */
+    data class Target(val key: String, val bounds: Rect, val ctrl: Char? = null, val commit: () -> Unit)
     data class Drag(val origin: Offset, val pointer: Offset)
     private val targets = mutableMapOf<Any, List<Target>>()
     /** 只在按住符号键当 Ctrl 时才算目标的键（九键数字键）；按住 Shift 拖过去不算。 */
@@ -43,9 +50,12 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
     fun showCtrlFaces() {
         if (ctrl) ctrlFaces = true
     }
+    /** 这个字母键按住 !@# 时发 Ctrl+几；没有时 null（见 [ctrlLetterOf]）。 */
+    fun ctrlLetter(letter: Char): Char? = ctrlLetterOf(letter)
+
     /** 按住符号键时另一根手指点字母：和按住 Shift 再点一样，发 Ctrl+这个字母（用户 10-24）。 */
     fun ctrlTap(letters: String): Boolean {
-        val letter = letters.singleOrNull()?.takeIf { ctrl && it.lowercaseChar() in 'a'..'z' } ?: return false
+        val letter = letters.singleOrNull()?.takeIf { ctrl }?.let(ctrlLetterOf) ?: return false
         val send = ctrlShortcut ?: return false
         ctrlUsed = true
         send(letter)
@@ -82,7 +92,7 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
      * 从 Shift 拖到回车上松手是 Shift+回车，换行（[shiftEnter]，用户 11-04）。
      */
     fun putEnter(id: Any, bounds: Rect, shiftEnter: () -> Unit = {}) {
-        targets[id] = listOf(Target(ENTER_KEY, bounds, shiftEnter))
+        targets[id] = listOf(Target(ENTER_KEY, bounds, com.kingzcheung.xime.keyboard.CtrlShortcuts.ENTER, shiftEnter))
     }
 
     /**
@@ -94,13 +104,16 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
             remove(id)
             return
         }
-        targets[id] = listOf(Target(letter.uppercaseChar().toString(), bounds) {})
+        targets[id] = listOf(Target(letter.uppercaseChar().toString(), bounds, letter.lowercaseChar()) {})
         ctrlOnly += id
     }
 
-    /** 合并字母键按左右半区选单个字母，绝不调用它的长按或符号手势。 */
+    /**
+     * 合并字母键按左右半区选单个字母，绝不调用它的长按或符号手势。
+     * 俄、韩、西、德语键盘上的字母（й ㅂ ñ ä）也算（用户 11-17），见 [com.kingzcheung.xime.settings.LetterLanguage.isKeyLetter]。
+     */
     fun put(id: Any, letters: String, bounds: Rect, commit: (String) -> Unit) {
-        if (letters.length !in 1..2 || letters.any { it.lowercaseChar() !in 'a'..'z' }) {
+        if (letters.length !in 1..2 || !letters.all(com.kingzcheung.xime.settings.LetterLanguage::isKeyLetter)) {
             remove(id)
             return
         }
@@ -109,7 +122,7 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
             val letter = char.uppercaseChar().toString()
             val cell = Rect(bounds.left + bounds.width * index / letters.length, bounds.top,
                 bounds.left + bounds.width * (index + 1) / letters.length, bounds.bottom)
-            Target(letter, cell) { commit(letter) }
+            Target(letter, cell, ctrlLetterOf(char)) { commit(letter) }
         }
     }
     fun remove(id: Any) {
@@ -129,7 +142,7 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
     var sliding by mutableStateOf(false)
         private set
     fun putSlideTap(id: Any, bounds: Rect, tap: () -> Unit) {
-        slideTaps[id] = Target(SLIDE_KEY, bounds, tap)
+        slideTaps[id] = Target(SLIDE_KEY, bounds, commit = tap)
     }
     fun removeSlideTap(id: Any) {
         slideTaps.remove(id)
@@ -155,11 +168,11 @@ internal class ShiftSlideTargets(private val candidates: CandidateDropTargets = 
     }
     fun at(point: Offset): Target? = if (!keyboardBounds.contains(point)) candidateAt(point)?.takeUnless { ctrl }
         else targets.entries.asSequence().filter { (id, _) -> ctrl || id !in ctrlOnly }.flatMap { (_, cells) -> cells.asSequence() }
-            .firstOrNull { it.bounds.contains(point) }
+            .firstOrNull { it.bounds.contains(point) }?.takeUnless { ctrl && it.ctrl == null }
 
     /** 拖出键盘、落在候选上：松手等于按住 Shift 点这个候选（释义模式上屏英文）。 */
     private fun candidateAt(point: Offset): Target? =
-        candidates.at(point)?.let { (bounds, select) -> Target(CANDIDATE_KEY, bounds, select) }
+        candidates.at(point)?.let { (bounds, select) -> Target(CANDIDATE_KEY, bounds, commit = select) }
 
     companion object {
         /** 候选目标的 key；不是字母，键帽高亮不会匹配到它。 */

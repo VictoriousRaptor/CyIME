@@ -80,7 +80,7 @@ internal fun Modifier.ctrlSymbolKeyGesture(
                         (change.position - first.position).getDistance() > viewConfiguration.touchSlop
                     val target = if (dragged) targets.move(bounds, pointer) else null
                     if (!change.pressed) {
-                        if (dragged) target?.key?.singleOrNull()?.let(shortcut)
+                        if (dragged) target?.ctrl?.let(shortcut)
                         else tap = !targets.ctrlUsed && change.uptimeMillis - first.uptimeMillis < hold
                         break
                     }

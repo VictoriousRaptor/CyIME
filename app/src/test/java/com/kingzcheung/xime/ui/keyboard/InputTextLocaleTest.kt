@@ -3,7 +3,9 @@ package com.kingzcheung.xime.ui.keyboard
 import com.kingzcheung.xime.settings.InputLanguage
 import com.kingzcheung.xime.settings.InputScheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InputTextLocaleTest {
@@ -18,5 +20,17 @@ class InputTextLocaleTest {
         assertEquals("ko-KR", inputTextLocaleTag(InputLanguage.KOREAN, InputScheme.DIRECT, false))
         assertNull("字母语言跟系统走", inputTextLocaleTag(InputLanguage.ENGLISH, InputScheme.DIRECT, false))
         assertNull(inputTextLocaleTag(InputLanguage.FRENCH, InputScheme.DIRECT, false))
+    }
+
+    @Test fun committedHanTextCarriesTheInputLanguage() {
+        // 11-16: 日语键盘打「自信」，上屏后输入框按中文写法画。上屏时带上 ja-JP。
+        assertTrue(needsTextLocale("自信", "ja-JP"))
+        assertTrue(needsTextLocale("じしん自信", "ja-JP"))
+        assertTrue("扩展 B 区的字也算", needsTextLocale("𠮷", "ja-JP"))
+        // 没有汉字（假名、谚文、字母、标点）不标；不知道写法（字母语言）不标。
+        assertFalse(needsTextLocale("じしん", "ja-JP"))
+        assertFalse(needsTextLocale("한국어", "ko-KR"))
+        assertFalse(needsTextLocale("hello,", "zh-CN"))
+        assertFalse(needsTextLocale("自信", null))
     }
 }

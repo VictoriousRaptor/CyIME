@@ -9,7 +9,9 @@ import java.text.Normalizer
 
 /**
  * Plain-text word lists as other input methods export them, one word per line:
- * `词 拼音`, `拼音 词` (Sogou/QQ exports, `'ni'hao 你好`), `词<TAB>pin yin<TAB>权重` (Rime). Fields are
+ * `词 拼音`, `拼音 词` (Sogou/QQ exports, `'ni'hao 你好`), `词<TAB>pin yin<TAB>权重` (Rime), `你好<TAB>ni'hao'<TAB>1`
+ * (Baidu), `你好(ni|hao) 20000` (Baidu mobile), `nihao<TAB>你好<TAB>zh-CN` (Gboard's dictionary.txt), Rime user
+ * dictionary snapshots (`ni hao<TAB>你好<TAB>c=3 d=0.9 t=12`). Fields are
  * separated by tabs, spaces or commas; pinyin may be written with spaces, apostrophes or run
  * together (nihao). A count column is ignored: every word gets the same weight as SCEL imports.
  * Lines without pinyin are skipped and counted. UTF-8, UTF-16 (with BOM) and GB18030 are read.
@@ -71,8 +73,12 @@ object TxtCellDictionary {
         return text.takeIf { CellDictionaryEnglish.letters(it).length >= 2 }
     }
 
+    /** Columns that are no pinyin: Gboard's language (`zh-CN`), Rime user dictionary stats (`c=3 d=0.9 t=12`). */
+    private val notPinyin = Regex("[a-z]{2,3}[-_][A-Za-z]{2,4}|[a-z]=.*")
+
     internal fun parseLine(line: String): DictEntry? {
-        val fields = line.split('\t', ' ', ',', '，').filter { it.isNotEmpty() }
+        // Baidu mobile writes `你好(ni|hao) 20000`.
+        val fields = line.split('\t', ' ', ',', '，', '(', ')', '|').filter { it.isNotEmpty() && !notPinyin.matches(it) }
         val text = fields.firstOrNull { word.matches(it) } ?: return null
         val pinyin = toneless(fields.filter { it != text && it.any(Char::isLetter) }
             .joinToString(" ").lowercase()).replace('ü', 'v').replace("u:", "v")

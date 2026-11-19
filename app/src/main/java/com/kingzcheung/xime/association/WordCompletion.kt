@@ -12,8 +12,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * 一种语言的补全词表：[words] 按词频从高到低（tools/wordlists/build_words.py 生成）。
- * 打字不用打重音和变音：cancion 给出 canción、uber 给出 über、strasse 给出 Straße、еще 给出 ещё；
- * 打了重音的那一位只认这个重音。
+ * 打字不用打重音和变音：cancion 给出 canción、uber 给出 über、strasse 给出 Straße、еще 给出 ещё、nguoi 给出 người；
+ * 打了重音的那一位只认这个重音（越南语打了变音还没打声调时，带声调的也算：viê 给出 việt）。
  */
 internal class WordLexicon(private val words: List<String>) {
     /** 词的下标按去重音小写排好，前缀查找用二分。 */
@@ -65,7 +65,26 @@ internal class WordLexicon(private val words: List<String>) {
             'á', 'à', 'â', 'ä', 'ã', 'å' -> "a"; 'é', 'è', 'ê', 'ë' -> "e"; 'í', 'ì', 'î', 'ï' -> "i"
             'ó', 'ò', 'ô', 'ö', 'õ' -> "o"; 'ú', 'ù', 'û', 'ü' -> "u"; 'ñ' -> "n"; 'ç' -> "c"; 'ÿ' -> "y"
             'ß' -> "ss"; 'œ' -> "oe"; 'æ' -> "ae"; 'ё' -> "е"
-            else -> char.toString()
+            else -> VIETNAMESE_BASE[char]?.toString() ?: char.toString()
+        }
+
+        /** 越南语带声调、变音的字母（小写，上面已有的 á à â ã 这些除外）→ 底下的拉丁字母。 */
+        private val VIETNAMESE_BASE: Map<Char, Char> = buildMap {
+            for (char in VIETNAMESE_TONED + "ăâêôơưđ") {
+                val base = if (char == 'đ') 'd' else java.text.Normalizer.normalize(char.toString(), java.text.Normalizer.Form.NFD)[0]
+                put(char, base)
+            }
+        }
+
+        /** 越南语元音（含变音）各带五个声调，NFC。 */
+        private const val VIETNAMESE_TONED = "áàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ"
+
+        /** 越南语带声调的字母去掉声调，变音留着（ệ → ê、ữ → ư）；不是这些字母原样返回。 */
+        private fun withoutVietnameseTone(char: Char): Char {
+            if (char !in VIETNAMESE_TONED) return char
+            val parts = java.text.Normalizer.normalize(char.toString(), java.text.Normalizer.Form.NFD)
+                .filter { it !in "\u0300\u0301\u0303\u0309\u0323" }
+            return java.text.Normalizer.normalize(parts, java.text.Normalizer.Form.NFC)[0]
         }
 
         fun fold(text: String): String = buildString(text.length) { for (char in text.lowercase()) append(foldChar(char)) }
@@ -84,7 +103,8 @@ internal class WordLexicon(private val words: List<String>) {
             offset = 0
             for (char in typed) {
                 val folded = foldChar(char)
-                if (folded != char.toString() && starts[offset] != char) return false
+                val inWord = starts[offset]
+                if (folded != char.toString() && inWord != char && (inWord == null || withoutVietnameseTone(inWord) != char)) return false
                 offset += folded.length
             }
             return true

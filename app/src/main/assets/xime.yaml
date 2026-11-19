@@ -585,6 +585,46 @@ keyboard:
       "'": { tap: { label: ",", value: "," }, swipe_up: { label: ".", value: "." }, long_press: { display: "bubble", values: [",", ".", "'", "«", "»", "?", "!"] } }
       earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
 
+  # 法语 AZERTY（法国、比利时的排法，用户 11-16）：法语的另一个布局，不绑方案（不写 schemas），
+  # 在布局栏选了才用（LetterLayouts.chosenSection），默认仍是上面的 qwerty_french。
+  # 按键和长按与 qwerty_french 相同；上下角标跟着位置走（a 在 q 那一格就用 q 那一格的角标），m 在 26 键之外，保留 m 自己的。
+  azerty_french:
+    button_layout: standard
+    layout:
+      rows:
+        - [a, z, e, r, t, y, u, i, o, p]
+        - [q, s, d, f, g, h, j, k, l, m]
+        - [w, x, c, v, b, n]
+    keys:
+      q: { tap: { label: "q", value: "q" } }
+      w: { tap: { label: "w", value: "w" } }
+      e: { tap: { label: "e", value: "e" }, long_press: { display: "bubble", values: ["é", "è", "ê", "ë"] } }
+      r: { tap: { label: "r", value: "r" } }
+      t: { tap: { label: "t", value: "t" } }
+      y: { tap: { label: "y", value: "y" }, long_press: { display: "bubble", values: ["ÿ"] } }
+      u: { tap: { label: "u", value: "u" }, long_press: { display: "bubble", values: ["ù", "û", "ü"] } }
+      i: { tap: { label: "i", value: "i" }, long_press: { display: "bubble", values: ["î", "ï"] } }
+      o: { tap: { label: "o", value: "o" }, long_press: { display: "bubble", values: ["ô", "œ"] } }
+      p: { tap: { label: "p", value: "p" } }
+      a: { tap: { label: "a", value: "a" }, long_press: { display: "bubble", values: ["à", "â", "æ"] } }
+      s: { tap: { label: "s", value: "s" } }
+      d: { tap: { label: "d", value: "d" } }
+      f: { tap: { label: "f", value: "f" } }
+      g: { tap: { label: "g", value: "g" } }
+      h: { tap: { label: "h", value: "h" } }
+      j: { tap: { label: "j", value: "j" } }
+      k: { tap: { label: "k", value: "k" } }
+      l: { tap: { label: "l", value: "l" } }
+      z: { tap: { label: "z", value: "z" } }
+      x: { tap: { label: "x", value: "x" } }
+      c: { tap: { label: "c", value: "c" }, long_press: { display: "bubble", values: ["ç"] } }
+      v: { tap: { label: "v", value: "v" } }
+      b: { tap: { label: "b", value: "b" } }
+      n: { tap: { label: "n", value: "n" } }
+      m: { tap: { label: "m", value: "m" } }
+      "'": { tap: { label: ",", value: "," }, swipe_up: { label: ".", value: "." }, long_press: { display: "bubble", values: [",", ".", "'", "«", "»", "?", "!"] } }
+      earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
+
   # 意大利语：26 键（QWERTY），字母逐字上屏，补全不用打重音。长按元音出 à è é ì í ò ó ù ú。
   # 字母键的上下角标和英文键盘同一规则，这里不配；' « » 在逗号键长按里。
   qwerty_italian:
@@ -623,6 +663,86 @@ keyboard:
       n: { tap: { label: "n", value: "n" } }
       m: { tap: { label: "m", value: "m" } }
       "'": { tap: { label: ",", value: "," }, swipe_up: { label: ".", value: "." }, long_press: { display: "bubble", values: [",", ".", "'", "«", "»", "?", "!"] } }
+      earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
+
+  # 越南语：26 键（QWERTY），Telex 打声调和变音（aa → â、ow → ơ、dd → đ，s f r x j 打声调，见 VietnameseTelex），
+  # 词随打随换。不用 Telex 时长按 a e o u d 出 ă â ê ô ơ ư đ。字母键的上下角标和英文键盘同一规则，这里不配。
+  qwerty_vietnamese:
+    schemas: [vietnamese]
+    button_layout: standard
+    layout:
+      rows:
+        - [q, w, e, r, t, y, u, i, o, p]
+        - [a, s, d, f, g, h, j, k, l]
+        - [z, x, c, v, b, n, m]
+    keys:
+      q: { tap: { label: "q", value: "q" } }
+      w: { tap: { label: "w", value: "w" } }
+      e: { tap: { label: "e", value: "e" }, long_press: { display: "bubble", values: ["ê"] } }
+      r: { tap: { label: "r", value: "r" } }
+      t: { tap: { label: "t", value: "t" } }
+      y: { tap: { label: "y", value: "y" } }
+      u: { tap: { label: "u", value: "u" }, long_press: { display: "bubble", values: ["ư"] } }
+      i: { tap: { label: "i", value: "i" } }
+      o: { tap: { label: "o", value: "o" }, long_press: { display: "bubble", values: ["ô", "ơ"] } }
+      p: { tap: { label: "p", value: "p" } }
+      a: { tap: { label: "a", value: "a" }, long_press: { display: "bubble", values: ["ă", "â"] } }
+      s: { tap: { label: "s", value: "s" } }
+      d: { tap: { label: "d", value: "d" }, long_press: { display: "bubble", values: ["đ"] } }
+      f: { tap: { label: "f", value: "f" } }
+      g: { tap: { label: "g", value: "g" } }
+      h: { tap: { label: "h", value: "h" } }
+      j: { tap: { label: "j", value: "j" } }
+      k: { tap: { label: "k", value: "k" } }
+      l: { tap: { label: "l", value: "l" } }
+      z: { tap: { label: "z", value: "z" } }
+      x: { tap: { label: "x", value: "x" } }
+      c: { tap: { label: "c", value: "c" } }
+      v: { tap: { label: "v", value: "v" } }
+      b: { tap: { label: "b", value: "b" } }
+      n: { tap: { label: "n", value: "n" } }
+      m: { tap: { label: "m", value: "m" } }
+      "'": { tap: { label: ",", value: "," }, swipe_up: { label: ".", value: "." }, long_press: { display: "bubble", values: [",", ".", "?", "!"] } }
+      earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
+
+  # 马来语：26 键（QWERTY），没有特殊字母，和英文键盘一样逐字上屏。叠词多（kanak-kanak），逗号键长按里放了 -。
+  # 字母键的上下角标和英文键盘同一规则，这里不配。
+  qwerty_malay:
+    schemas: [malay]
+    button_layout: standard
+    layout:
+      rows:
+        - [q, w, e, r, t, y, u, i, o, p]
+        - [a, s, d, f, g, h, j, k, l]
+        - [z, x, c, v, b, n, m]
+    keys:
+      q: { tap: { label: "q", value: "q" } }
+      w: { tap: { label: "w", value: "w" } }
+      e: { tap: { label: "e", value: "e" } }
+      r: { tap: { label: "r", value: "r" } }
+      t: { tap: { label: "t", value: "t" } }
+      y: { tap: { label: "y", value: "y" } }
+      u: { tap: { label: "u", value: "u" } }
+      i: { tap: { label: "i", value: "i" } }
+      o: { tap: { label: "o", value: "o" } }
+      p: { tap: { label: "p", value: "p" } }
+      a: { tap: { label: "a", value: "a" } }
+      s: { tap: { label: "s", value: "s" } }
+      d: { tap: { label: "d", value: "d" } }
+      f: { tap: { label: "f", value: "f" } }
+      g: { tap: { label: "g", value: "g" } }
+      h: { tap: { label: "h", value: "h" } }
+      j: { tap: { label: "j", value: "j" } }
+      k: { tap: { label: "k", value: "k" } }
+      l: { tap: { label: "l", value: "l" } }
+      z: { tap: { label: "z", value: "z" } }
+      x: { tap: { label: "x", value: "x" } }
+      c: { tap: { label: "c", value: "c" } }
+      v: { tap: { label: "v", value: "v" } }
+      b: { tap: { label: "b", value: "b" } }
+      n: { tap: { label: "n", value: "n" } }
+      m: { tap: { label: "m", value: "m" } }
+      "'": { tap: { label: ",", value: "," }, swipe_up: { label: ".", value: "." }, long_press: { display: "bubble", values: [",", ".", "-", "'", "?", "!"] } }
       earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
 
   # 俄语：ЙЦУКЕН，字母逐字上屏，补全不用打 ё。长按 е 出 ё、长按 ь 出 ъ。
@@ -764,15 +884,30 @@ keyboard:
   # 第三方笔画方案在 xime.custom.yaml 的 stroke.schemas 追加即可。
   stroke:
     schemas: [stroke]
-    # ── 左侧快捷符号列（常显；列表长度不限，超过 3 个时滚动显示）──
+    # ── 左侧快捷符号列（常显；列表长度不限，超过 4 个时上下滑动）──
+    # 和九键侧栏同一套，前四个是 ，。？！（11-18）；设置「按键符号 → 笔画侧栏」可以改。
     # 用户在 xime.custom.yaml 的同路径覆盖整个列表，未配置时使用内置默认值
     side_symbols:
+      - "，"
       - "。"
       - "？"
       - "！"
-      - "~"
+      - "…"
+      - "～"
+      - "、"
+      - "："
+      - "“"
+      - "”"
+      - "；"
+      - "（"
+      - "）"
     # ── 笔画键手势（可自定义：在 xime.custom.yaml 的 keyboard.stroke.keys 同路径覆盖）──
-    # 键 id 为键面标签；内置默认：上滑输入对应数字（与历史行为一致，此前版本该手势
+    # 键 id 是这个位置默认的键面字，改了键面字也不变；右上角数字和默认上滑数字跟着位置走。
+    # 点按也能改：tap 的 label 是键面字、value 是点下去送出的值，两个成对写，例如把 * 和分词对调：
+    #   "*":    { tap: { label: "分词", value: "word_separator" } }
+    #   "分词": { tap: { label: "*", value: "*" } }
+    # 笔画键送出 h / s / p / n / z。覆盖是整个键替换：只写 tap 时这个键的上滑仍打它位置上的数字。
+    # 内置默认：上滑输入对应数字（与历史行为一致，此前版本该手势
     # 因缺少滑动提示文本实际不触发，现修复生效），下滑可按需绑定编辑动作。
     # display：key（仅键面提示，无滑动气泡）/ bubble（仅滑动气泡）/ both（键面+气泡）。
     # 内置上滑全部显式配 display: "key"（不显示滑动气泡，数字提示由键面右上角角标

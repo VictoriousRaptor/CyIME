@@ -62,7 +62,7 @@
     <string name="settings_app_language_summary">設定画面の表示言語</string>
     <string name="settings_app_language_summary_old_android">システムの言語に従います。タップで変更</string>
     <string name="settings_app_language_system">システムに従う</string>
-    <string name="settings_app_language_note">現在翻訳済みなのは設定のホーム画面だけで、ほかの画面は今後のバージョンまで簡体字中国語で表示されます。画面の表示だけが変わり、入力言語は変わりません。</string>
+    <string name="settings_app_language_note">English は設定の全画面を翻訳済みです。日本語・繁體中文は今のところ設定のホーム画面だけで、ほかの画面は簡体字中国語で表示されます。画面の表示だけが変わり、入力言語は変わりません。</string>
     <string name="action_close">閉じる</string>
     <string name="subtype_label_pinyin">ピンイン</string>
     <string name="call_caption_service_label">CyIME 通話字幕</string>

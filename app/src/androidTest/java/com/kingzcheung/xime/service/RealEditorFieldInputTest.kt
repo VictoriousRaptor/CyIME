@@ -137,7 +137,12 @@ class RealEditorFieldInputTest {
                 rule.waitUntil(10_000) { actual.uiState.value.isAsciiMode }
                 typeKey("a"); typeKey("b")
                 assertText("ab")
-                typeKey("ime_switch"); typeKey("c")
+                // 文字密码框和可见密码框一样：语言键能切到中文，只在这个框里有效（用户 11-16）；再按一次切回英文。
+                typeKey("ime_switch")
+                rule.waitUntil(10_000) { !actual.uiState.value.isAsciiMode }
+                typeKey("ime_switch")
+                rule.waitUntil(10_000) { actual.uiState.value.isAsciiMode }
+                typeKey("c")
                 assertText("abc")
                 rule.runOnUiThread { actual.textCommit.commitLiteralText("！") }
                 assertText("abc!")
@@ -166,7 +171,9 @@ class RealEditorFieldInputTest {
                 val previousSession = actual.uiState.value.inputSessionId
                 rule.runOnUiThread { imm.restartInput(editor) }
                 rule.waitUntil(10_000) { actual.uiState.value.inputSessionId != previousSession && actual.inputReadiness.ticket() != null }
-                typeKey("ime_switch"); typeKey("r")
+                // 重新进框还是英文。
+                rule.waitUntil(10_000) { actual.uiState.value.isAsciiMode }
+                typeKey("r")
                 assertText("a!r")
                 assertTrue(actual.uiState.value.isAsciiMode)
                 // Explicit paste is intentionally not subject to typed-key ASCII conversion.

@@ -23,10 +23,11 @@ data class KeyboardCallbacks(
     val onGlidePreviewCode: ((String, Long, Int) -> Unit)? = null,
     val onGlidePreviewEnd: (() -> Unit)? = null,
     val onGlidePreviewHold: (() -> Long?)? = null,
+    val onEnglishGlidePreviewHold: (() -> Long?)? = null,
     val onGlidePreviewFinish: ((Long, Boolean) -> Unit)? = null,
     val inputAdmissionTicket: () -> Long? = { 0L },
     val captureInputContext: () -> kotlin.coroutines.CoroutineContext = { kotlin.coroutines.EmptyCoroutineContext },
-    /** 九键组句的上文：组合为空时光标前的已上屏文字；null 表示未知或正在组合。 */
+    /** 九键组句和中文滑行选编码的上文：组合为空时光标前的已上屏文字；null 表示未知或正在组合。 */
     val t9LeftContext: () -> String? = { null },
     val inputCommands: com.kingzcheung.xime.rime.InputCommandQueue? = null,
     val onT9UnconsumedDelete: (suspend (com.kingzcheung.xime.keyboard.RepeatInput?) -> Unit)? = null,

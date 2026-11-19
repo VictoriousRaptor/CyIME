@@ -15,6 +15,15 @@ internal object PairedSymbols {
     )
     private val closings = pairs.values.toSet()
 
+    /** 每补一次结尾加一；后面又补了一次时，前一次的延后检查作废。 */
+    @Volatile internal var commitGeneration = 0L
+
+    /** 补上结尾后延后多久查编辑框认没认光标位置；测试里换成手动执行。 */
+    internal var deferCaretCheck: (() -> Unit) -> Unit = { check ->
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ check() }, CARET_CHECK_DELAY_MS)
+    }
+    private const val CARET_CHECK_DELAY_MS = 150L
+
     fun closingFor(literal: String): String? = pairs[literal]
 
     fun isClosing(literal: String): Boolean = literal in closings
@@ -58,7 +67,14 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
     } finally {
         endBatchEdit()
     }
-    if (back != 0) dropClosingIfCaretIgnored(text, back)
+    if (back != 0) {
+        // 不能上屏后马上读：有的编辑框（网页、部分跨平台框架）读回的是还没处理完的旧状态，光标看着落在结尾后面，
+        // 正常编辑框里刚补上的结尾也被删掉（11-16 用户反馈：开成对符号，右半出来又马上没了）。等编辑框处理完再查。
+        val generation = ++PairedSymbols.commitGeneration
+        PairedSymbols.deferCaretCheck {
+            if (generation == PairedSymbols.commitGeneration) dropClosingIfCaretIgnored(text, back)
+        }
+    }
     return true
 }
 

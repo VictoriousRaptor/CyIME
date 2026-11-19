@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -34,8 +35,9 @@ import kotlin.math.floor
 @Composable
 internal fun PressBubbleLayer(controller: SwipeBubbleController, background: Color, text: Color,
     accent: Color, keyboardWidth: Float) {
-    val root = LocalView.current.rootView
-    val layer = remember(root) { PressBubbleDrawable(root) }
+    val composeView = LocalView.current
+    val root = composeView.rootView
+    val layer = remember(root, composeView) { PressBubbleDrawable(root, composeView) }
     val rotation = LocalFloatingKeyboardRotation.current
     val density = LocalDensity.current
     val referenceHeight = bubbleReferenceHeightDp()
@@ -84,8 +86,9 @@ internal fun PressBubbleLayer(controller: SwipeBubbleController, background: Col
 private fun SwipeState.isPlainPress() =
     isPressed && !isSwiping && !isLongPress && keyFlick == null && !pressedText.isNullOrEmpty()
 
-private class PressBubbleDrawable(private val host: View) : Drawable() {
+private class PressBubbleDrawable(private val host: View, private val composeView: View) : Drawable() {
     private val location = IntArray(2)
+    private val composeLocation = IntArray(2)
     private val transform = Matrix()
     private val area = RectF()
     private var anchor: LayoutCoordinates? = null
@@ -108,9 +111,13 @@ private class PressBubbleDrawable(private val host: View) : Drawable() {
      */
     private fun currentOrigin(): Offset? {
         val coordinates = anchor?.takeIf { it.isAttached } ?: return null
-        val windowOrigin = coordinates.localToWindow(Offset.Zero)
+        // 键盘在 Compose 根里的位置 + Compose 视图在窗口里的位置，后者每次直接问 View 系统，
+        // 不用 localToWindow 里 Compose 自己缓存的窗口位置。#417（用户 11-16 复现）：排列面板拉高、点对勾回来后，
+        // 气泡全被夹到窗口底边，说明算出的键盘位置低出了屏幕；窗口高度刚从拉高的样子缩回，最可能旧的是那份缓存。
+        val inRoot = coordinates.findRootCoordinates().localPositionOf(coordinates, Offset.Zero)
+        composeView.getLocationInWindow(composeLocation)
         host.getLocationInWindow(location)
-        return Offset(windowOrigin.x - location[0], windowOrigin.y - location[1])
+        return Offset(composeLocation[0] - location[0] + inRoot.x, composeLocation[1] - location[1] + inRoot.y)
     }
 
     fun show(data: BubbleDrawData?, angle: Float) {

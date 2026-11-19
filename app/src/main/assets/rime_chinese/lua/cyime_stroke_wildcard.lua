@@ -7,14 +7,17 @@ local MAX_CHARACTER_STROKES = 52
 
 local M = {}
 
--- lua 造的候选没有 preedit 时，Rime 拿原始字母当编码显示（#372：分词后编码显示成 h s p n z）。
--- 和 stroke.schema.yaml 的 preedit_format 一样换成笔画（康熙部首）；分词号、通配符原样留着。
-local STROKE_GLYPHS = { h = "⼀", s = "⼁", p = "⼃", n = "⼂", z = "⼄" }
+-- 编码默认显示字母 h s p n z（11-18）；设置里选了显示笔画时，方案补丁写回 translator/preedit_format，
+-- lua 造的候选跟着换成笔画（#372）。分词号、通配符原样留着。
+local STROKE_GLYPHS = { h = "⼀", s = "⼁", p = "⼃", n = "⼂", z = "乛" }
+local glyphs = false
 local function stroke_preedit(code)
+  if not glyphs then return code end
   return (code:gsub("[hspnz]", STROKE_GLYPHS))
 end
 
 function M.init(env)
+  glyphs = env.engine.schema.config:get_string("translator/preedit_format/@0") ~= nil
   env.mem = Memory(env.engine, env.engine.schema)
 end
 

@@ -444,13 +444,22 @@ T9RightCommitHandler::ComputeRightCommitConsumption(
 
 bool T9RightCommitHandler::HandleRightCommit(
     Context& ctx,
-    const std::optional<std::string>& candidate_pinyin,
+    const std::optional<std::string>& candidate_reading,
     int candidate_text_length,
     int rime_consumed_digits,
     bool is_t9_user_word) {
 
     T9_SCOPED_TIMER_TAG("T9RightCommit", "HandleRightCommit");
     if (ctx.input_buffer.is_empty()) return true;
+
+    // 模糊音候选（选 ying 出「音效 yin xiao」）按用户实际打的拼法算消费，
+    // 否则读音少一个字母，后面的音节留在输入里，上屏后多出一个字。
+    const std::optional<std::string> candidate_pinyin = AlignFuzzyReadingToTyped(
+        candidate_reading, ctx.input_buffer.selections, ctx.input_buffer.unassigned());
+    if (candidate_pinyin != candidate_reading) {
+        RCLOG(">> HandleRightCommit: fuzzy reading '%s' -> typed '%s'",
+              candidate_reading->c_str(), candidate_pinyin->c_str());
+    }
 
 #ifndef NDEBUG
     ctx.input_buffer.AssertInvariants();

@@ -27,6 +27,10 @@
 #include "t9_sentence_scorer.h"
 #include "t9_ngram_model.h"
 #include <jni.h>
+namespace rime {
+// cyime_rime/t9_cylm_sentence.h (in rime-static; that header needs cylm.h, not on this target's include path).
+int T9CylmForget(const std::string& text, int wait_ms);
+}
 #include <android/log.h>
 #include <algorithm>
 #include <map>
@@ -88,6 +92,8 @@ struct ProcessResult {
     std::string inputText;
     std::string preeditText;
     std::vector<std::pair<std::string, std::string>> candidates;
+    // 与 candidates 同序：该候选是用户以前打过的词（候选栏右上角标记）。
+    std::vector<bool> learned;
     // 与 candidates 同序：纠错候选逐音节的“实际敲的=正确拼音”，非纠错候选为空。
     std::vector<std::string> corrections;
     bool isAsciiMode = false;
@@ -104,6 +110,7 @@ struct CompositionResult {
     std::string preedit;
     std::string committedText;
     std::vector<std::pair<std::string, std::string>> candidates;
+    std::vector<bool> learned;
     // 与 candidates 同序：纠错候选逐音节的“实际敲的=正确拼音”，非纠错候选为空。
     std::vector<std::string> corrections;
     bool isAsciiMode = false;
@@ -311,6 +318,7 @@ public:
                     comment ? comment : ""
                 ));
             }
+            result.learned = learnedMarks(context.menu.page_no * context.menu.page_size, context.menu.num_candidates);
             result.corrections = correctionMarks(context.menu.page_no * context.menu.page_size, context.menu.num_candidates);
         }
         result.hasNextPage = !context.menu.is_last_page;
@@ -872,6 +880,7 @@ public:
                     comment ? comment : ""
                 ));
             }
+            result.learned = learnedMarks(context.menu.page_no * context.menu.page_size, context.menu.num_candidates);
             result.corrections = correctionMarks(context.menu.page_no * context.menu.page_size, context.menu.num_candidates);
             result.hasNextPage = !context.menu.is_last_page;
             result.hasPrevPage = context.menu.page_no > 0;
@@ -935,6 +944,56 @@ public:
             rime->free_context(&context);
         }
     }
+
+    // A candidate the user typed before: a whole dictionary entry (not a sentence assembled from
+    // several words) of two or more characters that the user dictionary has committed.
+    std::vector<bool> learnedMarks(size_t offset, size_t count) {
+        std::vector<bool> marks(count, false);
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session || session->context()->composition().empty()) return marks;
+        auto menu = session->context()->composition().back().menu;
+        if (!menu) return marks;
+        for (size_t i = 0; i < count && offset + i < menu->candidate_count(); ++i) {
+            auto genuine = rime::Candidate::GetGenuineCandidate(menu->GetCandidateAt(offset + i));
+            const rime::DictEntry* entry = nullptr;
+            if (auto sentence = rime::As<rime::Sentence>(genuine)) {
+                if (sentence->components().size() == 1) entry = &sentence->components().front();
+            } else if (auto phrase = rime::As<rime::Phrase>(genuine)) {
+                entry = &phrase->entry();
+            }
+            size_t chars = 0;
+            if (entry) for (unsigned char c : entry->text) chars += (c & 0xC0) != 0x80;
+            // Only the user's own words: a learned word the schema's dictionary already has is an
+            // ordinary word with a usage count, and marking those covered most common words (2026-10-30).
+            marks[i] = entry && entry->commit_count > 0 && chars >= 2 && !inSystemDictionary(entry->text);
+        }
+        return marks;
+    }
+
+    // Whether the current schema's translator dictionary has this text (its reverse lookup table).
+    bool inSystemDictionary(const std::string& text) {
+        char schema_id[256] = {0};
+        if (!rime || !session_id_ || !rime->get_current_schema(session_id_, schema_id, sizeof(schema_id))) return false;
+        if (system_dict_schema_ != schema_id) {
+            system_dict_schema_ = schema_id;
+            system_dict_.reset();
+            RimeConfig config = {0};
+            if (rime->schema_open(schema_id, &config)) {
+                const char* dict = rime->config_get_cstring(&config, "translator/dictionary");
+                auto* rldc = dynamic_cast<rime::ReverseLookupDictionaryComponent*>(
+                    rime::ReverseLookupDictionary::Require("reverse_lookup_dictionary"));
+                if (dict && rldc) {
+                    system_dict_.reset(rldc->Create(dict));
+                    if (system_dict_ && !system_dict_->Load()) system_dict_.reset();
+                }
+                rime->config_close(&config);
+            }
+        }
+        std::string code;
+        return system_dict_ && system_dict_->ReverseLookup(text, &code);
+    }
+    std::string system_dict_schema_;
+    std::unique_ptr<rime::ReverseLookupDictionary> system_dict_;
 
     // A candidate reached through spelling correction: its syllables as "typed=correct" for the
     // corrected ones and "typed" for the rest, so the candidate bar can show how it was fixed.
@@ -1196,6 +1255,9 @@ public:
         rime::the<rime::Dictionary> dictionary(dictionaries ? dictionaries->Create(ticket) : nullptr);
         rime::the<rime::UserDictionary> userDictionary(userDictionaries ? userDictionaries->Create(ticket) : nullptr);
         const std::string text = candidate->text();
+        // CyLM (九键长句) learns every commit too: without this the forgotten sentence came back first from CyLM's
+        // learned layer even after the user dictionary forgot it, since its components then had no commits.
+        const bool cylmForgot = rime::T9CylmForget(text, 300) > 0;
         bool forgotten = false;
         if (dictionary && userDictionary && dictionary->Load() && userDictionary->Load() &&
             !userDictionary->readonly()) {
@@ -1215,6 +1277,10 @@ public:
         if (forgotten) {
             context->RefreshNonConfirmedComposition();
         } else {
+            if (!learned && cylmForgot) {
+                context->RefreshNonConfirmedComposition();
+                return stillOffered(context, text) ? 1 : 3;
+            }
             if (!learned) return 2;
             // Not in that dictionary (another translator's word): Rime's own deletion by the owning translator.
             if (sentence && sentence->components().size() > 1) return 0;
@@ -1900,7 +1966,7 @@ static void ensureJniCache(JNIEnv* env) {
         jclass cls = env->FindClass("com/kingzcheung/xime/rime/RimeCandidate");
         gRimeCandidateClass = (jclass)env->NewGlobalRef(cls);
         gRimeCandidateCtor = env->GetMethodID(gRimeCandidateClass, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+            "(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;)V");
         env->DeleteLocalRef(cls);
     }
     if (!gRimeProcessResultClass) {
@@ -2135,7 +2201,8 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeProcessKeyAndGetResult(
         jstring comment = CandidateString(env, result.candidates[i].second);
         jstring correction = env->NewStringUTF(
             i < result.corrections.size() ? result.corrections[i].c_str() : "");
-        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment, correction);
+        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment,
+            static_cast<jboolean>(i < result.learned.size() && result.learned[i]), correction);
         env->SetObjectArrayElement(candidateArray, i, candidate);
         env->DeleteLocalRef(text);
         env->DeleteLocalRef(comment);
@@ -2189,7 +2256,8 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeGetProcessResult(
         jstring comment = CandidateString(env, result.candidates[i].second);
         jstring correction = env->NewStringUTF(
             i < result.corrections.size() ? result.corrections[i].c_str() : "");
-        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment, correction);
+        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment,
+            static_cast<jboolean>(i < result.learned.size() && result.learned[i]), correction);
         env->SetObjectArrayElement(candidateArray, i, candidate);
         env->DeleteLocalRef(text);
         env->DeleteLocalRef(comment);
@@ -2452,7 +2520,8 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeGetComposition(
         jstring comment = CandidateString(env, result.candidates[i].second);
         jstring correction = env->NewStringUTF(
             i < result.corrections.size() ? result.corrections[i].c_str() : "");
-        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment, correction);
+        jobject candidate = env->NewObject(gRimeCandidateClass, gRimeCandidateCtor, text, comment,
+            static_cast<jboolean>(i < result.learned.size() && result.learned[i]), correction);
         env->SetObjectArrayElement(candidateArray, i, candidate);
         env->DeleteLocalRef(text);
         env->DeleteLocalRef(comment);

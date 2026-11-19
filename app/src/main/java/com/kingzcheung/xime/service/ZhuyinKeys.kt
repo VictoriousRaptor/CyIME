@@ -14,6 +14,12 @@ internal object ZhuyinKeys {
 
     fun isTone(code: Char): Boolean = code in TONES
 
+    /**
+     * 实体键盘上不是字母的大千键：数字行和 , . / ; -（ㄅㄉˇˋㄓˊ˙ㄚㄞㄢ、ㄝㄡㄥㄤㄦ）。字母键本来就交给 Rime。
+     * 实体键盘照大千键位打（jp4wu = ㄨㄣˋㄊㄧ 問題），这些键不能当选候选、翻页或标点。
+     */
+    fun isHardwareSymbolCode(key: String): Boolean = key.length == 1 && key[0] in "1234567890,./;-"
+
     /** 声调只跟在音节后面：没打字、刚打过声调或分隔符时不收。 */
     fun takesTone(input: String): Boolean = input.isNotEmpty() && input.last() !in TONES && input.last() != '\''
 }

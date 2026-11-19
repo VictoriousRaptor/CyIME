@@ -276,22 +276,23 @@ object FileLogger {
         try {
             val rimeLogDir = File(File(context.filesDir, "rime"), "logs")
             if (!rimeLogDir.exists()) return
-            rimeLogDir.listFiles()
-                ?.filter { it.isFile && it.name.endsWith(".log") }
-                ?.sortedByDescending { it.lastModified() }
-                ?.drop(MAX_LOG_FILES)
-                ?.forEach { file ->
-                    file.delete()
-                }
-            rimeLogDir.listFiles()
-                ?.filter { it.isFile && it.name.endsWith(".log") && it.length() > MAX_LOG_SIZE }
-                ?.forEach { file ->
-                    file.delete()
-                }
+            rimeLogsToDelete(rimeLogDir.listFiles()?.toList().orEmpty()).forEach { it.delete() }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clean rime logs", e)
         }
     }
+
+    /**
+     * librime 用 glog 写日志，文件名是 rime.kime.<主机>.<用户>.log.WARNING.<时间>.<进程号>，不以 .log 结尾，
+     * 以前只认 .log，一个都没清过：每次启动引擎都多几个文件。保留最新 [MAX_LOG_FILES] 个，单个超过
+     * [MAX_LOG_SIZE] 的删掉；指向最新文件的 rime.kime.WARNING 等链接不动。
+     */
+    internal fun rimeLogsToDelete(files: List<File>): List<File> {
+        val logs = files.filter { it.isFile && RIME_LOG.matches(it.name) }.sortedByDescending { it.lastModified() }
+        return (logs.drop(MAX_LOG_FILES) + logs.filter { it.length() > MAX_LOG_SIZE }).distinct()
+    }
+
+    private val RIME_LOG = Regex(""".+\.log(\.(INFO|WARNING|ERROR|FATAL)\..+)?""")
 
     fun reopenLogFile() {
         openLogFile()

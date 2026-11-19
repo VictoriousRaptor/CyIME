@@ -103,10 +103,12 @@ internal fun OptionMenuCard(
     options: List<String>,
     selected: String?,
     highlighted: Int? = null,
-    width: Dp = 148.dp,
+    width: Dp? = null,
     onRowBounds: ((Int, Rect) -> Unit)? = null,
     onChoose: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** 选项显示成什么（存的值 → 显示的字，如「自动检测」→「自」）；没有的照原值画。 */
+    labels: Map<String, String> = emptyMap(),
 ) {
     val glass = LocalKeyboardInputPreferences.current.frostedGlass
     // 弹窗是另一个窗口，后面没有实时模糊：按不透明画，盖住下面按键的字。
@@ -115,11 +117,14 @@ internal fun OptionMenuCard(
     val accent = colors.accent
     val selectedBackground = lerp(colors.surface, accent.copy(alpha = 1f), 0.22f)
     val focusIndex = highlighted ?: options.indexOf(selected).takeIf { it >= 0 }
+    val shown = options.map { labels[it] ?: it }
+    // 选项都是一两个字（翻译栏的「自、英、日」）时列表也窄，不占半个键盘
+    val menuWidth = width ?: if (shown.all { it.length <= 2 }) 88.dp else 148.dp
     Surface(
         shape = CompactMenuStyle.Shape, tonalElevation = 0.dp, shadowElevation = CompactMenuStyle.Elevation,
         color = colors.surface, contentColor = colors.text,
         border = if (glass.enabled) BorderStroke(1.dp, colors.text.copy(alpha = 0.14f)) else null,
-        modifier = modifier.width(width).testTag("option-menu"),
+        modifier = modifier.width(menuWidth).testTag("option-menu"),
     ) {
         Column(Modifier.padding(6.dp)) {
             if (title.isNotEmpty()) {
@@ -149,7 +154,7 @@ internal fun OptionMenuCard(
                 ) {
                     if (isSelected) Icon(Icons.Default.Check, contentDescription = null, tint = colors.text,
                         modifier = Modifier.align(Alignment.CenterStart).size(CompactMenuStyle.IconSize))
-                    Text(option, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    Text(shown[index], maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 20.dp),
                         fontSize = CompactMenuStyle.FontSize, lineHeight = CompactMenuStyle.LineHeight,
                         textAlign = TextAlign.Center, color = colors.text)
@@ -167,6 +172,7 @@ internal fun OptionMenuPopup(
     selected: String?,
     onChoose: (String) -> Unit,
     onDismiss: () -> Unit,
+    labels: Map<String, String> = emptyMap(),
 ) {
     val density = LocalDensity.current
     val position = remember { BelowAnchorPosition() }
@@ -178,7 +184,7 @@ internal fun OptionMenuPopup(
     ) {
         // 弹窗是另一个窗口：沿用键盘的密度和字号
         androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides density) {
-            OptionMenuCard(title, options, selected, onChoose = onChoose)
+            OptionMenuCard(title, options, selected, onChoose = onChoose, labels = labels)
         }
     }
 }
@@ -280,7 +286,7 @@ internal fun ToolbarPressMenuPopup(state: ToolbarPressMenuState) {
     ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides density) {
             OptionMenuCard(options.title, options.options, options.selected, highlighted = state.highlighted,
-                onRowBounds = { index, bounds -> state.rows[index] = bounds })
+                onRowBounds = { index, bounds -> state.rows[index] = bounds }, labels = options.labels)
         }
     }
 }

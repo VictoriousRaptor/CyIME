@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -62,7 +63,7 @@ class CustomLayoutActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
+        setContent { com.kingzcheung.xime.ui.i18n.ProvideUiTranslations {
             var darkMode by remember { mutableIntStateOf(SettingsPreferences.getDarkMode(this)) }
             var themeId by remember { mutableStateOf(SettingsPreferences.getKeyboardTheme(this)) }
             DisposableEffect(Unit) {
@@ -91,7 +92,7 @@ class CustomLayoutActivity : ComponentActivity() {
                         createNew = savedInstanceState == null && intent.getBooleanExtra("create_layout", false)) { finish() }
                 } }
             }
-        }
+        }}
     }
 }
 

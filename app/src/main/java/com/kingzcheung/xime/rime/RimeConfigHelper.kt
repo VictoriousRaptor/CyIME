@@ -80,7 +80,8 @@ object RimeConfigHelper {
         val t1 = android.os.SystemClock.elapsedRealtime()
         RimeEngine.getInstance().initialize(user, shared)
         val t2 = android.os.SystemClock.elapsedRealtime()
-        val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context))
+        val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context)) ||
+            (addBuiltinWhenNothingCompiles(context) && ensureDeployment(context))
         FileLogger.w(TAG, "prepareEngine: data=${t1 - t0}ms init=${t2 - t1}ms deploy=${android.os.SystemClock.elapsedRealtime() - t2}ms usable=$usable")
         preparedInProcess = usable
         usable
@@ -98,7 +99,8 @@ object RimeConfigHelper {
             preparedInProcess = false
             val (user, shared) = initializeRimeDataAsync(context)
             RimeEngine.getInstance().initialize(user, shared)
-            val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context))
+            val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context)) ||
+            (addBuiltinWhenNothingCompiles(context) && ensureDeployment(context))
             preparedInProcess = usable
             usable
         }
@@ -131,6 +133,28 @@ object RimeConfigHelper {
         if (current.isBlank() || handwriting || current == com.kingzcheung.xime.settings.InputModes.ENGLISH) return null
         if (enabled.isEmpty() || current in enabled) return null
         return fallbackSchema(current, enabled, emptySet())?.takeIf { it != current }
+    }
+
+    /**
+     * 启用的方案一个都没编译出来（比如从备份恢复了只开着导入方案的配置，这台机器上却没有那个方案的文件；
+     * 11-16 用户截图：「部署失败：wanxiang（没有编译出 wanxiang.schema.yaml）」，键盘一直卡在「正在加载词库」）：
+     * 把内置拼音加进启用列表并切过去，先让键盘能打字。原来的方案留在列表里，文件补齐后照常能用，
+     * 提示里照旧写着它没编译出来。已经有能用的方案、内置拼音本身就在列表里时不动。
+     */
+    private fun addBuiltinWhenNothingCompiles(context: Context): Boolean {
+        val build = File(context.filesDir, "rime/build")
+        val enabled = SchemaManager.getEnabledSchemas(context)
+        val inputs = enabled.filter { it !in com.kingzcheung.xime.settings.CyimeInputDefaults.dependencies &&
+            it != com.kingzcheung.xime.settings.InputModes.ENGLISH }
+        if (inputs.any { missingBuildArtifact(build, it) == null }) return false
+        val available = File(context.filesDir, "rime").listFiles().orEmpty()
+            .filter { it.name.endsWith(".schema.yaml") }.map { it.name.removeSuffix(".schema.yaml") }.toSet()
+        val native = SchemaManager.fallbackNativeSchema(available).firstOrNull()?.takeIf { it !in enabled } ?: return false
+        SchemaManager.setEnabledSchemas(context, enabled + native)
+        SettingsPreferences.setCurrentSchema(context, native)
+        com.kingzcheung.xime.settings.InputModes.selectProfile(context, native)
+        FileLogger.w(TAG, "No enabled schema compiled ($enabled), added built-in $native")
+        return true
     }
 
     /** Restore Chinese packs without the optional English translator. Keep the user's requested
@@ -216,7 +240,7 @@ object RimeConfigHelper {
     /** 当前方案没编译出来时换用的方案：同语言优先，其次任一能用的输入方案；都不能用返回 null。 */
     internal fun fallbackSchema(current: String, enabled: List<String>, broken: Set<String>): String? {
         val working = enabled.filter {
-            it !in broken && it !in com.kingzcheung.xime.settings.CyimeInputDefaults.dependencies &&
+            it !in broken && !com.kingzcheung.xime.settings.CyimeInputDefaults.isDependency(it) &&
                 it != com.kingzcheung.xime.settings.InputModes.ENGLISH
         }
         val language = com.kingzcheung.xime.settings.InputLanguage.forSchema(current)
@@ -617,7 +641,9 @@ object RimeConfigHelper {
     /** 方案没编译出来时返回缺的是什么（给用户看的一句），齐全时返回 null。 */
     internal fun missingBuildArtifact(build: File, id: String): String? {
         val schema = File(build, "$id.schema.yaml")
-        if (!schema.isFile) return "没有编译出 $id.schema.yaml"
+        // 方案文件本身就不在（从备份恢复了导入方案的启用记录，文件没跟过来）：说清要重新导入，不是编译出错。
+        if (!schema.isFile) return if (build.parentFile?.let { File(it, "$id.schema.yaml").isFile } == false)
+            "这台设备上没有 $id.schema.yaml，请重新导入这个方案" else "没有编译出 $id.schema.yaml"
         val chinese = id in com.kingzcheung.xime.settings.ChineseSchemas.ids
         val translator = Regex("""(?ms)^translator:\s*\n(.*?)(?=^\S|\z)""")
             .find(schema.readText())?.groupValues?.get(1) ?: return if (chinese) "方案里没有 translator" else null

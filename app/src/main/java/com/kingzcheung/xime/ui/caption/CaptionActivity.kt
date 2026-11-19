@@ -33,7 +33,7 @@ class CaptionActivity : ComponentActivity() {
     private var exitRequested = false
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         if (allowed) controller.start()
-        else Toast.makeText(this, "没有麦克风权限就听不到，请在手机设置里允许", Toast.LENGTH_LONG).show()
+        else com.kingzcheung.xime.ui.i18n.UiToast.makeText(this, "没有麦克风权限就听不到，请在手机设置里允许", Toast.LENGTH_LONG).show()
     }
 
     /**
@@ -68,7 +68,7 @@ class CaptionActivity : ComponentActivity() {
         // Captions floating from an earlier page carry on here instead of starting over.
         controller = CaptionFloat.giveBack() ?: CaptionController(this)
         CaptionFloat.pageAlive = true
-        setContent { CaptionScreen(controller, onExit = { exitRequested = true; finish() }) }
+        setContent { com.kingzcheung.xime.ui.i18n.ProvideUiTranslations { CaptionScreen(controller, onExit = { exitRequested = true; finish() }) }}
     }
 
     override fun onStart() {

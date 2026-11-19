@@ -23,6 +23,7 @@ object JapanesePlugin {
     private const val TAG = "JapanesePlugin"
     private const val KEY_ACTIVE = "japanese_plugin_active"
     private const val KEY_MIGRATED = "japanese_plugin_migrated"
+    private const val KEY_HANDWRITING_MIGRATED = "japanese_handwriting_migrated"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** 日语插件装着并启用（由 [sync] 维护的偏好，不碰插件管理器）。 */
@@ -116,5 +117,10 @@ object JapanesePlugin {
         // 上次没下完的（没网、下载失败）不用在这里补：下载排在默认模型队列里，启动和联网时自动再试，
         // 用户在模型管理里删掉的就不再补。
         sync(app)
+        // 1.16 起轻量版也不带日语手写模板：已经装着日语插件的人升级后补下一次（约 3 MB）。只做一次，之后删掉算用户的选择。
+        if (!prefs.getBoolean(KEY_HANDWRITING_MIGRATED, false)) {
+            prefs.edit().putBoolean(KEY_HANDWRITING_MIGRATED, true).apply()
+            if (isActive(app)) JapanesePack.request(app)
+        }
     }
 }

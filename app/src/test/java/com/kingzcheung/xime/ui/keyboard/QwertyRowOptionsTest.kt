@@ -113,4 +113,25 @@ class QwertyRowOptionsTest {
         assertFalse(shiftTapTypesSeparator(active = false, composing = true))
         assertFalse(syllableSplitActive(true, ascii = true, profile = InputProfiles.describe("rime_ice")))
     }
+
+    /** 用户 11-16：英文和西、德、法、意语用同两个开关打撇号（what's）；中文的分词不受影响。 */
+    @Test fun apostropheKeysForWordsWhenSwitchedOn() {
+        val pinyin = InputProfiles.describe("rime_ice")
+        // 默认关：和以前一样。
+        assertFalse(apostropheSplitActive(false, ascii = true, profile = pinyin))
+        // 中文键盘的英文状态、英文、字母语言。
+        assertTrue(apostropheSplitActive(true, ascii = true, profile = pinyin))
+        for (id in listOf(com.kingzcheung.xime.settings.InputModes.ENGLISH, "french", "italian", "german", "spanish", "malay"))
+            assertTrue(id, apostropheSplitActive(true, ascii = false, profile = InputProfiles.describe(id)))
+        // 反例：中文打拼音（那时是分词）、俄语韩语、日语罗马字、英文单词方案（字母先进组字区）。
+        // 越南语打词时字母会换成带声调的，Shift 也不当撇号。
+        for (id in listOf("rime_ice", "double_pinyin_flypy", "russian", "korean", "vietnamese", "japanese",
+                com.kingzcheung.xime.settings.InputModes.ENGLISH_WORDS))
+            assertFalse(id, apostropheSplitActive(true, ascii = false, profile = InputProfiles.describe(id)))
+        // Shift 只在打词时写 '：光标前是字母才算，刚打过 ' 或没在打词时照旧是 Shift。
+        assertTrue(typingWord("what"))
+        assertFalse(typingWord(""))
+        assertFalse(typingWord("what'"))
+        assertFalse(typingWord("2"))
+    }
 }

@@ -106,6 +106,12 @@ class ClipboardManager private constructor(private val context: Context) {
         }
 
         internal const val RECENT_CLIP_ON_OPEN_MS = 30_000L
+        /** 弹出键盘时连着来的几次补看（onStartInput、窗口显示、输入框重启）算一次。 */
+        internal const val OPEN_CHECK_GAP_MS = 1_500L
+
+        /** 弹出键盘时要不要看一眼剪贴板描述：离上次看过超过 [OPEN_CHECK_GAP_MS]（#341）。 */
+        internal fun openCheckDue(lastCheckAt: Long, now: Long): Boolean =
+            lastCheckAt == Long.MIN_VALUE || now - lastCheckAt >= OPEN_CHECK_GAP_MS
         /** 弹出键盘时同一条复制最多补读几次：系统一直不给读时不每次弹出都去读。 */
         internal const val OPEN_READ_TRIES = 2
 
@@ -150,6 +156,13 @@ class ClipboardManager private constructor(private val context: Context) {
     private val clipboardListener = AndroidClipboardManager.OnPrimaryClipChangedListener {
         readClipboard()
     }
+
+    /**
+     * 上次弹出键盘看描述的时间（开机以来的毫秒）：同一次弹出连着来的几次只看一次。小米把每次看描述都记成
+     * 一次读剪贴板，一次弹出键盘会走到 [readMissedCopy] 好几次（换输入框、窗口显示、输入框重启），
+     * 记录里一次弹出九次（#341）。
+     */
+    @Volatile private var lastOpenCheckAt = Long.MIN_VALUE
 
     /** 这次开着无痕后已经提示过「复制的内容没记进来」；无痕开关一变就重新算。 */
     @Volatile private var incognitoCopyNoticed = false
@@ -349,6 +362,11 @@ class ClipboardManager private constructor(private val context: Context) {
      * 键盘弹出（含输入框没变、只是键盘重新显示）时再读一次。
      */
     fun readMissedCopy(boardOpened: Boolean = false) {
+        if (!boardOpened) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (!openCheckDue(lastOpenCheckAt, now)) return
+            lastOpenCheckAt = now
+        }
         val description = runCatching { androidClipboardManager.primaryClipDescription }.getOrNull() ?: return
         val timestamp = description.timestamp
         if (timestamp != openTriedClip) { openTriedClip = timestamp; openTries = 0 }

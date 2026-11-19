@@ -54,4 +54,20 @@ class EnglishContractionCompletionTest {
         assertSame(words, apply("hel", words))
         assertEquals(20, apply("im", List(20) { "im$it" }).size)
     }
+
+    /** 打了撇号（what'、don'）：从缩写表里给对得上的，跟着大小写；和打的一样的不重复。 */
+    @Test fun typedApostropheOffersMatchingContractions() {
+        fun typed(text: String) = EnglishContractionCompletion.withApostrophe(text, table.forms(), 20)
+        assertEquals(listOf("what's", "what're", "what'd"), typed("what'"))
+        assertEquals(listOf("don't"), typed("don'"))
+        assertEquals(listOf("What's", "What're", "What'd"), typed("What'"))
+        assertEquals(listOf("DON'T"), typed("DON'"))
+        assertEquals(listOf("I'm", "I've", "I'll", "I'd"), typed("i'"))
+        assertEquals(listOf("I'm", "I've", "I'll", "I'd"), typed("I'"))
+        assertEquals(listOf("you're", "you've", "you'll", "you'd"), typed("you'"))
+        // 已经打全了：候选栏最前面就是它，不再重复。
+        assertEquals(emptyList<String>(), typed("what's"))
+        // 表里没有的写法不硬凑。
+        assertEquals(emptyList<String>(), typed("xyz'"))
+    }
 }

@@ -129,6 +129,13 @@ class LetterKeyboardFrameTest {
         assertTrue(singles.max() / singles.min() < 1.05f)
     }
 
+    /** 自建布局按住 Ctrl 拆开合并键：调过宽度的合并键按调过的格数对半分，其余键不变（用户 11-17）。 */
+    @Test fun customSplitUsesAdjustedWidths() {
+        val row = listOf("q", "we", "rt", "y", "u", "io", "p")
+        val split = splitPairSpans(row, false, mapOf("we" to 3f, "p" to 0.5f))
+        assertEquals(listOf(1f, 1.5f, 1.5f, 1f, 1f, 1f, 1f, 1f, 1f, 0.5f), split)
+    }
+
     /** 14 键大写时拆键：均匀排布下拆开的两个字母各占合并键的一半，每个字母的左边缘与拆开前同位；严格对齐时各 1 份。 */
     @Test fun fourteenSplitKeepsLetterPositions() {
         fourteen.forEach { row ->

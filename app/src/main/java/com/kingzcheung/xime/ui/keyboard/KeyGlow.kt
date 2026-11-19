@@ -54,6 +54,11 @@ internal fun Modifier.keyGlow(
     gapLightHoldMillis: Long? = null,
     /** 键缝动效：键自己报点按生效、移光标（空格、回车）。 */
     gapLightTrigger: KeyGapLightTrigger? = null,
+    /**
+     * 滑到哪个键按哪个键（用户 11-16，像三星键盘）：手指滑到这个键上是 true，从这个键起手、已经滑走是 false，
+     * 不在滑是 null（照旧只看手指按在这个键上）。变成 true 时像按下一样亮一次并保持，离开时淡出。
+     */
+    slideLit: Boolean? = null,
 ): Modifier = composed {
     val visibility by rememberUpdatedState(glowVisibility.coerceIn(0f, 1f))
     val preferences = LocalKeyboardInputPreferences.current
@@ -68,7 +73,8 @@ internal fun Modifier.keyGlow(
     val glowEnabled = preferences.keyGlowEnabled
     val motionEnabled = preferences.keyAnimationEnabled && animateCap
     // 键缝动效：在键帽上登记位置、旁观按下；没开时是空的。放在键帽缩放之前，登记的是不缩放的位置。
-    val gapSource = keyGapLightSource(gapLight, holdMillis = gapLightHoldMillis, trigger = gapLightTrigger)
+    val gapSource = keyGapLightSource(gapLight, holdMillis = gapLightHoldMillis, trigger = gapLightTrigger,
+        slideLit = slideLit == true)
     if (!glowEnabled && !motionEnabled) return@composed this.then(gapSource).then(paintedCap)
     // One coherent colour per press, as in the reference; overlapping squares
     // vary in brightness instead of mixing three unrelated theme colours.
@@ -87,35 +93,56 @@ internal fun Modifier.keyGlow(
     DisposableEffect(glowEnabled, motionEnabled) {
         onDispose { animation?.cancel() }
     }
+    fun pressLight() {
+        animation?.cancel()
+        release?.cancel()
+        if (glowEnabled) scope.launch { held.snapTo(KEY_GLOW_HOLD_ALPHA) }
+        if (glowEnabled) {
+            color = glowColors[Random.nextInt(glowColors.size)]
+            particles = List(4) { index ->
+                GlowSquare(0.2f + (index % 2) * 0.6f + (Random.nextFloat() - 0.5f) * 0.25f,
+                    0.15f + (index / 2) * 0.7f + (Random.nextFloat() - 0.5f) * 0.25f,
+                    0.85f + Random.nextFloat() * 0.50f,
+                    Random.nextFloat() * 60f - 30f, Random.nextFloat() * 100f - 50f)
+            }
+        }
+        animation = scope.launch {
+            elapsed.snapTo(0f)
+            // This is only the clock. Scale, travel and opacity each have their own
+            // continuous nonlinear curve below; none waits at an intermediate state.
+            val duration = if (glowEnabled) KEY_GLOW_DURATION_MS else KEY_CAP_DURATION_MS
+            // Keep the original cap curve; motion-only stops its clock after cap recovery.
+            elapsed.animateTo(duration.toFloat() / KEY_GLOW_DURATION_MS, tween(duration, easing = LinearEasing))
+        }
+    }
+    fun releaseLight() {
+        if (glowEnabled) {
+            release?.cancel()
+            release = scope.launch { held.animateTo(0f, tween(KEY_GLOW_RELEASE_MS)) }
+        }
+    }
     val observed = this.pointerInput(glowEnabled, motionEnabled) {
         awaitEachGesture {
             // 只旁观 DOWN，因此同一帧内按下/松开也不会丢失动画；不干扰拂动和长按。
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            animation?.cancel()
-            release?.cancel()
-            if (glowEnabled) scope.launch { held.snapTo(KEY_GLOW_HOLD_ALPHA) }
-            if (glowEnabled) {
-                color = glowColors[Random.nextInt(glowColors.size)]
-                particles = List(4) { index ->
-                    GlowSquare(0.2f + (index % 2) * 0.6f + (Random.nextFloat() - 0.5f) * 0.25f,
-                        0.15f + (index / 2) * 0.7f + (Random.nextFloat() - 0.5f) * 0.25f,
-                        0.85f + Random.nextFloat() * 0.50f,
-                        Random.nextFloat() * 60f - 30f, Random.nextFloat() * 100f - 50f)
-                }
-            }
-            animation = scope.launch {
-                elapsed.snapTo(0f)
-                // This is only the clock. Scale, travel and opacity each have their own
-                // continuous nonlinear curve below; none waits at an intermediate state.
-                val duration = if (glowEnabled) KEY_GLOW_DURATION_MS else KEY_CAP_DURATION_MS
-                // Keep the original cap curve; motion-only stops its clock after cap recovery.
-                elapsed.animateTo(duration.toFloat() / KEY_GLOW_DURATION_MS, tween(duration, easing = LinearEasing))
-            }
+            pressLight()
             // Watch (never consume) until every pointer is up, then let the held colour fade.
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
             } while (event.changes.any { it.pressed })
-            if (glowEnabled) release = scope.launch { held.animateTo(0f, tween(KEY_GLOW_RELEASE_MS)) }
+            releaseLight()
+        }
+    }
+    // 滑到哪个键按哪个键：手指滑到这个键上就像按下一样亮，滑走就淡出；起手的键手指一滑走就淡出，
+    // 不再一直亮到松手（用户 11-16：要像三星键盘那样滑到哪亮到哪）。
+    val slideState = remember(glowEnabled, motionEnabled) { arrayOfNulls<Boolean>(1) }
+    LaunchedEffect(slideLit, glowEnabled, motionEnabled) {
+        val before = slideState[0]
+        slideState[0] = slideLit
+        when (slideGlowStep(before, slideLit)) {
+            SlideGlowStep.PRESS -> pressLight()
+            SlideGlowStep.RELEASE -> releaseLight()
+            SlideGlowStep.NONE -> Unit
         }
     }
     val animatedCap = if (motionEnabled) Modifier.graphicsLayer {
@@ -167,6 +194,19 @@ internal fun Modifier.keyGlow(
             drawContent() // Keep glyphs sharp, above the light.
         }
     }
+}
+
+internal enum class SlideGlowStep { PRESS, RELEASE, NONE }
+
+/**
+ * 滑到哪个键按哪个键时一个键的炫光怎么变（[before] → [now]，见 keyGlow 的 slideLit）：
+ * 手指滑上来亮一次；滑走淡出；起手的键开始滑（null → false）也淡出；滑完松手（false → null）交给原来的松手淡出。
+ */
+internal fun slideGlowStep(before: Boolean?, now: Boolean?): SlideGlowStep = when {
+    now == true && before != true -> SlideGlowStep.PRESS
+    now != true && before == true -> SlideGlowStep.RELEASE
+    now == false && before == null -> SlideGlowStep.RELEASE
+    else -> SlideGlowStep.NONE
 }
 
 /** Narrow feather around a square, preserving straight sides and four corners. */

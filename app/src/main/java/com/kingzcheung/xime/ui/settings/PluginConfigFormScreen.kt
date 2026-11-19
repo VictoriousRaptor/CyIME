@@ -38,7 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -168,11 +168,11 @@ fun PluginConfigFormScreen(
                     }
                 }
                 if (!allValid) {
-                    Toast.makeText(context, "请填写必填配置", Toast.LENGTH_SHORT).show()
+                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "请填写必填配置", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
                 autoAuthorizeConfiguredHosts()
-                Toast.makeText(context, "配置已保存", Toast.LENGTH_SHORT).show()
+                com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "配置已保存", Toast.LENGTH_SHORT).show()
                 if (!embedded) onBack()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -331,7 +331,7 @@ fun PluginConfigFormScreen(
                                         android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                         android.net.Uri.parse("package:$pluginId"),
                                     ))
-                                    Toast.makeText(context, "请在应用信息页面卸载", Toast.LENGTH_SHORT).show()
+                                    com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "请在应用信息页面卸载", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -584,7 +584,7 @@ private fun UiNodeEditor(
                 onClick = {
                     val action = key
                     if (action.isNullOrBlank()) {
-                        Toast.makeText(context, "未配置动作", Toast.LENGTH_SHORT).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "未配置动作", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
                     runCatching { beforeAction() }

@@ -18,6 +18,24 @@ import org.robolectric.annotation.Config
 class PairedSymbolsTest {
     private val field = EditText(ApplicationProvider.getApplicationContext())
     private val connection: InputConnection = field.onCreateInputConnection(EditorInfo())
+    /** 延后的光标检查：测试里攒着，[settle] 时执行，模拟编辑框处理完以后。 */
+    private val pendingChecks = mutableListOf<() -> Unit>()
+
+    private val defaultDefer = PairedSymbols.deferCaretCheck
+
+    @org.junit.Before fun collectDeferredChecks() {
+        PairedSymbols.deferCaretCheck = { pendingChecks += it }
+    }
+
+    @org.junit.After fun restoreDeferredChecks() {
+        PairedSymbols.deferCaretCheck = defaultDefer
+    }
+
+    private fun settle() {
+        val checks = pendingChecks.toList()
+        pendingChecks.clear()
+        checks.forEach { it() }
+    }
 
     private fun type(literal: String) {
         val (text, caret) = PairedSymbols.commitFor(literal)
@@ -82,6 +100,7 @@ class PairedSymbolsTest {
         fun typeInto(literal: String) {
             val (text, caret) = PairedSymbols.commitFor(literal)
             assertTrue(ignoring.commitTextWithCaret(text, caret))
+            settle()
         }
         typeInto("《")
         assertEquals("《|", shown())
@@ -98,6 +117,29 @@ class PairedSymbolsTest {
         assertEquals("（ni好|）", shown())
         type("）")
         assertEquals("（ni好）|", shown())
+    }
+
+    /**
+     * 编辑框认光标位置，只是刚上屏时读回的是旧状态（光标看着在结尾后面）：等它处理完再查，结尾留着（用户 11-16）。
+     */
+    @Test fun aLaggingReadRightAfterCommitDoesNotDeleteTheClosingHalf() {
+        var lagging = true
+        val lagged = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? =
+                if (lagging) field.text.toString().takeLast(n) else super.getTextBeforeCursor(n, flags)
+        }
+        val (text, caret) = PairedSymbols.commitFor("（")
+        assertTrue(lagged.commitTextWithCaret(text, caret))
+        lagging = false
+        settle()
+        assertEquals("（|）", shown())
+    }
+
+    /** 连着点两次开头：只按最后一次查，前一次的检查不再删东西。 */
+    @Test fun onlyTheLatestPairIsChecked() {
+        type("（"); type("《")
+        settle()
+        assertEquals("（《|》）", shown())
     }
 
     @Test fun aSelectionIsReplacedByThePairLikeAnyTypedSymbol() {

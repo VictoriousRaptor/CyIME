@@ -25,12 +25,26 @@ internal data class HardwareCandidatePresentation(
      */
     fun window(start: Int, step: Int = HARDWARE_PAGE_SIZE): HardwareCandidatePresentation {
         val stride = step.coerceIn(1, HARDWARE_PAGE_SIZE)
-        return if (association || (start == 0 && words.size <= stride)) this
-        else copy(words = words.drop(start).take(HARDWARE_PAGE_SIZE),
-            comments = comments.drop(start).take(HARDWARE_PAGE_SIZE),
+        if (association || (start == 0 && words.size <= stride)) return this
+        val size = hardwareWindowSize(words.size - start, stride)
+        return copy(words = words.drop(start).take(size),
+            comments = comments.drop(start).take(size),
             hasPreviousPage = start > 0 || hasPreviousPage,
-            hasNextPage = start + stride < words.size || hasNextPage)
+            hasNextPage = start + size < words.size || hasNextPage)
     }
+}
+
+/**
+ * 一页引擎候选（默认 20 个）在工具条上分几组显示，每组放得下 [fit] 个：组数按放得下的算，个数平均分。
+ * 原来每组都放满、最后剩几个单成一组：放得下 9 个时是 9、9、2，第三组后面空一大片，每页都这样循环
+ * （11-16 用户反馈，平板接蓝牙键盘输 yi）。现在是 7、7、6：不重复、不漏，也不留大片空白。
+ */
+internal fun hardwareWindowSize(remaining: Int, fit: Int): Int {
+    if (remaining <= 0) return 0
+    val f = fit.coerceIn(1, HARDWARE_PAGE_SIZE)
+    if (remaining <= f) return remaining
+    val groups = (remaining + f - 1) / f
+    return (remaining + groups - 1) / groups
 }
 
 internal const val HARDWARE_PAGE_SIZE = 10

@@ -33,7 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchColors
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -274,7 +274,8 @@ fun SettingsToggleItem(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
+            // 说明为空时不占一行（如「启用开屏广告」，用户 11-16 要求不写说明）。
+            if (subtitle.isNotEmpty()) Text(
                 text = settingsJumpText(subtitle, subtitleJumps, MaterialTheme.colorScheme.primary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

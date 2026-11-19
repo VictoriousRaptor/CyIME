@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.settings
 import android.content.SharedPreferences
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.runtime.*

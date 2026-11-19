@@ -58,8 +58,13 @@ object JapanesePack {
 
     fun dictionaryReady(context: Context): Boolean = dictionaryBundled(context) || dictionaryUnpacked(context)
 
-    /** 日语能转换了（或这台手机本来就只能显示罗马字）。 */
-    fun ready(context: Context): Boolean = engineReady(context) && dictionaryReady(context)
+    /** 日语手写模板（1.16 起轻量版也不带，[com.kingzcheung.xime.handwriting.HandwritingAssets]）。 */
+    private fun handwritingReady(context: Context): Boolean =
+        com.kingzcheung.xime.handwriting.HandwritingAssets.bundled(context, "kana_default_och.bin") ||
+            ModelManager.isModelDownloaded(context, BuiltinModelCatalog.JAPANESE_HANDWRITING)
+
+    /** 日语能转换、能手写了（或这台手机本来就只能显示罗马字）。 */
+    fun ready(context: Context): Boolean = engineReady(context) && dictionaryReady(context) && handwritingReady(context)
 
     /** 还要下载的模型；词库下载了还没解开的不算（[installDictionary] 会解）。 */
     fun missing(context: Context): List<ModelInfo> = listOfNotNull(
@@ -67,6 +72,7 @@ object JapanesePack {
         ModelManager.getModel(BuiltinModelCatalog.JAPANESE_DICTIONARY)?.takeUnless {
             dictionaryReady(context) || ModelManager.isModelDownloaded(context, it)
         },
+        ModelManager.getModel(BuiltinModelCatalog.JAPANESE_HANDWRITING)?.takeUnless { handwritingReady(context) },
     )
 
     /** 要下载的字节数，按下载的大小算（引擎是压缩包，按目录里写的压缩后大小）。 */
@@ -135,12 +141,12 @@ object JapanesePack {
     }
 
     /**
-     * 卸载「日语」插件时：删掉下载的词库、引擎和解开的词库，学习记录（rime/azookey/memory）留着。
+     * 卸载「日语」插件时：删掉下载的词库、引擎、手写模板和解开的词库，学习记录（rime/azookey/memory）留着。
      * 先关掉日语再调用（日语方案不在用，翻译器不会再读词库）。安装包里带的不动。
      */
     internal fun removeDownloads(context: Context) {
         if (dictionaryBundled(context)) return
-        for (id in listOf(BuiltinModelCatalog.JAPANESE_DICTIONARY, BuiltinModelCatalog.JAPANESE_ENGINE))
+        for (id in listOf(BuiltinModelCatalog.JAPANESE_DICTIONARY, BuiltinModelCatalog.JAPANESE_ENGINE, BuiltinModelCatalog.JAPANESE_HANDWRITING))
             if (ModelManager.getModel(id) != null) ModelManager.deleteModel(context, id)
         File(rimeDir(context), "azookey/dictionary").deleteRecursively()
     }

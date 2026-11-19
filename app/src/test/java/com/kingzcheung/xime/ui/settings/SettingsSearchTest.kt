@@ -256,4 +256,13 @@ class SettingsSearchTest {
         assertTrue(searchSettings("字号").isNotEmpty())
         assertEquals("字号", searchTextFor("字号", TextRange(1, 2)))
     }
+
+    @Test fun `english screen finds settings by the English names it shows`() {
+        val english = com.kingzcheung.xime.ui.i18n.UiTranslations.parse(java.io.File("src/main/assets/i18n/en.tsv").readText())
+        assertTrue(searchSettings("theme", english = english).any { it.title == "主题与外观" })
+        assertTrue(searchSettings("key label", english = english).any { it.title == "按键字号" })
+        // 中文照样能搜，没有英文表时英文词搜不到页面标题。
+        assertTrue(searchSettings("主题", english = english).any { it.title == "主题与外观" })
+        assertFalse(searchSettings("appearance").any { it.title == "主题与外观" })
+    }
 }

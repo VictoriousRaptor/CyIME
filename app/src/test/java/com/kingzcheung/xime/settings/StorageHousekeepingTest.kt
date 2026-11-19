@@ -73,4 +73,46 @@ class StorageHousekeepingTest {
         assertFalse(previous.exists())
         assertEquals("new", File(models, "paraformer-zh-en-int8/model.onnx").readText())
     }
+
+    @Test fun `过期缓存：发出去一天的图片副本和三天没动的临时文件，自己管大小的不碰`() {
+        val cache = tmp.newFolder("cache")
+        val now = 30L * 24 * 60 * 60 * 1000
+        fun File.age(hours: Long) = apply { setLastModified(now - hours * 60 * 60 * 1000) }
+        val oldCopy = File(cache, "emoji_cache/a.png").apply { parentFile!!.mkdirs(); writeText("png") }.age(25)
+        val freshCopy = File(cache, "emoji_cache/b.png").apply { writeText("png") }.age(2)
+        val oldExport = File(cache, "dict_export_userdb.txt").apply { writeText("x") }.age(80)
+        val oldTestDir = File(cache, "learning-test-1").apply { mkdirs() }
+        File(oldTestDir, "a.json").apply { writeText("{}") }.age(100)
+        oldTestDir.age(100)
+        val busyDir = File(cache, "schema-import-busy").apply { mkdirs() }
+        File(busyDir, "part").apply { writeText("x") }.age(1)
+        busyDir.age(100)
+        val freshTemp = File(cache, "market-1.xipk").apply { writeText("x") }.age(5)
+        val managed = listOf("coil_cache", "clipboard_images", "updates", "stats_share", "WebView").map {
+            File(cache, it).apply { mkdirs(); File(this, "f").apply { writeText("x") }.age(500) }.age(500)
+        }
+        val found = StorageHousekeeping.findStaleCache(cache, now).toSet()
+        assertEquals(setOf(oldCopy, oldExport, oldTestDir), found)
+        assertTrue((managed + freshCopy + busyDir + freshTemp).none { it in found })
+    }
+
+    @Test fun `改回缓存组只走数据目录，跳过缓存目录`() {
+        val data = tmp.newFolder("data")
+        val cache = File(data, "cache").apply { mkdirs(); File(this, "c.bin").writeText("cache") }
+        val model = File(data, "files/models/sv/model.onnx").apply { parentFile!!.mkdirs(); writeText("12345") }
+        val visited = mutableListOf<String>()
+        val bytes = StorageHousekeeping.regroup(data.toPath(), setOf(cache.toPath())) { path ->
+            visited += data.toPath().relativize(path).toString().replace('\\', '/')
+            if (path == model.toPath()) 5L else -1L
+        }
+        assertEquals(5L, bytes)
+        assertTrue("files/models/sv/model.onnx" in visited)
+        assertTrue(visited.none { it.startsWith("cache") })
+    }
+
+    @Test fun `缓存目录不大时不写明细`() {
+        val cache = tmp.newFolder("cache")
+        File(cache, "small").writeText("x")
+        assertEquals(null, StorageHousekeeping.cacheBreakdown(cache))
+    }
 }

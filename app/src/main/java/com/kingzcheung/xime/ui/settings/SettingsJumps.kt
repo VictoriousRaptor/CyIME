@@ -1,7 +1,7 @@
 package com.kingzcheung.xime.ui.settings
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -60,7 +60,15 @@ internal fun settingsPageMatches(pattern: String?, arg: (String) -> String?, tar
  */
 @Composable
 internal fun settingsJumpText(text: String, jumps: List<String>?, linkColor: Color): AnnotatedString {
+    val english = com.kingzcheung.xime.ui.i18n.LocalUiTranslations.current
+    if (english != null) return englishJumpText(text, jumps, linkColor, english)
     val jump = LocalSettingsJump.current ?: return AnnotatedString(text)
+    return settingsJumpLinks(text, jumps, linkColor, jump)
+}
+
+/** 中文说明里「」认得的设置名变成链接。 */
+private fun settingsJumpLinks(text: String, jumps: List<String>?, linkColor: Color,
+                              jump: (SettingsSearchEntry) -> Unit): AnnotatedString {
     val style = TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
     return buildAnnotatedString {
         var at = 0
@@ -81,4 +89,33 @@ internal fun settingsJumpText(text: String, jumps: List<String>?, linkColor: Col
 internal fun SettingsJumpText(text: String, jumps: List<String>, style: TextStyle, color: Color = Color.Unspecified,
                               modifier: Modifier = Modifier) {
     Text(settingsJumpText(text, jumps, MaterialTheme.colorScheme.primary), style = style, color = color, modifier = modifier)
+}
+
+/**
+ * 英文界面的指路：整段先换成英文，再按中文「」里认得的设置名，把它们的英文名（英文表里「」写成 “ ”）变成链接。
+ * 说明没有英文时照旧是中文，链接也照旧。
+ */
+@Composable
+private fun englishJumpText(text: String, jumps: List<String>?, linkColor: Color,
+                            english: com.kingzcheung.xime.ui.i18n.UiTranslations): AnnotatedString {
+    val translated = english.translate(text)
+    val jump = LocalSettingsJump.current ?: return AnnotatedString(translated)
+    if (translated == text) return settingsJumpLinks(text, jumps, linkColor, jump)
+    val style = TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+    val links = Bracketed.findAll(text).mapNotNull { match ->
+        val label = match.groupValues[1]
+        val entry = if (jumps == null || label in jumps) settingsJumpEntry(label) else null
+        entry?.let { english.translate(label) to it }
+    }.distinctBy { it.first }.toList()
+    return buildAnnotatedString {
+        append(translated)
+        for ((name, entry) in links) {
+            var from = translated.indexOf(name)
+            while (from >= 0) {
+                val end = from + name.length
+                addLink(LinkAnnotation.Clickable("settings-jump:${entry.title}", style) { jump(entry) }, from, end)
+                from = translated.indexOf(name, end)
+            }
+        }
+    }
 }

@@ -55,7 +55,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -181,7 +181,7 @@ internal fun InstalledPluginsList(
 
     LaunchedEffect(importMessage) {
         if (importMessage != null) {
-            Toast.makeText(context, importMessage, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, importMessage.orEmpty(), Toast.LENGTH_SHORT).show()
             viewModel.consumeImportMessage()
         }
     }

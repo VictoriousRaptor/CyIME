@@ -1,0 +1,24 @@
+# CyIME 越南语：字母逐字上屏，Telex 声调和变音由应用随打随换，补全由应用按商店里的越南语补全词表给出。
+# 这个方案只是语言入口（语言列表、语言键、键盘布局 qwerty_vietnamese 都按方案识别），
+# 不组字、不翻译、不转标点：按键交回应用原样上屏。
+schema:
+  schema_id: vietnamese
+  name: 越南语
+  version: "1"
+  author:
+    - Cyletix
+  description: |
+    越南语 26 键，Telex 打声调（vieetj → việt）；补全不用打声调（nguoi → người）。
+
+switches:
+  - name: ascii_mode
+    states: [ VI, ABC ]
+    reset: 0
+
+engine:
+  processors:
+    - express_editor
+  segmentors:
+    - fallback_segmentor
+  translators:
+    - echo_translator

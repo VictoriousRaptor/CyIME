@@ -103,6 +103,9 @@ object DoublePinyinSchemes {
         check(base.isFile) { "请先完成小鹤双拼部署" }
         writeLayoutVariants(rimeDir, scheme, base.readText(), layouts)
         if (scheme.id != BASE) {
+            // 停顿纠错索引先写：方案文件里把它列为依赖，部署时得已经在。小鹤方案还没带这项（旧安装包的文件）时不写。
+            if (base.readText().contains(DoublePinyinScheme.pauseId(BASE)))
+                writeIfChanged(File(rimeDir, "${DoublePinyinScheme.pauseId(scheme.id)}.schema.yaml"), scheme.pauseSchema())
             writeIfChanged(File(rimeDir, "${scheme.id}.schema.yaml"), scheme.schema(base.readText()))
             val base14 = File(rimeDir, "${DoublePinyinScheme.k14Id(BASE)}.schema.yaml")
             // 14 键、九键没有分号键：ing 在分号上的方案（微软双拼）把分号并到 L 键（DoublePinyinScheme.k14Schema、t9Schema）。
@@ -142,8 +145,50 @@ object DoublePinyinSchemes {
     private fun mergedLayouts(context: Context) =
         runCatching { CustomKeyboardLayouts.load(context) }.getOrDefault(emptyList()).filter { it.mergedGroups.isNotEmpty() }
 
+    /**
+     * 旧版（1.15.94、1.15.95）每个双拼方案生成过一份「双拼纠错索引」（cyime_edit_*），现在换成了停顿纠错索引
+     * （cyime_pause_*），旧文件没人删，被当成没写语言的导入方案列进「语言与方案」。只删名字对得上的那几份和它们的编译产物。
+     */
+    internal fun retireOldCorrectionIndexes(rimeDir: File) {
+        val stale = rimeDir.listFiles { f -> f.name.startsWith(OLD_CORRECTION_PREFIX) && f.name.endsWith(".schema.yaml") }
+            .orEmpty().filter { file ->
+                runCatching { file.readText() }.getOrDefault("")
+                    .contains("\n  name: $OLD_CORRECTION_NAME\n")
+            }
+        for (file in stale) {
+            val id = file.name.removeSuffix(".schema.yaml")
+            if (!file.delete()) { Log.w(TAG, "Cannot remove old ${file.name}"); continue }
+            File(rimeDir, "build").listFiles { f -> f.name.startsWith("$id.") }.orEmpty().forEach { it.delete() }
+        }
+    }
+
+    /**
+     * 手动启用过的旧索引（手机 11-17：「已安装的方案」里列出、底部卡在「正在应用方案更改…」）：文件删掉后
+     * 启用列表和当前方案里还留着它的 id，从中去掉。只去掉文件已不在的 cyime_edit_*。
+     */
+    internal fun staleOldIndexIds(ids: List<String>, rimeDir: File): Set<String> = ids.filter {
+        it.startsWith(OLD_CORRECTION_PREFIX) && !File(rimeDir, "$it.schema.yaml").exists()
+    }.toSet()
+
+    private fun forgetOldCorrectionIndexes(context: Context, rimeDir: File) {
+        val enabled = SchemaManager.readSavedEnabledSchemas(context) ?: return
+        val stale = staleOldIndexIds(enabled, rimeDir)
+        if (stale.isNotEmpty()) SchemaManager.setEnabledSchemas(context, enabled - stale)
+        val current = SettingsPreferences.getCurrentSchema(context)
+        if (staleOldIndexIds(listOf(current), rimeDir).isNotEmpty()) {
+            val next = (enabled - stale).firstOrNull() ?: CyimeInputDefaults.recommended.first()
+            SettingsPreferences.setCurrentSchema(context, next)
+        }
+    }
+
+    private const val OLD_CORRECTION_PREFIX = "cyime_edit_"
+    private const val OLD_CORRECTION_NAME = "双拼纠错索引"
+
     /** 初始化时调用：小鹤双拼方案随版本更新后，其他内置、自定义方案和各九键、14 键、布局版本跟着更新。 */
     @Synchronized fun install(context: Context, rimeDir: File) {
+        retireOldCorrectionIndexes(rimeDir)
+        runCatching { forgetOldCorrectionIndexes(context, rimeDir) }
+            .onFailure { Log.w(TAG, "Cannot drop old correction indexes from the schema list", it) }
         if (!File(rimeDir, "$BASE.schema.yaml").isFile) return
         val layouts = mergedLayouts(context)
         for (scheme in DoublePinyinScheme.BUILTINS + runCatching { load(context) }.getOrDefault(emptyList())) {
@@ -224,6 +269,7 @@ object DoublePinyinSchemes {
             File(rimeDir, "$id.schema.yaml").delete()
             File(rimeDir, "${DoublePinyinScheme.t9Id(id)}.schema.yaml").delete()
             File(rimeDir, "${DoublePinyinScheme.k14Id(id)}.schema.yaml").delete()
+            File(rimeDir, "${DoublePinyinScheme.pauseId(id)}.schema.yaml").delete()
             File(rimeDir, "en_dicts/${DoublePinyinScheme.cnEnName(id)}.txt").delete()
             layoutVariantFiles(rimeDir, id).forEach { (file, _) -> file.delete() }
         }

@@ -30,6 +30,21 @@ object LetterLayouts {
 
     fun typable(layout: CustomKeyboardLayout): Boolean = layout.mergedGroups.isEmpty()
 
+    /** 法语 AZERTY（法国、比利时的排法，用户 11-16）：xime.yaml 里的 azerty_french。 */
+    const val AZERTY_FRENCH = "azerty_french"
+
+    /**
+     * 字母语言自带的另一套键盘（xime.yaml 里不绑方案的 section）：法语可以换成 AZERTY。
+     * 选了才用，存的键和上面的排列一样（letter_layout_<语言>），没选时照旧用语言自己的键盘。
+     */
+    private val SECTION_LAYOUTS: Map<InputLanguage, List<String>> = mapOf(InputLanguage.FRENCH to listOf(AZERTY_FRENCH))
+    val sectionLayoutIds: Set<String> get() = SECTION_LAYOUTS.values.flatten().toSet()
+
+    fun sectionChoices(language: InputLanguage): List<String> = SECTION_LAYOUTS[language].orEmpty()
+
+    /** 这个语言换用的那套键盘；null 用语言自己的键盘。 */
+    fun chosenSection(language: InputLanguage): String? = chosen[language]?.takeIf { it in sectionChoices(language) }
+
     /** null keeps the language's own 26 keys; a deleted custom layout falls back the same way. */
     fun chosen(language: InputLanguage): CustomKeyboardLayout? =
         chosen[language]?.let(CustomKeyboardLayouts::find)?.takeIf(::typable)
@@ -48,7 +63,7 @@ object LetterLayouts {
 
     /** [layoutId] that is not a typable letter layout (the language's own 26 keys) clears the choice. */
     fun select(context: Context, language: InputLanguage, layoutId: String) {
-        val id = CustomKeyboardLayouts.find(layoutId)?.takeIf(::typable)?.id
+        val id = layoutId.takeIf { it in sectionChoices(language) } ?: CustomKeyboardLayouts.find(layoutId)?.takeIf(::typable)?.id
         SettingsPreferences.getPrefsPublic(context).edit().apply {
             if (id == null) remove(PREFIX + language.id) else putString(PREFIX + language.id, id)
         }.apply()
@@ -59,7 +74,8 @@ object LetterLayouts {
     /** A layout tap resolved to [entry]; Chinese entries carry their layout in the schema itself. */
     fun selectFor(context: Context, entry: SchemaInfo, layoutId: String) {
         val base = entry.baseProfile
-        if (base.layout.kind == LayoutKind.ALPHABETIC && appliesTo(base.language, base.scheme))
+        if (base.layout.kind == LayoutKind.ALPHABETIC &&
+            (appliesTo(base.language, base.scheme) || sectionChoices(base.language).isNotEmpty()))
             select(context, base.language, layoutId)
     }
 

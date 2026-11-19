@@ -39,25 +39,41 @@ local CACHE_MAX = 200
 -- ===== 补字 =====
 local HEAD_QUALITY = 60
 
--- lua 造的候选没有 preedit 时，Rime 拿原始字母当编码显示（#372：分词后编码显示成 h s p n z）。
--- 和 stroke.schema.yaml 的 preedit_format 一样换成笔画（康熙部首）；分词号、通配符原样留着。
-local STROKE_GLYPHS = { h = "⼀", s = "⼁", p = "⼃", n = "⼂", z = "⼄" }
+-- ===== 空段 =====
+-- n 个分词号就是 n+1 个字（11-18 贡献者）：分词号之间、后面没打笔画的段代表任意一个字，
+-- 首笔按横竖撇点折五种展开查词表，最多展开 125 种（三个空段），再多就不查，免得打字卡顿。
+local STROKES = { "h", "s", "p", "n", "z" }
+local MAX_FIRST_CODES = 125
+
+-- 编码默认显示字母 h s p n z（11-18）；设置里选了显示笔画时，方案补丁写回 translator/preedit_format，
+-- lua 造的候选跟着换成笔画（#372：不然分词后的编码一半字母一半笔画）。分词号、通配符原样留着。
+local STROKE_GLYPHS = { h = "⼀", s = "⼁", p = "⼃", n = "⼂", z = "乛" }
+local glyphs = false
 local function stroke_preedit(code)
+  if not glyphs then return code end
   return (code:gsub("[hspnz]", STROKE_GLYPHS))
 end
 
 -- 把编码按分词键切段。只允许 h/s/p/n/z 和分词键 '（含 * 的通配查询交给内置
 -- wildcard 模块，这里整段不处理，避免重复给候选）。
+-- n 个分词号切成 n+1 段，空段（分词号连着打、或打在最后）代表一个还没打笔画的字：
+-- zzhpzns' 出骆驼，hshszh'nzsnnphhhs'' 出吉祥如意（11-18）。至少要有一段打了笔画。
 local function split(input)
   if not input:find("'", 1, true) or input:find("[^hspnz']") then return nil end
   local parts = {}
   for part in (input .. "'"):gmatch("([^']*)'") do parts[#parts + 1] = part end
-  if parts[#parts] == "" then parts[#parts] = nil end
   if #parts < 2 or #parts > MAX_SEGMENTS then return nil end
   for _, part in ipairs(parts) do
-    if part == "" then return nil end
+    if part ~= "" then return parts end
   end
-  return parts
+  return nil
+end
+
+local function has_empty(parts)
+  for _, part in ipairs(parts) do
+    if part == "" then return true end
+  end
+  return false
 end
 
 -- 只接受纯汉字（CJK 基本区，UTF-8 三字节），返回字数。不用 utf8.codes，
@@ -109,20 +125,58 @@ local function matches(env, text, parts)
   return i >= #parts
 end
 
-local function best_word(env, parts, from, to)
-  local slice, firsts = {}, {}
+-- 词表按每个字的第一笔编码。空段的第一笔不知道，五种都查；展开太多返回 nil。
+local function first_codes(parts, from, to)
+  local codes = { "" }
   for i = from, to do
-    slice[#slice + 1] = parts[i]
-    firsts[#firsts + 1] = parts[i]:sub(1, 1)
+    local first = parts[i]:sub(1, 1)
+    local options = first == "" and STROKES or { first }
+    local expanded = {}
+    for _, prefix in ipairs(codes) do
+      for _, option in ipairs(options) do expanded[#expanded + 1] = prefix .. option end
+    end
+    if #expanded > MAX_FIRST_CODES then return nil end
+    codes = expanded
   end
-  if not env.phrases:dict_lookup(table.concat(firsts), false, 0) then return nil end
-  local scanned = 0
-  for entry in env.phrases:iter_dict() do
-    scanned = scanned + 1
-    if scanned > SCAN_EXACT then break end
-    if matches(env, entry.text, slice) then return entry end
+  return codes
+end
+
+-- 第 from 到 to 段对得上的词（每个字的笔顺开头都对得上），按词频从高到低，最多 limit 个。
+-- 词表每个编码下的词本来就按词频排，所以每个编码只取前 limit 个对得上的；
+-- 展开了几个编码时扫描上限按编码平分（每个至少 SCAN_PER_CODE），总量和以前一个编码时差不多。
+local SCAN_PER_CODE = 500
+local function lookup_words(env, parts, from, to, limit, seen)
+  local codes = first_codes(parts, from, to)
+  if not codes then return {} end
+  local slice = {}
+  for i = from, to do slice[#slice + 1] = parts[i] end
+  local budget = #codes == 1 and SCAN_EXACT or math.max(SCAN_PER_CODE, math.floor(SCAN_EXACT / #codes))
+  local found, taken = {}, {}
+  for _, code in ipairs(codes) do
+    if env.phrases:dict_lookup(code, false, 0) then
+      local scanned, kept = 0, 0
+      for entry in env.phrases:iter_dict() do
+        scanned = scanned + 1
+        if scanned > budget or kept >= limit then break end
+        local text = entry.text
+        if not taken[text] and not (seen and seen[text]) and matches(env, text, slice) then
+          taken[text] = true
+          kept = kept + 1
+          found[#found + 1] = { text = text, weight = entry.weight, order = #found }
+        end
+      end
+    end
   end
-  return nil
+  table.sort(found, function(a, b)
+    if a.weight ~= b.weight then return a.weight > b.weight end
+    return a.order < b.order
+  end)
+  for i = #found, limit + 1, -1 do found[i] = nil end
+  return found
+end
+
+local function best_word(env, parts, from, to)
+  return lookup_words(env, parts, from, to, 1)[1]
 end
 
 local function sentence(env, parts)
@@ -150,22 +204,10 @@ end
 -- 选了接着打剩下的，和拼音选词一样一段一段上屏。
 local function emit_phrase_heads(env, parts, seg, emit, seen)
   for len = math.min(#parts - 1, MAX_WORD_PHRASE - 1), 2, -1 do
-    local slice, firsts, chars = {}, {}, 0
-    for i = 1, len do
-      slice[i] = parts[i]
-      firsts[i] = parts[i]:sub(1, 1)
-      chars = chars + #parts[i] + 1
-    end
-    local found, scanned = 0, 0
-    if env.phrases:dict_lookup(table.concat(firsts), false, 0) then
-      for entry in env.phrases:iter_dict() do
-        scanned = scanned + 1
-        if scanned > SCAN_EXACT or found >= MAX_HEADS then break end
-        if not seen[entry.text] and matches(env, entry.text, slice) then
-          found = found + 1
-          emit(entry.text, seg.start + chars)
-        end
-      end
+    local chars = 0
+    for i = 1, len do chars = chars + #parts[i] + 1 end
+    for _, item in ipairs(lookup_words(env, parts, 1, len, MAX_HEADS, seen)) do
+      emit(item.text, seg.start + chars)
     end
   end
 end
@@ -225,6 +267,8 @@ end
 local function emit_char_heads(env, parts, seg)
   if not env.chars then return end
   local head = parts[1]
+  -- 第一段空着（先打了分词号）：不知道第一个字，不补单字。
+  if head == "" then return end
   local static = env.cache[head]
   if not static then
     static = static_words(env, head)
@@ -313,6 +357,7 @@ end
 -- ============================================================
 
 function M.init(env)
+  glyphs = env.engine.schema.config:get_string("translator/preedit_format/@0") ~= nil
   env.codes = {}
   env.cache, env.cache_n = {}, 0
   env.learn_cache, env.learn_n = {}, 0
@@ -364,9 +409,6 @@ function M.func(input, seg, env)
 
   -- 内置词表：整词 / 拼句 / 更长的词
   if env.phrases then
-    local firsts = {}
-    for i, part in ipairs(parts) do firsts[i] = part:sub(1, 1) end
-    local code = table.concat(firsts)
     local seen = {}
     local function emit(text, stop)
       seen[text] = true
@@ -376,15 +418,11 @@ function M.func(input, seg, env)
       yield(cand)
     end
 
-    local exact, scanned = 0, 0
-    if #parts <= MAX_WORD_PHRASE and env.phrases:dict_lookup(code, false, 0) then
-      for entry in env.phrases:iter_dict() do
-        scanned = scanned + 1
-        if scanned > SCAN_EXACT or exact >= MAX_EXACT then break end
-        if not seen[entry.text] and matches(env, entry.text, parts) then
-          exact = exact + 1
-          emit(entry.text)
-        end
+    local exact = 0
+    if #parts <= MAX_WORD_PHRASE then
+      for _, item in ipairs(lookup_words(env, parts, 1, #parts, MAX_EXACT, seen)) do
+        exact = exact + 1
+        emit(item.text)
       end
     end
 
@@ -395,7 +433,14 @@ function M.func(input, seg, env)
 
     if #parts >= MAX_WORD_PHRASE then
       emit_phrase_heads(env, parts, seg, emit, seen)
+    elseif has_empty(parts) then
+      -- 有空段时只给正好 n+1 个字的词（和前几个字的词），不往更长的词猜：空段已经说了这里有几个字。
+      if #parts >= 3 then emit_phrase_heads(env, parts, seg, emit, seen) end
     else
+      local firsts = {}
+      for i, part in ipairs(parts) do firsts[i] = part:sub(1, 1) end
+      local code = table.concat(firsts)
+      local scanned
       local longer = {}
       for _, next_stroke in ipairs({ "h", "s", "p", "n", "z" }) do
         scanned = 0

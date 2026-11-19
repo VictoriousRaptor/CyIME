@@ -33,6 +33,11 @@ interface AsrBackend {
     fun processAudioChunk(buffer: ByteArray)
     fun stop()
     fun cancel()
+    /**
+     * 另一个线程正卡在 [stop] 里等最终结果，而这份结果已经没人要（用户又按了开始，旧会话的结果会被作废）：
+     * 让它尽快返回。只用于本地识别（不再等整段重识别）；默认什么都不做，照旧等。
+     */
+    fun abandonFinishing() {}
     fun release()
     fun isAvailable(): Boolean
 }

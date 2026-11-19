@@ -35,6 +35,10 @@ void T9CylmWarm(CylmModel* model);
 // every 20 texts and read back from it when the model opens.
 void T9CylmLearn(CylmModel* model, const string& text);
 void T9CylmLearnInto(CylmModel* model, const string& file);
+// Long-press 忘记: takes `text` out of every model's learned layer (cylm_forget), queued commits of it included, and
+// saves the layer. Waits for a running decode at most `wait_ms`. Returns the trigram types taken out, -1 when CyLM
+// was busy past the wait (nothing taken out).
+int T9CylmForget(const string& text, int wait_ms);
 // The user's own words in the Rime user directory `dir` go to CyLM (cylm_add_word); rechecked when files change.
 void T9CylmSyncWords(CylmModel* model, const string& dir);
 // Starts CyLM on this key's input while Rime builds its own sentence (called when the translation is created).

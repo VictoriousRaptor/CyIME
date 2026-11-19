@@ -18,6 +18,10 @@ class TxtCellDictionaryTest {
         assertEquals("你好|ni hao", code("nihao,你好"))
         assertEquals("西安|xi an", code("西安 xian"))                // run together, split by character count
         assertEquals("策略|ce lve", code("策略 ce lue"))
+        assertEquals("你好|ni hao", code("你好\tni'hao'\t1"))           // Baidu
+        assertEquals("你好|ni hao", code("你好(ni|hao) 20000"))         // Baidu mobile
+        assertEquals("你好|ni hao", code("nihao\t你好\tzh-CN"))         // Gboard dictionary.txt
+        assertEquals("你好|ni hao", code("ni hao \t你好\tc=3 d=0.9 t=12"))  // Rime user dictionary snapshot
     }
 
     @Test

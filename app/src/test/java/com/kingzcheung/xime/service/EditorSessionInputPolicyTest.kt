@@ -21,10 +21,11 @@ class EditorSessionInputPolicyTest {
         assertTrue(EditorInfoClassifier.isTerminalEditor(shell))
         assertTrue(EditorInfoClassifier.isSecretEditor(shell))
         assertTrue(com.kingzcheung.xime.settings.IncognitoState.isSensitiveEditor(shell))
-        for (password in listOf(field(termius, 0x81, 0x50000001), field(termius, 0x12, 0x50000001))) {
+        // Termius 的密码框按密码框：先给英文；文字密码能切中文（11-16），数字密码不能。
+        for ((password, switchable) in listOf(field(termius, 0x81, 0x50000001) to true, field(termius, 0x12, 0x50000001) to false)) {
             assertFalse(EditorInfoClassifier.isTerminalEditor(password))
             assertTrue(session.begin(password, false, false, "rime_ice").isAsciiMode)
-            assertFalse(session.choose(false))
+            assertEquals(switchable, session.choose(false))
         }
         // 可见密码框（Termius 登录页、别的应用的代码编辑器）先给英文，可以切回中文，仍按密码框不学词。
         for (visible in listOf(field(termius, 0x91, EditorInfo.IME_ACTION_DONE), field("other.editor", 0x91, 0x50000001))) {
@@ -40,10 +41,8 @@ class EditorSessionInputPolicyTest {
         packageName = "fixture.invalid"
     }
 
-    @Test fun allPasswordVariationsLockDirectAsciiWithoutSavingLanguage() {
+    @Test fun numberPasswordLocksDirectAsciiWithoutSavingLanguage() {
         val types = listOf(
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD,
         )
         types.forEach { type ->
@@ -64,6 +63,32 @@ class EditorSessionInputPolicyTest {
             session.completePreparation(restored.isAsciiMode, restored.currentSchemaId)
             assertNull(session.engineAsciiOverride())
         }
+    }
+
+    /** 用户 11-16：压缩包密码是中文，密码框一直是英文 26 键，切不了语言。 */
+    @Test fun textPasswordStartsEnglishButCanSwitchToChineseForThisFieldOnly() {
+        for (variation in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) {
+            val password = editor(InputType.TYPE_CLASS_TEXT or variation)
+            val session = EditorSessionInputPolicy()
+            // 进框照旧是英文、直接上屏。
+            assertTrue(session.begin(password, false, false, "rime_ice").isAsciiMode)
+            assertEquals(EditorFieldPolicy.Kind.PASSWORD, session.field.kind)
+            assertTrue(session.directInput)
+            assertFalse(session.locksNativeInput)
+            assertTrue(session.field.allowsNativeInput)
+            // 语言键切到中文：只在这个框里有效。
+            assertTrue(session.choose(false, "rime_ice"))
+            assertFalse(session.directInput)
+            assertFalse(session.begin(password, true, false, "rime_ice").isAsciiMode)
+            // 离开后回到进框前的中文；下一个密码框又是英文。
+            assertFalse(session.begin(editor(InputType.TYPE_CLASS_TEXT, 2), false, false, "rime_ice").isAsciiMode)
+            assertTrue(session.begin(editor(password.inputType, 3), false, false, "rime_ice").isAsciiMode)
+            // 不开语音；可见密码（代码编辑器）照旧能说。
+            assertTrue(session.field.blocksVoice)
+            assertFalse(EditorFieldPolicy.fromInputType(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD).blocksVoice)
+        }
+        // 仍是密码框：不学词、不联想。
+        assertTrue(EditorInfoClassifier.isSecretEditor(editor(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)))
     }
 
     /** 用户 11-13：写代码的软件（关联想用 VISIBLE_PASSWORD）被锁成英文，切不回中文。 */
@@ -121,12 +146,13 @@ class EditorSessionInputPolicyTest {
         val uri = editor(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_MULTI_LINE, 4)
         session.begin(uri, false, false, "rime_ice")
         assertFalse(session.locksNativeInput)
-        // 真正的密码框（单行）照旧锁英文。
+        // 单行密码框也先给英文、能切中文（11-16：压缩包密码是中文），但不开语音；数字密码照旧锁数字。
         for (variation in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) {
             val password = editor(InputType.TYPE_CLASS_TEXT or variation, 5)
             assertTrue(session.begin(password, false, false, "rime_ice").isAsciiMode)
-            assertTrue(session.locksNativeInput)
-            assertFalse(session.choose(false, "rime_ice"))
+            assertFalse(session.locksNativeInput)
+            assertTrue(session.field.blocksVoice)
+            assertTrue(session.choose(false, "rime_ice"))
         }
         assertTrue(EditorFieldPolicy.fromInputType(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD).locksNativeInput)
     }
@@ -309,9 +335,10 @@ class EditorSessionInputPolicyTest {
             assertEquals(EditorSessionPresentation(false, "chinese"),
                 session.begin(editor(InputType.TYPE_CLASS_TEXT, 2), false, true, "chinese", addressEnglish = false))
 
+            // 密码框不跟「网址、邮箱框自动切英文」：照旧先给英文。
             val password = editor(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, 3)
             assertTrue(session.begin(password, false, false, "chinese", addressEnglish = false).isAsciiMode)
-            assertTrue(session.locksNativeInput)
+            assertTrue(session.directInput)
         }
     }
 

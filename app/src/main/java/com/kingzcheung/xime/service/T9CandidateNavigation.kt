@@ -26,10 +26,15 @@ data class CandidateFocus(
     }
 }
 
+/**
+ * 「下一项」管得着的键盘：九键拼音、双拼，和笔画键盘（11-18 贡献者：笔画的 0 键也做成九键那样的下一项）。
+ * 笔画的编码不是拼音，编码显示、左栏音节只按九键换（见 [shownPreedit]、[highlightedT9Syllable]）。
+ */
 fun CandidateState.usesT9CandidateNavigation(profile: InputProfile): Boolean =
-    profile.language == InputLanguage.CHINESE &&
-        (profile.scheme == InputScheme.PINYIN || profile.scheme == InputScheme.DOUBLE_PINYIN) &&
-        profile.layout.kind == LayoutKind.T9 && profile.mode == InputMode.KEYBOARD &&
+    profile.language == InputLanguage.CHINESE && profile.mode == InputMode.KEYBOARD &&
+        ((profile.layout.kind == LayoutKind.T9 &&
+            (profile.scheme == InputScheme.PINYIN || profile.scheme == InputScheme.DOUBLE_PINYIN)) ||
+            (profile.layout.kind == LayoutKind.STROKE_KEYPAD && profile.scheme == InputScheme.STROKE)) &&
         ((isComposing && inputText.isNotEmpty()) ||
             (!isComposing && inputText.isEmpty() && candidates.isEmpty() && associationCandidates.isNotEmpty() &&
                 !isDeletionRecovery && !isDigitPhraseList)) &&
@@ -82,13 +87,15 @@ internal fun CandidateState.highlightedT9Reading(): String? {
  * 「下一项」换了高亮时，换成高亮候选的拼音；没换高亮就是引擎给的 [CandidateState.preeditText]。
  */
 fun CandidateState.shownPreedit(profile: InputProfile): String {
-    if (!usesT9CandidateNavigation(profile) || !isComposing || highlightedCandidateIndex == 0) return preeditText
+    if (profile.layout.kind != LayoutKind.T9 ||
+        !usesT9CandidateNavigation(profile) || !isComposing || highlightedCandidateIndex == 0) return preeditText
     return t9PreeditWithReading(preeditText, highlightedT9Reading() ?: return preeditText) ?: preeditText
 }
 
 /** 左栏应标出的音节：「下一项」换了高亮时是高亮候选的第一个音节，否则 null（左栏照旧）。 */
 fun CandidateState.highlightedT9Syllable(profile: InputProfile): String? {
-    if (!usesT9CandidateNavigation(profile) || !isComposing || highlightedCandidateIndex == 0) return null
+    if (profile.layout.kind != LayoutKind.T9 ||
+        !usesT9CandidateNavigation(profile) || !isComposing || highlightedCandidateIndex == 0) return null
     return highlightedT9Reading()?.split(' ', '\'')?.firstOrNull { it.isNotEmpty() }?.lowercase()
 }
 

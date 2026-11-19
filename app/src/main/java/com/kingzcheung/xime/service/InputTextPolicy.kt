@@ -44,6 +44,14 @@ internal fun isSentencePunctuation(text: String): Boolean =
 internal fun japaneseChoonpuIsCode(key: String, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
     key == "-" && !ascii && profile.capabilities.japaneseConversion
 
+/**
+ * 注音键盘的注音键：轻声 ˙（U+02D9）在 Unicode 里是修饰符号，会被 [isLiteralPunctuation] 当成标点，
+ * 把打着的 ㄉㄜ 原样连 ˙ 一起上屏（用户 11-18：轻声键是摆设，打不出「的」）。ˊˇˋ 是修饰字母，本来就不受影响。
+ * 注音方案、非西文时这些键交给按键队列，由 ImeKeyRouter.routeZhuyinKey 换成大千键码送进 Rime。
+ */
+internal fun zhuyinKeyIsCode(key: String, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
+    !ascii && profile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN && ZhuyinKeys.code(key) != null
+
 /** Keyboard punctuation only: never rewrite pasted prose, digits, emoji or speech results. */
 internal fun punctuationWidth(text: String, full: Boolean, japanese: Boolean = false): String {
     if (text.isEmpty() || !text.all { isLiteralPunctuation(it.toString()) }) return text

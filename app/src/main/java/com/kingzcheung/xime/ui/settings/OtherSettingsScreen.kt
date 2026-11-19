@@ -14,7 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -75,15 +75,13 @@ fun OtherSettingsContent(onBack: () -> Unit, onNavigateToRoute: (String) -> Unit
                     onClick = { onNavigateToRoute(SettingsRoutes.Performance) },
                     showArrow = true
                 )
-                // 界面语言：翻译补齐前只在开发者自己的包里出现（公开包隐藏，系统语言照样自动生效）。
-                if (com.kingzcheung.xime.BuildConfig.DEV_TOOLS || com.kingzcheung.xime.BuildConfig.DEBUG) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 56.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    AppLanguageItem()
-                }
+                // 界面语言：默认跟随系统；选英文时设置各页按 assets/i18n/en.tsv 显示英文。
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                AppLanguageItem()
             })
         }
     }

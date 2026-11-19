@@ -77,6 +77,12 @@ object AssociationService {
     ): List<String> {
         // Load the English dictionary on its first request, shared by concurrent keystrokes.
         if (topK <= 0) return emptyList()
+        // 打了撇号（what'、don'）：词表里没有撇号，补全从缩写表里找对得上的（what's、don't）。
+        if (ApostropheCompletion.APOSTROPHE in prefix) {
+            if (!initialize(context)) return emptyList()
+            val table = contractions ?: return emptyList()
+            return EnglishContractionCompletion.withApostrophe(prefix, table.forms(), topK)
+        }
         val bundled = if (initialize(context)) trieEngine?.predict(prefix, topK).orEmpty().map { it.text }
             else emptyList()
         val imported = withContext(Dispatchers.IO) {

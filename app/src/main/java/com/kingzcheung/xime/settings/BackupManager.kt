@@ -43,8 +43,8 @@ object BackupManager {
     /** 除 kime_settings 外随备份保存的设置文件（字幕显示、手写公式模式、模型下载源）。 */
     internal val SETTINGS_PREFS = listOf("caption_mode", "handwriting", "model_download_source")
 
-    /** 只带其中几个键的设置文件：clipboard_board 里还存着固定条目（pins），备份只带卡片行数、图片高度和平铺/列表。 */
-    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height", "list_layout"))
+    /** 只带其中几个键的设置文件：clipboard_board 里还存着固定条目（pins），备份只带卡片行数、图片高度、图片张数、平铺/列表和图片占用上限。 */
+    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height", "recent_image_count", "list_layout", "image_cache_mb"))
 
     /** 只留 [keys] 里的键（[prefsToJson] 格式）。 */
     internal fun keepKeys(json: String, keys: Set<String>): String {

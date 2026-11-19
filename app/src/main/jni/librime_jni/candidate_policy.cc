@@ -6,9 +6,11 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <set>
 #include <sstream>
+#include <utility>
 #include <utf8.h>
 #include <rime/candidate.h>
 #include <rime/config.h>
@@ -21,7 +23,10 @@
 #include <rime/gear/translator_commons.h>
 #include <rime/language.h>
 #include <rime/registry.h>
+#include <rime/resource.h>
+#include <rime/service.h>
 #include <rime/translation.h>
+#include <t9_ngram_model.h>
 #include <t9_pinyin_map.h>
 
 namespace cyime {
@@ -113,9 +118,13 @@ double SpellingCoverage(const an<Phrase>& phrase) {
   return complete / std::max<size_t>(1, phrase->end() - phrase->start());
 }
 
+// Kinds of single edit a nine-key lookup may offer (the keyboard's 拼音纠错 switches, see RefineOmission).
+enum : int { kEditOmission = 1, kEditSwap = 2, kEditTap = 4, kEditAll = 7, kEditExtra = 8 };
+
 // The auxiliary prism can match an edit in several syllables. Only offer a
 // whole reading that differs from the actual input by one edit in total.
-bool IsSingleSpellingEdit(const string& input, const string& pinyin, bool digits, Config* tap_grid = nullptr) {
+bool IsSingleSpellingEdit(const string& input, const string& pinyin, bool digits, Config* tap_grid = nullptr,
+                          int kinds = kEditAll) {
   string expected;
   for (char ch : pinyin) {
     if (ch == ' ') continue;
@@ -132,8 +141,8 @@ bool IsSingleSpellingEdit(const string& input, const string& pinyin, bool digits
            adjacent.find(expected[pos]) != string::npos;
   }
   if (digits && expected.size() == input.size() + 1)
-    return expected.compare(pos + 1, string::npos, input, pos, string::npos) == 0;
-  return expected.size() == input.size() && pos + 1 < input.size() &&
+    return (kinds & kEditOmission) && expected.compare(pos + 1, string::npos, input, pos, string::npos) == 0;
+  return (kinds & kEditSwap) && expected.size() == input.size() && pos + 1 < input.size() &&
          input[pos] == expected[pos + 1] && input[pos + 1] == expected[pos] &&
          input.compare(pos + 2, string::npos, expected, pos + 2, string::npos) == 0;
 }
@@ -141,6 +150,15 @@ bool IsSingleSpellingEdit(const string& input, const string& pinyin, bool digits
 // ScriptTranslator consults its engine's schema and current input when querying.
 // Use the small edit prism's own engine so it cannot start the active keyboard's
 // joint decoder, sentence model, or learning callbacks a second time.
+// Double pinyin (every syllable is two keys): the one-key slip a reading from the pause prism assumes, by the keys
+// the whole input has for its characters. One short: a key was left out. One over: a key was pressed twice. Even:
+// two keys are swapped. (Not by each syllable's span: the search for spans takes the longest spelling first, and
+// reads vege typed veeg as vee + g, two slips, where it is ve + eg, one.)
+int TwoKeyEdit(const std::string& text, size_t keys) {
+  const auto expected = 2 * HanCharacters(text).size();
+  return keys + 1 == expected ? kEditOmission : keys == expected + 1 ? kEditExtra : keys == expected ? kEditSwap : 0;
+}
+
 class EditLookup : public Engine {
  public:
   EditLookup(const string& id, const string& active_dictionary) {
@@ -154,12 +172,12 @@ class EditLookup : public Engine {
     }
   }
 
-  an<Candidate> Best(const string& input, bool digits, const string& original_first) {
+  an<Candidate> Best(const string& input, bool digits, const string& original_first, int kinds = kEditAll) {
     auto hit = Lookup(input);
-    if (hit && IsSingleSpellingEdit(input, hit->comment(), digits)) return hit;
+    if (hit && IsSingleSpellingEdit(input, hit->comment(), digits, nullptr, kinds)) return hit;
     // Two independent decodings agree with the original reading. Looking for
     // a substituted key here mostly introduces alternatives to correctly typed text.
-    if (!digits || tap_schema_.empty() || (hit && hit->text() == original_first)) return nullptr;
+    if (!digits || tap_schema_.empty() || !(kinds & kEditTap) || (hit && hit->text() == original_first)) return nullptr;
     if (!taps_) taps_.reset(new EditLookup(tap_schema_, dictionary_));
     auto neighbor = taps_->Lookup(input);
     return neighbor && IsSingleSpellingEdit(input, neighbor->comment(), true, taps_->schema()->config()) ?
@@ -186,7 +204,8 @@ class PolicyTranslation : public Translation {
  public:
   PolicyTranslation(an<Translation> source, const std::string& input, bool numeric, Translator* omission,
                     EditLookup* edits, an<Candidate> edit, BasicParticleChoices* particles, size_t particle_start,
-                    bool drop_corrections = false)
+                    bool drop_corrections = false, double correction_lead_bias = 0.0, int pause_kinds = -1,
+                    const std::function<bool(const std::string&, const std::string&)>& pause_likely = nullptr)
       : source_(source), end_(input.size()), drop_corrections_(drop_corrections) {
     // Bound the work independently of dictionary size. This is native candidate
     // identity-preserving ordering, not a separate UI list with stale indices.
@@ -436,7 +455,9 @@ class PolicyTranslation : public Translation {
           return p && !As<Sentence>(p) && p->end() == end_ && !HanCharacters(p->text()).empty() &&
                  (count = corrections(p)) > 0;
         });
-        static const double kPenalty = std::log(100.0), kMargin = std::log(2000.0);
+        // t9/correction_lead_bias (the keyboard's correction strength, ln units) is added to the 2000.
+        static const double kPenalty = std::log(100.0);
+        const double kMargin = std::log(2000.0) + correction_lead_bias;
         if (corrected != limit && corrections(top) == 0) {
           const auto p = As<Phrase>(Candidate::GetGenuineCandidate(*corrected));
           // Only the first corrected syllable's penalty is given back (2026-11-12): a word that needs two or three
@@ -465,6 +486,15 @@ class PolicyTranslation : public Translation {
           kept.emplace_back(i, head_[i]);
       }
     }
+    auto weight = [](const an<Candidate>& item) {
+      const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
+      return p ? p->weight() : 0.0;
+    };
+    auto corrected = [&](const an<Candidate>& item) {
+      if (numeric || item->type() == "cyime_omission" || item->end() != end_) return false;
+      const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
+      return p && p->correction_marks().find('=') != std::string::npos;
+    };
     size_t inserted = 0;
     if (omission && head_.size() >= 2) {
       Segment segment(0, input.size());
@@ -478,20 +508,17 @@ class PolicyTranslation : public Translation {
         // first five only when its word weight is higher (2026-11-03: a pause moved 今天 for jintiab from 3rd to
         // 6th; jntian still gets 今天 above 纪念日). The two translators' qualities are on different scales.
         // Only corrections of the whole input count: a shorter word's weight is not comparable with a sentence's.
-        auto weight = [](const an<Candidate>& item) {
-          const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
-          return p ? p->weight() : 0.0;
-        };
-        auto corrected = [&](const an<Candidate>& item) {
-          if (numeric || item->type() == "cyime_omission" || item->end() != end_) return false;
-          const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
-          return p && p->correction_marks().find('=') != std::string::npos;
-        };
         for (size_t i = 0; i < 10 && inserted < 2 && !alternatives->exhausted(); ++i) {
           auto c = alternatives->Peek();
           alternatives->Next();
           if (!c || c->start() != 0 || c->end() != input.size() ||
               hidden.count(c->text()) || HanCharacters(c->text()).empty()) continue;
+          // Double pinyin (cyime_pause_correction): only a reading with one key left out, doubled or swapped, of a
+          // kind whose switch is on, and only when the word model finds it more likely than the first candidate by
+          // the scheme's margin. Two keys a syllable leave so many such readings that correctly typed clauses got
+          // one too (22 of 670: 你到家了没 gained 你到家了吗我).
+          if (pause_kinds >= 0 && (!(TwoKeyEdit(c->text(), input.size()) & pause_kinds) ||
+                                   (pause_likely && !pause_likely(c->text(), head_.front()->text())))) continue;
           auto same = [&](const auto& item) { return item->text() == c->text(); };
           auto first_five = original.begin() + std::min<size_t>(5, original.size());
           if (std::any_of(original.begin(), first_five, same) ||
@@ -520,8 +547,50 @@ class PolicyTranslation : public Translation {
       if (original >= head_.begin() + std::min<size_t>(5, head_.size())) {
         if (original != head_.end()) head_.erase(original);
         seen_.insert(edit->text());
-        head_.insert(head_.begin() + 2 + inserted, New<ShadowCandidate>(
+        // Among the readings added after a pause and the corrections found while typing, the more common word comes
+        // first (2026-11-16): the swapped-letter reading used to go behind the omission readings, which the omission
+        // prism finds for nearly any input, so it was fifth (26-key words with two letters swapped, wanted word in
+        // the first three after the pause 58%, 79% with the omission readings off). It now passes those of lower
+        // word weight only: put third outright, it pushed 你说 for nihuo behind 你后 (uo read as ou).
+        const double own = weight(edit);
+        size_t at = 2;
+        while (at < std::min<size_t>(5 + inserted, head_.size()) &&
+               (head_[at]->type() == "cyime_omission" || corrected(head_[at])) && weight(head_[at]) >= own)
+          ++at;
+        head_.insert(head_.begin() + std::min(at, head_.size()), New<ShadowCandidate>(
             edit, "cyime_spelling_edit", edit->text(), numeric ? edit->comment() : "纠错", false));
+        omission_inserted = true;
+      }
+    }
+    // After a pause the most common corrected whole word comes third when only made-up sentences, initials and
+    // shorter words are ahead of it (2026-11-16): while typing, the translator lists every sentence it can compose
+    // from the letters as typed before any corrected word, so a doubled or extra letter left the wanted word fourth
+    // to tenth (duuole: 都有了, 度U哦了, 度过了 before 多了). A word typed out in full, a learned word and a more
+    // common pause reading keep their places before it, and so do the first two candidates. Not in double pinyin
+    // (pause_kinds >= 0): its pause readings cover these slips already, and the corrected words listed for a correctly
+    // typed clause there are longer phrases it could begin (是这样的 gained 一个运动员 third, 10 of 670 clauses).
+    if (!numeric && pause_kinds < 0 && (omission || edits) && head_.size() > 3) {
+      size_t best = 0;
+      double best_weight = 0;
+      for (size_t i = 2; i < head_.size(); ++i) {
+        if (!corrected(head_[i]) || head_[i]->start() != 0) continue;
+        const auto p = As<Phrase>(Candidate::GetGenuineCandidate(head_[i]));
+        if (As<Sentence>(p) || p->type() == "user_phrase" || HanCharacters(p->text()).size() < 2) continue;
+        if (!best || p->weight() > best_weight) { best = i; best_weight = p->weight(); }
+      }
+      auto stays = [&](const an<Candidate>& item) {
+        if (item->type() == "cyime_omission" || item->type() == "cyime_spelling_edit")
+          return weight(item) >= best_weight;
+        const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
+        if (!p || HanCharacters(p->text()).empty()) return false;
+        if (p->type() == "user_phrase") return true;
+        return !As<Sentence>(p) && item->start() == 0 && p->end() == end_ && SpellingCoverage(p) >= 0.5 &&
+               p->correction_marks().find('=') == std::string::npos;
+      };
+      size_t at = 2;
+      while (best > 2 && at < std::min<size_t>(5, best) && stays(head_[at])) ++at;
+      if (best > 2 && at < std::min<size_t>(5, best)) {
+        std::rotate(head_.begin() + at, head_.begin() + best, head_.begin() + best + 1);
         omission_inserted = true;
       }
     }
@@ -601,8 +670,29 @@ class CandidatePolicy : public Filter {
     // Swapped-letter correction is on only in full pinyin (26 keys); double pinyin, 14 keys and nine keys
     // keep their short-input corrections (a two-key slip in double pinyin is a whole syllable).
     engine_->schema()->config()->GetBool("translator/cyime_transposition_correction", &full_pinyin_);
-    if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_))
+    // Registered for RefineOmission when there is anything to look up after a pause.
+    if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_) || !omission_id_.empty())
       spelling_policies[engine_->context()] = this;
+    engine_->schema()->config()->GetDouble("t9/correction_lead_bias", &correction_lead_bias_);
+    // cyime_pause_correction (double pinyin, two keys a syllable): the pause prism (cyime_omission_schema) reads one
+    // key left out, pressed twice or swapped with its neighbour. margin is the word-model gate (ln units): such a
+    // reading is offered only when its text is that much more likely than the first candidate's. max_keys is the
+    // longest input looked up (the lookup grows with length). The keyboard's 漏键, 多键, 顺序 switches reach it as
+    // session options, see PauseKinds.
+    pause_gate_ = engine_->schema()->config()->GetDouble("cyime_pause_correction/margin", &pause_margin_);
+    engine_->schema()->config()->GetInt("cyime_pause_correction/max_keys", &pause_max_keys_);
+    // t9/digit_edit_margin (nine keys): a reading with one digit edited is offered after a pause only when the
+    // word model finds its text more likely than the first candidate's by this margin (ln units). Digits are
+    // ambiguous enough that an edited reading exists for most correctly typed input (16% of everyday clauses got
+    // one in third place, like 你老板我的小姨了吗 for 你看到我的消息了吗); a slip leaves a first candidate the model
+    // finds unlikely. Without the option or the model file every edited reading is offered.
+    string model;
+    if ((engine_->schema()->config()->GetDouble("t9/digit_edit_margin", &edit_margin_) || pause_gate_) &&
+        engine_->schema()->config()->GetString("t9/ngram_model", &model) && !model.empty()) {
+      const ResourceType type{"t9_ngram", "", ".lm"};
+      the<ResourceResolver> resolver(Service::instance().CreateResourceResolver(type));
+      edit_model_ = T9NgramModel::Open(resolver->ResolvePath(model).string());
+    }
   }
   ~CandidatePolicy() override {
     const auto it = spelling_policies.find(engine_->context());
@@ -616,6 +706,31 @@ class CandidatePolicy : public Filter {
     return edits_.get();
   }
   bool HasOmission() const { return !omission_id_.empty(); }
+  // The one-key slips a double pinyin scheme's pause readings may assume (off when the option is set); -1 for other
+  // schemes, where every reading of the pause prism is offered.
+  int PauseKinds() const {
+    if (!pause_gate_) return -1;
+    const auto* context = engine_->context();
+    return (context->get_option("_cyime_pause_omission_off") ? 0 : kEditOmission) |
+           (context->get_option("_cyime_pause_extra_off") ? 0 : kEditExtra) |
+           (context->get_option("_cyime_pause_swap_off") ? 0 : kEditSwap);
+  }
+  bool OmissionLookup(size_t keys) const {
+    return HasOmission() && (!pause_gate_ || (PauseKinds() != 0 &&
+        (pause_max_keys_ <= 0 || keys <= static_cast<size_t>(pause_max_keys_))));
+  }
+  // Letters: whether a pause has anything to look up for input of this many keys.
+  bool PauseLookup(size_t keys) const { return !edit_id_.empty() || OmissionLookup(keys); }
+  bool EditLikely(const string& edited, const string& first) const { return Likely(edited, first, edit_margin_); }
+  bool Likely(const string& edited, const string& first, double margin) const {
+    if (!edit_model_) return true;
+    auto score = [&](const string& text) {
+      std::vector<int32_t> parts;
+      edit_model_->Decompose(text, &parts);
+      return edit_model_->Chain(T9NgramModel::kUnseen, T9NgramModel::kUnseen, true, true, parts, nullptr, nullptr);
+    };
+    return score(edited) >= score(first) + margin;
+  }
   an<Translation> Apply(an<Translation> source, CandidateList*) override {
     const auto& input = engine_->context()->input();
     const bool numeric = !input.empty() && input.find_first_not_of("23456789' ") == std::string::npos;
@@ -630,9 +745,17 @@ class CandidatePolicy : public Filter {
         comp[comp.size() - 2].status >= Segment::kSelected && comp[comp.size() - 2].end == comp.back().start;
     const bool short_letters = full_pinyin_ && !input.empty() && input.size() <= 2 &&
         input.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == std::string::npos;
-    return New<PolicyTranslation>(source, input, numeric, idle ? Omission() : nullptr, edits,
-                                  idle && numeric ? pending_digit_edit : nullptr, whole || tail ? &particles_ : nullptr,
-                                  tail ? comp.back().start : 0, short_letters);
+    const int pause_kinds = PauseKinds();
+    std::function<bool(const std::string&, const std::string&)> pause_likely;
+    // Without the model file nothing is offered: ungated, 22 of 670 correctly typed inputs gained a made-up sentence.
+    if (pause_gate_)
+      pause_likely = [this](const std::string& edited, const std::string& first) {
+        return edit_model_ && Likely(edited, first, pause_margin_);
+      };
+    return New<PolicyTranslation>(source, input, numeric, idle && OmissionLookup(input.size()) ? Omission() : nullptr,
+                                  edits, idle && numeric ? pending_digit_edit : nullptr,
+                                  whole || tail ? &particles_ : nullptr, tail ? comp.back().start : 0, short_letters,
+                                  correction_lead_bias_, pause_kinds, pause_likely);
   }
  private:
   Translator* Omission() {
@@ -651,6 +774,14 @@ class CandidatePolicy : public Filter {
   the<Translator> omission_;
   the<EditLookup> edits_;
   string edit_id_, omission_id_;
+  std::shared_ptr<const T9NgramModel> edit_model_;
+  double edit_margin_ = 0.0;
+  // cyime_pause_correction/margin is set: a double pinyin scheme, whose pause readings are gated and sorted by kind.
+  bool pause_gate_ = false;
+  double pause_margin_ = 0.0;
+  int pause_max_keys_ = 0;
+  // How much more common than 2000 times (ln units, either sign) a corrected word must be to lead the word as typed.
+  double correction_lead_bias_ = 0.0;
   BasicParticleChoices particles_;
   bool selected_tail_ = false;
   bool full_pinyin_ = false;
@@ -681,13 +812,22 @@ bool RefineOmission(rime::Context* context) {
   if (!original.menu || original.menu->Prepare(2) < 2) return false;
   an<Candidate> digit_edit;
   const bool numeric = context->input().front() >= '2' && context->input().front() <= '9';
-  const auto policy = numeric ? spelling_policies.find(context) : spelling_policies.end();
+  const auto registered = spelling_policies.find(context);
+  // Letters: nothing to look up when the scheme has no pause prism, its switches are all off or the input is too long.
+  if (!numeric && (registered == spelling_policies.end() || !registered->second->PauseLookup(context->input().size())))
+    return false;
+  const auto policy = numeric ? registered : spelling_policies.end();
   if (policy != spelling_policies.end()) {
     auto* edits = policy->second->Edits();
     auto first = original.menu->GetCandidateAt(0);
-    if (edits && first)
-      digit_edit = edits->Best(context->input(), true, Candidate::GetGenuineCandidate(first)->text());
-    if (digit_edit && (hidden.count(digit_edit->text()) || HanCharacters(digit_edit->text()).empty()))
+    // The keyboard's switches (邻键纠错, 顺序纠错, 漏键纠错) reach nine keys as session options, off when set.
+    const int kinds = (context->get_option("_cyime_digit_omission_off") ? 0 : kEditOmission) |
+                      (context->get_option("_cyime_digit_swap_off") ? 0 : kEditSwap) |
+                      (context->get_option("_cyime_digit_tap_off") ? 0 : kEditTap);
+    if (edits && first && kinds)
+      digit_edit = edits->Best(context->input(), true, Candidate::GetGenuineCandidate(first)->text(), kinds);
+    if (digit_edit && (hidden.count(digit_edit->text()) || HanCharacters(digit_edit->text()).empty() ||
+                       !policy->second->EditLikely(digit_edit->text(), Candidate::GetGenuineCandidate(first)->text())))
       digit_edit.reset();
     for (size_t i = 0; digit_edit && i < 5; ++i) {
       auto present = original.menu->GetCandidateAt(i);

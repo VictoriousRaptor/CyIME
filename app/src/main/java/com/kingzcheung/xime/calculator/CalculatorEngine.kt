@@ -38,6 +38,18 @@ class CalculatorEngine {
         fun isCalculatorKey(key: String): Boolean =
             key.length == 1 && (digitOf(key[0]) != null || operatorOf(key[0]) != null)
 
+        /**
+         * 上屏的「算式 = 结果」里，小数点开头的数补上 0（打的 1000+.1 写成 1000+0.1=1000.1，#332）。
+         * 只改上屏和候选里的写法，打字时输入框里照打的字；全角的小数点补全角的 ０。
+         */
+        fun withLeadingZeros(expression: String): String = buildString {
+            expression.forEachIndexed { i, c ->
+                val prev = expression.getOrNull(i - 1)
+                if ((c == '.' || c == '．') && (prev == null || operatorOf(prev) != null)) append(if (c == '．') '０' else '0')
+                append(c)
+            }
+        }
+
         /** 换成 exp4j 认的写法。 */
         fun normalized(expression: String): String =
             expression.map { digitOf(it) ?: operatorOf(it) ?: it }.joinToString("")
@@ -79,7 +91,7 @@ class CalculatorEngine {
         if (!isActive()) return ""
         val result = getResult()
         if (result.isEmpty()) return ""
-        return "$rawInput=$result"
+        return "${withLeadingZeros(rawInput)}=$result"
     }
 
     /** 完整原始表达式候选，如 "44-70+35-70 = -61"。 */
@@ -87,7 +99,7 @@ class CalculatorEngine {
         if (!isActive()) return null
         val result = getResult()
         if (result.isEmpty()) return null
-        return "$rawInput = $result"
+        return "${withLeadingZeros(rawInput)} = $result"
     }
 
     fun clear() {

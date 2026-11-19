@@ -8,7 +8,7 @@ name: AI 改写
 icon: "改"
 description: 选中一段字（不选就是整个输入框），点键盘菜单里的「AI 改写」，选润色、改错字、更正式、更口语、缩短或翻译，点结果替换原文。可选讯飞星火 X2 或自己的 OpenAI 兼容接口，密钥只存在手机里。
 
-version: 0.4.1
+version: 0.5.0
 
 type: tool
 activation: multi

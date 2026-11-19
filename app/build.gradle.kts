@@ -19,6 +19,7 @@ apply(from = "build-logic/tasks-plugin-dev.gradle.kts")
 apply(from = "build-logic/tasks-japanese.gradle.kts")
 apply(from = "build-logic/tasks-offline-translate.gradle.kts")
 apply(from = "build-logic/tasks-chinese.gradle.kts")
+apply(from = "build-logic/tasks-word-association.gradle.kts")
 apply(from = "build-logic/tasks-stroke.gradle.kts")
 apply(from = "build-logic/tasks-cangjie.gradle.kts")
 apply(from = "build-logic/tasks-t9-grammar.gradle.kts")
@@ -77,6 +78,8 @@ android {
     // libcytranslate.so (arm64-v8a, x86_64; tasks-offline-translate.gradle.kts): offline translation engine.
     sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/translate-jniLibs").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/chinese-assets").get().asFile)
+    // association/dict-words-v1.gz (tasks-word-association.gradle.kts): what follows a whole word, for the association bar.
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/word-association-assets").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/stroke-assets").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/cangjie-assets").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/rime-manifest").get().asFile)
@@ -102,8 +105,8 @@ android {
         // 按发布批次定号：兼容修复升 PATCH，兼容功能升 MINOR 并归零 PATCH。
         // 不兼容变更升 MAJOR；日常编辑不逐次升号。完整规则见 docs/packaging.md。
         // versionCode 是独立递增的交付序号；同批普通版与内置版共用。
-        versionCode = 20261447
-        versionName = "1.15.94"
+        versionCode = 20261473
+        versionName = "1.15.100"
 
 
         // Isolated Compose rendering on a local x86 emulator; ordinary device tests keep the full app.
@@ -232,6 +235,19 @@ android {
     // 带模型的安装包照旧内置。它要的 libc++_shared.so 留在包里。离线包（assembleOffline）也必须带 bundleModels。
     if (providers.gradleProperty("bundleModels").orNull != "true")
         packaging.jniLibs.excludes.add("**/libopencv_java4.so")
+    // 语音引擎 libsherpa-onnx-jni.so（arm64 约 8.6 MB）同理：轻量版和语音模型一起下载（模型目录 speech-engine，
+    // speech/SherpaLibrary.kt；sherpa 类里的加载调用在 tasks-speech.gradle.kts 改写），带模型的安装包照旧内置。
+    if (providers.gradleProperty("bundleModels").orNull != "true")
+        packaging.jniLibs.excludes.add("**/libsherpa-onnx-jni.so")
+    // 手写大模板（1.16）：生僻字模板（约 4.4 MB）跟汉字手写模型一起下载（模型目录 handwriting-rare），
+    // 日语假名、日文汉字模板（约 5.6 MB）装「日语」插件时下载（japanese-handwriting），见 handwriting/HandwritingAssets.kt。
+    // japanese_kanji.json（贡献页的常用度表）和 latin_default_strokes.json 留在包里。带模型的安装包照旧内置。
+    if (providers.gradleProperty("bundleModels").orNull != "true")
+        listOf(
+            "hanzi_rare_och.bin", "hanzi_rare_och.json",
+            "kana_default_strokes.json", "kana_default_och.bin", "kana_default_och.json",
+            "japanese_kanji_strokes.json", "japanese_kanji_och.bin", "japanese_kanji_och.json",
+        ).forEach { androidResources.ignoreAssetsPatterns.add(it) }
     // 日语词库（assets/azookey，约 18 MB）和转换引擎 libCyAzooKey.so（约 6 MB）：轻量版不带，装「日语」插件时下载
     // （settings/JapanesePack.kt）；带模型的安装包（完整版、朋友包、离线包）照旧内置。日语方案 rime_japanese 很小，留在包里。
     if (providers.gradleProperty("bundleModels").orNull != "true") {

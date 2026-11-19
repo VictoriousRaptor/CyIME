@@ -56,8 +56,9 @@ internal fun letterKeySpan(key: String, weighted: Boolean, evenMerged: Boolean =
  * 14 键大写、按住 Shift 拖动或按住符号键当 Ctrl 时，双字母键拆成两个单字母键（同 KeyboardLayout 的 renderRows）；
  * 拆开的两半各占原合并键的一半，拆开前后每个字母的位置和宽度不变。严格对齐时两半各 1 份，与单字母键相同。
  */
-internal fun splitPairSpans(pairedRow: List<String>, evenMerged: Boolean): List<Float> = pairedRow.flatMap { key ->
-    val span = letterKeySpan(key, true, evenMerged)
+internal fun splitPairSpans(pairedRow: List<String>, evenMerged: Boolean, widths: Map<String, Float> = emptyMap()): List<Float> = pairedRow.flatMap { key ->
+    // 自建布局调过宽度的键按调过的格数（同 KeyboardRowWithConfig），拆开的两半各占一半。
+    val span = widths[key] ?: letterKeySpan(key, true, evenMerged)
     if (key.length == 2 && key.all { it.lowercaseChar() in 'a'..'z' }) listOf(span / 2, span / 2) else listOf(span)
 }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -270,13 +271,13 @@ internal fun SpeechPunctuationSettings() {
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("自动加标点", style = MaterialTheme.typography.bodyLarge)
-            Text("保留在线接口或中文本地整句定稿返回的标点。关闭后停顿留空格，口述的标点照常输入。",
+            Text("留下在线接口和中文整句定稿按意思加的标点，不是每停一下就加。本地中文要在「说完后」选整句定稿。口述的标点照常输入。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = autoPunctuation, onCheckedChange = null,
             colors = settingsSwitchColors())
     }
-    // 只带一部分标点：自动加标点开着时逐项一行开关，默认全开；关掉的那类在停顿处留空格。
+    // 只带一部分标点：自动加标点开着时逐项一行开关，默认全开；关掉的那类按「停顿处加空格」留空格或不留。
     if (autoPunctuation) listOf(
         Triple("逗号、顿号、分号", SettingsPreferences::isSttPunctuationComma, SettingsPreferences::setSttPunctuationComma),
         Triple("句号", SettingsPreferences::isSttPunctuationPeriod, SettingsPreferences::setSttPunctuationPeriod),
@@ -295,12 +296,27 @@ internal fun SpeechPunctuationSettings() {
                 Text(when {
                     title == "末尾的标点" -> if (kept) "整段话最后保留句号、问号等标点。" else "整段话最后不带标点，中间的照留；口述照样出。"
                     kept -> "保留模型打的$title。"
-                    else -> "不带$title，停顿处留空格；口述照样出。"
+                    else -> "不带$title；口述照样出。"
                 },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = kept, onCheckedChange = null, colors = settingsSwitchColors())
         }
+    }
+    var pauseSpace by remember { mutableStateOf(SettingsPreferences.isSttPauseSpace(context)) }
+    HorizontalDivider(modifier = Modifier.padding(start = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    Row(Modifier.fillMaxWidth().settingsSearchAnchor("停顿处加空格").testTag("speech-pause-space")
+        .toggleable(value = pauseSpace, role = Role.Switch,
+            onValueChange = { pauseSpace = it; SettingsPreferences.setSttPauseSpace(context, it) })
+        .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("停顿处加空格", style = MaterialTheme.typography.bodyLarge)
+            Text(if (pauseSpace) "说话停顿、没加标点的地方空一格。" else "中文里不加空格；英文单词之间照常空一格。",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = pauseSpace, onCheckedChange = null, colors = settingsSwitchColors())
     }
 }
 

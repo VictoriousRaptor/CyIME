@@ -460,6 +460,7 @@ private fun T9KeyboardContent(
         }
         return T9KeySwipes(
             symbolInputText = gesture.swipeUp?.let { symbolInputValue(it.value.ifEmpty { it.label }, it.action) },
+            symbolInputDownText = gesture.swipeDown?.let { symbolInputValue(it.value.ifEmpty { it.label }, it.action) },
             onSwipeUp = swipeHandlerFor(gesture.swipeUp, commitDirect, onGestureAction),
             onSwipeDown = swipeHandlerFor(gesture.swipeDown, commitDirect, onGestureAction),
             swipeUpText = if (swipeHints.up &&
@@ -504,13 +505,13 @@ private fun T9KeyboardContent(
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight(0.8f).testTag("t9-left-rail"),
+                .weight(NineGridFrame.SIDE).testTag("t9-left-rail"),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .weight(3f)
+                    .weight(NineGridFrame.SIDE_PANEL_ROWS)
                     .padding(scaledKeyVisualPadding())
                     // 键缝动效：左边这块面板不是键，按它不画；登记位置是为了线能绕着它走、半透明时光不从它底下透出来。
                     .then(keyGapLightSource(GapLightKind.NONE))
@@ -606,7 +607,7 @@ private fun T9KeyboardContent(
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight(3.4f),
+                .weight(NineGridFrame.MAIN),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -736,7 +737,7 @@ private fun T9KeyboardContent(
                         icon = rememberVectorPainter(Icons.Default.Language),
                         onClick = { onKeyPress("ime_switch") },
                         backgroundColor = specialKeyBackgroundColor, iconColor = specialKeyTextColor,
-                        modifier = Modifier.weight(0.8f),
+                        modifier = Modifier.weight(NineGridFrame.BOTTOM_LANGUAGE),
                         onPress = { onKeyPressDown?.invoke("ime_switch") },
                         shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                     )
@@ -744,7 +745,7 @@ private fun T9KeyboardContent(
                 if (!LocalKeyboardInputPreferences.current.symbolKeyCycle) KeyboardModeKey(
                     slot = 2, onKeyPress = onKeyPress,
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                    modifier = Modifier.weight(0.8f), onKeyPressDown = onKeyPressDown,
+                    modifier = Modifier.weight(NineGridFrame.BOTTOM_MODE), onKeyPressDown = onKeyPressDown,
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                     ctrlTargets = ctrlTargets, onCtrlShortcut = onCtrlShortcut,
                 )
@@ -755,7 +756,7 @@ private fun T9KeyboardContent(
                     onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
                     onVoiceModeChange = callbacks.onVoiceModeChange,
                     backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                    modifier = Modifier.weight(if (LocalKeyboardInputPreferences.current.symbolKeyCycle) 2.6f else 1.8f),
+                    modifier = Modifier.weight(NineGridFrame.spaceWeight(LocalKeyboardInputPreferences.current.symbolKeyCycle)),
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
                 )
                 if (!languageOnLeft) LanguageKey()
@@ -766,7 +767,7 @@ private fun T9KeyboardContent(
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight(0.8f).testTag("t9-right-rail"),
+                .weight(NineGridFrame.ACTION).testTag("t9-right-rail"),
         ) {
             // 按住 !@# 点删除：Ctrl+删除（用户 11-13）；还在打字时照常删编码，九键的删除要先经过它自己的选音节撤回。
             val ctrlDelete: () -> Unit = {
@@ -883,7 +884,8 @@ private fun T9KeyboardContent(
                 // 没在选候选时（原来 0 键点一下打 0 的时候）往角标方向滑打 0，方向和 1~9 的数字一样；
                 // 关了「上下滑输入符号」就不接（同其他数字角标），0 只在数字键盘里有。
                 onZero = if (!nextCandidate && LocalKeyboardInputPreferences.current.cornerSymbolInput) ({ commitDirect("0") }) else null,
-                showZeroHint = hintsActive && swipeHints.up,
+                // 打不出 0 时回车上也不画 0（用户 11-16：功能关了还显示角标）。
+                showZeroHint = hintsActive && swipeHints.up && LocalKeyboardInputPreferences.current.cornerSymbolInput,
                 backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
                 modifier = enterModifier,
                 onPress = { onKeyPressDown?.invoke("enter") },
@@ -946,6 +948,8 @@ internal fun T9MergedEnterKey(
 /** 九键数字键的滑动配置：回调 + 提示文本（均受 keyboard.t9.keys 配置与提示开关控制）。 */
 internal data class T9KeySwipes(
     val symbolInputText: String? = null,
+    /** 下滑直接上屏的符号：「上下滑输入符号」关着时这一滑不输入、键上不画（用户 11-16）。 */
+    val symbolInputDownText: String? = null,
     val onSwipeUp: (() -> Unit)? = null,
     val onSwipeDown: (() -> Unit)? = null,
     /** 上滑滑动气泡文本（display: key 时不传） */
@@ -1018,6 +1022,7 @@ private fun T9DigitKey(
         badgeText = digit,
         swipeText = currentSwipes.swipeUpText,
         symbolInputText = currentSwipes.symbolInputText,
+        symbolInputDownText = currentSwipes.symbolInputDownText,
         swipeDownText = currentSwipes.swipeDownText,
         swipeUpKeyLabel = currentSwipes.swipeUpKeyLabel,
         swipeDownKeyLabel = currentSwipes.swipeDownKeyLabel,
@@ -1191,6 +1196,7 @@ internal fun NineKeyButton(
         badgeText = digit,
         swipeText = swipes.swipeUpText,
         symbolInputText = swipes.symbolInputText,
+        symbolInputDownText = swipes.symbolInputDownText,
         swipeDownText = swipes.swipeDownText,
         swipeUpKeyLabel = swipes.swipeUpKeyLabel,
         swipeDownKeyLabel = swipes.swipeDownKeyLabel,

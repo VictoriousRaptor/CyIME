@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -145,7 +145,7 @@ private fun CandidateLine(code: String, words: List<String>, extra: String?, ski
         Spacer(Modifier.width(10.dp))
         words.forEachIndexed { index, word ->
             if (index > 0) Spacer(Modifier.width(12.dp))
-            Text(word, fontSize = 13.sp, maxLines = 1, color = if (index == 0) primary else onSurface,
+            androidx.compose.material3.Text(word, fontSize = 13.sp, maxLines = 1, color = if (index == 0) primary else onSurface,
                 fontWeight = if (index == 0) FontWeight.Medium else null)
         }
         if (extra != null) {
@@ -215,7 +215,7 @@ internal fun CandidateSpacingLegend(wide: Boolean) {
                     contentAlignment = Alignment.Center) {
                     Box(Modifier.width(1.dp).height(12.dp).background(onSurface.copy(alpha = 0.2f)))
                 } else if (index > 0) Spacer(Modifier.width(10.dp))
-                Text(word, fontSize = 13.sp, maxLines = 1,
+                androidx.compose.material3.Text(word, fontSize = 13.sp, maxLines = 1,
                     color = if (index == 0) MaterialTheme.colorScheme.primary else onSurface,
                     fontWeight = if (index == 0) FontWeight.Medium else null)
             }

@@ -73,3 +73,6 @@
 只见上不见下	zhi jian shang bu jian xia	300
 # 翻来覆去 sank to 4567 in the chat blend; the full model then wrote 翻来复去. Back to its rime-ice count.
 翻来覆去	fan lai fu qu	15765
+# His report (2026-11-17, B 站评论): shenmo gave 神魔 first; many people type 什么 as shen mo. Only this word gets the
+# mo reading; 么 mo itself was tried and dropped (nine-key replay: sentences then ended in 么, 我昨天么 / 满意么).
+什么	shen mo	100000

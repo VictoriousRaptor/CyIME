@@ -50,7 +50,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -221,11 +221,11 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("贡献滑行轨迹", glidePath, glide, "滑行练习 练习 贡献 上传 轨迹 魔搭 数据 改进识别"),
         SettingsSearchEntry("三行字母错位", qwertyPath, qwerty, "错位 排布 实体键盘 对齐 手机排布 字母行 偏移"),
         SettingsSearchEntry("其他字母布局逗号键", layouts, layoutIndex, "逗号 空格 加宽 标点"),
-        SettingsSearchEntry("首字母大写", qwertyPath, qwerty, "英文句首自动大写 英文键盘 首句大写 句首大写 自动大写 大小写 西班牙语 德语 法语 意大利语 俄语"),
+        SettingsSearchEntry("首字母大写", qwertyPath, qwerty, "英文句首自动大写 英文键盘 首句大写 句首大写 自动大写 大小写 西班牙语 德语 法语 意大利语 俄语 越南语 马来语"),
         SettingsSearchEntry("底排标点固定上滑", qwertyPath, qwerty, "逗号 句号 半角 点号 向上拖 上拉 长按 符号 屏幕边缘 数字键盘 点键 冒号 端口 IP"),
         SettingsSearchEntry("其他字母布局句号键", layouts, layoutIndex, "句号 空格 标点"),
-        SettingsSearchEntry("逗号键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 单引号 撇号 音节 西安 xian 逗号"),
-        SettingsSearchEntry("Shift 键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 Shift 大小写 大写键 音节 西安 xian"),
+        SettingsSearchEntry("逗号键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 单引号 撇号 音节 西安 xian 逗号 英文 缩写 what's"),
+        SettingsSearchEntry("Shift 键分词", qwertyPath, qwerty, "分词 分词键 隔音符 分隔符 Shift 大小写 大写键 音节 西安 xian 撇号 单引号 英文 缩写 what's"),
         SettingsSearchEntry("长音键", qwertyPath, qwerty, "长音 ー 伸ばし棒 日语 日文 罗马字 L 键 Shift 大写键 コーヒー"),
         SettingsSearchEntry("拖到候选选词的距离", ninePath, nine, "九键 0键 零键 拖动 拖拽 托转 选词 候选 距离 阈值 Shift 百分比 拖线"),
         SettingsSearchEntry("拂动选字母", ninePath, nine, "九键 拂动 滑动 长按 数字 字母 字母菜单 上下左右"),
@@ -266,6 +266,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("自动避开输入区域", hardware, SettingsRoutes.HardwareKeyboard, "避让 遮挡 输入框 浮窗 浮条"),
         SettingsSearchEntry("靠边停靠", hardware, SettingsRoutes.HardwareKeyboard, "停靠 吸附 边缘 竖条 浮窗 浮条"),
         SettingsSearchEntry("底部候选", hardware, SettingsRoutes.HardwareKeyboard, "三星 通栏 三星式通栏 底边使用三星式通栏 底部 底边 候选栏 整宽 编号 停靠", section = "靠边停靠"),
+        SettingsSearchEntry("锁定浮窗位置", hardware, SettingsRoutes.HardwareKeyboard, "锁定 固定 不能拖 拖不动 误拖 浮窗 浮条 工具条 位置"),
         SettingsSearchEntry("游戏直通", hardware, SettingsRoutes.HardwareKeyboard, "游戏 打游戏 玩游戏 wasd 按键被吞 收不到 不弹键盘 蓝牙键盘 otg 外接键盘 实体键盘"),
         // 外观 › 主题与外观
         SettingsSearchEntry("显示模式", theme, SettingsRoutes.Theme, "深色 浅色 跟随系统 夜间 暗色 黑色 白色 明暗 日间"),
@@ -303,6 +304,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("候选注释内容", candidates, candidatePage, "注释 拼音 释义 翻译 编码 中英 英文意思 词典 英文 单词 英文单词 选英文 出英文 上屏英文 打英文 中译英 下一项 长按下一项 shift"),
         // 九键的「下一项」键：搜「下一项」时排在上面「候选注释内容」后面（同分按先后）
         SettingsSearchEntry("去掉 0 键，回车加高", ninePath, nine, "九键 0键 零键 数字0 去掉0 大回车 回车加高 合并 下一项 上一项 回车键 确定键"),
+        SettingsSearchEntry("笔画去掉 0 键，回车加高", ninePath, nine, "笔画 0键 零键 数字0 去掉0 大回车 回车加高 合并 回车键 确定键"),
+        SettingsSearchEntry("笔画编码显示成 一丨丿丶乛", ninePath, nine, "笔画 编码 输入串 hspnz 字母 横竖撇点折 一丨丿丶乛 笔画显示 部首 乛 乙"),
         SettingsSearchEntry("显示纠错标记", candidates, candidatePage, "纠错 拼音 标注 红字 隐藏", section = "拼音显示"),
         SettingsSearchEntry("编码显示", candidates, candidatePage, "预编辑 输入框 候选栏 编码位置 拼音显示 拼音框 拼音浮框 拼音气泡"),
         SettingsSearchEntry("双拼编码显示全拼", candidates, candidatePage, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "拼音显示"),
@@ -325,7 +328,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("键内炫光", effect, SettingsRoutes.KeyEffect, "炫光 发光 光效 渐变 彩虹"),
         SettingsSearchEntry("键缝动效", effect, SettingsRoutes.KeyEffect, "键缝 动效 动画 光线 线路 流光 扩散 特效"),
         // 智能 › 词库
-        page("导入的词库", dictionary, SettingsRoutes.CellDictionaries, "分类词库 细胞词库 搜狗 scel txt json 导入词库 下载词库 本地导入 删除词库 自动更新词库 词库更新 在线词库 新词"),
+        page("导入的词库", dictionary, SettingsRoutes.CellDictionaries, "分类词库 细胞词库 搜狗 scel txt json 导入词库 下载词库 本地导入 删除词库 自动更新词库 词库更新 在线词库 新词 导出词库 导出 QQ 百度 Gboard 微软拼音 dctx 电脑版"),
         SettingsSearchEntry("我的短语", dictionary, SettingsRoutes.Dictionary, "自定义短语 短语 快捷短语 常用语 编码", anchor = null),
         SettingsSearchEntry("查词", dictionary, SettingsRoutes.Dictionary, "方案词库 词库 词条 编码 查找", anchor = null),
         SettingsSearchEntry("删掉的候选", dictionary, SettingsRoutes.Dictionary, "屏蔽的候选 屏蔽 恢复 候选 九键 删词 忘记", anchor = null),
@@ -339,6 +342,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("单次联想", prediction, SettingsRoutes.SmartPrediction, "单次 联想 停止", section = "功能开关"),
         SettingsSearchEntry("无痕模式", prediction, SettingsRoutes.SmartPrediction, "无痕 隐私 不学习 不记录 剪贴板 私密 密码"),
         SettingsSearchEntry("删掉刚打的词不学习", prediction, SettingsRoutes.SmartPrediction, "自学习 学习 误触 怪词 删除 退格 删掉 不记 词库 调频", section = "无痕"),
+        SettingsSearchEntry("锁定词序", prediction, SettingsRoutes.SmartPrediction, "锁定词权 词权 词频 调频 固定 顺序 盲打 专业 不学习 候选顺序", section = "无痕"),
         SettingsSearchEntry("用户学习数据", prediction, SettingsRoutes.SmartPrediction, "学习 记忆 个人语料 导出 导入 保存 统计 学习文件"),
         // 智能 › 语音转文本
         SettingsSearchEntry("本地识别", speech, SettingsRoutes.SpeechToText, "本地 离线 模型 识别方式 在线 无需网络"),
@@ -350,6 +354,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("整句定稿", speech, SettingsRoutes.SpeechToText, "整句 定稿 校正 二次校正 不校正 说完后 断句 分段 准确 SenseVoice X-ASR 说完", section = "中文语音"),
         SettingsSearchEntry("语音模型", speech, SettingsRoutes.SpeechToText, "语音模型 说话时 主模型 边说边出字 Paraformer SenseVoice Zipformer 日语 英文 二次校正 SenseVoice 校正 换模型", anchor = null, section = "中文语音"),
         SettingsSearchEntry("自动加标点", speech, SettingsRoutes.SpeechToText, "标点 逗号 句号 问号 感叹号 顿号 分号 自动标点 去掉标点 不加标点 部分标点 只要逗号 不要句号 末尾标点 句末标点 最后不带标点 空格 在线接口 语音", section = "语音标点"),
+        SettingsSearchEntry("停顿处加空格", speech, SettingsRoutes.SpeechToText, "空格 不加空格 去掉空格 没有空格 不要空格 停顿 断句 中文空格 语音", section = "语音标点"),
         SettingsSearchEntry("数字转阿拉伯数字", speech, SettingsRoutes.SpeechToText, "数字 阿拉伯数字 中文数字 大写数字 小写数字 ITN 金额 年份 电话 百分比 小数 时间 语音", section = "数字"),
         SettingsSearchEntry("语音纠错", speech, SettingsRoutes.SpeechToText, "纠错 错词 正词 替换 同音字 识别错 认错 改词 映射 纠错词库 语音", section = "纠错"),
         // 字幕是插件（11-05）：设置在字幕插件那一页；没装时搜索结果换成去插件市场（[withCaptionPluginState]）。
@@ -382,10 +387,14 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
             "剪贴板 卡片 行数 几行 显示 记录 折叠 最多显示 剪贴板卡片最多显示 卡片最多显示"),
         SettingsSearchEntry("图片高度", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 图片 高度 太矮 比例 长图 截图 卡片"),
+        SettingsSearchEntry("显示几张图片", clipboard, SettingsRoutes.ClipboardPanel,
+            "剪贴板 图片 张数 几张 太多 全是图片 占地方 最近 照片 截图"),
         SettingsSearchEntry("最近截图", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 截图 截屏 相册 图片 照片"),
         SettingsSearchEntry("也显示相册照片", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 相册 照片 最近 图片 不只截图"),
         SettingsSearchEntry("剪贴板数量上限", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 条数 数量 最多 上限 保存 历史记录 不限 存文档", anchor = "数量上限", section = "历史记录"),
+        SettingsSearchEntry("剪贴板图片占用上限", clipboard, SettingsRoutes.ClipboardPanel,
+            "剪贴板 图片 截图 空间 大小 占用 缓存 MB 上限", anchor = "图片占用上限", section = "历史记录"),
         SettingsSearchEntry("剪贴板保留时间", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 定期清理 自动清理 自动删除 过期 天数 保留 历史记录", anchor = "保留时间", section = "历史记录"),
         SettingsSearchEntry("导出剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "导出 剪贴板 记录 固定内容 备份"),
@@ -415,7 +424,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("检查更新", about, SettingsRoutes.About, "更新 升级 新版本 最新版本 下载 安装 版本号"),
         SettingsSearchEntry("自动检查更新", about, SettingsRoutes.About, "自动 更新 升级 新版本 提醒"),
         SettingsSearchEntry("更新后提示更新内容", about, SettingsRoutes.About, "更新内容 更新日志 新功能 改了什么 公告 提示 首页"),
-        SettingsSearchEntry("启动广告（彩蛋）", about, SettingsRoutes.About, "广告 彩蛋 开屏 启动 全屏 假广告 玩笑"),
+        SettingsSearchEntry("启用开屏广告", about, SettingsRoutes.About, "广告 开屏 启动 全屏"),
         page("更新内容", about, SettingsRoutes.ReleaseNotes, "更新内容 更新日志 更新说明 发布说明 新功能 改了什么 公告 changelog"),
         page("隐私策略", about, SettingsRoutes.Privacy, "隐私 数据 联网 收集"),
         page("鸣谢", about, SettingsRoutes.Credits, "致谢 感谢 鸣谢 上游 Xime 雾凇 参考 来源 作者 credits"),
@@ -550,17 +559,36 @@ private fun termScore(term: String, title: String, keywords: String, path: Strin
     return if (coverage >= FUZZY_MIN_COVERAGE) (30 * coverage).toInt() else 0
 }
 
-/** 按空格分词，每个词都要匹配上；得分高的在前，同分保持索引顺序（整页在前，页内按页面顺序）。 */
-internal fun searchSettings(query: String, index: List<SettingsSearchEntry> = SettingsSearchIndex): List<SettingsSearchEntry> {
+/** 英文界面时按英文标题、路径的得分：只认整段包含，不做逐字模糊（英文两字母一段太容易乱配）。 */
+private fun englishTermScore(term: String, title: String, path: String): Int = when {
+    title == term -> 130
+    title.startsWith(term) -> 115
+    term in title -> 100
+    term in path -> 40
+    else -> 0
+}
+
+/**
+ * 按空格分词，每个词都要匹配上；得分高的在前，同分保持索引顺序（整页在前，页内按页面顺序）。
+ * [english] 不为 null（英文界面）时英文标题、路径也算，界面上看到的英文名能搜到；中文照样能搜。
+ */
+internal fun searchSettings(
+    query: String,
+    index: List<SettingsSearchEntry> = SettingsSearchIndex,
+    english: com.kingzcheung.xime.ui.i18n.UiTranslations? = null,
+): List<SettingsSearchEntry> {
     val terms = query.trim().split(Regex("\\s+")).map(::normalizeSearchText).filter { it.isNotEmpty() }
     if (terms.isEmpty()) return emptyList()
     return index.mapNotNull { entry ->
         val title = normalizeSearchText(entry.title)
         val keywords = normalizeSearchText(entry.keywords)
         val path = normalizeSearchText(entry.path)
+        val enTitle = english?.let { normalizeSearchText(it.translate(entry.title)) }
+        val enPath = english?.let { normalizeSearchText(it.translate(entry.path)) }
         var total = 0
         for (term in terms) {
-            val s = termScore(term, title, keywords, path)
+            var s = termScore(term, title, keywords, path)
+            if (enTitle != null && enPath != null) s = maxOf(s, englishTermScore(term, enTitle, enPath))
             if (s == 0) return@mapNotNull null
             total += s
         }
@@ -583,18 +611,23 @@ internal fun committedSearchText(text: String, composition: TextRange?): String 
  * 实际拿去搜的词：整段文字能搜到就用整段（别的输入法边拼英文单词边搜照旧），
  * 搜不到而且有没上屏的部分，就只用已上屏的字，不为拼音报「没有找到」。
  */
-internal fun searchTextFor(text: String, composition: TextRange?): String {
+internal fun searchTextFor(
+    text: String,
+    composition: TextRange?,
+    english: com.kingzcheung.xime.ui.i18n.UiTranslations? = null,
+): String {
     val committed = committedSearchText(text, composition)
-    if (committed == text || text.isBlank() || searchSettings(text).isNotEmpty()) return text
+    if (committed == text || text.isBlank() || searchSettings(text, english = english).isNotEmpty()) return text
     return committed
 }
 
 @Composable
 internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     var field by remember { mutableStateOf(TextFieldValue(query, TextRange(query.length))) }
+    val english = com.kingzcheung.xime.ui.i18n.LocalUiTranslations.current
     // 外面改了搜索词（点清除、返回时恢复）才同步回输入框；拼音还在拼时 query 不变，不打断输入法。
     LaunchedEffect(query) {
-        if (searchTextFor(field.text, field.composition) != query) field = TextFieldValue(query, TextRange(query.length))
+        if (searchTextFor(field.text, field.composition, english) != query) field = TextFieldValue(query, TextRange(query.length))
     }
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
@@ -607,7 +640,7 @@ internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit,
         Box(Modifier.weight(1f).padding(vertical = 14.dp)) {
             BasicTextField(value = field, onValueChange = {
                     field = it
-                    val next = searchTextFor(it.text, it.composition)
+                    val next = searchTextFor(it.text, it.composition, english)
                     if (next != query) onQueryChange(next)
                 }, singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -624,7 +657,8 @@ internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit,
 @Composable
 internal fun SettingsSearchResults(query: String, onOpen: (SettingsSearchEntry) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val results = withCaptionPluginState(searchSettings(query), com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(context))
+    val english = com.kingzcheung.xime.ui.i18n.LocalUiTranslations.current
+    val results = withCaptionPluginState(searchSettings(query, english = english), com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(context))
     if (results.isEmpty()) {
         Text("没有找到「$query」相关的设置", style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))

@@ -25,7 +25,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -247,7 +247,7 @@ internal fun CandidateCommentContentIllustration(content: com.kingzcheung.xime.s
             if (gloss) "apple" to " 苹果" else "苹果" to " píng guǒ").forEachIndexed { index, (word, note) ->
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 6.dp, vertical = 3.dp), verticalAlignment = Alignment.Bottom) {
-                Text(word, fontSize = 13.sp, maxLines = 1, fontWeight = if (index == 0) FontWeight.Medium else null,
+                androidx.compose.material3.Text(word, fontSize = 13.sp, maxLines = 1, fontWeight = if (index == 0) FontWeight.Medium else null,
                     color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                 Text(note, fontSize = 9.sp, color = hint, maxLines = 1, overflow = TextOverflow.Clip)
             }

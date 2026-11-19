@@ -61,3 +61,25 @@ internal fun normalizeVoiceText(text: String, language: InputLanguage = InputLan
     }
     return if (arabicNumbers) spokenNumbersToDigits(punctuated) else punctuated
 }
+
+/** 汉字、假名、中日文标点和全角符号：挨着它们的空格是停顿留下的，不是词与词之间的空格。 */
+internal fun isCjkText(c: Char): Boolean = c in '　'..'ヿ' || c in '㐀'..'䶿' || c in '一'..'鿿' ||
+    c in '豈'..'﫿' || c in '＀'..'￯'
+
+/**
+ * 「停顿处加空格」关掉时：去掉挨着中文（汉字、假名、全角标点）的空格；英文等单词之间的空格照留，
+ * 「I love you」不会粘成一个词，韩文按词空格也不动。
+ */
+internal fun withoutCjkSpaces(text: String): String = buildString {
+    var i = 0
+    while (i < text.length) {
+        val c = text[i]
+        if (c != ' ') { append(c); i++; continue }
+        var next = i
+        while (next < text.length && text[next] == ' ') next++
+        val left = lastOrNull()
+        val right = text.getOrNull(next)
+        if (left != null && right != null && !isCjkText(left) && !isCjkText(right)) append(' ')
+        i = next
+    }
+}

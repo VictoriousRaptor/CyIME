@@ -19,6 +19,8 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
     private var lambda = DEFAULT_LAMBDA
     private var isInitialized = false
     private var baseModel: BaseAssociationModel? = null
+    /** 整词后面常接什么（从内置词库生成）；安装包里没有这个文件时为 null，联想照旧只用联想表。 */
+    private var wordTable: WordContinuationTable? = null
     
     suspend fun initialize(): Boolean {
         if (isInitialized) return true
@@ -27,9 +29,7 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
         baseModel = withContext(Dispatchers.IO) {
             // Without the marks the table still works; after a whole word it then behaves as before.
             val wordCompletions = try {
-                context.assets.open(BaseAssociationModel.WORD_COMPLETIONS_ASSET).use { input ->
-                    java.util.zip.GZIPInputStream(input).reader(Charsets.UTF_8).use(BaseAssociationModel::readWordCompletions)
-                }
+                openTextAsset(BaseAssociationModel.WORD_COMPLETIONS_ASSET).use(BaseAssociationModel::readWordCompletions)
             } catch (error: Exception) {
                 Log.e(TAG, "Association word completion marks failed to load", error)
                 emptyMap()
@@ -45,10 +45,33 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
                 null
             }
         }
+        wordTable = withContext(Dispatchers.IO) {
+            try {
+                openTextAsset(WordContinuationTable.ASSET).use(WordContinuationTable::read)
+            } catch (error: Exception) {
+                Log.e(TAG, "Word continuation table failed to load", error)
+                null
+            }
+        }
         isInitialized = result || baseModel != null
         return isInitialized
     }
     
+    /**
+     * 打包时 .gz 资源会被解压、去掉 .gz 后缀放进安装包（AssetManager 只认去掉后缀的名字），
+     * 所以先按去掉后缀的名字读纯文本，找不到再按原名读 gzip。
+     */
+    private fun openTextAsset(name: String): java.io.Reader {
+        val plain = name.removeSuffix(".gz")
+        if (plain != name) {
+            try {
+                return context.assets.open(plain).reader(Charsets.UTF_8)
+            } catch (_: java.io.FileNotFoundException) {
+            }
+        }
+        return java.util.zip.GZIPInputStream(context.assets.open(name)).reader(Charsets.UTF_8)
+    }
+
     fun recordUserInput(text: String) {
         userNgramCache.recordInput(text)
     }
@@ -67,6 +90,9 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
         baseModel?.predict(context, BaseAssociationModel.MAX_PER_CONTEXT, afterWholeWord)?.forEach {
             allCandidates[it.text] = BASE_WEIGHT * it.score
         }
+        // The corpus table knows the last one or two characters only. When the context ends with a longer
+        // dictionary word (厄尔尼诺), what follows that whole word (现象) joins on the same scale.
+        mergeWordContinuations(allCandidates, baseModel?.contextLength(context) ?: 0, wordTable?.lookup(context), BASE_WEIGHT)
         // Imported personal corpora carry their own counts (0.4·share); typed observations are
         // shares over few events, so they earn weight gradually (n/USER_CONFIDENCE_EVENTS).
         userNgramCache.profileCandidates(context).forEach { candidate ->

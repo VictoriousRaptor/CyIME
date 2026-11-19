@@ -310,8 +310,9 @@ fun ToolPanelBar(
 }
 
 /**
- * 翻译栏左边的「自动检测 ⇄ 英文」：点左边选原文语言，点右边选目标语言，中间箭头两边对调。
- * 每边一个 36dp 高的胶囊，和圆钮、关闭按钮一样高。
+ * 翻译栏左边的「自 ⇄ 英」：点左边选原文语言，点右边选目标语言，中间箭头两边对调。
+ * 每边一个 36dp 高的胶囊，和圆钮、关闭按钮一样高；插件给了单字（optionLabels）就画单字，是个 36dp 圆，
+ * 省下的宽度给右边输入框。旧插件没给就画全名。
  */
 @Composable
 private fun LiveBarLanguages(
@@ -337,8 +338,10 @@ private fun LiveBarLanguages(
             } else if (index == 1) {
                 Spacer(Modifier.width(4.dp))
             }
+            val value = node.value ?: node.defaultValue.orEmpty()
+            val shown = node.optionLabels[value] ?: value
             Box(
-                Modifier.height(36.dp).widthIn(max = 84.dp)
+                Modifier.height(36.dp).widthIn(min = 36.dp, max = 84.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(pillColor)
                     .testTag("live-bar-lang:$key")
@@ -346,11 +349,11 @@ private fun LiveBarLanguages(
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(node.value ?: node.defaultValue.orEmpty(), color = textColor, fontSize = 12.sp,
+                Text(shown, color = textColor, fontSize = if (shown.length <= 1) 14.sp else 12.sp,
                     fontWeight = FontWeight.Medium, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 if (open == key) {
-                    OptionMenuPopup(node.label.orEmpty(), node.options, node.value,
+                    OptionMenuPopup(node.label.orEmpty(), node.options, node.value, labels = node.optionLabels,
                         onChoose = { option -> open = null; if (option != node.value) onSelect(key, option) },
                         onDismiss = { open = null })
                 }

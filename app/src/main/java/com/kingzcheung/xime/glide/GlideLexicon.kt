@@ -90,8 +90,72 @@ object GlideLexicon {
      * 不闪退：这一笔当没认出，日志只记第一次（用户 11-12）。须在后台线程调用。
      */
     fun decodeStroke(context: Context, keyboard: GlideKeyboard, chinese: Boolean, doublePinyin: DoublePinyinScheme?,
-        xs: FloatArray, ys: FloatArray): List<GlideCandidate> = decodeOrEmpty {
-        if (chinese) chineseDecoder(context, keyboard, doublePinyin).decode(xs, ys) else decoder(context, keyboard).decode(xs, ys)
+        xs: FloatArray, ys: FloatArray, left: String? = null): List<GlideCandidate> = decodeOrEmpty {
+        if (!chinese) return@decodeOrEmpty decodeTrimmingTail(xs, ys, keyboard.keyUnit, decoder(context, keyboard)::decode)
+        val candidates = decodeTrimmingTail(xs, ys, keyboard.keyUnit, chineseDecoder(context, keyboard, doublePinyin)::decode)
+        // 中文按前文重排（[ChineseGlideContext]）；没有前文就不碰词组模型。
+        if (left.isNullOrEmpty() || candidates.size < 2) candidates
+        else ChineseGlideContext.rerank(candidates, left, chineseWordOf(context, doublePinyin),
+            ChineseGlideContext.model(context.applicationContext.filesDir))
+    }
+
+    /** 中文滑行编码（全拼或双拼）→ 它最常用的词；全拼、各双拼方案各一份。两份词表行数对不上时一律查不到。 */
+    private val chineseWords = HashMap<Any, Map<String, String>>()
+
+    private fun chineseWordOf(context: Context, doublePinyin: DoublePinyinScheme?): (String) -> String? {
+        val map = synchronized(this) {
+            val key: Any = doublePinyin ?: "py"
+            chineseWords[key] ?: run {
+                val entries = pinyin(context); val words = pinyinWords(context)
+                val out = HashMap<String, String>()
+                if (words.size == entries.size) entries.forEachIndexed { index, syllables ->
+                    val code = if (doublePinyin == null) syllables.joinToString("")
+                        else syllables.map { doublePinyin.code(it) ?: return@forEachIndexed }.joinToString("")
+                    out.putIfAbsent(code, words[index])
+                }
+                out.also { chineseWords[key] = it }
+            }
+        }
+        return { map[it] }
+    }
+
+    /**
+     * 整笔认不出时去掉末尾一段再认（11-17 他报「划的时候候选已经对了，一松手字没了」）：快划时抬手那一下手指还在往前甩，
+     * 轨迹末端冲出最后一个键一个键宽左右，起止点对不上任何词，整笔就没有候选，什么都不出。
+     * 依次去掉末尾 [TAIL_CUTS] 个键宽各认一次，取首选代价最低的那次；去掉后剩下的不到一个键宽就不再试（短划照旧按点按算）。
+     * 整笔本来认得出时不走这里，结果不变。
+     */
+    internal fun decodeTrimmingTail(xs: FloatArray, ys: FloatArray, keyUnit: Float,
+        decode: (FloatArray, FloatArray) -> List<GlideCandidate>): List<GlideCandidate> {
+        val whole = decode(xs, ys)
+        if (whole.isNotEmpty() || xs.size < 3 || xs.size != ys.size || keyUnit <= 0f) return whole
+        var length = 0f
+        for (i in 1 until xs.size) length += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+        var kept = xs.size
+        var best = whole
+        for (cut in TAIL_CUTS) {
+            if (length - cut * keyUnit < keyUnit) break
+            val count = keptAfterCut(xs, ys, cut * keyUnit)
+            if (count == kept || count < 2) continue
+            kept = count
+            val trimmed = decode(xs.copyOf(count), ys.copyOf(count))
+            if (trimmed.isNotEmpty() && (best.isEmpty() || trimmed.first().cost < best.first().cost)) best = trimmed
+        }
+        return best
+    }
+
+    /** 抬手前甩出去的那段最多试去掉几个键宽。 */
+    internal val TAIL_CUTS = floatArrayOf(0.5f, 1f, 1.5f, 2f, 2.5f)
+
+    /** 从末尾往回去掉至少 [cut] 长的一段后还剩几个点。 */
+    private fun keptAfterCut(xs: FloatArray, ys: FloatArray, cut: Float): Int {
+        var removed = 0f
+        var i = xs.size - 1
+        while (i > 0 && removed < cut) {
+            removed += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            i--
+        }
+        return i + 1
     }
 
     @Volatile private var failureLogged = false
@@ -257,4 +321,18 @@ internal fun chineseCodeSyllables(
         return mapToRaw(parts.flatMap { it.chunked(2) })
     }
     return mapToRaw(chineseGlideSyllables(code, doublePinyin, readings, entries) ?: return null)
+}
+
+/**
+ * 滑行接管后这一笔什么都没出时记一行日志（11-17「松手字没了」查不到原因：这几处出口以前都不留痕）。
+ * 只记原因、点数、轨迹长几个键宽、起点在不在字母键上、有没有实时预览，不记坐标和字。
+ */
+fun glideDropNote(reason: String, keys: Map<Char, com.kingzcheung.xime.keyboard.LetterKeyRect>, xs: FloatArray, ys: FloatArray, preview: Boolean): String {
+    val unit = keys.values.map { minOf(it.width, it.height) }.sorted().let { it.getOrNull(it.size / 2) } ?: 0f
+    var length = 0f
+    for (i in 1 until minOf(xs.size, ys.size)) length += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+    val onLetter = xs.isNotEmpty() && ys.isNotEmpty() &&
+        keys.values.any { r -> xs[0] >= r.x && xs[0] < r.x + r.width && ys[0] >= r.y && ys[0] < r.y + r.height }
+    val keysLong = if (unit > 0f) "%.1f".format(java.util.Locale.ROOT, length / unit) else "?"
+    return "glide dropped reason=$reason points=${xs.size} lengthKeys=$keysLong startOnLetter=$onLetter preview=$preview keys=${keys.size}"
 }

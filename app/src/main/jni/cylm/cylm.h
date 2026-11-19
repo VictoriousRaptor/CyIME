@@ -41,6 +41,11 @@ int cylm_adapt(CylmModel* model, const char* path);
 int cylm_learn(CylmModel* model, const char* text, double count);
 int cylm_add_word(CylmModel* model, const char* word, const char* pinyin, long long weight);
 int cylm_adapt_save(CylmModel* model, const char* path);
+/* Long-press 忘记: takes what cylm_learn learned from `text` out of the user's layer, so the word or sentence goes
+ * back to the model's own order. Text of one word: every trigram with that word goes. Longer text: every trigram
+ * with one of its words of 2+ characters, and the text's own trigrams (as cylm_learn adds them). Returns the number
+ * of trigram types taken out, or -1. Not during a decode, as cylm_learn. */
+int cylm_forget(CylmModel* model, const char* text);
 /* 1 when the word is in CyLM's lexicon (the user's words included), else 0. The hook keeps Rime's sentence when one
  * of its words (2+ characters) is not: CyLM would only spell that word out of single characters. */
 int cylm_has_word(CylmModel* model, const char* word);

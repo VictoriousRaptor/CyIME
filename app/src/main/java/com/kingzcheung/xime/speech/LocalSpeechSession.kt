@@ -55,6 +55,19 @@ internal fun hasForeignScript(text: String): Boolean = FOREIGN.containsMatchIn(t
 internal fun keepChinese(preview: String, refined: String, locked: Boolean): String =
     if (locked && hasForeignScript(refined)) preview else refined
 
+/** 字数：字母、数字、汉字，不算标点和空格。 */
+private fun spokenUnits(text: String): Int = text.count { it.isLetterOrDigit() }
+
+/**
+ * 第二遍（SenseVoice / X-ASR，按停顿或结束时整段）的字数不到已显示文字的一半：多半是噪音大、第二遍没听出来，
+ * 不是改错。这时留下已显示的文字，不让它被吞掉（2026-11-16 用户：噪音大时手动结束，说过的话没了）。
+ * 已显示的不到 4 个字时照旧以第二遍为准：噪音里流式模型冒出的一两个字仍会被第二遍清掉。
+ */
+internal fun secondPassLostText(shown: String, second: String): Boolean {
+    val before = spokenUnits(shown)
+    return before >= 4 && spokenUnits(second) * 2 < before
+}
+
 /** Second-pass result before text cleanup: [event] is the model's <|…|> label or empty. */
 internal class RichTranscript(val text: String, val language: String = "", val event: String = "",
     /** Token pieces and their start times in seconds from the start of the refined audio (may be empty). */
@@ -77,8 +90,11 @@ internal class LocalSpeechSession(
     // the same end-of-input re-read; its segments stay at the engine's 6 s so text still appears while speaking.
     private val wholeSentenceActive = wholeSentence &&
         (engine.hasRefinement && engine.isStreaming || !engine.isStreaming && !engine.hasRollingPreview)
-    /** 整句定稿时保留模型标点（整句的句末不再是切点硬塞的句号）。 */
-    private val transcript = SpeechTranscript(keepMarks = wholeSentenceActive)
+    /**
+     * 整句定稿时保留模型标点，但不保留停顿处的：第二遍只听到这一段，段尾总会补一个标点，说话停一下就是一个逗号、句号。
+     * 说话中只显示段内的标点，结束时整段重识别按整句的意思重新加。
+     */
+    private val transcript = SpeechTranscript(keepMarks = wholeSentenceActive, pauseMarks = false)
     /** 流式预览的定稿前文字，整段重识别时作为把关的第一遍。 */
     private val previews = SpeechTranscript()
     private val decodeTimeoutMs = if (wholeSentenceActive) maxOf(engine.decodeTimeoutMs, WHOLE_SENTENCE_DECODE_TIMEOUT_MS)
@@ -210,7 +226,8 @@ internal class LocalSpeechSession(
                     if (abandoned.get()) return@execute
                     try {
                         check(System.nanoTime() < deadline) { "离线识别积压" }
-                        val text = guarded(preview, keepChinese(preview, if (wholeSentenceActive) engine.refinePunctuated(samples) else engine.refine(samples), engine.lockedChinese))
+                        val second = guarded(preview, keepChinese(preview, if (wholeSentenceActive) engine.refinePunctuated(samples) else engine.refine(samples), engine.lockedChinese))
+                        val text = if (engine.isStreaming && secondPassLostText(preview, second)) preview else second
                         check(System.nanoTime() < deadline) { "离线识别超时" }
                         synchronized(outputLock) { pending.remove(id); publish(id, text, boundary, confirmed = true) }
                     } catch (e: Exception) {
@@ -268,8 +285,11 @@ internal class LocalSpeechSession(
             whole.update(++id, part, SpeechBoundary.PAUSE)
         }
         if (abandoned.get() || System.nanoTime() > budgetEnd) return null
-        val first = synchronized(outputLock) { previews.text() }
-        return guarded(first, whole.text()).ifEmpty { null }
+        val (first, shown) = synchronized(outputLock) { previews.text() to transcript.text() }
+        val merged = guarded(first, whole.text())
+        // 整段重识别的字数不到已显示的一半（噪音里常见）：保留按停顿定稿和预览的文字。
+        if (secondPassLostText(shown, merged)) return null
+        return merged.ifEmpty { null }
     }
 
     /** Drains actual audio, then waits only for outstanding work; no artificial stop delay. */

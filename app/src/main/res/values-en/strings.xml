@@ -62,7 +62,7 @@
     <string name="settings_app_language_summary">Language of the settings screens</string>
     <string name="settings_app_language_summary_old_android">Follows the system language; tap to change</string>
     <string name="settings_app_language_system">System default</string>
-    <string name="settings_app_language_note">For now only the settings home page is translated; other pages still show Simplified Chinese until a later version. This changes only the screen text, not your input languages.</string>
+    <string name="settings_app_language_note">English covers all settings screens; 繁體中文 and 日本語 cover only the settings home page for now. This changes only the screen text, not your input languages.</string>
     <string name="action_close">Close</string>
     <string name="subtype_label_pinyin">Pinyin</string>
     <string name="call_caption_service_label">CyIME call captions</string>

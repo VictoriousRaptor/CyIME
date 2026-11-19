@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 object ClipboardWordSegmenter {
     suspend fun split(context: Context, text: String): List<String> = withContext(Dispatchers.IO) {
         val wanted = HashSet<String>()
-        Regex("[\\p{IsHan}]+").findAll(text).forEach { match ->
+        Regex("[\\p{script=Han}]+").findAll(text).forEach { match ->
             val value = match.value
             for (i in value.indices) for (end in i + 1..minOf(value.length, i + 16)) wanted.add(value.substring(i, end))
         }
@@ -56,7 +56,7 @@ object ClipboardWordSegmenter {
     internal fun segment(text: String, words: Map<String, Double>, total: Double): List<String> {
         val result = mutableListOf<String>()
         // Preserve spaces, punctuation and complete Unicode code points exactly.
-        Regex("[\\p{IsHan}]+|[\\p{L}\\p{N}]+|\\s+|[^\\p{L}\\p{N}\\s]").findAll(text).forEach { match ->
+        Regex("[\\p{script=Han}]+|[\\p{L}\\p{N}]+|\\s+|[^\\p{L}\\p{N}\\s]").findAll(text).forEach { match ->
             val run = match.value
             if (!Character.UnicodeScript.of(run.codePointAt(0)).equals(Character.UnicodeScript.HAN)) {
                 result.add(run)

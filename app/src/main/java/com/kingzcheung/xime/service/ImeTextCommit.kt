@@ -222,8 +222,12 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         service.voiceRecognitionHandler.abandonPendingOnManualInput()
         val owner = service.uiState.value.inputSessionId
         // 「标点上屏首选」（默认关）只管屏幕键盘上的断句标点；实体键盘的逗号句号另有翻页规则，不变。
-        val candidateFirst = !hardware && isSentencePunctuation(literal) &&
-            com.kingzcheung.xime.settings.SettingsPreferences.isPunctuationCommitsCandidateEnabled(service)
+        // 笔画键盘打着笔画时点符号（主键区的 ，。、左栏）一律先上屏高亮的候选（平常是首选，「下一项」换过就是标亮的那个）：
+        // 编码是 h s p n z，原样上屏没有用（11-18 贡献者）。
+        val strokeKeyboard = !hardware && service.uiState.value.let {
+            !it.isAsciiMode && it.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE }
+        val candidateFirst = !hardware && (strokeKeyboard || isSentencePunctuation(literal) &&
+            com.kingzcheung.xime.settings.SettingsPreferences.isPunctuationCommitsCandidateEnabled(service))
         val submit: suspend () -> Unit = literal@ {
             if (owner != service.uiState.value.inputSessionId) return@literal
             if (service.keyRouter.usesDirectFieldInput) {
@@ -235,6 +239,10 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
             val output = if (emailDomain && literal in EmailSuffixes.DOTS) "." else paired
             // 角标、符号面板打的标点同样跟英文选词后自动补的空格换位置（默认关）。
             if (service.keyRouter.englishAutoSpace.isArmed && service.keyRouter.consumeEnglishAutoSpace(literal)) return@literal
+            // 角标、长按、标点键打的撇号：正在打英文（西、德、法、意、马来）词时接进这个词（what's、l'eau），补全接着出；
+            // 马来语的连字符同样接进词里（kanak-kanak）。
+            if (!hardware && !emailDomain && (literal == WORD_APOSTROPHE || literal == WORD_HYPHEN) &&
+                service.keyRouter.commitWordApostrophe(literal)) return@literal
             // 英文标点后自动加空格（默认关）：只管屏幕键盘，成对符号不在其中。
             if (!hardware && !emailDomain && paired == literal && service.keyRouter.commitEnglishPunctuationSpace(literal)) return@literal
             val engine = service.rimeEngine

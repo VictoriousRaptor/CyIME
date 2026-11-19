@@ -228,6 +228,9 @@ class SpeechRecognitionManager(
 
         // Capture can resume while the previous result is finishing. Backend ownership remains
         // serialized, so an old stop/cancel can never terminate the new recognition session.
+        // 上一次的最终结果随上面的 sessionId++ 作废（它已显示的字由 VoiceRecognitionHandler 先上屏），
+        // 不必再等它的整段重识别：新会话的第一个字、麦克风缓冲都不再被它拖住。
+        recordingThread?.abandonFinishing()
         recordingThread = RecordingThread(currentBackend, preStarted, sessionId, recognitionLanguage, recordingThread, drainBytes)
         recordingThread!!.start()
     }
@@ -537,6 +540,8 @@ class SpeechRecognitionManager(
         @Volatile var requestedLanguage = language
         private val audioQueue = ArrayBlockingQueue<CapturedAudio>(100) // At most 10 s / 320 KB of PCM.
         private val backendFinished = CountDownLatch(1)
+        /** 送音已结束，正在（或马上要）在 [AsrBackend.stop] 里等最终结果。 */
+        @Volatile private var finishingBackend = false
         @Volatile private var captureEnded = false
         @Volatile private var deliveryThread: Thread? = null
         @Volatile private var backendOperationStartedAt = 0L
@@ -554,6 +559,16 @@ class SpeechRecognitionManager(
                     }
                 }
             }, "AsrShutdownWatch").start()
+        }
+
+        /**
+         * 新会话已开始，这一次的最终结果会被作废（sessionId 已变）：还在送剩下的音就按取消收尾，
+         * 已在等最终结果就让后端别等了（后台线程里做，不在主线程上跨进程调用）。
+         */
+        fun abandonFinishing() {
+            cancelRequested = true
+            if (!finishingBackend || backendFinished.count == 0L) return
+            Thread({ try { currentBackend.abandonFinishing() } catch (_: Exception) { } }, "AsrAbandonFinish").start()
         }
 
         fun awaitBackendFinished() {
@@ -660,6 +675,7 @@ class SpeechRecognitionManager(
             } finally {
                 if (attempted) try {
                     backendOperationStartedAt = System.nanoTime()
+                    finishingBackend = true
                     if (cancelRequested || released) currentBackend.cancel() else currentBackend.stop()
                 } catch (error: Exception) {
                     Log.w(TAG, "Speech backend stop failed after microphone release", error)

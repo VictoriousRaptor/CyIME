@@ -6,6 +6,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -65,7 +66,9 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
                     options.bottomBar) { save("bottom_bar", it) }
                 BottomCandidatesLegend(options.bottomBar)
             }
-            Text("浮条任意位置均可拖动；长按语言键选择语言。", style = MaterialTheme.typography.bodyMedium)
+            HardwareOption("锁定浮窗位置", "工具条停在现在的位置，不能拖动；按钮照常能点", options.lockPosition) { save("lock_position", it) }
+            Text(if (options.lockPosition) "长按语言键选择语言。" else "浮条任意位置均可拖动；长按语言键选择语言。",
+                style = MaterialTheme.typography.bodyMedium)
             Text("游戏", style = MaterialTheme.typography.titleMedium)
             HardwareOption("游戏直通", "游戏类应用里不显示键盘，按键直接交给游戏；按应用声明的类别识别",
                 options.gamePassthrough) { save("game_passthrough", it) }

@@ -11,6 +11,18 @@ class CyimeInputDefaultsTest {
         assertEquals(1, modes.count { it.schemaId == InputModes.ENGLISH })
         assertFalse(modes.any { it.schemaId in setOf("melt_eng", "pinyin_simp", "jaroomaji", "t9") })
     }
+    /** 双拼停顿纠错的索引（每个双拼方案一个）只是依赖：不进输入方式列表，也不当备用方案。 */
+    @Test fun doublePinyinPauseIndexIsNotAnInputMode() {
+        val pause = DoublePinyinScheme.pauseId("double_pinyin_flypy")
+        val custom = DoublePinyinScheme.pauseId(DoublePinyinScheme.CUSTOM_PREFIX + "0".repeat(32))
+        val ids = listOf(pause, "double_pinyin_flypy", custom, "rime_ice")
+        assertTrue(CyimeInputDefaults.isDependency(pause) && CyimeInputDefaults.isDependency(custom) && CyimeInputDefaults.isDependency("cyime_omission"))
+        assertFalse(CyimeInputDefaults.isDependency("double_pinyin_flypy"))
+        assertEquals(listOf("double_pinyin_flypy", "rime_ice"), CyimeInputDefaults.canonicalIds(ids, ids.toSet()))
+        assertFalse(CyimeInputDefaults.visibleSchema(pause, ids.toSet()))
+        assertEquals(listOf("double_pinyin_flypy"), SchemaManager.fallbackNativeSchema(setOf(pause, "double_pinyin_flypy")))
+        assertEquals("double_pinyin_flypy", com.kingzcheung.xime.rime.RimeConfigHelper.fallbackSchema("rime_ice", listOf(pause, "double_pinyin_flypy"), setOf("rime_ice")))
+    }
     @Test fun marketOnlyAndUnknownSchemasKeepTheirIdsAndOrder() {
         val ids = listOf("my_personal", "pinyin_simp", "t9", "jaroomaji", "wanxiang")
         assertEquals(ids, CyimeInputDefaults.canonicalIds(ids, ids.toSet()))

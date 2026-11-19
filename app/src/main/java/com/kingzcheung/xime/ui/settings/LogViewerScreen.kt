@@ -38,7 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -85,10 +85,10 @@ fun LogViewerScreen(
                     context.startActivity(chooser)
                 }
                 is LogViewerEvent.SavedToDownloads -> {
-                    snackbarHostState.showSnackbar("已保存到 ${event.path}")
+                    snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, "已保存到 ${event.path}"))
                 }
                 is LogViewerEvent.ShowError -> {
-                    snackbarHostState.showSnackbar(event.message)
+                    snackbarHostState.showSnackbar(com.kingzcheung.xime.ui.i18n.UiTexts.text(context, event.message))
                 }
             }
         }

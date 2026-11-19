@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.twotone.KeyboardReturn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +22,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.settings.SpellingPatches
+import com.kingzcheung.xime.settings.TypoEffects
+import com.kingzcheung.xime.settings.TypoStrength
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.kingzcheung.xime.ui.keyboard.normalizeLetterSwipeDistance
@@ -75,7 +79,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 // 邻键纠错、模糊音 11-01 搬到「语言与方案」（跟着方案走，九键和 26 键页不再各放一份）。
                 SettingsSection(title = "大小写", content = {
                     SettingsToggleItem(Icons.TwoTone.Abc, "首字母大写",
-                        "英文(含英文单词方案)和西、德、法、意、俄语键盘上，新句子和新段落的第一个字母自动大写。",
+                        "英文(含英文单词方案)和西、德、法、意、俄、越南、马来语键盘上，新句子和新段落的第一个字母自动大写。",
                         checked = settings.englishSentenceCaps, onCheckedChange = {
                             settings = settings.copy(englishSentenceCaps = it); settings.save(context)
                         })
@@ -103,7 +107,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "逗号键分词",
                         "中文全拼、双拼的 26 键和 14 键：逗号键左下角加 '(只开句号键时在句号键上)，" +
                             "打拼音时${if (settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe) "下滑" else "上滑"}插入分词(xi'an)，F 键的 ' 仍跟随字母键手势；" +
-                            "没在打拼音时输入 '。九键照旧用 1 键分词。",
+                            "没在打拼音时输入 '。英文和西、德、法、意、马来语也有这个 '，打单词时接进词里(what's、l'eau)。九键照旧用 1 键分词。",
                         checked = settings.syllableSplitKey, onCheckedChange = {
                             settings = settings.copy(syllableSplitKey = it); settings.save(context)
                         })
@@ -114,7 +118,8 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "Shift 键分词",
                         "中文全拼、双拼的 26 键和 14 键：打拼音时 Shift 键写「分词」，点一下插入分词(xi'an)；" +
-                            "没在打拼音时照旧切换大小写，按住 Shift 打大写也不变。",
+                            "没在打拼音时照旧切换大小写，按住 Shift 打大写也不变。" +
+                            "英文和西、德、法、意、马来语打单词时 Shift 键写 '，点一下打撇号(what's、l'eau)。",
                         checked = settings.shiftSyllableSplit, onCheckedChange = {
                             settings = settings.copy(shiftSyllableSplit = it); settings.save(context)
                         },
@@ -134,6 +139,16 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             checked = settings.t9MergeZeroIntoEnter, onCheckedChange = {
                                 settings = settings.copy(t9MergeZeroIntoEnter = it); settings.save(context)
                             })
+                    })
+                    // 用户 11-17 转来：笔画键盘的 0 键用的也是九键那个键，给它一个同款开关。默认关，原来的排法不变。
+                    SettingsSection(title = "笔画按键", content = {
+                        SettingsToggleItem(Icons.AutoMirrored.TwoTone.KeyboardReturn, "笔画去掉 0 键，回车加高",
+                            strokeMergeZeroSubtitle(settings.cornerSymbolInput, settings.reverseSymbolSwipe),
+                            checked = settings.strokeMergeZeroIntoEnter, onCheckedChange = {
+                                settings = settings.copy(strokeMergeZeroIntoEnter = it); settings.save(context)
+                            })
+                        HorizontalDivider()
+                        StrokeGlyphPreeditToggle()
                     })
                     SettingsSection(title = "九键手势", content = {
                         val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
@@ -261,16 +276,35 @@ internal fun NeighborCorrectionSection() {
     val showDouble = support.doublePinyin || settings.doublePinyinCorrection != defaults.doublePinyinCorrection
     var typos by remember { mutableStateOf(SpellingPatches.Typo.entries.associateWith { SpellingPatches.typo(context, it) }) }
     val needsNeighbor = if (settings.neighborCorrection) null else "要先打开「邻键纠错」"
-    val fullOnly = if (support.fullPinyin) null else "只用于 26 键全拼"
+    // 双拼 26 键停一下后也补顺序、多键（只有同一个键多按一下）、漏键三种（11-16）。
+    val fullOrDouble = if (support.fullPinyin || support.doublePinyin) null else "只用于 26 键全拼、双拼"
+    // 九键全拼停一下后也补邻键、顺序、漏键三种（多键没有）。
+    val anyKeyboard = if (support.fullPinyin || support.doublePinyin || support.nineKey) null else "只用于 26 键全拼、双拼、九键"
+    // 强度（11-16）：邻键纠错和九键各一条滑条，每一档下面写实测效果；最后几行是现在这种开关和强度组合测出来的效果。
+    val on = typos.filterValues { it }.keys
+    var lead by remember { mutableStateOf(TypoStrength.lead(context)) }
+    var digit by remember { mutableStateOf(TypoStrength.digit(context)) }
+    val effects by produceState<TypoEffects.Table?>(null) {
+        value = kotlinx.coroutines.withContext(Dispatchers.IO) { runCatching { TypoEffects.table(context) }.getOrNull() }
+    }
     SettingsSection(title = "拼音纠错", content = {
-        Text("26 键全拼四种都有，双拼只有邻键纠错，九键、14 键不纠错。", style = MaterialTheme.typography.bodySmall,
+        Text("26 键全拼四种都有；双拼 26 键有邻键纠错，停一下后还补顺序、多键(只有同一个键多按一下)、漏键；九键有邻键、顺序、漏键三种(停一下才出)；14 键不纠错。", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SettingsToggleItem(Icons.TwoTone.Spellcheck, "邻键纠错",
             "按偏到旁边的键时，也给出本来想打的词，原来的候选还在",
             checked = settings.neighborCorrection, onCheckedChange = {
                 settings.copy(neighborCorrection = it).save(context)
-            }, lockMessage = if (support.fullPinyin || support.doublePinyin) null else "只用于 26 键全拼、双拼",
+            }, lockMessage = anyKeyboard,
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.NEIGHBOR_CORRECTION)
+        if (settings.neighborCorrection && support.fullPinyin) {
+            TypoLevelSlider("邻键纠错强度", TypoStrength.Lead.entries, lead, { it.title },
+                "纠正出来的词什么时候排到你打的词前面。越保守越少抢第一，纠正的词仍在后面几个候选里。只用于 26 键全拼；改完要几秒重新部署",
+                effect = { level -> effects?.let { TypoEffects.leadText(it.fullPinyin, level, on) } }, tag = "typo-lead-strength") { chosen ->
+                TypoStrength.setLead(context, chosen)
+                lead = chosen
+                scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
+            }
+        }
         if (showDouble) {
             HorizontalDivider()
             SettingsToggleItem(Icons.TwoTone.Spellcheck, "双拼邻键纠错",
@@ -288,33 +322,114 @@ internal fun NeighborCorrectionSection() {
                     SpellingPatches.setTypo(context, typo, on)
                     typos = typos + (typo to on)
                     scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
-                }, lockMessage = fullOnly ?: if (typo == SpellingPatches.Typo.OMISSION) null else needsNeighbor,
-                costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.typo(typo))
+                }, lockMessage = (if (typo == SpellingPatches.Typo.EXTRA) fullOrDouble else anyKeyboard)
+                    ?: if (typo == SpellingPatches.Typo.OMISSION) null else needsNeighbor,
+                costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.typo(typo),
+                extraCost = {
+                    val text = if (support.fullPinyin) effects?.let { TypoEffects.typoText(it.fullPinyin, typo, settings.neighborCorrection, lead, on) } else null
+                    if (text != null) TypoEffectNote(text, "typo-effect:${typo.key}")
+                })
+        }
+        if (support.nineKey) {
+            HorizontalDivider()
+            TypoLevelSlider("九键纠错强度", TypoStrength.Digit.entries, digit, { it.title },
+                "九键停一下后补出来的纠正给得多还是少(按到上下左右的键、少按一个、两个按反，各跟上面的邻键、漏键、顺序开关)；改完要几秒重新部署",
+                effect = { level -> effects?.let { TypoEffects.digitText(it.nineKey, level) } }, tag = "typo-t9-strength") { chosen ->
+                TypoStrength.setDigit(context, chosen)
+                digit = chosen
+                scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
+            }
+        }
+        val summary = if (!support.fullPinyin) emptyList<String>() else effects?.let {
+            TypoEffects.summary(it.fullPinyin, settings.neighborCorrection, lead, on)
+        }.orEmpty()
+        if (summary.isNotEmpty()) {
+            HorizontalDivider()
+            Column(Modifier.fillMaxWidth().padding(16.dp).testTag("typo-effect-summary"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("按现在的设置(26 键全拼，实测)", style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                summary.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                // 速度只跟开关有关，强度不改每键的工作量（各档实测每键耗时一样）。
+                val costs = buildSet<com.kingzcheung.xime.settings.PerformanceCosts.Item> {
+                    if (settings.neighborCorrection) add(com.kingzcheung.xime.settings.PerformanceCosts.Item.NEIGHBOR_CORRECTION)
+                    on.forEach { typo ->
+                        if (typo == SpellingPatches.Typo.OMISSION || settings.neighborCorrection)
+                            add(com.kingzcheung.xime.settings.PerformanceCosts.Item.typo(typo))
+                    }
+                }
+                PerformanceCostTotalNote(costs, label = "性能开销(开着的 ${costs.size} 种合计)", tag = "typo-correction")
+            }
         }
     })
 }
 
-private fun typoCaption(typo: SpellingPatches.Typo): String = when (typo) {
-    SpellingPatches.Typo.TRANSPOSITION -> "相邻两个字母打反也出想打的词(如 shenem 出“什么”)；改完要几秒重新部署"
-    SpellingPatches.Typo.EXTRA -> "多按一下或多碰到旁边的键也出想打的词(如 woomen 出“我们”)；改完要几秒重新部署"
-    SpellingPatches.Typo.OMISSION -> "漏打一个字母也出想打的词(如 chengong 出“成功”)，有的停一下才出；改完要几秒重新部署"
+/** 开关说明下面的实测效果一行，样式同 [PerformanceCostNote]。 */
+@Composable
+private fun TypoEffectNote(text: String, tag: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp).testTag(tag))
 }
 
-/** 已启用的中文方案里有没有 26 键全拼、26 键双拼：纠错只在这两种上起作用，都没有时对应的开关灰掉。 */
-internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean) {
+/**
+ * 纠错强度的滑条：标题 + 当前档名，一句说明，滑条，两端档名，最下面是滑到的那一档的实测效果（拖动中就换）。
+ * 写法同「性能与省电」里空闲释放的滑条（松手时按滑块位置取值）。
+ */
+@Composable
+private fun <T> TypoLevelSlider(
+    title: String, levels: List<T>, current: T, label: (T) -> String, description: String,
+    effect: (T) -> String?, tag: String, onChoose: (T) -> Unit,
+) {
+    var position by remember(current) { mutableStateOf(levels.indexOf(current).coerceAtLeast(0).toFloat()) }
+    val shown = levels[position.roundToInt().coerceIn(levels.indices)]
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+            Spacer(Modifier.width(8.dp))
+            Text(label(shown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Slider(value = position, onValueChange = { position = it }, modifier = Modifier.testTag(tag),
+            onValueChangeFinished = {
+                val chosen = levels[position.roundToInt().coerceIn(levels.indices)]
+                if (chosen != current) onChoose(chosen)
+            },
+            valueRange = 0f..(levels.size - 1).toFloat(), steps = levels.size - 2)
+        Row(Modifier.fillMaxWidth()) {
+            Text(label(levels.first()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.weight(1f))
+            Text(label(levels.last()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        effect(shown)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("$tag-effect"))
+        }
+    }
+}
+
+private fun typoCaption(typo: SpellingPatches.Typo): String = when (typo) {
+    SpellingPatches.Typo.TRANSPOSITION -> "相邻两个字母打反也出想打的词(如 shenem 出“什么”)，双拼是两个键按反、九键是两个数字按反，这两种停一下才出；改完要几秒重新部署"
+    SpellingPatches.Typo.EXTRA -> "多按一下或多碰到旁边的键也出想打的词(如 woomen 出“我们”)，双拼只补同一个键多按一下、停一下才出；改完要几秒重新部署"
+    SpellingPatches.Typo.OMISSION -> "漏打一个字母也出想打的词(如 chengong 出“成功”)，有的停一下才出，双拼是少按一个键、停一下才出；改完要几秒重新部署"
+}
+
+/** 已启用的中文方案里有没有 26 键全拼、26 键双拼、九键全拼：纠错只在这三种上起作用（九键只有邻键、顺序、漏键，停一下才出；双拼的顺序、多键、漏键也是停一下才出），都没有时对应的开关灰掉。 */
+internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean, val nineKey: Boolean = false) {
     companion object {
-        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true)
+        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true, nineKey = true)
 
         fun of(context: android.content.Context): TypoCorrectionSupport =
             of(com.kingzcheung.xime.settings.SchemaManager.getEnabledSchemas(context) + SettingsPreferences.getCurrentSchema(context))
 
         fun of(schemas: Collection<String>): TypoCorrectionSupport {
-            val profiles = schemas.distinct().map { com.kingzcheung.xime.settings.InputProfiles.describe(it) }
-                .filter { it.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE &&
-                    it.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC }
+            val chinese = schemas.distinct().map { com.kingzcheung.xime.settings.InputProfiles.describe(it) }
+                .filter { it.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE }
+            val profiles = chinese.filter { it.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC }
             return TypoCorrectionSupport(
                 fullPinyin = profiles.any { it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN },
-                doublePinyin = profiles.any { it.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN })
+                doublePinyin = profiles.any { it.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN },
+                // 九键双拼不算：它不用九键全拼的数字纠错表。
+                nineKey = chinese.any { it.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9 &&
+                    it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN })
         }
     }
 }
@@ -425,9 +540,42 @@ private fun QwertyStaggerSettings(
  * 「去掉 0 键，回车加高」的说明：照实写开了以后少了什么、0 去哪打。
  * 回车上打 0 和 1～9 的数字角标同一个方向（跟「反转上下滑方向」），关了「上下滑输入符号」就不接。
  */
+/** 笔画键盘「去掉 0 键，回车加高」的说明：笔画的 0 键打字时也是「下一项」（11-18），去掉后和九键一样没有。 */
+internal fun strokeMergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe: Boolean): String {
+    val zero = if (cornerSymbolInput) "数字 0 在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}打(和 1～9 的数字一样，打字选词时不接)，数字键盘里也有。"
+        else "「上下滑输入符号」关着，回车上不能打 0，到数字键盘里打。"
+    return "笔画键盘右边一列只留删除、重输和占两格高的回车。没有「下一项」键：不能点它切下一项、左滑上一项，选词直接点候选。$zero"
+}
+
 internal fun t9MergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe: Boolean): String {
     val zero = if (cornerSymbolInput) "数字 0 在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}打(和 1～9 的数字一样，打字选词时不接)，数字键盘里也有。"
         else "「上下滑输入符号」关着，回车上不能打 0，到数字键盘里打。"
     return "右边一列只留删除、重输和占两格高的回车。没有「下一项」键：不能点它切下一项、左滑上一项，" +
         "长按换英文、拖到候选上屏英文也用不了，选词直接点候选。$zero"
+}
+
+/**
+ * 笔画编码显示成 一丨丿丶乛（默认关，显示 h s p n z；11-18 贡献者偏向全用字母）。
+ * 存在 [SpellingPatches.STROKE_GLYPH_PREEDIT_KEY]，改完写方案补丁重新部署；另一处改动或备份恢复时跟着变。
+ */
+@Composable
+internal fun StrokeGlyphPreeditToggle() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember(context) { mutableStateOf(SpellingPatches.strokeGlyphPreedit(context)) }
+    DisposableEffect(context) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == SpellingPatches.STROKE_GLYPH_PREEDIT_KEY) enabled = SpellingPatches.strokeGlyphPreedit(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    SettingsToggleItem(Icons.TwoTone.Abc, "笔画编码显示成 一丨丿丶乛",
+        "关着时输入串和候选后面的剩余笔画显示 h s p n z(横竖撇点折)，打开后都显示成 一丨丿丶乛。改完要几秒重新部署",
+        checked = enabled, onCheckedChange = { on ->
+            SpellingPatches.setStrokeGlyphPreedit(context, on)
+            enabled = on
+            scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
+        })
 }

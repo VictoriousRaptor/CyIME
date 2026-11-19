@@ -115,4 +115,21 @@ class ClipboardBoardContentTest {
         }
         assertEquals(0f, clipboardPinnedPreviewHeight(-24f), 0f)
     }
+
+    /** 用户 11-17：「全部」只放最新几张没固定的图片，文字和固定的图片都在。 */
+    @Test fun allShowsOnlyTheNewestUnfixedPictures() {
+        fun image(n: Int) = ClipboardCard.Image(ClipboardImage("content://media/external/images/media/$n", "image/png", n.toLong()))
+        val pinnedImage = image(1)
+        val cards = clipboardCards(listOf(text(10).item, text(3).item),
+            (1..9).map { image(it).item }, ClipboardFilter.ALL, setOf(pinnedImage.key))
+        val pins = setOf(pinnedImage.key)
+        val shown = withRecentImageCount(cards, pins, 4)
+        assertEquals(listOf(pinnedImage, text(10), image(9), image(8), image(7), image(6), text(3)), shown)
+        // 不限 keeps them all.
+        assertEquals(cards, withRecentImageCount(cards, pins, 0))
+        // Default 4; a stored value that is not offered falls back to it.
+        assertEquals(4, clipboardRecentImageCount(4))
+        assertEquals(4, clipboardRecentImageCount(7))
+        assertEquals(0, clipboardRecentImageCount(0))
+    }
 }

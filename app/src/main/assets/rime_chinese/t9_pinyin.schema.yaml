@@ -27,6 +27,11 @@ t9:
   more_sentences_min_keys: 9
   spelling_penalty: 5.0
   word_penalty: 8.0
+  # 停顿后的错字补查（少按一个数字、相邻两个数字按反、按到上下左右相邻的键；cyime_edit_schema）只加在第 3 位以后，
+  # 而且纠正出来的词句要比现在的第一条在词组模型里高出这么多（自然对数，3.0 约 20 倍）才给。没有这道门槛时，
+  # 没打错的输入也会多出一条拼凑的句子（云端 550 词 + 120 句：前三被改 17 词 19 句；3.0 时 1 词 0 句）。
+  # 没有词组模型文件时不设门槛。
+  digit_edit_margin: 3.0
   # 停顿后的长句模型重排已停用（2026-10-09 同语料回放：停顿后首选只多对 3/488 字，
   # 同时拖慢逐键解码并在停顿后改动候选）。排序只依据词权与语法 n-gram；
   # 恢复时在此加回 sentence_model: t9_sentence，并重跑九键回放与速度门禁。
@@ -97,6 +102,9 @@ t9:
     # 候选插入位置（默认 2，即第二位）
     idx: 2
 
+# 停顿后的错字补查用的索引（构建时生成，见 tasks-chinese.gradle.kts）；门槛见上面 t9/digit_edit_margin。
+cyime_edit_schema: cyime_digit_edit
+
 cyime_particle_shortcuts:
   __include: cyime_particle_shortcuts:/common
   alphabet: "22233344455566677778889999"
@@ -105,6 +113,8 @@ schema:
   schema_id: t9_pinyin
   dependencies:
     - cyime_t9_english
+    - cyime_digit_edit
+    - cyime_digit_tap
   name: 中文九键
   version: "2.2"
   description: |

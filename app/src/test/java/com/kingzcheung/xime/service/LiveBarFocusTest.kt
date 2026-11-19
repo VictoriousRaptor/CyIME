@@ -50,6 +50,7 @@ class LiveBarFocusTest {
         assertEquals("翻译成", quick.title)
         assertEquals(listOf("英文", "日文"), quick.options)
         assertEquals("英文", quick.selected)
+        assertEquals("旧插件没给单字就没有", emptyMap<String, String>(), quick.labels)
     }
 
     @Test fun noQuickSelectMeansNoLongPressList() {

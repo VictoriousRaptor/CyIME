@@ -2,6 +2,7 @@ package com.kingzcheung.xime.speech
 
 import com.kingzcheung.xime.service.VoiceMarks
 import com.kingzcheung.xime.service.normalizeVoiceText
+import com.kingzcheung.xime.service.withoutCjkSpaces
 import com.kingzcheung.xime.settings.InputLanguage
 import org.junit.Assert.*
 import org.junit.Test
@@ -24,6 +25,13 @@ class SpeechPunctuationTest {
     @Test fun `mixed Chinese and English keep ASCII marks after Latin words`() {
         assertEquals("我用 iPhone, 很好用。", cleanSpeechText("我用 iPhone，很好用。", keepMarks = true))
         assertEquals("这个 bug 太严重了！", cleanSpeechText("这个 bug 太严重了!", keepMarks = true))
+    }
+
+    @Test fun `apostrophes inside English words stay (#325)`() {
+        assertEquals("you'd I'll can't", cleanSpeechText("you'd, I'll, can't."))
+        assertEquals("I'll go, you'd stay.", cleanSpeechText("I'll go, you'd stay.", keepMarks = true))
+        assertEquals("don’t", cleanSpeechText("don’t"))
+        assertEquals("he said yes", cleanSpeechText("he said 'yes'")) // quotes around a word are not kept
     }
 
     @Test fun `a run of marks collapses to the strongest one`() {
@@ -114,5 +122,59 @@ class SpeechPunctuationTest {
         val pcm = ByteArray(32000) { if (it % 2 == 0) 64 else 6 }
         assertEquals("你好 世界", LocalSpeechSession(Engine(), {}, {}).apply { acceptPcm(pcm) }.finish())
         assertEquals("你好，世界。", LocalSpeechSession(Engine(), {}, {}, wholeSentence = true).apply { acceptPcm(pcm) }.finish())
+    }
+
+    @Test fun `pause segments shown while speaking keep no mark of their own`() {
+        // 2026-11-18 用户：断句太碎导致全是逗号句号。A lone pause segment always ends with a mark; only marks inside
+        // a segment, ？！ and the final stop stay, and the end-of-input re-read decides the sentence marks.
+        val t = SpeechTranscript(keepMarks = true, pauseMarks = false)
+        t.update(1, "你之前好好给我保证了，说的。", SpeechBoundary.PAUSE)
+        t.update(2, "不用流式，用整句识别。", SpeechBoundary.LIMIT)
+        t.update(3, "那肯定是哪里有问题的？", SpeechBoundary.PAUSE)
+        assertEquals("你之前好好给我保证了，说的 不用流式，用整句识别那肯定是哪里有问题的？你看这能看吗。",
+            t.update(4, "你看这能看吗。", SpeechBoundary.STOP))
+        val streaming = SpeechTranscript(keepMarks = true, pauseMarks = false)
+        streaming.update(1, "第一句。", SpeechBoundary.PAUSE)
+        assertEquals("第一句 第二句还在说", streaming.update(2, "第二句还在说"))
+        val english = SpeechTranscript(keepMarks = true, pauseMarks = false)
+        english.update(1, "hello world.", SpeechBoundary.PAUSE)
+        assertEquals("hello world next one.", english.update(2, "next one.", SpeechBoundary.STOP))
+    }
+
+    @Test fun `whole sentence session shows no pause marks while speaking and the re-read decides them`() {
+        class Engine : LocalSpeechEngine {
+            override val hasRefinement = true
+            override val isStreaming = true
+            override fun detector(): SpeechDetector = object : SpeechDetector {
+                override fun speech(frame: FloatArray) = frame.any { it != 0f }
+                override fun reset() { }
+            }
+            override fun accept(samples: FloatArray) = "预览"
+            override fun finishStream() = "预览"
+            override fun refine(samples: FloatArray) = "你好"
+            override fun refinePunctuated(samples: FloatArray) =
+                if (samples.size > 3 * 16000) "你好，世界，你好，世界。" else cleanSenseVoiceText("你好，世界。", keepMarks = true)
+            override fun reset() { }
+            override fun close() { }
+        }
+        val loud = ByteArray(32000) { if (it % 2 == 0) 64 else 6 }
+        val silence = ByteArray(48000)
+        val shown = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val s = LocalSpeechSession(Engine(), { shown.add(it) }, {}, wholeSentence = true)
+        s.acceptPcm(loud); s.acceptPcm(silence); s.acceptPcm(loud)
+        assertEquals("你好，世界，你好，世界。", s.finish())
+        assertTrue(shown.toString(), shown.any { it.startsWith("你好，世界 预览") })
+        assertTrue(shown.toString(), shown.none { it.startsWith("你好，世界。") || it.startsWith("你好，世界，预览") })
+    }
+
+    @Test fun `no pause space keeps English word spaces`() {
+        assertEquals("你好世界", withoutCjkSpaces("你好 世界"))
+        assertEquals("你好，世界", withoutCjkSpaces("你好， 世界"))
+        assertEquals("我用iPhone打字", withoutCjkSpaces("我用 iPhone 打字"))
+        assertEquals("I love you", withoutCjkSpaces("I love you"))
+        assertEquals("hello world你好", withoutCjkSpaces("hello  world 你好"))
+        assertEquals("안녕 하세요", withoutCjkSpaces("안녕 하세요"))
+        assertEquals("はい分かりました", withoutCjkSpaces("はい 分かりました"))
+        assertEquals("体温36.5度", withoutCjkSpaces("体温 36.5度"))
     }
 }

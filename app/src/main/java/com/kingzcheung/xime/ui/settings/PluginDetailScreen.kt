@@ -11,7 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -130,7 +130,7 @@ fun PluginSettingsContent(
                         (pluginInstance as EmojiPlugin).openSettings(context)
                         onBack()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "无法打开插件设置: ${e.message}", Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "无法打开插件设置: ${e.message}", Toast.LENGTH_LONG).show()
                         onBack()
                     }
                 }

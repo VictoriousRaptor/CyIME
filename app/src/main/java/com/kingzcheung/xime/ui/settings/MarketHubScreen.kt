@@ -58,7 +58,7 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -212,7 +212,7 @@ private fun SchemesMarketTab(
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             viewModel.clearToast()
         }
     }
@@ -468,7 +468,7 @@ private fun ModelsMarketTab(
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             viewModel.clearToast()
         }
     }
@@ -925,7 +925,7 @@ fun MarketSchemeDetailContent(
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             viewModel.clearToast()
         }
     }
@@ -1275,7 +1275,7 @@ fun MarketModelDetailContent(
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, message, Toast.LENGTH_SHORT).show()
             viewModel.clearToast()
         }
     }

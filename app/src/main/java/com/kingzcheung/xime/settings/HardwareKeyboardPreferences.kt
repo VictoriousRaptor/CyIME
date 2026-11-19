@@ -19,6 +19,8 @@ data class HardwareKeyboardOptions(
     val gamePassthrough: Boolean = false,
     /** 工具快捷键（Ctrl+. / Ctrl+回车 / Alt+V / Alt+H）。关掉后这些组合键交给应用。默认开。 */
     val toolShortcuts: Boolean = true,
+    /** 锁定浮窗位置：工具条不能拖动，停在现在的位置（按钮照常能点）。默认关。 */
+    val lockPosition: Boolean = false,
 )
 
 object HardwareKeyboardPreferences {
@@ -38,12 +40,13 @@ object HardwareKeyboardPreferences {
             associationInWindow = p.getBoolean(PREFIX + "association_in_window", false),
             gamePassthrough = p.getBoolean(PREFIX + "game_passthrough", false),
             toolShortcuts = p.getBoolean(PREFIX + "tool_shortcuts", true),
+            lockPosition = p.getBoolean(PREFIX + "lock_position", false),
         )
     }
     fun set(context: Context, key: String, enabled: Boolean) {
         require(key in setOf("ctrl_space", "shift_tap", "follow_cursor", "avoid_editor", "dock_edge",
             "page_minus_equals", "page_brackets", "page_comma_period", "bottom_bar", "association_in_window",
-            "game_passthrough", "tool_shortcuts"))
+            "game_passthrough", "tool_shortcuts", "lock_position"))
         SettingsPreferences.getPrefsPublic(context).edit().putBoolean(PREFIX + key, enabled).apply()
     }
 }

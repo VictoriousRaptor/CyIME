@@ -9,6 +9,8 @@ import com.kingzcheung.xime.settings.CellDictionaryManager
 import com.kingzcheung.xime.settings.CellDictionaryOffer
 import com.kingzcheung.xime.settings.CellDictionaryState
 import com.kingzcheung.xime.settings.CellWordAutoUpdate
+import com.kingzcheung.xime.settings.DictionaryExport
+import com.kingzcheung.xime.settings.DictionaryExportSources
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +75,19 @@ class CellDictionaryViewModel(application: Application) : AndroidViewModel(appli
         store.select(entry.id, true)
         val skipped = if (entry.skipped > 0) "，跳过 ${entry.skipped} 行（单字或没有拼音）" else ""
         "已导入「${entry.name}」${entry.count + entry.english} 个词$skipped，点「应用更改」后生效"
+    }
+
+    /** 导出词库：[source] 为 null 时是当前方案学到的词，否则是这个导入的词库；写进用户选好的 [uri]。 */
+    fun export(uri: Uri, source: String?, format: DictionaryExport.Format) = work("正在导出词库…") {
+        val (name, words) = if (source == null) "我学到的词" to DictionaryExportSources.userWords(context)
+        else (store.read().installed.firstOrNull { it.id == source }?.name ?: "导入的词库") to
+            DictionaryExportSources.packWords(store, source)
+        require(words.isNotEmpty()) { "没有可导出的词" }
+        val result = DictionaryExport.write(format, name, words)
+        require(result.written > 0) { "没有能导出的词：只导出两个字以上、带拼音的词" }
+        requireNotNull(context.contentResolver.openOutputStream(uri, "wt")) { "无法写入文件" }.use { it.write(result.bytes) }
+        val skipped = if (result.skipped > 0) "，跳过 ${result.skipped} 条（单字、整句或拼音对不上）" else ""
+        "已导出 ${result.written} 个词$skipped"
     }
 
     /**

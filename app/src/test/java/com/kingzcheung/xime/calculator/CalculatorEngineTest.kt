@@ -141,6 +141,17 @@ class CalculatorEngineTest {
     }
 
     @Test
+    fun `小数点开头的数上屏时补 0（#332）`() {
+        val engine = CalculatorEngine()
+        "1000+.1".forEach { if (CalculatorEngine.digitOf(it) != null) engine.handleDigit(it.toString()) else engine.handleOperator(it.toString()) }
+        assertEquals("1000+.1", engine.getExpression()) // 输入框里照打的字
+        assertEquals("1000+0.1 = 1000.1", engine.getCandidate())
+        assertEquals("1000+0.1=1000.1", engine.getFormulaResult())
+        assertEquals("０．５+0.2", CalculatorEngine.withLeadingZeros("．５+.2"))
+        assertEquals("1.5*2", CalculatorEngine.withLeadingZeros("1.5*2"))
+    }
+
+    @Test
     fun `小数计算状态机`() {
         val engine = CalculatorEngine()
         engine.handleDigit("1")

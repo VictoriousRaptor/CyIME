@@ -24,6 +24,23 @@ internal fun inputTextLocaleTag(language: InputLanguage, scheme: InputScheme, tr
         else -> null
     }
 
+/** 上屏的字里有汉字、又知道是哪种写法时才标（[withTextLocale]）。 */
+internal fun needsTextLocale(text: String, tag: String?): Boolean =
+    tag != null && text.codePoints().anyMatch { Character.UnicodeScript.of(it) == Character.UnicodeScript.HAN }
+
+/**
+ * 上屏的字带上输入语言（LocaleSpan）：输入框按它画汉字。日语键盘打「自信」，候选里是日本写法，
+ * 系统是中文时上屏后输入框却按中文写法画（用户 11-16，之前也提过）。字本身没变，只是写法跟系统走了。
+ * 认 span 的输入框（普通 EditText 等）按标的语言画；不认的照旧按系统语言画。
+ */
+internal fun withTextLocale(text: String, tag: String?): CharSequence {
+    if (!needsTextLocale(text, tag)) return text
+    return android.text.SpannableString(text).apply {
+        setSpan(android.text.style.LocaleSpan(java.util.Locale.forLanguageTag(tag!!)), 0, length,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+}
+
 /** 里面没自己指定 style 的文字按当前输入语言的写法画；自己指定 style 的用 [withInputTextLocale]。 */
 @Composable
 internal fun ProvideInputTextLocale(language: InputLanguage, scheme: InputScheme, traditionalOutput: Boolean,

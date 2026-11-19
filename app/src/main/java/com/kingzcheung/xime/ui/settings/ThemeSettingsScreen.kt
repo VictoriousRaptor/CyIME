@@ -23,7 +23,7 @@ import androidx.compose.material.icons.twotone.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -396,7 +396,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
             }
             imported.onSuccess { editing = it to base }.onFailure {
                 com.kingzcheung.xime.util.FileLogger.e("Appearance", "Custom background failed", it)
-                android.widget.Toast.makeText(context, "这张图片读不出来，换一张试试", android.widget.Toast.LENGTH_LONG).show()
+                com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "这张图片读不出来，换一张试试", android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -405,7 +405,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             val added = withContext(Dispatchers.IO) { com.kingzcheung.xime.ui.theme.CustomImageTheme.addSlides(context, uris) }
-            if (added < uris.size) android.widget.Toast.makeText(context,
+            if (added < uris.size) com.kingzcheung.xime.ui.i18n.UiToast.makeText(context,
                 if (added == 0 && slides.size >= com.kingzcheung.xime.settings.BackgroundMotionPreferences.MAX_SLIDES)
                     "最多 ${com.kingzcheung.xime.settings.BackgroundMotionPreferences.MAX_SLIDES + 1} 张"
                 else "有 ${uris.size - added} 张没有加上", android.widget.Toast.LENGTH_LONG).show()
@@ -445,7 +445,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
                             onImageChanged()
                         }.onFailure {
                             com.kingzcheung.xime.util.FileLogger.e("Appearance", "Custom background promote failed", it)
-                            android.widget.Toast.makeText(context, "没有删除成功，请重试", android.widget.Toast.LENGTH_LONG).show()
+                            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "没有删除成功，请重试", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                 },
@@ -497,7 +497,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
                         onSaved()
                     }.onFailure {
                         com.kingzcheung.xime.util.FileLogger.e("Appearance", "Custom background save failed", it)
-                        android.widget.Toast.makeText(context, "图片没有保存成功，请重试", android.widget.Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "图片没有保存成功，请重试", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             },
@@ -519,7 +519,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
                     }
                     saved.onSuccess { editingSlide = null }.onFailure {
                         com.kingzcheung.xime.util.FileLogger.e("Appearance", "Slide placement save failed", it)
-                        android.widget.Toast.makeText(context, "没有保存成功，请重试", android.widget.Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "没有保存成功，请重试", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             },
@@ -544,7 +544,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
                             onDeleted(base)
                         }.onFailure {
                             com.kingzcheung.xime.util.FileLogger.e("Appearance", "Custom background delete failed", it)
-                            android.widget.Toast.makeText(context, "没有删除成功，请重试", android.widget.Toast.LENGTH_LONG).show()
+                            com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "没有删除成功，请重试", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                 }) { Text("删除") }

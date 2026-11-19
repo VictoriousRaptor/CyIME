@@ -88,6 +88,13 @@ class SpeechRecognitionLanguageSessionTest {
             allowClose = CountDownLatch(1)
         }
         override fun cancel() = stop() // Deliberately emits even after cancellation: manager must reject it.
+        val abandons = AtomicInteger()
+        /** Like the :asr service skipping its end-of-input re-read: the blocked stop returns at once. */
+        @Volatile var abandonReleasesStop = false
+        override fun abandonFinishing() {
+            abandons.incrementAndGet()
+            if (abandonReleasesStop) allowClose.countDown()
+        }
         override fun release() {}
         override fun isAvailable() = true
     }
@@ -381,6 +388,21 @@ class SpeechRecognitionLanguageSessionTest {
         f.backend.allowClose.countDown()
         assertEquals(InputLanguage.JAPANESE, f.session().first)
         assertTrue(f.results.isEmpty())
+    }
+
+    @Test fun restartingDuringAStopTellsTheBackendToStopWaitingForTheDiscardedFinal() = Fixture().use { f ->
+        // 2026-11-16：连按时新会话要等上一次的整段重识别做完，首字慢；那份结果反正会被作废。
+        f.backend.abandonReleasesStop = true
+        f.manager.startRecognition(InputLanguage.ENGLISH)
+        f.session()
+        f.manager.stopRecognition()
+        assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
+        f.manager.startRecognition(InputLanguage.JAPANESE)
+        assertEquals("the new session starts without the test releasing the old stop", InputLanguage.JAPANESE, f.session().first)
+        assertEquals(1, f.backend.abandons.get())
+        f.drain()
+        assertTrue("the old session's final never reaches the editor", f.results.isEmpty())
+        assertTrue(f.errors.isEmpty())
     }
 
     @Test fun cancelledQueuedStartReleasesItsMicrophoneWithoutStartingAnotherBackendSession() = Fixture().use { f ->

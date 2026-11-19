@@ -2359,7 +2359,7 @@ index 99e4511..e518976 100644
   public:
    ScriptTranslation(ScriptTranslator* translator,
                      Corrector* corrector,
-@@ -144,16 +175,18 @@ class ScriptTranslation : public Translation {
+@@ -144,16 +175,26 @@ class ScriptTranslation : public Translation {
                      size_t start,
                      size_t end_of_input,
                      int max_sentences,
@@ -2376,6 +2376,14 @@ index 99e4511..e518976 100644
          max_sentences_(max_sentences),
          sentence_cutoff_threshold_(sentence_cutoff_threshold) {
 +    LoadT9Options(config, context);
++    // CyIME: t9/correction_lead_bias (the keyboard's correction strength, ln units) is added to how much more likely
++    // a corrected sentence must be before it leads the sentence of the typed letters (t9/tail_correction_margin,
++    // t9/slip_correction_margin). Only on the scheme's own translator: a helper prism (cyime_omission, read after a
++    // pause) keeps the scheme's margins, or its first sentence turns into the typed reading and hides the slip.
++    if (const double bias = translator->correction_lead_bias()) {
++      if (t9_tail_correction_margin_ > 0) t9_tail_correction_margin_ = std::max(0.01, t9_tail_correction_margin_ + bias);
++      if (t9_slip_correction_margin_ > 0) t9_slip_correction_margin_ = std::max(0.01, t9_slip_correction_margin_ + bias);
++    }
 +    if (context && config) config->GetBool("full_pinyin/offer_homophone_tails", &offer_homophone_tails_);
      set_exhausted(true);
    }
@@ -2472,7 +2480,7 @@ index 99e4511..e518976 100644
  // ScriptTranslator implementation
  
  ScriptTranslator::ScriptTranslator(const Ticket& ticket)
-@@ -227,7 +312,15 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
+@@ -227,7 +312,16 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
                           &enable_word_completion_)) {
        enable_word_completion_ = enable_completion_;
      }
@@ -2483,6 +2491,7 @@ index 99e4511..e518976 100644
 +    config->GetInt(name_space_ + "/sentence_char_homophones", &sentence_char_homophones_);
 +    config->GetInt(name_space_ + "/sentence_word_homophones", &sentence_word_homophones_);
 +    if (ticket.schema == engine_->schema()) config->GetDouble(name_space_ + "/sentence_near_homophone_margin", &sentence_near_homophone_margin_);  // not on a helper prism (cyime_omission): the reading as typed would join its sentences and hide the slip
++    if (ticket.schema == engine_->schema()) config->GetDouble("t9/correction_lead_bias", &correction_lead_bias_);
 +    config->GetInt(name_space_ + "/sentence_word_max_syllables", &sentence_word_max_syllables_);
 +    config->GetInt(name_space_ + "/sentence_short_max_sentences", &sentence_short_max_sentences_);
      config->GetBool(name_space_ + "/incremental_compose",
@@ -3437,7 +3446,7 @@ index 28e4f3b..e9486e1 100644
    string FormatPreedit(const string& preedit);
    string Spell(const Code& code);
    string GetPrecedingText(size_t start) const;
-@@ -72,31 +88,70 @@ class ScriptTranslator : public Translator,
+@@ -72,31 +88,73 @@ class ScriptTranslator : public Translator,
                           const string& preceding_text,
                           bool cacheable);
  
@@ -3455,6 +3464,8 @@ index 28e4f3b..e9486e1 100644
 +  int sentence_char_homophones() const { return sentence_char_homophones_; }
 +  int sentence_word_homophones() const { return sentence_word_homophones_; }
 +  double sentence_near_homophone_margin() const { return sentence_near_homophone_margin_; }
++  // CyIME: t9/correction_lead_bias, see ScriptTranslation's constructor. 0 on a helper prism.
++  double correction_lead_bias() const { return correction_lead_bias_; }
 +  int sentence_word_max_syllables() const { return sentence_word_max_syllables_; }
 +  int sentence_short_max_sentences() const { return sentence_short_max_sentences_; }
 +  int spelling_hints() const { return candidate_comments() ? 100 : spelling_hints_; }
@@ -3483,6 +3494,7 @@ index 28e4f3b..e9486e1 100644
 +  // dictionary weight is within this much (natural log) of the first word's (chong le: 冲了 49707, 充了 13049, so the
 +  // word model can decide between 冲了一百元 and 充了一百元). 0: off.
 +  double sentence_near_homophone_margin_ = 0.0;
++  double correction_lead_bias_ = 0.0;
 +  int sentence_word_max_syllables_ = 0;
 +  // CyIME: sentences made for input of at most sentence_word_max_syllables syllables, where more than
 +  // max_sentences (0: the same). The word model chooses among the sentences Rime ranks best by dictionary weight;

@@ -418,11 +418,12 @@ fun SwipeableKeyButton(
     val ctrlTargets = LocalShiftSlideTargets.current
     // 14 键快捷键键面出来前双字母键还没拆开：按点在左半还是右半决定是哪个字母，和拆开后的位置一样（用户 10-31）。
     val ctrlTapFraction = remember { floatArrayOf(0.5f) }
-    val fourteenKeyLayout = LocalFourteenKeyLayout.current
+    // 自建布局里的合并键（we、rt）和 14 键一样：按住 Ctrl 时按字母拆开，各出各的快捷键（用户 11-17）。
+    val pairedLetterKeys = LocalFourteenKeyLayout.current || customLayout?.mergedGroups?.isNotEmpty() == true
     val tapOrCtrl: () -> Unit = {
         val letters = letterGroup ?: text
         val pick = ctrlShortcutLetter?.toString()
-            ?: if (fourteenKeyLayout && letters.length == 2 && ctrlTargets?.ctrl == true)
+            ?: if (pairedLetterKeys && letters.length == 2 && ctrlTargets?.ctrl == true)
             letters[if (ctrlTapFraction[0] < 0.5f) 0 else 1].toString() else letters
         if (ctrlTargets?.ctrlTap(pick) != true) onClick()
     }
@@ -430,18 +431,25 @@ fun SwipeableKeyButton(
     val reserveDragForGlide = letterGlideOwnsDrag || t9GlideOwnsDrag
     // 九键滑行接管拖动的数字键往下滑打不出下角标：左下角不画（用户 11-11）。26 键字母滑行改成长按弹出上下两个角标
     // （[withGlideCornerMenu]），下角标打得到，照旧画（用户 11-11「关闭数字行滑行打不出 !@#」）。
-    val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide && !letterGlideOwnsDrag }
     // 「上下滑输入符号」关着时（用户 11-14：关了提示还能滑出符号，要能真关）：直接上屏的角标不接上下滑、也不接长按。
     // 用户给字母设的上下滑动作（撤销、复制这类）和功能键的滑动不是角标，照旧。
     val cornerSymbols = inputPreferences.cornerSymbolInput
     val upSymbol = symbolInputText?.takeIf { it.isNotBlank() }
     val downSymbol = symbolInputDownText?.takeIf { it.isNotBlank() }
+    // 滑不出来的角标也不画（用户 11-16：功能关了还显示上下角标）。用户给这个字母设了动作的那一角照画动作名。
+    // 只是不画，「上方/下方角标提示」存的值不动，功能打开后照原来的显示。
+    val boundCorners = if (cornerSymbols || letterGroup?.length != 1) null to null
+        else letterSwipeCornerLabels(letterGroup.lowercase())
+    val upCornerOff = !cornerSymbols && upSymbol != null && boundCorners.first == null
+    val downCornerOff = !cornerSymbols && downSymbol != null && boundCorners.second == null
+    val upCornerLabel = (swipeUpKeyLabel ?: swipeText).takeUnless { upCornerOff }
+    val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide && !letterGlideOwnsDrag || downCornerOff }
     val keyOnSwipe = onSwipe.takeUnless { !cornerSymbols && upSymbol != null }
     val keyOnSwipeDown = onSwipeDown.takeUnless { !cornerSymbols && downSymbol != null }
     // 角标提示关着时键上不画角标，滑动时改用气泡显示要输入的符号（用户 11-14：长按有气泡，上下滑没有）。
     val upHint = swipeText?.takeIf { it.isNotEmpty() } ?: upSymbol?.takeIf { keyOnSwipe != null }
     val downHint = swipeDownText?.takeIf { it.isNotEmpty() } ?: downSymbol?.takeIf { keyOnSwipeDown != null }
-    val cornerShown = !(swipeUpKeyLabel ?: swipeText).isNullOrEmpty() || !downCornerLabel.isNullOrEmpty()
+    val cornerShown = !upCornerLabel.isNullOrEmpty() || !downCornerLabel.isNullOrEmpty()
     // 滑到哪个键按哪个键（用户 11-14，像三星键盘）：滑行和「上下滑输入符号」都关着、整个键盘滑动移光标也关着时才有。
     val slideTaps = !cornerSymbols && !reserveDragForGlide && !LocalLetterGlide.current && LocalT9GlideKeys.current == null &&
         inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD && ctrlTargets != null
@@ -590,9 +598,10 @@ fun SwipeableKeyButton(
     val dragSpace = LocalKeyDragSpace.current
     var dragBounds by remember { mutableStateOf(Rect.Zero) }
     val shiftToken = remember { Any() }
-    val maxShiftLetters = if (LocalFourteenKeyLayout.current) 2 else 1
+    val maxShiftLetters = if (pairedLetterKeys) 2 else 1
+    // 俄、韩、西、德语键盘上的 й ㅂ ñ ä 也是字母键：Shift 拖过去打大写、按住 !@# 当 Ctrl（用户 11-17）。
     val shiftLetters = (letterGroup ?: text).takeIf { group ->
-        group.length in 1..maxShiftLetters && group.all { it.lowercaseChar() in 'a'..'z' }
+        group.length in 1..maxShiftLetters && group.all(com.kingzcheung.xime.settings.LetterLanguage::isKeyLetter)
     }
     val currentLetterSelection by rememberUpdatedState(onLetterSelection)
     androidx.compose.runtime.DisposableEffect(shiftTargets, shiftToken) {
@@ -620,9 +629,17 @@ fun SwipeableKeyButton(
     }
     val slideHovered = shiftTargets?.slideHovered === slideToken
     val pressedLook = (isPressed && !(shiftTargets?.sliding == true && !slideHovered)) || shiftHovered || slideHovered
+    // 炫光跟着手指走（用户 11-16）：滑到的键亮，起手的键滑走就淡出；其余键不参与（null），不因开始滑动而重组动画。
+    val slideGlow = when {
+        slideHovered -> true
+        isPressed && shiftTargets?.sliding == true -> false
+        else -> null
+    }
     // 按住符号键当 Ctrl：单字母键换成快捷键键面（用户 10-24）；按满时限才换，渐变出来，松手立刻换回（用户 10-31）。
     // 九键数字键换成它代表的字母的用途，左上角写数字（用户 11-03）。
-    val ctrlLetter = (ctrlShortcutLetter ?: shiftLetters?.singleOrNull())?.takeIf { shiftTargets?.ctrlFaces == true }
+    // 俄、韩语键盘按位置换成 26 键的字母（ЙЦУКЕН 的 с 是 Ctrl+C）；ñ、х 这类没有对应字母的键不换键面。
+    val ctrlLetter = (ctrlShortcutLetter ?: shiftLetters?.singleOrNull()?.let { shiftTargets?.ctrlLetter(it) })
+        ?.takeIf { shiftTargets?.ctrlFaces == true }
     // 从 0 起渐变：14 键这时才拆成单字母键，新键也要渐变出来，不能一出现就是快捷键键面。
     val ctrlFade = remember { androidx.compose.animation.core.Animatable(0f) }
     androidx.compose.runtime.LaunchedEffect(ctrlLetter != null) {
@@ -701,7 +718,8 @@ fun SwipeableKeyButton(
             )).keyHeldHighlight(pressedLook),
                 // 键缝动效的长按进度：按这个键实际生效的那套手势算（角标长按、长按菜单、九键数字），没有长按就不画。
                 gapLightHoldMillis = effectiveActions.longPressDelayMillis(
-                    androidx.compose.ui.platform.LocalViewConfiguration.current.longPressTimeoutMillis))
+                    androidx.compose.ui.platform.LocalViewConfiguration.current.longPressTimeoutMillis),
+                slideLit = slideGlow)
             .then(if (hexagonal) Modifier.honeycombLabelArea() else Modifier),
         contentAlignment = if (layoutMode == ButtonLayout.COMPACT) Alignment.TopStart else Alignment.Center
     ) {
@@ -721,7 +739,7 @@ fun SwipeableKeyButton(
         // 快捷键键面画在里层 Box 里，那里拿不到 BoxWithConstraints 的 maxWidth，先取出来。
         val keyWidthDp = maxWidth.value
         // 和角标一起显示时键面实际写的上下角标（截短规则同下面单独画角标时）。
-        val dpUpCorner = (swipeUpKeyLabel ?: swipeText)?.takeIf { it.isNotEmpty() && it != badgeText }
+        val dpUpCorner = upCornerLabel?.takeIf { it.isNotEmpty() && it != badgeText }
             ?.let { punctuationKeyLabel(if (it.length <= 4) it else it.take(4)) }
         val dpDownCorner = downCornerLabel?.takeIf { it.isNotEmpty() }
             ?.let { punctuationKeyLabel(if (it.length <= 4) it else it.take(4)) }
@@ -770,7 +788,7 @@ fun SwipeableKeyButton(
                             .padding(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 2.dp),
                         horizontalAlignment = Alignment.End
                     ) {
-                        val swipeUpHint = swipeUpKeyLabel ?: swipeText
+                        val swipeUpHint = upCornerLabel
                         if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != true && !swipeUpHint.isNullOrEmpty()) {
                             val displayText = if (swipeUpHint.length <= 2) swipeUpHint else swipeUpHint.take(2)
                             Text(
@@ -823,7 +841,7 @@ fun SwipeableKeyButton(
                         // 双拼键位提示的韵母在字母下面：字母上移半个提示高，两者一起居中。
                         modifier = Modifier.fillMaxWidth().offset(y = if (dpCornerLayout != null) dpCornerLayout.letterOffsetDp.dp
                             else if (dpHint != null) (-(dpFinals?.heightDp ?: 0f) / 2f).dp
-                            else if (hintsVisible && !(swipeUpKeyLabel ?: swipeText).isNullOrEmpty() && keyHeight >= 40.dp) 2.dp else 0.dp)
+                            else if (hintsVisible && !upCornerLabel.isNullOrEmpty() && keyHeight >= 40.dp) 2.dp else 0.dp)
                             // 和角标一起显示：字母框固定为 1.2 倍字号高、居中、超出裁掉，备用字体（全角分号等）不会伸进上下层。
                             .then(if (dpCornerLayout != null) Modifier
                                 .height((dpCornerLayout.letterSp * 1.2f * density.fontScale).dp)
@@ -840,8 +858,8 @@ fun SwipeableKeyButton(
 
                 // 上滑提示与角标文字相同（如九键/笔画上滑输入键面数字）时不再重复渲染提示，
                 // 角标已表达该信息；swipeText 状态保持非空，上滑触发与气泡不受影响。
-                if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != true && !(swipeUpKeyLabel ?: swipeText).isNullOrEmpty() && (swipeUpKeyLabel ?: swipeText) != badgeText) {
-                    val keyLabel = (swipeUpKeyLabel ?: swipeText)!!
+                if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != true && !upCornerLabel.isNullOrEmpty() && upCornerLabel != badgeText) {
+                    val keyLabel = upCornerLabel
                     val displayText = if (keyLabel.length <= 4) keyLabel else keyLabel.take(4)
                     Text(
                         text = punctuationKeyLabel(displayText),

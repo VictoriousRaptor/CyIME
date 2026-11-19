@@ -165,8 +165,9 @@ class InferenceService : Service() {
         HandwritingInference.loadRareTemplates(runCatching {
             val personal = File(modelPath).name == "ochwpro-personal.onnx"
             HanziRareTemplates.decode(
-                assets.open("handwriting/hanzi_rare_och.json").bufferedReader(Charsets.UTF_8).use { it.readText() },
-                assets.open("handwriting/hanzi_rare_och.bin").use { it.readBytes() },
+                // 轻量版的生僻字模板是跟手写模型一起下载的（HandwritingAssets），没下好时这一步失败，不出生僻字。
+                com.kingzcheung.xime.handwriting.HandwritingAssets.readText(this, "hanzi_rare_och.json"),
+                com.kingzcheung.xime.handwriting.HandwritingAssets.readBytes(this, "hanzi_rare_och.bin"),
                 if (personal) null else sha256(File(modelPath)),
             )
         }.onFailure { Log.w(TAG, "rare hanzi templates unreadable", it) }.getOrNull())
