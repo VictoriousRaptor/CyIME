@@ -104,6 +104,7 @@ open class LuaPluginAdapter(
         "multi_select" -> UiNodeType.MULTI_SELECT
         "switch" -> UiNodeType.SWITCH
         "number" -> UiNodeType.NUMBER
+        "entries" -> UiNodeType.ENTRIES
         "action", "button" -> UiNodeType.BUTTON // 旧契约 "action" 兼容
         "section" -> UiNodeType.SECTION
         "metric" -> UiNodeType.METRIC

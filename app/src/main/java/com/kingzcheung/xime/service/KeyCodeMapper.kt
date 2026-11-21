@@ -102,6 +102,18 @@ internal fun hardwareCandidatePageDirection(
     }
 }
 
+/**
+ * 注音（大千）实体键盘按 Shift 打的标点（Shift+, 是「，」、Shift+. 是「。」，同 Rime 注音、微软注音）：
+ * 不按 Shift 的 , . / ; - 是注音键，标点都在 Shift 上，交给方案的标点表。字母、数字小键盘、带 Ctrl/Alt/Meta 的不算。
+ */
+internal fun isZhuyinHardwarePunctuation(key: String, keyCode: Int, shift: Boolean, ctrl: Boolean, alt: Boolean,
+    meta: Boolean): Boolean = shift && !ctrl && !alt && !meta && key.length == 1 && key[0].code in 0x21..0x7E &&
+    !key[0].isLetterOrDigit() && keyCode !in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_EQUALS
+
+/** 注音（大千）的 , . - 是注音键、Shift 加它们是标点，实体键盘上都不翻页；[ ] = 照旧翻页。 */
+internal fun zhuyinKeepsPagingKey(keyCode: Int): Boolean =
+    keyCode != KeyEvent.KEYCODE_COMMA && keyCode != KeyEvent.KEYCODE_PERIOD && keyCode != KeyEvent.KEYCODE_MINUS
+
 /** Only unshifted number-row keys select numbered candidates. */
 internal fun hardwareCandidateDigitIndex(keyCode: Int, shifted: Boolean): Int? {
     if (shifted) return null

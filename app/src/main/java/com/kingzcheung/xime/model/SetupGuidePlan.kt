@@ -495,7 +495,7 @@ object SetupGuidePlanner {
             facts.metered -> notes += "现在用的是移动数据，要下载的 ${mbText(download)} 会等连上 Wi-Fi 再下。"
         }
         if (facts.inPackage.isNotEmpty() && remove.isNotEmpty()) {
-            notes += "安装包本身占的空间由系统管理，单独删不掉；这里删的是解压到${facts.device}里的那一份。以后要用，直接从安装包取回，不用联网。"
+            notes += "删的是解压出来的副本，以后要用可直接从安装包取回。"
         }
         val voiceMode = when {
             answers.voice == VoiceUse.NEVER -> null
@@ -504,7 +504,7 @@ object SetupGuidePlanner {
         }
         // 有内存焦虑：语音空闲 1 分钟就从内存卸掉（性能与省电里同一项）。不用语音、也不用字幕时没有模型可卸，不改。
         val voiceIdle = SAVER_VOICE_IDLE_MINUTES.takeIf { saver && voiceNeeded }
-        if (voiceIdle != null) notes += "语音空闲 $voiceIdle 分钟后从内存卸掉，之后第一次说话要多等一两秒。在 性能与省电 里可以改。"
+        if (voiceIdle != null) notes += "语音空闲 $voiceIdle 分钟后卸载，再说话时稍慢。"
         if (turnOff.isNotEmpty()) notes += "关掉${turnOff.joinToString("、") { it.title }}" +
             (turnOff.mapNotNull { it.memoryMb }.sum().takeIf { it >= 1 }?.let { "，按「性能与省电」里的表约省 ${it.roundToInt()} MB 内存" } ?: "") +
             "。以后想开，在设置里各自的开关打开。"

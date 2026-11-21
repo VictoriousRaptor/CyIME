@@ -3,7 +3,7 @@ package com.kingzcheung.xime.clipboard
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** 用户 11-09：剪贴板图片太矮，可选按图片比例（有上限）或矮。11-17：默认改成完整，不裁剪。 */
+/** 用户 11-09：剪贴板图片太矮，可选按图片比例（有上限）或矮。11-17：默认改成完整。11-18：完整铺满宽度，超出面板的下半截裁掉，不留两边空白。 */
 class ClipboardImageHeightTest {
     private val width = 160f
     private val records = 500f
@@ -26,7 +26,7 @@ class ClipboardImageHeightTest {
         assertEquals(120f, clipboardImageCardHeight(full, width, records, aspect = 4f / 3f), .01f)
         // A phone screenshot (9:20) is taller than the six-tenths cap of 「按图片比例」.
         assertEquals(355.56f, clipboardImageCardHeight(full, width, records, aspect = 9f / 20f), .01f)
-        // Longer than the records area: as tall as the area (shown smaller, never cropped).
+        // Longer than the records area: as tall as the area (the view fills the width and cuts the rest off the bottom).
         assertEquals(500f, clipboardImageCardHeight(full, width, records, aspect = .1f), .01f)
         assertEquals(80f, clipboardImageCardHeight(full, width, records, aspect = 4f), .01f)
         assertEquals(200f, clipboardImageCardHeight(full, width, records, aspect = null), .01f)

@@ -84,13 +84,13 @@ class SetupGuidePlanTest {
         assertTrue(plan.remove.all { "能省就省" in it.reason })
         assertEquals(SetupGuidePlanner.SAVER_VOICE_IDLE_MINUTES, plan.voiceIdleMinutes)
         assertTrue(plan.notes.any { "能省就省" in it })
-        assertTrue(plan.notes.any { "从内存卸掉" in it })
+        assertTrue(plan.notes.any { "分钟后卸载" in it })
         // 没选“有”：同一台设备照旧推荐，语音释放不改。
         val normal = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, installed = installed), answers.copy(memorySaver = false))
         assertEquals(SpeechModelCatalog.TWO_PASS, normal.voiceMode)
         assertEquals(CandidateModelCatalog.NGRAM, normal.t9Model)
         assertNull(normal.voiceIdleMinutes)
-        assertTrue(normal.notes.none { "能省就省" in it || "从内存卸掉" in it })
+        assertTrue(normal.notes.none { "能省就省" in it || "分钟后卸载" in it })
     }
 
     @Test fun memoryExtrasTurnOffOnlyWhatWasPickedAndOnlyWithSaver() {

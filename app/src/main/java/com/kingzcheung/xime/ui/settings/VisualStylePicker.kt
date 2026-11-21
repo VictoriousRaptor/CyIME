@@ -42,7 +42,7 @@ internal fun VisualStylePicker(selected: VisualStyle, onSelect: (VisualStyle) ->
     Column(Modifier.settingsSearchAnchor("视觉样式", bleed = 6.dp, bleedVertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("视觉样式", style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary)
-        Text("只改变材质。明暗、配色和背景始终跟随主题设置。",
+        Text("只改材质，颜色跟随主题。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         VisualStyle.offered.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -103,7 +103,7 @@ internal fun KeyShapePicker(selected: KeyShape, onSelect: (KeyShape) -> Unit) {
     Column(Modifier.settingsSearchAnchor("按键形状", bleed = 6.dp, bleedVertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("按键形状：${shown.title}", style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary)
-        Text("所有布局和面板的按键一起改；蜂窝布局的六边形字母键不变。",
+        Text("所有布局的按键一起改。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val palette = MaterialTheme.colorScheme
         val surface = keyboard?.background ?: palette.surface

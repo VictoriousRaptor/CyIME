@@ -126,13 +126,14 @@ internal fun clipboardPinnedPreviewHeight(recordsHeightDp: Float): Float =
 
 /**
  * 剪贴板里（没固定的）图片卡片多高（用户 11-09：图片太矮，给个选项）。固定的图片照旧只露一条。
- * 「完整」（用户 11-17，默认）：整张图都看得到，不裁剪，按图片比例定高，长图最高到整个记录区，
- * 超出的缩小显示；配合「全部」只显示最新几张图片，不会满屏都是图。
+ * 「完整」（用户 11-17，默认）：铺满卡片宽度，按图片比例定高，长图最高到整个记录区，超出的下半截裁掉
+ * （用户 11-18：原来缩小整张显示，竖长截图两边空出一大块，不行）；点开照旧看原图。
+ * 配合「全部」只显示最新几张图片，不会满屏都是图。
  * 「标准」：11-17 前的默认，比宽稍高，裁剪；「按图片比例」长图高、宽图矮；「矮」是 11-09 前的样子。
  * 标准和按比例都不超过记录区的六成，一张长截图不会占满面板。
  */
 internal enum class ClipboardImageHeight(val key: String, val label: String, val caption: String) {
-    FULL("full", "完整", "整张显示不裁剪，长图最高到面板高度"),
+    FULL("full", "完整", "铺满宽度，长图最高到面板高度，超出的下面裁掉"),
     STANDARD("standard", "标准", "比宽稍高，上下裁掉一些"),
     RATIO("ratio", "按图片比例", "长图高、宽图矮，最高到面板的六成"),
     LOW("low", "矮", "只露一段，一屏看到的记录多"),
@@ -151,17 +152,43 @@ internal val ClipboardImageHeight.followsPicture: Boolean
 /**
  * Preference (board prefs)：「全部」里显示几张没固定的图片（用户 11-17：一打开全是图片，挤掉后面的文字）。
  * 只算最新的几张；固定的图片、文字、「图片」页和分组页都不受影响，图片本身也不删。0 = 不限（11-17 前的样子）。
+ * 几种来源各至少留一张（用户 11-19：拍几张照片，截图就全被挤掉了），见 [withRecentImageCount]。
  */
 internal const val CLIPBOARD_RECENT_IMAGE_COUNT_KEY = "recent_image_count"
 internal val ClipboardRecentImageCounts = listOf(2, 4, 8, 0)
 internal fun clipboardRecentImageCount(stored: Int): Int = if (stored in ClipboardRecentImageCounts) stored else 4
 
-/** [cards] with only the newest [count] unfixed pictures (0 keeps them all). Text and fixed pictures stay. */
+/** 剪贴板图片从哪来：真的复制过的、系统截图、相册里最近的照片。 */
+internal enum class ClipboardImageKind { COPIED, SCREENSHOT, PHOTO }
+
+internal val ClipboardImage.kind: ClipboardImageKind
+    get() = when {
+        // 复制进历史的（含粘过的截图）带着来源和哈希，算复制的。
+        source != null || sha256 != null -> ClipboardImageKind.COPIED
+        label == ScreenshotImageSource.SCREENSHOT_LABEL -> ClipboardImageKind.SCREENSHOT
+        label == ScreenshotImageSource.PHOTO_LABEL -> ClipboardImageKind.PHOTO
+        else -> ClipboardImageKind.COPIED
+    }
+
+/**
+ * [cards] with only [count] unfixed pictures (0 keeps them all). Text and fixed pictures stay.
+ * 每种来源先留它最新的一张（复制的、截图、照片，位置不够时按这个先后），剩下的位置按新旧补满：
+ * 4 张、连拍了一串照片时是 3 张照片 + 1 张截图（用户 11-19）。只有一种来源时就是最新的几张，和以前一样。
+ */
 internal fun withRecentImageCount(cards: List<ClipboardCard>, pins: Set<String>, count: Int): List<ClipboardCard> {
     if (count <= 0) return cards
-    var shown = 0
-    // Cards are fixed first, then newest first, so the first unfixed pictures met are the newest.
-    return cards.filter { it !is ClipboardCard.Image || it.key in pins || shown++ < count }
+    // Cards are fixed first, then newest first, so the unfixed pictures met here are newest first.
+    val unfixed = cards.filterIsInstance<ClipboardCard.Image>().filter { it.key !in pins }
+    val kept = LinkedHashSet<String>()
+    for (kind in ClipboardImageKind.entries) {
+        if (kept.size >= count) break
+        unfixed.firstOrNull { it.item.kind == kind }?.let { kept += it.key }
+    }
+    for (card in unfixed) {
+        if (kept.size >= count) break
+        kept += card.key
+    }
+    return cards.filter { it !is ClipboardCard.Image || it.key in pins || it.key in kept }
 }
 
 /** A picture card at least this tall stays easy to tap, however wide the picture. */

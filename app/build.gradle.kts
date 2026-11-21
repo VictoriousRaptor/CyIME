@@ -105,8 +105,8 @@ android {
         // 按发布批次定号：兼容修复升 PATCH，兼容功能升 MINOR 并归零 PATCH。
         // 不兼容变更升 MAJOR；日常编辑不逐次升号。完整规则见 docs/packaging.md。
         // versionCode 是独立递增的交付序号；同批普通版与内置版共用。
-        versionCode = 20261473
-        versionName = "1.15.100"
+        versionCode = 20261489
+        versionName = "1.15.103"
 
 
         // Isolated Compose rendering on a local x86 emulator; ordinary device tests keep the full app.
@@ -235,10 +235,6 @@ android {
     // 带模型的安装包照旧内置。它要的 libc++_shared.so 留在包里。离线包（assembleOffline）也必须带 bundleModels。
     if (providers.gradleProperty("bundleModels").orNull != "true")
         packaging.jniLibs.excludes.add("**/libopencv_java4.so")
-    // 语音引擎 libsherpa-onnx-jni.so（arm64 约 8.6 MB）同理：轻量版和语音模型一起下载（模型目录 speech-engine，
-    // speech/SherpaLibrary.kt；sherpa 类里的加载调用在 tasks-speech.gradle.kts 改写），带模型的安装包照旧内置。
-    if (providers.gradleProperty("bundleModels").orNull != "true")
-        packaging.jniLibs.excludes.add("**/libsherpa-onnx-jni.so")
     // 手写大模板（1.16）：生僻字模板（约 4.4 MB）跟汉字手写模型一起下载（模型目录 handwriting-rare），
     // 日语假名、日文汉字模板（约 5.6 MB）装「日语」插件时下载（japanese-handwriting），见 handwriting/HandwritingAssets.kt。
     // japanese_kanji.json（贡献页的常用度表）和 latin_default_strokes.json 留在包里。带模型的安装包照旧内置。

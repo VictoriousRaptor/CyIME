@@ -124,7 +124,7 @@ object StorageStats {
             Category(
                 id = ID_MODELS,
                 title = "离线模型",
-                description = "联想 / 手写 / 语音识别模型(含旧版本目录)，清除后需重新下载",
+                description = "联想、手写和语音模型，清除后要重新下载",
                 sizeBytes = modelsSize,
                 clearable = true,
                 // 点进模型管理逐个删（11-04「更多对内存的控制」）；「清理」仍是一次全删。
@@ -133,21 +133,21 @@ object StorageStats {
             Category(
                 id = ID_SCHEMA_CACHE,
                 title = "方案编译缓存",
-                description = "输入方案的编译产物与日志，清除后下次启动自动重建，不影响词库与自定义配置",
+                description = "输入方案的缓存，清除后自动重建",
                 sizeBytes = buildSize,
                 clearable = true,
             ),
             Category(
                 id = ID_SCHEMAS,
                 title = "方案与词库",
-                description = "已安装方案、用户词库与自定义配置，暂不支持一键清理",
+                description = "已安装的方案、词库和自定义配置",
                 sizeBytes = schemasSize,
                 clearable = false,
             ),
             Category(
                 id = ID_PLUGINS,
                 title = "插件",
-                description = "已安装插件及其资源，卸载请前往插件管理",
+                description = "已安装的插件，在插件管理里卸载",
                 sizeBytes = pluginsSize,
                 clearable = false,
                 navigable = true,
@@ -155,7 +155,7 @@ object StorageStats {
             Category(
                 id = ID_MARKET_PACKAGES,
                 title = "已下载方案包",
-                description = "方案市场的安装包(内置方案除外)；已安装的方案不受影响，重装时需重新下载",
+                description = "方案市场的安装包，不影响已安装的方案",
                 sizeBytes = marketSize,
                 clearable = true,
             ),
@@ -183,7 +183,7 @@ object StorageStats {
             Category(
                 id = ID_OCR_MODELS,
                 title = "文字识别模型",
-                description = "从安装包解出的文字识别模型，使用文字识别时自动准备",
+                description = "文字识别模型，用到时自动准备",
                 sizeBytes = ocrSize,
                 clearable = false,
             ),
@@ -197,14 +197,14 @@ object StorageStats {
             Category(
                 id = ID_EXTERNAL,
                 title = "外部目录数据",
-                description = "Android/data 下的语音调校录音、个人手写模型与训练样本等，卸载时一并删除",
+                description = "语音录音、个人手写模型和样本，卸载应用时删除",
                 sizeBytes = externalSize,
                 clearable = false,
             ),
             Category(
                 id = ID_OTHER,
                 title = "其他数据",
-                description = "设置、用户配置索引、联想词频缓存、数据库等",
+                description = "设置、联想词频和数据库",
                 sizeBytes = otherSize,
                 clearable = false,
             ),

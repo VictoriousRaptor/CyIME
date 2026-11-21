@@ -49,6 +49,7 @@ class HardwareCandidatePositionTest {
 
     @Test fun followsMovingCaretAndFallsBackWithinOffsetHost() {
         val anchor = mutableStateOf<HardwareCursorAnchor?>(null)
+        val input = mutableStateOf("nihao")
         val viewLocation = IntArray(2)
         rule.setContent {
             val view = LocalView.current
@@ -57,7 +58,7 @@ class HardwareCandidatePositionTest {
                     Box(Modifier.size(600.dp, 420.dp).padding(start = 40.dp, top = 30.dp)
                         .onGloballyPositioned { view.getLocationOnScreen(viewLocation) }) {
                         HardwareKeyboardCandidateBar(
-                            inputText = "nihao", preeditText = "ni hao", candidates = listOf("你好", "拟好"),
+                            inputText = input.value, preeditText = input.value, candidates = listOf("你好", "拟好"),
                             hasNextPage = false, hasPrevPage = false, cursorAnchor = anchor.value,
                             highlightIndex = 0, cardBackgroundColor = Color.Black,
                             candidateTextColor = Color.White, activeColor = Color.Blue,
@@ -81,9 +82,12 @@ class HardwareCandidatePositionTest {
         move(50f, 60f, 80f)
         assertEquals(host.left + 50f, card().left, 1f)
         assertEquals(host.top + 88f, rule.onNodeWithTag("hardware-preedit-card", true).fetchSemanticsNode().boundsInRoot.top, 1f)
+        // 同一次输入里横向定在开始打字的地方，纵向跟着光标换行走（用户 11-20：卡片跟着光标左右晃）。
         move(90f, 120f, 140f)
-        assertEquals(host.left + 90f, card().left, 1f)
+        assertEquals(host.left + 50f, card().left, 1f)
         assertEquals(host.top + 148f, rule.onNodeWithTag("hardware-preedit-card", true).fetchSemanticsNode().boundsInRoot.top, 1f)
+        // 这次输入结束（只剩联想）后照常跟光标。
+        rule.runOnIdle { input.value = "" }
         move(host.width - 5f, host.height - 30f, host.height - 10f)
         assertEquals(host.right - 8f, card().right, 1f)
         assertTrue(card().bottom <= host.bottom - 38f + 1f)
@@ -224,12 +228,14 @@ class HardwareCandidatePositionTest {
         rule.runOnIdle { text.value = "ce shi shu ru" }
         rule.waitForIdle()
         assertTrue(requireNotNull(preeditBounds).width() > short)
+        // 贴底时拼音画在浮条里，不再浮在浮条上方压住 App 的输入框（用户 11-20）。
         rule.runOnIdle { docked.value = true }
         rule.waitForIdle()
         rule.onNodeWithTag("hardware-candidate-card", true).assertDoesNotExist()
+        rule.onNodeWithTag("hardware-preedit-card", true).assertDoesNotExist()
         assertNull(candidateBounds)
-        assertNotNull(preeditBounds)
-        rule.runOnIdle { text.value = "" }
+        assertNull(preeditBounds)
+        rule.runOnIdle { docked.value = false; text.value = "" }
         rule.waitForIdle()
         assertNull(preeditBounds)
     }

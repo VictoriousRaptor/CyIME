@@ -26,6 +26,8 @@ internal class InlineCompositionTracker {
     /** 还没打拼音时宿主最近报来的折叠光标：下一段编码从这里开始写。 */
     private var anchor = -1
     private var hostReportedSpan = false
+    /** 宿主报过的组合区起点；只知道开打前的光标、没报过组合区时为 -1。 */
+    val reportedStart: Int get() = if (hostReportedSpan) start else -1
 
     /**
      * onUpdateSelection（和新输入框的初始选区）：记下编码起点。宿主换了整段文字（setText）后光标常被放回开头，
@@ -60,6 +62,25 @@ internal class InlineCompositionTracker {
 }
 
 internal data class DetachedComposition(val start: Int, val end: Int)
+
+/**
+ * 编码显示在输入框时，长按空格挪编码里的光标，宿主里该放到的位置。先拿宿主文字（[content] 从 [contentStart] 起，
+ * 选区 [selStart]..[selEnd] 相对 [content]）核对编码在哪；有的宿主取不到文字、给的是旧文字，或上次放光标没照做，
+ * 核对不上就用宿主报过的组合区起点 [reportedStart]（用户 11-18：「拼音显示在输入框的时候无法移动，但是候选词是跟着移动而变化的」）。
+ * 两样都没有返回 null，不往编码外面放。
+ */
+internal fun inlineCaretPosition(
+    code: String, trackedCaret: Int, offset: Int,
+    content: CharSequence?, contentStart: Int, selStart: Int, selEnd: Int, reportedStart: Int,
+): Int? {
+    if (offset !in 0..code.length) return null
+    if (content != null && contentStart >= 0 && selStart in 0..content.length && selStart == selEnd) {
+        val start = selStart - trackedCaret
+        if (start >= 0 && start + code.length <= content.length &&
+            content.subSequence(start, start + code.length).toString() == code) return contentStart + start + offset
+    }
+    return if (reportedStart >= 0) reportedStart + offset else null
+}
 
 /**
  * 宿主重启输入后，在光标处找回被定格的拼音编码。光标必须是折叠的，且光标前后的文字

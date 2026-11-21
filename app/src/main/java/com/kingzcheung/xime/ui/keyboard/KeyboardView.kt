@@ -138,12 +138,36 @@ internal const val DEPLOY_NOTICE_DELAY_MS = 600L
 
 /**
  * 首选上拖选改局部（PR #363）：26 键全拼和双拼都有（11-18 全拼也接上，原来只有双拼，全拼上找不到）；
- * 九键、14 键等其它方案照旧用长按首选里的拆词重选，两种入口不同时出现。
+ * 内置 14 键全拼、双拼也有（11-20：引擎按合并键编码对字，已能换词；按键换成合并键的大写代表字母，见 [sentenceEditKey]）。
+ * 自建布局里每个键都只出一个字母的（没有双字母合并键，如乱序十七）也有，和 26 键一样（PR #516）。
+ * 九键、自建双字母合并键布局等其它方案照旧用长按首选里的拆词重选，两种入口不同时出现。
  */
 internal fun usesSentenceDragEdit(profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
     (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN ||
         profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN) &&
-        profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC
+        (profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC ||
+            profile.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14 ||
+            (profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.MERGED &&
+                com.kingzcheung.xime.settings.KeysConfigHelper.isSingleLetterSection(profile.layout.id)))
+
+/**
+ * 九键全拼首选上的拖选（11-20）：九键的引擎处理器全进程只有一个，开不了隔离会话列词，所以不开改局部的面板，
+ * 而是走长按拆词已有的九键重选：从拖选开头所在的词起重选，光标放到拖选最后一个字后面，候选栏就只给这几个字。
+ * 和 26 键一样，有了拖选就不再出长按拆词。九键双拼的注释是全拼、对不上数字键数，不打开。
+ */
+internal fun usesT9DragReselect(profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
+    profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN &&
+        profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9
+
+/**
+ * 拖选改局部时按下的键接到编码后面的样子；不是编码键时为 null。26 键是小写字母；内置 14 键的合并键（qw）
+ * 换成大写代表字母（Q），同打字时送给引擎的一样，l、m 和点选的单个字母照旧小写。
+ */
+internal fun sentenceEditKey(key: String, merged14: Boolean): String? = when {
+    com.kingzcheung.xime.rime.MergedLetterInput.isGroup(key, merged14) -> key.first().uppercase()
+    key.length == 1 && (key[0].lowercaseChar() in 'a'..'z' || key == ";" || key == "'") -> key.lowercase()
+    else -> null
+}
 
 /** Keep choices for the unconfirmed suffix when an earlier candidate is selected. */
 internal fun remainingSentenceSyllables(
@@ -429,8 +453,11 @@ fun KeyboardView(
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
     com.kingzcheung.xime.settings.KeysConfigHelper.cornerFullWidth = punctuationFull
+    // 按住空格说话滑到右上角锁定：空格和候选栏右端的锁共用这一份状态（SpaceVoiceLock）。
+    val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
         LocalInlineQuickActionEditor provides inlineEditor,
+        LocalSpaceVoiceLock provides spaceVoiceLock,
         LocalKeyGapLightVoice provides gapLightVoice,
         LocalKeyboardUndockFollow provides undockFollow,
         LocalKeyboardResizeOpacityEditing provides opacityEditingState.takeIf { resizeActive },
@@ -663,7 +690,9 @@ fun KeyboardView(
         var sentenceEdit by remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) {
             mutableStateOf<com.kingzcheung.xime.service.SentenceEditSession?>(null)
         }
-        var sentenceDragOwner by remember { mutableStateOf<com.kingzcheung.xime.service.SentenceEditSession?>(null) }
+        // 拖选范围只给拼音条读：把 State 本身交下去，拖动每换一个字只重绘拼音条，不重绘整块键盘（1.15.100 放大镜卡）。
+        val sentenceDragOwnerState = remember { mutableStateOf<com.kingzcheung.xime.service.SentenceEditSession?>(null) }
+        var sentenceDragOwner by sentenceDragOwnerState
         var sentenceDragRange by remember { mutableStateOf<Pair<Int, Int>?>(null) }
         var sentenceDragRequest by remember { mutableIntStateOf(0) }
         var sentenceDragLoading by remember { mutableStateOf(false) }
@@ -886,6 +915,8 @@ fun KeyboardView(
             }
             callbacks.onPreeditKeyInput = if (sentenceEdit != null) ({ key ->
                 val owner = sentenceEdit
+                val typed = sentenceEditKey(key,
+                    state.inputProfile.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14 && !state.isAsciiMode)
                 when {
                     owner == null -> false
                     sentenceApplying -> true
@@ -925,8 +956,8 @@ fun KeyboardView(
                         if (sentenceCode.isEmpty()) viewModel.setCandidatePageExpanded(false)
                         true
                     }
-                    key.length == 1 && (key[0].lowercaseChar() in 'a'..'z' || key == ";" || key == "'") -> {
-                        sentenceCode = (if (sentenceReplaceOnType) "" else sentenceCode) + key.lowercase()
+                    typed != null -> {
+                        sentenceCode = (if (sentenceReplaceOnType) "" else sentenceCode) + typed
                         sentenceJustSelected = false
                         sentenceReplaceOnType = false
                         sentenceWordCode = ""
@@ -987,7 +1018,8 @@ fun KeyboardView(
         var incognitoConfirm by remember(state.inputSessionId) { mutableStateOf(false) }
         // 中文全拼、双拼 26 键：菜单里的「滑行输入」开关的是「中文滑行输入」（其他中文键盘不滑行，不出现）。
         val chineseGlideMenu = !state.isAsciiMode &&
-            com.kingzcheung.xime.glide.chineseGlideSupported(state.inputProfile, state.currentSchemaId)
+            com.kingzcheung.xime.glide.chineseGlideSupported(state.inputProfile, state.currentSchemaId,
+                inputPreferences.externalGlideEncodings)
         // 九键：菜单里的「滑行输入」开关「九键滑行」（用户 11-09：开了以后键盘上找不到地方关）。
         val nineGlideMenu = state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9
         val traditionalSwitchApplies = !state.isAsciiMode && !state.isHandwritingMode &&
@@ -1032,9 +1064,7 @@ fun KeyboardView(
                                 ((nineGlideMenu || state.isAsciiMode || chineseGlideMenu) && inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD)))
                             ({ item.button.flipGesture(quickContext, inputPreferences, chineseGlideMenu, nineGlideMenu) }) else return null
                     ToolbarButton.SOUND -> ({
-                        val on = !(quickToggles.sound || quickToggles.vibration)
-                        SettingsPreferences.setSoundEnabled(quickContext, on)
-                        SettingsPreferences.setVibrationEnabled(quickContext, on)
+                        SettingsPreferences.setSoundAndVibrationEnabled(quickContext, !(quickToggles.sound || quickToggles.vibration))
                     })
                     ToolbarButton.FLOATING -> ({
                         viewModel.closeOverlay()
@@ -1333,15 +1363,20 @@ fun KeyboardView(
             }
 
             val editFrame = preeditFrame.takeIf { inputPreferences.showCodeInCandidateBar && preeditEditSession != null }
+            // 点小签、气泡时记下拼音原来在哪，编辑条从那里渐渐长成原样（11-21）；编辑条关掉就清掉。
+            val preeditOrigin = remember { mutableStateOf<PreeditOrigin?>(null) }
             val drawPreeditEditor: (@Composable () -> Unit)? = if (editFrame == null) null else ({
+                DisposableEffect(Unit) { onDispose { preeditOrigin.value = null } }
                 PreeditEditorBar(editFrame, keyBgColor, candidateTextColor, accentColor,
                     onClose = { closePreeditEditor() },
                     onCaret = { editPreedit(caret = it) },
                     onReplace = { editPreedit(text = it) },
-                    preedit = candidateState.value.preeditText, inline = inputPreferences.inlinePreeditPreview,
-                    onCaretBounds = preeditMagnifierAnchor?.let { anchor -> { anchor.value = it } })
+                    preedit = candidateState.value.preeditText,
+                    onCaretBounds = preeditMagnifierAnchor?.let { anchor -> { anchor.value = it } },
+                    openFrom = preeditOrigin.value)
             })
-            if (!inputPreferences.inlinePreeditPreview) drawPreeditEditor?.invoke()
+            // 气泡和「紧贴候选上方」的小签点开后，都是同一个原来的编辑条，浮在键盘上方（11-21 他要求小签点开也恢复原样，不缩小）。
+            drawPreeditEditor?.invoke()
 
             // 候选栏与展开页共用：展开页从同一版本中实际显示的候选之后接着排。
             var visibleBarAssociations by remember(singleCharFilter) { mutableStateOf(emptyList<String>()) }
@@ -1461,7 +1496,8 @@ fun KeyboardView(
                             else cs.highlightedCandidateIndex,
                         hardwareHighlightIndex = hardwareCandidateHighlight,
                         associationHighlightIndex = cs.focusedT9AssociationIndex,
-                        expandAssociations = cs.pendingEnglishText.isEmpty(),
+                        // 英文补全也能往左拉展开（用户 11-20）；展开页接着栏里露出的往下排，栏里第一个是已打的原词。
+                        expandAssociations = true,
                     )
                 }
             }
@@ -1481,19 +1517,28 @@ fun KeyboardView(
             val correctionScheme = remember(state.currentSchemaId) {
                 com.kingzcheung.xime.settings.DoublePinyinSchemes.find(state.currentSchemaId)
             }
-            val correctionMarks = remember(cs.correctedCandidates, correctionVisible, correctionScheme, doublePinyinKeysShown) {
+            // 候选上方那行拼音不管「显示纠错标记」开没开都显示首选的纠正读音；候选旁边的只在开着时显示。
+            val allCorrectionMarks = remember(cs.correctedCandidates, correctionScheme, doublePinyinKeysShown) {
                 when {
-                    !correctionVisible -> emptyMap()
                     correctionScheme == null || !doublePinyinKeysShown -> cs.correctedCandidates
                     else -> cs.correctedCandidates.mapValues { (_, marks) ->
                         com.kingzcheung.xime.rime.CorrectionMarks.doublePinyin(marks, correctionScheme)
                     }
                 }
             }
+            val correctionMarks = if (correctionVisible) allCorrectionMarks else emptyMap()
+            // 「拼音显示声调」：双拼显示按键时拼音是按键不是拼法，不标。
+            val preeditToneData = rememberPreeditToneData(inputPreferences.preeditTones &&
+                !(correctionScheme != null && doublePinyinKeysShown))
+            // 「显示自造词角标」关着时不画小铅笔，候选宽度也按没角标算；学习照常。
+            val learnedMarkVisible = rememberLearnedMarkVisible()
             androidx.compose.runtime.CompositionLocalProvider(
-                LocalLearnedCandidates provides cs.learnedCandidates,
+                LocalLearnedCandidates provides if (learnedMarkVisible) cs.learnedCandidates else emptySet(),
                 LocalCorrectedCandidates provides correctionMarks,
-                LocalSentenceSelection provides sentenceDragOwner,
+                LocalPreeditLineCorrections provides allCorrectionMarks,
+                LocalPreeditToneData provides preeditToneData,
+                LocalSentenceSelection provides sentenceDragOwnerState,
+                LocalPreeditOrigin provides preeditOrigin,
                 LocalSentenceCandidateHighlight provides sentenceEdit?.let { owner ->
                     val replacement = sentenceReplacement(owner)
                     SentenceCandidateHighlight(owner.sentence(replacement), owner.start, owner.start + replacement.length)
@@ -1509,7 +1554,7 @@ fun KeyboardView(
                         }
                     }
                 } else Modifier)
-                    .clipboardPanelExpandGesture().drawWithContent {
+                    .clipboardPanelExpandGesture().spaceVoiceLockTarget(spaceVoiceLock, accentColor).drawWithContent {
                     drawContent()
                     InputLatencyTrace.finish(candidateState.value.traceEventId, "draw-submitted")
                 },
@@ -1656,6 +1701,12 @@ fun KeyboardView(
                                 android.widget.Toast.makeText(quickContext, "这句话暂时无法按字对应编码", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
+                    } else if (sentenceEdit == null && !showHandwritingCandidates && !glossSwap && !state.isAsciiMode &&
+                        usesT9DragReselect(state.inputProfile) && callbacks.onReselectSentenceRange != null &&
+                        !expandedDataMode && (cs.candidates.firstOrNull()?.length ?: 0) >= 2) { start, end ->
+                        val sentence = cs.candidates.firstOrNull()
+                        if (sentence != null && callbacks.isCandidateSnapshotCurrent(cs))
+                            callbacks.onReselectSentenceRange?.invoke(sentence, start, end)
                     } else null,
                     onClearAssociation = {
                         toolbarFeedback()
@@ -1694,6 +1745,10 @@ fun KeyboardView(
                         callbacks.onUpdateQuickActions?.invoke(inlineEditor.finish())
                     },
                     onEditQuickActions = startInlineEditing,
+                    onCollapseCandidates = {
+                        toolbarFeedback()
+                        viewModel.setCandidatePageExpanded(false)
+                    },
                     onShowMoreCandidates = {
                         toolbarFeedback()
                         candidatePageOpening++
@@ -1820,12 +1875,15 @@ fun KeyboardView(
                     }
                 }
                 val barAssociationCount = visibleBarAssociations.size
+                // 栏里的联想序号：英文打字时第一个是已打的原词（[associationWordAt] 同一规矩），展开页接着往下排。
+                val barAssociationWords = if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported)
+                    listOf(cs.pendingEnglishText) + cs.associationCandidates else cs.associationCandidates
                 CandidatePage(
                     state = CandidatePageState(
                         candidates = sentenceEdit?.let { sentenceWords.mapIndexed { index, word -> CandidateEntry(word.text, globalIndex = index) } }
                             ?: expandedEntries,
                         engineRevision = displayedExpandedRevision,
-                        associationCandidates = if (sentenceEdit != null) emptyList() else cs.associationCandidates.drop(barAssociationCount),
+                        associationCandidates = if (sentenceEdit != null) emptyList() else barAssociationWords.drop(barAssociationCount),
                         backgroundColor = keyboardBgColor,
                         textColor = candidateTextColor,
                         keyBackgroundColor = keyBgColor,
@@ -1843,6 +1901,10 @@ fun KeyboardView(
                         floating = state.isFloatingMode,
                     ),
                     callbacks = CandidatePageCallbacks(
+                        onCollapse = {
+                            toolbarFeedback()
+                            viewModel.setCandidatePageExpanded(false)
+                        },
                         onCandidateSelect = { entry ->
                             if (sentenceEdit != null) {
                                 if (sentenceWordsCode == sentenceCode && sentenceWordsSelection == sentenceSelected) sentenceWords.getOrNull(entry.globalIndex)?.let {
@@ -1877,10 +1939,10 @@ fun KeyboardView(
                         }.takeIf { sentenceEdit == null && (cs.isComposing || cs.candidates.isNotEmpty()) },
                         onAssociationSelect = select@{ index ->
                             val sourceIndex = index + barAssociationCount
-                            val word = cs.associationCandidates.getOrNull(sourceIndex) ?: return@select
+                            val word = barAssociationWords.getOrNull(sourceIndex) ?: return@select
                             val current = candidateState.value
                             if (cs.pendingEnglishText != current.pendingEnglishText ||
-                                current.associationCandidates.getOrNull(sourceIndex) != word) return@select
+                                com.kingzcheung.xime.service.associationWordAt(current, sourceIndex) != word) return@select
                             callbacks.onAssociationSelect?.invoke(sourceIndex)
                             viewModel.setCandidatePageExpanded(false)
                         },
@@ -1981,7 +2043,8 @@ fun KeyboardView(
                 else -> null
             }
             Column(Modifier.clipboardUnderlaySize(clipboardPanel, state.keyboardHeightDp).fillMaxSize()
-                .cySwapFadeIn(underlaySwapKey, instantKey = listOf(state.isAsciiMode, state.inputProfile.language))
+                .then(if (state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID) Modifier
+                    else Modifier.cySwapFadeIn(underlaySwapKey, instantKey = listOf(state.isAsciiMode, state.inputProfile.language)))
                 .excludeRevealedKeyboardPanels(panelsSeeKeyboardBackground, candidateReveal, overlayReveal).then(
                 if (candidatePageExpanded || overlayVisible) Modifier.clearAndSetSemantics {} else Modifier
             // 全屏手写开着工具面板时书写区仍露在面板上方，照旧不动它。
@@ -2488,8 +2551,9 @@ fun KeyboardView(
                 revealState = overlayReveal,
             ) {
             // 面板里换页（菜单进剪贴板、表情和符号互换等）新页快速淡入；符号页打开没有揭幕，打开本身也淡入。
-            Box(Modifier.fillMaxSize().cySwapFadeIn(retainedOverlay?.route?.let { it::class },
-                fadeOnFirst = symbolPageSwap)) {
+            Box(Modifier.fillMaxSize().then(if (state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID &&
+                retainedOverlay?.route is OverlayRoute.Symbol) Modifier else Modifier.cySwapFadeIn(retainedOverlay?.route?.let { it::class },
+                fadeOnFirst = symbolPageSwap))) {
             when (val p = retainedOverlay) {
                 is KeyboardPage.Overlay -> when (p.route) {
                     is OverlayRoute.Menu -> MenuBar(
@@ -2645,14 +2709,15 @@ fun KeyboardView(
                     )
                     is OverlayRoute.Symbol -> SymbolKeyboardLayout(
                         onKeyPressDown = callbacks.onKeyPressDown,
+                        onKeyRelease = callbacks.onKeyRelease,
                         isFloatingMode = state.isFloatingMode,
                         onSelectExact = { symbol ->
                             (callbacks.onCommitExactText ?: callbacks.onCommitText)?.invoke(symbol)
                         },
                         onSelect = { symbol ->
                             // 删除键的清空、撤回同其他键盘（11-05「部分页面的删除键功能缺失」）。
+                            // 按键音和振动已在删除键按下时给（onKeyPressDown），这里不再补一次振动。
                             if (symbol == "delete" || symbol == "clear_all" || symbol == "undo_clear") {
-                                onHapticFeedback?.invoke()
                                 callbacks.onKeyPress(symbol, false)
                             } else {
                                 callbacks.onCommitText?.invoke(symbol)
@@ -3056,7 +3121,7 @@ private class SentenceParts(val words: List<String>, val reselect: (Int) -> Unit
 private fun sentenceParts(callbacks: KeyboardCallbacks, cs: com.kingzcheung.xime.service.CandidateState,
     word: String, first: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): SentenceParts? {
     val reselect = callbacks.onReselectSentenceWord ?: return null
-    if (usesSentenceDragEdit(profile)) return null
+    if (usesSentenceDragEdit(profile) || usesT9DragReselect(profile)) return null
     if (!first || !cs.isComposing || cs.candidates.firstOrNull() != word) return null
     val words = callbacks.sentenceWords(word)?.takeIf { it.size >= 2 } ?: return null
     return SentenceParts(words) { target ->

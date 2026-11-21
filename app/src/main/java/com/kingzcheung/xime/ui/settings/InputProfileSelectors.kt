@@ -136,8 +136,9 @@ private fun SchemeTextCard(label: String, preview: String, chosen: Boolean, tag:
             .then(if (height != null) Modifier.height(height) else Modifier.heightIn(min = 48.dp)).testTag(tag)
             .then(if (isAction) Modifier.clickable(role = Role.Button, onClick = onClick)
                 else Modifier.selectable(chosen, role = Role.RadioButton, onClick = onClick))
-            .padding(horizontal = 10.dp, vertical = 3.dp), contentAlignment = Alignment.Center) {
-            Column(Modifier.padding(horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // 「方案管理」卡片窄（88dp 起），两层左右留白占掉 32dp，四个字放不下被截成「方案管」（#491）：动作卡片少留白。
+            .padding(horizontal = if (isAction) 4.dp else 10.dp, vertical = 3.dp), contentAlignment = Alignment.Center) {
+            Column(Modifier.padding(horizontal = if (isAction) 0.dp else 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (isAction) Icon(Icons.Outlined.Settings, null, Modifier.size(16.dp), tint = contentColor.copy(alpha = .75f))
                 else Text(preview, style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = .75f),
                     textAlign = TextAlign.Center, maxLines = 1)

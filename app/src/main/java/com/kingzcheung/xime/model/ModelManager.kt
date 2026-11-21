@@ -114,9 +114,18 @@ object ModelManager {
     fun getModelsByCategory(category: ModelCategory): List<ModelInfo> =
         allModels().filter { it.category == category }
 
-    // Kept for existing callers; the built-in catalog is available offline from process start.
+    /** 启动时用本机存的网上模型目录（[RemoteModelVersions]）补上内置模型的新版本；没有时只用内置版本。 */
+    fun loadCachedRemote(context: Context) {
+        val remote = RemoteModelVersions.cached(context)
+        if (remote.isNotEmpty()) _modelsFlow.value = RemoteModelVersions.merge(BuiltinModelCatalog.models, remote)
+    }
+
+    /** 联网读网上模型目录，内置模型有新版本时列出来；读不到时保持原样，内置版本始终离线可用。 */
     suspend fun loadFromRemote(context: Context) {
-        _modelsFlow.value = BuiltinModelCatalog.models
+        val remote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { RemoteModelVersions.refresh(context.applicationContext ?: context) }.getOrNull()
+        } ?: return
+        _modelsFlow.value = RemoteModelVersions.merge(BuiltinModelCatalog.models, remote)
     }
 
 
@@ -270,8 +279,6 @@ object ModelManager {
                     if (state is ModelDownloadState.Complete) {
                         // 日语词库下好马上解开、引擎设为只读，不等下次 Rime 准备。
                         com.kingzcheung.xime.settings.JapanesePack.afterInstall(context, model.id)
-                        // 轻量版下好语音、声纹模型时，语音引擎还没有就一起下。
-                        com.kingzcheung.xime.speech.SpeechEnginePack.afterInstall(context, model)
                         // 轻量版下好汉字手写模型时，生僻字模板一起下。
                         com.kingzcheung.xime.handwriting.HandwritingRarePack.afterInstall(context, model)
                         notifyInstalledModelsChanged()

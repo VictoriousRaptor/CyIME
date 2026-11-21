@@ -55,6 +55,8 @@ engine:
     - punct_translator
     - table_translator
   filters:
+    # 日文汉字、韩文汉字、粤语字（设置 › 中文输入，默认关）：开关关着时这些字不出（11-20 他：仓颉、注音都要一样），见 lua/cyime_char_lists.lua。
+    - lua_filter@*cyime_char_lists
     - simplifier
     # 单字提前要在去重之前：它会先取一批候选，放在去重后面，繁简同形的字（傳、传都转成传）会去不掉
     - single_char_filter

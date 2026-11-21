@@ -14,11 +14,15 @@ internal object CandidateModelAssets {
     private fun disabledKey(id: String) = "candidate_model_disabled_$id"
     private val verifiedRuntime = ConcurrentHashMap<String, List<String>>()
 
+    /** 候选模型清单：内置的加上网上模型目录补的新版本（[RemoteModelVersions]），按文件认下载时要认得出新版本。 */
+    private fun catalog(): List<ModelInfo> =
+        ModelManager.getAllModels().filter { model -> CandidateModelCatalog.models.any { it.id == model.id } }
+
     fun setDisabled(context: Context, id: String, disabled: Boolean) {
         SettingsPreferences.getPrefsPublic(context).edit().putBoolean(disabledKey(id), disabled).commit()
     }
 
-    fun isDisabledAsset(context: Context, name: String): Boolean = CandidateModelCatalog.models.any { model ->
+    fun isDisabledAsset(context: Context, name: String): Boolean = catalog().any { model ->
         model.files.any { it.name == name } &&
             SettingsPreferences.getPrefsPublic(context).getBoolean(disabledKey(model.id), false)
     }
@@ -31,7 +35,7 @@ internal object CandidateModelAssets {
         .joinToString("\n")
 
     /** 用户下载过同名的候选模型（如九键词组模型）时，安装包自带的那份不再同步回 rime/，免得把用户的选择换回去。 */
-    private fun hasEnabledDownload(context: Context, name: String): Boolean = CandidateModelCatalog.models.any { model ->
+    private fun hasEnabledDownload(context: Context, name: String): Boolean = catalog().any { model ->
         model.versions.any { version -> version.files.any { it.name == name } } &&
             !SettingsPreferences.getPrefsPublic(context).getBoolean(disabledKey(model.id), false) &&
             model.versions.any { hasDownloadedModelFiles(ModelStorage.getModelDir(context, model.id), it) }
@@ -65,7 +69,7 @@ internal object CandidateModelAssets {
         }
     }
 
-    fun installAvailable(context: Context, models: List<ModelInfo> = CandidateModelCatalog.models) {
+    fun installAvailable(context: Context, models: List<ModelInfo> = catalog()) {
         for (model in models) {
             if (SettingsPreferences.getPrefsPublic(context).getBoolean(disabledKey(model.id), false)) continue
             val source = ModelStorage.getModelDir(context, model.id)
@@ -106,7 +110,7 @@ internal object CandidateModelAssets {
      * 的下载（100~200 MB）就不再起作用，删掉。不是硬链接（拷贝安装）时无法确认归属，保持原样。
      */
     fun dropUnusedNgramVariant(context: Context) {
-        val variants = CandidateModelCatalog.models
+        val variants = catalog()
             .filter { it.id == CandidateModelCatalog.NGRAM || it.id == CandidateModelCatalog.NGRAM_SMALL }
         val runtime = File(context.filesDir, "rime")
         val active = activeVariant(runtime, variants.map { it to ModelStorage.getModelDir(context, it.id) })
@@ -120,7 +124,7 @@ internal object CandidateModelAssets {
 
     /** 整个条目都已停用（如九键长句增强）：已下载的文件不再参与排序，删掉；自定义同名文件保留。 */
     private fun dropRetiredModels(context: Context) {
-        for (model in CandidateModelCatalog.models) {
+        for (model in catalog()) {
             if (model.versions.isEmpty() || !model.versions.all { it.retired }) continue
             // 语法增强在没有九键词组模型时仍参与九键排序，只在装了词组模型后删（dropSupersededGrammar）。
             if (model.id == CandidateModelCatalog.GRAMMAR) continue
@@ -141,11 +145,11 @@ internal object CandidateModelAssets {
      */
     fun dropSupersededGrammar(context: Context) {
         val runtime = File(context.filesDir, "rime")
-        val ngramInstalled = CandidateModelCatalog.models
+        val ngramInstalled = catalog()
             .filter { it.id == CandidateModelCatalog.NGRAM || it.id == CandidateModelCatalog.NGRAM_SMALL }
             .any { model -> model.versions.any { hasDownloadedModelFiles(runtime, it) } }
         if (!ngramInstalled) return
-        val grammar = CandidateModelCatalog.models.firstOrNull { it.id == CandidateModelCatalog.GRAMMAR } ?: return
+        val grammar = catalog().firstOrNull { it.id == CandidateModelCatalog.GRAMMAR } ?: return
         val modelDir = ModelStorage.getModelDir(context, grammar.id)
         val names = grammar.versions.flatMap { it.files }.map { it.name }.distinct()
         if (names.none { File(runtime, it).isFile || File(modelDir, it).isFile }) return
@@ -166,7 +170,7 @@ internal object CandidateModelAssets {
     }
 
     private fun knownCatalogOwner(name: String, file: File): ModelInfo? =
-        CandidateModelCatalog.models.firstOrNull { matchesAnyVersion(it, name, file) }
+        catalog().firstOrNull { matchesAnyVersion(it, name, file) }
 
     /** Explicit deletion only removes known catalog content, never a custom same-name file. */
     fun removeRuntimeCopy(context: Context, model: ModelInfo): Boolean {

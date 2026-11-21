@@ -33,26 +33,26 @@ object ModelIndexLoader {
         val baseUrls = cfg.baseUrls
 
         FileLogger.i(TAG, "Loading model index from ${baseUrls.size} mirrors")
+        fetchIndexText(baseUrls)?.let(::parseModelsIndex).orEmpty()
+    }
 
+    /** 依次试各条线路，返回第一份能解析出模型的目录原文；都不行时为 null。 */
+    internal fun fetchIndexText(baseUrls: List<String>): String? {
         for (base in baseUrls) {
             val host = base.substringAfter("://").substringBefore("/")
             try {
                 val url = base.trimEnd('/') + "/" + MODELS_INDEX_PATH
                 val text = fetchText(url)
-                if (text != null) {
-                    val result = parseModelsIndex(text)
-                    if (result.isNotEmpty()) {
-                        FileLogger.i(TAG, "Loaded ${result.size} models from $host")
-                        return@withContext result
-                    }
+                if (text != null && parseModelsIndex(text).isNotEmpty()) {
+                    FileLogger.i(TAG, "Loaded model index from $host")
+                    return text
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to fetch from $host: ${e.message}")
             }
         }
-
         FileLogger.w(TAG, "All mirrors failed for model index")
-        emptyList()
+        return null
     }
 
     internal fun parseModelsIndex(modelsText: String): List<ModelInfo> {
@@ -106,6 +106,7 @@ object ModelIndexLoader {
             ?: ((versionNode["archive"] as? YamlMap)?.get("sha256") as? YamlScalar)?.content ?: ""
         val archiveUrl = (versionNode["archive"] as? YamlMap)
             ?.let { (it["url"] as? YamlScalar)?.content }
+        val archiveMirrors = strings((versionNode["archive"] as? YamlMap)?.get("mirrors"))
 
         return ModelVersion(
             version = version,
@@ -114,7 +115,8 @@ object ModelIndexLoader {
             files = parseFiles(versionNode),
             archiveUrl = archiveUrl,
             size = size,
-            sha256 = sha256
+            sha256 = sha256,
+            archiveMirrors = archiveMirrors,
         )
     }
 
@@ -126,9 +128,13 @@ object ModelIndexLoader {
             val url = (fileEntry["url"] as? YamlScalar)?.content ?: ""
             ModelFile(name = name, downloadUrl = url,
                 sha256 = (fileEntry["sha256"] as? YamlScalar)?.content.orEmpty(),
-                sizeBytes = (fileEntry["sizeBytes"] as? YamlScalar)?.content?.toLongOrNull() ?: 0)
+                sizeBytes = (fileEntry["sizeBytes"] as? YamlScalar)?.content?.toLongOrNull() ?: 0,
+                mirrors = strings(fileEntry["mirrors"]))
         }
     }
+
+    private fun strings(node: Any?): List<String> =
+        (node as? YamlList)?.items?.mapNotNull { (it as? YamlScalar)?.content }.orEmpty()
 
     private fun parseCategory(category: String): ModelCategory {
         return when (category.lowercase()) {

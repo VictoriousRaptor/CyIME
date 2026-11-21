@@ -56,7 +56,7 @@ internal fun JapanesePackStatus(modifier: Modifier = Modifier, showReady: Boolea
             // 1.16 起轻量版的日语手写模板也是下载的：只缺它时日语打字不受影响。
             missing.all { it.id == com.kingzcheung.xime.model.BuiltinModelCatalog.JAPANESE_HANDWRITING } ->
                 "日语手写要先下载假名模板（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}），下好前手写认不出假名，打字不受影响。"
-            else -> "日语要先下载词库和转换引擎（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}），下好前只显示罗马字。"
+            else -> "日语要先下载词库（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}）。"
         }
         Text(text, style = MaterialTheme.typography.bodySmall,
             color = if (failed != null && downloading == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)

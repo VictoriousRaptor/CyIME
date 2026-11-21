@@ -74,4 +74,15 @@ class ModelAutoUpdaterTest {
         assertFalse(ModelAutoUpdater.isNewer(m, v2, v2))
         assertFalse(ModelAutoUpdater.isNewer(m, ModelVersion(version = "x"), v1))
     }
+
+    @Test fun scansAtMostEverySixHoursAcrossRestarts() {
+        val hour = 60 * 60 * 1000L
+        val last = 1_000_000_000_000L
+        assertTrue(ModelAutoUpdater.scanDue(0L, last))
+        assertFalse(ModelAutoUpdater.scanDue(last, last + 10 * 60 * 1000L))
+        assertFalse(ModelAutoUpdater.scanDue(last, last + 5 * hour))
+        assertTrue(ModelAutoUpdater.scanDue(last, last + 6 * hour))
+        // 时钟往回调过：不卡住。
+        assertTrue(ModelAutoUpdater.scanDue(last, last - hour))
+    }
 }

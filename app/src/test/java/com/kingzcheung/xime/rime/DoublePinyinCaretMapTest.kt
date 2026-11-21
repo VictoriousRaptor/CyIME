@@ -65,4 +65,24 @@ class DoublePinyinCaretMapTest {
         assertNull(DoublePinyinCaretMap.build("shuang", "ulpb", flypy))
         assertNull(DoublePinyinCaretMap.build("shuang'pin'ni", "ulpb", flypy))
     }
+    // 11-19 平板：小鹤双拼编辑栏 woxlvidcvegewftidedaaj，点在 ge 的 g、e 中间选「我想知道这个」，
+    // 后面从 e 开始重新切成 ew fen id……拼音条成了乱码。光标落到音节分界才对。
+    @Test fun aTapInsideADoublePinyinSyllableLandsOnItsBoundary() {
+        val raw = "woxlvidcvegewftidedaaj"
+        val reading = "wo'xiang'zhi'dao'zhe'ge'wen'ti'de'da'an"
+        assertEquals(12, snapDoublePinyinCaret(raw, reading, flypy, 11))
+        assertEquals(10, snapDoublePinyinCaret(raw, reading, flypy, 10))
+        assertEquals(10, snapDoublePinyinCaret(raw, reading, flypy, 11, direction = -1))
+        assertEquals(12, snapDoublePinyinCaret(raw, reading, flypy, 11, direction = 1))
+        assertEquals(0, snapDoublePinyinCaret(raw, reading, flypy, 0))
+        assertEquals(raw.length, snapDoublePinyinCaret(raw, reading, flypy, raw.length))
+        // Keys shown as typed (全拼显示关着) and keys echoed after the caret pair up two by two.
+        assertEquals(4, snapDoublePinyinCaret("woxlvidc", "wo xl vi dc", flypy, 3))
+        assertEquals(6, snapDoublePinyinCaret("woxlvidc", "wo'xiang vidc", flypy, 5))
+        // A lone last key (just an initial) and readings that don't line up leave the caret alone.
+        assertEquals(5, snapDoublePinyinCaret("woxlv", "wo'xiang'zh", flypy, 5))
+        assertEquals(3, snapDoublePinyinCaret("woxl", "", flypy, 3))
+        // Separators the user typed are boundaries on both sides.
+        assertEquals(3, snapDoublePinyinCaret("wo'xl", "wo'xiang", flypy, 3))
+    }
 }

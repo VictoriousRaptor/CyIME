@@ -34,7 +34,7 @@ internal fun SchemaLanguageDialog(schema: SchemaMeta, onChosen: (InputLanguage?)
         text = {
             Column {
                 Text((if (!schema.languageChosen && current != null) "这个方案没写语言，现在按方案名当作${current.displayName}。" else "这个方案没写语言。") +
-                    "选好后，字母布局、语音和手写按这个语言走；方案文件不改，不用重新部署。",
+                    "布局、语音和手写会按这个语言。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp))
                 (SchemaLanguageChoice.choices + listOf<InputLanguage?>(null)).forEach { language ->

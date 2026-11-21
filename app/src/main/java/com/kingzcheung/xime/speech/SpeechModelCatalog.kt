@@ -18,7 +18,7 @@ object SpeechModelCatalog {
     private const val RELEASE = "https://github.com/Cyletix/CyIME/releases/download/models/"
     private const val reazonBase = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/291488c8151be24d7da4bf7af26e533fad96e407"
     val models = listOf(
-        ModelInfo(ZIPFORMER_JA_INT8, "Zipformer · 日语轻量", "约 153 MB，原版的 INT8 量化版；说话中预览、停顿后定稿，准确度与原版可能不同。", ModelCategory.ASR,
+        ModelInfo(ZIPFORMER_JA_INT8, "Zipformer · 日语轻量", "约 153 MB，边说边预览，停顿后定稿。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "291488c8151b", size = "153.0 MB", files = listOf(
                 ModelFile("encoder-epoch-99-avg-1.int8.onnx", "$reazonBase/encoder-epoch-99-avg-1.int8.onnx", "2c7bd08a8a99f9ddd0d9e458456577b1f6279214e51426f114f9eced44c54e1d", 154670139L,
                     mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-encoder-epoch-99-avg-1.int8.onnx")),
@@ -29,7 +29,7 @@ object SpeechModelCatalog {
                 ModelFile("tokens.txt", "$reazonBase/tokens.txt", "2c3ac659818a48a0c04010e0593bbc4d7c8a24a054340b01131499c05fd52def", 45754L,
                     mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-tokens.txt"))
             )))),
-        ModelInfo(ZIPFORMER_JA, "Zipformer · 日语原版", "约 586 MB，FP32 原版；说话中预览、停顿后定稿，加载及识别耗时较长。", ModelCategory.ASR,
+        ModelInfo(ZIPFORMER_JA, "Zipformer · 日语原版", "约 586 MB，边说边预览，停顿后定稿，加载较慢。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "291488c8151b", size = "586.4 MB", files = listOf(
                 ModelFile("encoder-epoch-99-avg-1.onnx", "$reazonBase/encoder-epoch-99-avg-1.onnx", "ecdb0b771e16104aaf8e579cb3c1e32fbd589eb641c5946d82b615bd366c5f96", 592347848L,
                     mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-fp32-291488c8151b-encoder-epoch-99-avg-1.onnx")),
@@ -42,7 +42,7 @@ object SpeechModelCatalog {
             )))),
         // Paraformer、SenseVoice 国内原来只有 hf-mirror 一条线路，两百多 MB 常常很慢：加 CyIME 魔搭仓库的同名副本
         // （和 Release `models` 逐字节相同，下载后仍按哈希校验；魔搭上还没有时 404，自动换下一条）。
-        ModelInfo("paraformer-zh-en-int8", "Paraformer · 中英", "中英流式识别，边说边出字；int8 量化。", ModelCategory.ASR,
+        ModelInfo("paraformer-zh-en-int8", "Paraformer · 中英", "中英识别，边说边出字。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "8e40c43232a1", size = "226.2 MB", files = listOf(
                 ModelFile("decoder.int8.onnx", "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en/resolve/8e40c43232a1c5c66c82111efc5820d3accca11b/decoder.int8.onnx", "f3cca9f77bb9d93c8fcbfb63ae617b6b1ee96818df3aa3b151c40658fe38594f", 71664561L,
                     mirrors = listOf(RELEASE + "paraformer-zh-en-int8-8e40c43232a1-decoder.int8.onnx", DownloadMirrors.CYIME_MODELSCOPE + "paraformer-zh-en-int8-8e40c43232a1-decoder.int8.onnx")),
@@ -52,7 +52,7 @@ object SpeechModelCatalog {
                     mirrors = listOf(RELEASE + "paraformer-zh-en-int8-8e40c43232a1-tokens.txt", DownloadMirrors.CYIME_MODELSCOPE + "paraformer-zh-en-int8-8e40c43232a1-tokens.txt"))
             )))),
         // 2026-10-30 回放：公开口语 CER 6.1 %（SenseVoice 整句 7.2 %），平板外放实测与豆包同为 5.6 %；只用于中文整句定稿。
-        ModelInfo(XASR, "X-ASR · 中英整句定稿", "可选。中文开着「整句定稿」时（只用 SenseVoice，或 Paraformer / Zipformer 加 SenseVoice 二次校正），下载后改用它定稿：更准、更快；只用于中文。", ModelCategory.ASR,
+        ModelInfo(XASR, "X-ASR · 中英整句定稿", "可选。中文说完后用它整句定稿，更准更快。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "2026-06-03", size = "136.4MB",
                 archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2", sha256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224",
                 archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2"),

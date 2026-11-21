@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -92,15 +93,17 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
     var hideDoublePinyin by remember { mutableStateOf(draft.hideDoublePinyin) }
     // 「更多配置」：从跳转页回来仍停在这一页；回答每次打开都从现在的设置读起。
     var showMore by rememberSaveable { mutableStateOf(false) }
-    var moreFacts by remember { mutableStateOf<SetupMoreFacts?>(null) }
-    var moreAnswers by remember { mutableStateOf<SetupMoreChoices?>(null) }
-    var moreResult by remember { mutableStateOf<List<String>?>(null) }
+    // 从跳转页回来接着显示原来的内容（11-19 用户：回来选项变回去、页面拉回顶上）：内容一直在，滚动位置才接得上；
+    // 「好了」比的仍是这次打开时的设置。只有从推荐配置页重新点进来才从头读。
+    var moreFacts by remember { mutableStateOf(draft.moreFacts) }
+    var moreAnswers by remember { mutableStateOf(draft.moreAnswers) }
+    var moreResult by remember { mutableStateOf(draft.moreResult) }
     LaunchedEffect(showMore) {
         if (!showMore) return@LaunchedEffect
         val read = withContext(Dispatchers.IO) { SetupGuide.readMore(context) }
-        moreFacts = read
+        val opened = moreFacts
+        moreFacts = if (opened == null) read else read.copy(current = opened.current)
         moreAnswers = read.current
-        moreResult = null
     }
     LaunchedEffect(Unit) {
         val read = withContext(Dispatchers.IO) { SetupGuide.readFacts(context) }
@@ -122,6 +125,9 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
         draft.allowMetered = allowMetered
         draft.hideDoublePinyin = hideDoublePinyin
         draft.keepRemoveIds(removable, removeIds)
+        draft.moreFacts = moreFacts
+        draft.moreAnswers = moreAnswers
+        draft.moreResult = moreResult
     }
     if (showMore) {
         BackHandler { showMore = false }
@@ -147,6 +153,7 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
                 else moreResult = SetupMore.changes(from, to)
             },
             onDone = onDone,
+            scroll = draft.moreScroll,
         )
         return
     }
@@ -172,7 +179,13 @@ fun SetupGuideScreen(firstRun: Boolean, onDone: () -> Unit, onOpenPerformance: (
         onSkip = { SetupGuide.markShown(context); onDone() },
         onDone = onDone,
         // 没按推荐设置就直接去「更多配置」，也算看过这一页，下次不再自动弹出。
-        onOpenMore = { SetupGuide.markShown(context); showMore = true },
+        onOpenMore = {
+            SetupGuide.markShown(context)
+            moreFacts = null; moreAnswers = null; moreResult = null
+            scope.launch { draft.moreScroll.scrollTo(0) }
+            showMore = true
+        },
+        scroll = draft.scroll,
     )
 }
 
@@ -186,6 +199,12 @@ class SetupGuideDraft : ViewModel() {
     var result: SetupGuide.Result? = null
     var allowMetered: Boolean = false
     var hideDoublePinyin: Boolean = SetupGuidePlanner.HIDE_OTHER_DOUBLE_PINYIN_BY_DEFAULT
+    var moreFacts: SetupMoreFacts? = null
+    var moreAnswers: SetupMoreChoices? = null
+    var moreResult: List<String>? = null
+    /** 两页各自的滚动位置：进「更多配置」、跳转页再回来停在原处（rememberScrollState 离开这一段界面就没了）。 */
+    val scroll = ScrollState(0)
+    val moreScroll = ScrollState(0)
     private var removable: Set<String>? = null
     private var removeIds: Set<String> = emptySet()
 
@@ -218,6 +237,7 @@ internal fun SetupGuideContent(
     /** 首次设置时不给：先走完这一页。 */
     onOpenPerformance: (() -> Unit)? = null,
     onOpenMore: (() -> Unit)? = null,
+    scroll: ScrollState = rememberScrollState(),
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -238,12 +258,11 @@ internal fun SetupGuideContent(
         }
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(scroll).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Spacer(Modifier.height(4.dp))
-            Text("告诉 CyIME 你平时怎么打字、打算怎么用，它会照你的习惯设好打字方式和键盘，" +
-                "再看这台设备的情况推荐留哪些模型、删掉哪些用不到的，让应用少占空间。",
+            Text("回答几个问题，按你的习惯设好键盘，并清掉用不到的模型。",
                 style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (facts == null || plan == null) {
                 Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
@@ -272,7 +291,7 @@ internal fun SetupGuideContent(
                         Text("正在整理…", style = GuideText.optionTitle())
                     } else Text("按推荐设置", style = GuideText.optionTitle())
                 }
-                Text("以后想换，随时可以在 设置 → 配置选择 → 按设备推荐配置 重新选；删掉的模型在用到时会提示下载。",
+                Text("以后可以随时重新设置。",
                     style = GuideText.note(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 onOpenMore?.let { MoreEntry(it) }
                 Spacer(Modifier.height(24.dp))
@@ -493,18 +512,17 @@ private fun AnswerSection(facts: SetupFacts, answers: SetupAnswers, onAnswers: (
         Triple(false, "不用字幕", (if (facts.captionIconChangeable) "桌面上不放「字幕」图标(已有的会变灰，可长按移除)，" else "") +
             "删掉分清谁在说话的模型。以后想用，在 设置 → 扩展 → 插件 里装「字幕」"),
     ), answers.caption, "setup-caption",
-        note = "「字幕」是 CyIME 里单独的一个页面：把身边的人说的话实时变成大字显示在屏幕上，还能分清是谁在说。" +
-            "适合开会、上课，或和听力不好的人当面说话。用不用都不影响打字和语音输入。") {
+        note = "「字幕」把身边的人说的话实时变成大字，适合开会、上课或和听力不好的人交流。") {
         onAnswers(answers.copy(caption = it))
     }
     // 用户 11-04：有人被几百兆吓退、内存不够。选了就只留必需的；默认照上次的回答，没答过是“没有”。
     GuideQuestion("有内存焦虑吗？", listOf(
-        Triple(true, "有，能省就省", "只留必需的模型，九键用精简版(首选略差)，语音空闲 ${SetupGuidePlanner.SAVER_VOICE_IDLE_MINUTES} 分钟就从内存卸掉"),
+        Triple(true, "有，能省就省", "只留必需的模型，九键用精简版，语音空闲后尽快卸载"),
         Triple(false, "没有", "按这台${facts.device}的情况推荐"),
     ), answers.memorySaver, "setup-memory-saver") { onAnswers(answers.copy(memorySaver = it)) }
     // 用户 11-12：选项太少。答“有”时再列现在开着、关掉能省内存的功能，多选，默认一个不选，点了才关。
     if (answers.memorySaver && facts.memoryExtras.isNotEmpty()) {
-        Text("还可以关掉这些(现在都开着，点一下选上，按推荐设置时关掉)：",
+        Text("还可以关掉这些：",
             style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             facts.memoryExtras.forEach { extra ->
@@ -517,7 +535,7 @@ private fun AnswerSection(facts: SetupFacts, answers: SetupAnswers, onAnswers: (
             }
         }
     }
-    if (answers.memorySaver) Text("实际占了多少，可以在 设置 → 关于 → 存储空间 最上面的「运行内存」看。",
+    if (answers.memorySaver) Text("占用情况见 设置 → 关于 → 存储空间。",
         style = GuideText.note(), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
@@ -653,7 +671,7 @@ private fun MoreEntry(onClick: () -> Unit) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("更多配置", style = GuideText.optionTitle(), color = MaterialTheme.colorScheme.primary)
-                Text("滑行输入、角标滑动还是长按、上下滑方向、候选栏取消按钮、长按空格、删除键、字大小、声音振动等。可以不设",
+                Text("滑行、角标、删除键、字号、声音振动等，可以跳过",
                     style = GuideText.body(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -679,6 +697,7 @@ internal fun SetupMoreContent(
     onApply: () -> Unit,
     onDone: () -> Unit,
     onOpenRoute: ((String) -> Unit)? = null,
+    scroll: ScrollState = rememberScrollState(),
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -700,7 +719,7 @@ internal fun SetupMoreContent(
         }
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(scroll).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Spacer(Modifier.height(4.dp))
@@ -718,7 +737,7 @@ internal fun SetupMoreContent(
                 }
                 Spacer(Modifier.height(24.dp))
             } else {
-                Text("选中的是现在的设置。点哪项就马上改成哪项，和设置页里那个开关是同一个设置。",
+                Text("选中的是现在的设置，点一下立即生效。",
                     style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 MoreQuestions(facts, answers, onAnswers)
                 if (onOpenRoute != null) {
@@ -776,7 +795,7 @@ private fun MoreQuestions(facts: SetupMoreFacts, answers: SetupMoreChoices, onAn
     val lower = if (answers.reverseSwipe) "下滑" else "上滑"
     if (SetupMore.cornerLockedByGlide(answers.glide)) {
         GuideHeading("按键角标的符号和数字")
-        Text("开着滑行，字母键的滑动都用来滑词：按住字母键输入上方角标，下方角标不再显示。",
+        Text("开着滑行时，角标改为长按输入。",
             style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else GuideQuestion("按键角标的符号和数字怎么输入？", com.kingzcheung.xime.ui.keyboard.CornerInputChoice.entries.map { choice ->
         Triple(choice, choice.label, when (choice) {

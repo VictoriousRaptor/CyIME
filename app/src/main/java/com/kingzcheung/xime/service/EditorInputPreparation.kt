@@ -60,6 +60,8 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
                 // 换了方向的条目时，该语言的选中条目也跟着换，语言键切回来、菜单里打勾的都是它。
                 if (stored != saved && target == stored && !policy.scoped) InputModes.selectProfile(service, target,
                     InputModes.languageOf(target, service.uiState.value.schemas))
+                // 字母排列（双拼、码表、英文的 QWJRTK、Colemak、自己排的布局）也换成这个方向记的那个（用户 11-20）。
+                if (!policy.scoped) com.kingzcheung.xime.settings.LetterLayouts.restoreForOrientation(service)
                 val refreshName = service.uiState.value.currentSchemaId != target || service.uiState.value.schemas.isEmpty() ||
                     service.schemaNameStale
                 service.schemaNameStale = false

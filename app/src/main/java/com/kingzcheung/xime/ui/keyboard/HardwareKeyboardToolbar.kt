@@ -1,7 +1,13 @@
 package com.kingzcheung.xime.ui.keyboard
 
 import android.graphics.Rect
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.tween
@@ -57,6 +63,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import com.kingzcheung.xime.ui.theme.CyMotion
+import com.kingzcheung.xime.ui.theme.cySwapFadeIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -124,6 +135,12 @@ internal fun HardwareKeyboardToolbar(
     /** 「锁定浮窗位置」：不能拖动，按钮照常能点。 */
     positionLocked: Boolean = false,
     onBottomDockChanged: (Boolean) -> Unit = {},
+    /** 贴底时的拼音：画在候选左边，不再浮在浮条上方挡住 App 的输入框（见 HardwareBarSteady.kt）。空串不画。 */
+    preeditText: String = "",
+    /** 浮条或候选卡挡住了正在打的字：两者一起变淡。 */
+    overlapFaded: Boolean = false,
+    /** 报告浮条自己是否挡住了正在打的字。 */
+    onCoversTyping: (Boolean) -> Unit = {},
 ) {
     val themeKey = com.kingzcheung.xime.ui.theme.LocalKeyboardPalette.current?.key ?: backgroundColor
     val shadowRadius = with(LocalDensity.current) { 1.dp.toPx() }
@@ -134,7 +151,19 @@ internal fun HardwareKeyboardToolbar(
     val currentBoundsCallback by rememberUpdatedState(onBoundsChanged)
     val currentPositionCallback by rememberUpdatedState(onPositionChange)
     val currentPosition by rememberUpdatedState(position)
-    DisposableEffect(Unit) { onDispose { currentBoundsCallback(null) } }
+    val currentCoversTyping by rememberUpdatedState(onCoversTyping)
+    DisposableEffect(Unit) { onDispose { currentBoundsCallback(null); currentCoversTyping(false) } }
+    // 打字中（含停手后 [HARDWARE_TOOLS_RETURN_MS] 内）：右侧按钮收成细边，条子宽度、位置都不变（用户 11-20）。
+    // 字与字之间候选会短暂为空、上屏后又出联想，只看这一刻有没有候选，按钮就会每个字进出一次，候选区宽度跟着变。
+    var typingHold by remember { mutableStateOf(false) }
+    LaunchedEffect(composing) {
+        if (composing) typingHold = true
+        else { kotlinx.coroutines.delay(HARDWARE_TOOLS_RETURN_MS); typingHold = false }
+    }
+    val typing = composing || typingHold
+    // 点细边把按钮放出来，再打一个字又收起。
+    var toolsPeek by remember { mutableStateOf(false) }
+    LaunchedEffect(candidatesRevision, typing) { if (!typing || composing) toolsPeek = false }
 
     var hostScreenOrigin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { hostScreenOrigin = it.positionOnScreen() },
@@ -171,11 +200,12 @@ internal fun HardwareKeyboardToolbar(
         // 正在打字时宽条也这样收：五个图标占掉近 250dp，候选只剩四五个的位置（用户 11-13：打字时图标太多，候选显示不全）。
         // 上屏后的联想照旧（图标都在），不打字时也照旧。
         val hasCandidates = bottomCandidateContent != null
+        val collapseTools = showCandidateStrip && typing && !toolsPeek
         val compactStrip = showCandidateStrip &&
-            ((composing && hasCandidates) || hardwareCandidateStripIsCompact(minOf(720.dp, usableWidth).value))
+            (typing || hardwareCandidateStripIsCompact(minOf(720.dp, usableWidth).value))
         var moreExpanded by remember { mutableStateOf(false) }
-        LaunchedEffect(compactStrip, hasCandidates, candidatesRevision) {
-            if (!compactStrip || hasCandidates) moreExpanded = false
+        LaunchedEffect(compactStrip, hasCandidates, candidatesRevision, collapseTools) {
+            if (!compactStrip || hasCandidates || collapseTools) moreExpanded = false
         }
         val samsung = samsungBottomBar && bottomDocked
         val targetWidth = if (samsung) maxWidth
@@ -224,6 +254,17 @@ internal fun HardwareKeyboardToolbar(
             ?: if (samsung) HardwareToolbarOffset(animatedOffset.x, animatedOffset.y)
             else geometry.constrain(animatedOffset.x, animatedOffset.y)
         val currentResting by rememberUpdatedState(displayedOffset)
+        // 拖着浮条时按屏幕最高刷新率跟手（用户 11-19）。
+        HighRefreshWhile(dragging != null)
+        // 挡住正在打的字：浮条和候选卡一起在 220ms 内淡到 40% 透明，不挡了再恢复（用户 11-20，与 Windows 一致）。
+        // 拖动时不算：手里拖着的东西要看得清。
+        val typingLine = hardwareTypingLine(cursorAnchor?.inHost(hostScreenOrigin.x, hostScreenOrigin.y),
+            editorBounds?.inHost(hostScreenOrigin.x, hostScreenOrigin.y), gap * 3)
+        val coversTyping = dragging == null && HardwareCandidateExclusion(displayedOffset.x.roundToInt(), displayedOffset.y.roundToInt(),
+            displayedOffset.x.roundToInt() + renderedWidthPx, displayedOffset.y.roundToInt() + measuredSize.height).overlaps(typingLine)
+        LaunchedEffect(coversTyping) { currentCoversTyping(coversTyping) }
+        val overlapAlpha by animateFloatAsState(if ((overlapFaded || coversTyping) && dragging == null) HARDWARE_OVERLAP_ALPHA else 1f,
+            tween(HARDWARE_OVERLAP_FADE_MS), label = "hardware-toolbar-overlap")
         val currentDock by rememberUpdatedState(dockAtEdge)
         val currentLocked by rememberUpdatedState(positionLocked)
         // 拖动中松手会停靠到哪：先画出那里的轮廓（设置里「拖近时有蓝色轮廓」），
@@ -316,6 +357,7 @@ internal fun HardwareKeyboardToolbar(
                     val bounds = coordinates.boundsInWindow()
                     currentBoundsCallback(Rect(floor(bounds.left).toInt(), floor(bounds.top).toInt(), ceil(bounds.right).toInt(), ceil(bounds.bottom).toInt()))
                 }
+                .graphicsLayer { alpha = overlapAlpha }
                 .clip(shape).then(surface?.invoke() ?: Modifier.background(backgroundColor))
                 .testTag("hardware-keyboard-toolbar").padding(padding)
                 .glassTextHalo(textSurface?.halo),
@@ -341,40 +383,51 @@ internal fun HardwareKeyboardToolbar(
                 if (mode == HardwareToolbarMode.FULL) auxiliaryActions()
                 HardwareToolbarLanguageKey(protectedContentColor, languageActions, languageLabel, onSwitchLanguage, buttonSize, capsLock, accentColor)
             }
+            val stripWidth = (toolbarWidth - padding * 2).coerceAtLeast(0.dp)
+            // 候选区：贴底时拼音在最左（只长不缩），候选每换一次轻轻淡入，动画只在这里面，条子本身不动。
+            val candidateArea: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                if (statusText == null && preeditText.isNotEmpty()) HardwareStripPreedit(stripWidth * HARDWARE_PREEDIT_SLOT_FRACTION) {
+                    PreeditLabel(preeditText, CandidateBarVisuals(backgroundColor, contentColor, Color.Transparent, accentColor,
+                        selectedTextColor, preeditBackgroundColor = Color.Transparent).withTextSurface(textSurface),
+                        followTextTail = true)
+                }
+                Box(Modifier.weight(1f).testTag("hardware-docked-candidates").cySwapFadeIn(candidatesRevision)) {
+                    if (statusText != null) HardwareToolbarStatus(statusText, protectedContentColor)
+                    else if (showCandidateContent) bottomCandidateContent?.invoke()
+                }
+            }
             if (samsung) {
                 // Samsung-style docked bar: collapse at the left, the numbered candidates spread
                 // across the full width, and the language key at the right.
-                Row(Modifier.width((toolbarWidth - padding * 2).coerceAtLeast(0.dp)).height(candidateRowHeight)
+                Row(Modifier.width(stripWidth).height(candidateRowHeight)
                     .testTag("hardware-samsung-bar"), verticalAlignment = Alignment.CenterVertically) {
                     onHideKeyboard?.let { hide ->
                         HardwareToolbarAction(Icons.Default.KeyboardArrowDown, "收起", "hardware-toolbar-hide",
                             protectedContentColor, onClick = hide)
                     }
-                    Box(Modifier.weight(1f).testTag("hardware-docked-candidates")) {
-                        if (statusText != null) HardwareToolbarStatus(statusText, protectedContentColor)
-                        else if (showCandidateContent) bottomCandidateContent?.invoke()
+                    candidateArea()
+                    HardwareStripTools(collapseTools, protectedContentColor, onPeek = { toolsPeek = true }) {
+                        HardwareToolbarAction(Icons.Default.Keyboard, "展开屏幕键盘", "hardware-toolbar-keyboard", protectedContentColor, onClick = onShowKeyboard)
+                        HardwareToolbarLanguageKey(protectedContentColor, languageActions, languageLabel, onSwitchLanguage,
+                            capsLock = capsLock, capsColor = accentColor)
                     }
-                    HardwareToolbarAction(Icons.Default.Keyboard, "展开屏幕键盘", "hardware-toolbar-keyboard", protectedContentColor, onClick = onShowKeyboard)
-                    HardwareToolbarLanguageKey(protectedContentColor, languageActions, languageLabel, onSwitchLanguage,
-                        capsLock = capsLock, capsColor = accentColor)
                 }
             } else if (showCandidateStrip) {
-                Row(Modifier.width((toolbarWidth - padding * 2).coerceAtLeast(0.dp)).height(candidateRowHeight),
+                Row(Modifier.width(stripWidth).height(candidateRowHeight),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (compactStrip && moreExpanded) Row(Modifier.weight(1f).testTag("hardware-toolbar-more-actions"),
                         horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                         auxiliaryActions()
-                    } else Box(Modifier.weight(1f).testTag("hardware-docked-candidates")) {
-                        if (statusText != null) HardwareToolbarStatus(statusText, protectedContentColor)
-                        else if (showCandidateContent) bottomCandidateContent?.invoke()
+                    } else candidateArea()
+                    HardwareStripTools(collapseTools, protectedContentColor, onPeek = { toolsPeek = true }) {
+                        HardwareToolbarAction(Icons.Default.Keyboard, "展开屏幕键盘", "hardware-toolbar-keyboard", protectedContentColor, onClick = onShowKeyboard)
+                        if (compactStrip) HardwareToolbarAction(Icons.Default.MoreHoriz, if (moreExpanded) "收起更多" else "更多",
+                            "hardware-toolbar-more", protectedContentColor, size = 40.dp, active = moreExpanded,
+                            onClick = { moreExpanded = !moreExpanded })
+                        else auxiliaryActions()
+                        HardwareToolbarLanguageKey(protectedContentColor, languageActions, languageLabel, onSwitchLanguage,
+                            capsLock = capsLock, capsColor = accentColor)
                     }
-                    HardwareToolbarAction(Icons.Default.Keyboard, "展开屏幕键盘", "hardware-toolbar-keyboard", protectedContentColor, onClick = onShowKeyboard)
-                    if (compactStrip) HardwareToolbarAction(Icons.Default.MoreHoriz, if (moreExpanded) "收起更多" else "更多",
-                        "hardware-toolbar-more", protectedContentColor, size = 40.dp, active = moreExpanded,
-                        onClick = { moreExpanded = !moreExpanded })
-                    else auxiliaryActions()
-                    HardwareToolbarLanguageKey(protectedContentColor, languageActions, languageLabel, onSwitchLanguage,
-                        capsLock = capsLock, capsColor = accentColor)
                 }
             }
             else if (vertical || essentialStacked) Column(horizontalAlignment = Alignment.CenterHorizontally) { actions() }
@@ -413,6 +466,43 @@ internal fun HardwareKeyboardToolbar(
                 .testTag("hardware-toolbar-dock-preview"))
         }
     }
+}
+
+/**
+ * 候选长条右侧的按钮。打字时收成一条细边（宽度让给候选，条子总宽不变），点细边放出来；
+ * 收起、放出只在条子里面横向展开、淡入淡出。
+ */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.HardwareStripTools(
+    collapsed: Boolean, color: Color, onPeek: () -> Unit, content: @Composable () -> Unit,
+) {
+    AnimatedVisibility(collapsed, enter = fadeIn(CyMotion.enter()) + expandHorizontally(CyMotion.enter()),
+        exit = fadeOut(CyMotion.exit(CyMotion.EXIT_FAST)) + shrinkHorizontally(CyMotion.exit(CyMotion.EXIT_FAST))) {
+        Box(Modifier.width(16.dp).height(40.dp).clickable(role = Role.Button, onClick = onPeek)
+            .semantics { contentDescription = "显示工具按钮" }.testTag("hardware-toolbar-tools-edge"),
+            contentAlignment = Alignment.Center) {
+            Box(Modifier.width(3.dp).height(20.dp).clip(CircleShape).background(color.copy(alpha = .35f)))
+        }
+    }
+    AnimatedVisibility(!collapsed, enter = fadeIn(CyMotion.enter()) + expandHorizontally(CyMotion.enter(), expandFrom = Alignment.Start),
+        exit = fadeOut(CyMotion.exit(CyMotion.EXIT_FAST)) + shrinkHorizontally(CyMotion.exit(CyMotion.EXIT_FAST), shrinkTowards = Alignment.End)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { content() }
+    }
+}
+
+/**
+ * 贴底时候选左边的拼音格：只长不缩，按 40dp 一档长，最宽 [maxWidth]（再长就在格里跟着末尾滚）。
+ * 一次输入结束（格子离开）才重新从窄的开始。
+ */
+@Composable
+private fun HardwareStripPreedit(maxWidth: Dp, content: @Composable () -> Unit) {
+    val slot = remember { IntArray(1) }
+    Box(Modifier.layout { measurable, constraints ->
+        val maxPx = minOf(constraints.maxWidth, maxWidth.roundToPx())
+        val placeable = measurable.measure(Constraints(0, maxPx.coerceAtLeast(0), 0, constraints.maxHeight))
+        slot[0] = hardwareGrowOnlyWidth(slot[0], placeable.width, 40.dp.roundToPx(), maxPx)
+        layout(slot[0], placeable.height) { placeable.place(0, 0) }
+    }.padding(start = 4.dp).testTag("hardware-docked-preedit")) { content() }
 }
 
 /** Like Gboard's pill: a plain icon in a full-size touch target; the circle shows only while pressed or on. */

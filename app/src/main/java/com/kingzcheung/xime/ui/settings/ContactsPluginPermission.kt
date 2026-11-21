@@ -35,4 +35,4 @@ internal fun rememberContactsPermissionGate(pluginId: String): (Boolean, () -> U
     }
 }
 
-internal const val CONTACTS_DENIED = "没有通讯录权限，插件没有打开。可在系统设置 › 应用 › CyIME › 权限里允许通讯录"
+internal const val CONTACTS_DENIED = "需要通讯录权限，请在系统设置里允许"

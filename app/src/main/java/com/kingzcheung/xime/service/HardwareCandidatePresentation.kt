@@ -35,16 +35,16 @@ internal data class HardwareCandidatePresentation(
 }
 
 /**
- * 一页引擎候选（默认 20 个）在工具条上分几组显示，每组放得下 [fit] 个：组数按放得下的算，个数平均分。
- * 原来每组都放满、最后剩几个单成一组：放得下 9 个时是 9、9、2，第三组后面空一大片，每页都这样循环
- * （11-16 用户反馈，平板接蓝牙键盘输 yi）。现在是 7、7、6：不重复、不漏，也不留大片空白。
+ * 一页引擎候选（默认 20 个）在工具条上分几组显示，每组放得下 [fit] 个。前面的组放满；只剩两组的量时
+ * 两组平分：放得下 9 个时是 9、6、5，不再 9、9、2 那样最后一组空一大片（11-16 用户反馈，平板接蓝牙键盘输 yi）。
+ * 第一组照旧放满：原来整页平分成 7、7、6，每打一个字候选条先按 10 个画满、量完缩成 7 个，宽度来回跳（用户 11-19）。
  */
 internal fun hardwareWindowSize(remaining: Int, fit: Int): Int {
     if (remaining <= 0) return 0
     val f = fit.coerceIn(1, HARDWARE_PAGE_SIZE)
     if (remaining <= f) return remaining
-    val groups = (remaining + f - 1) / f
-    return (remaining + groups - 1) / groups
+    if (remaining >= 2 * f) return f
+    return (remaining + 1) / 2
 }
 
 internal const val HARDWARE_PAGE_SIZE = 10

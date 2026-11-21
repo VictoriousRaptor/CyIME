@@ -29,6 +29,22 @@ class PairedSymbolsTest {
 
     @org.junit.After fun restoreDeferredChecks() {
         PairedSymbols.deferCaretCheck = defaultDefer
+        PairedSymbols.forgetCaretIgnoringApps()
+    }
+
+    /** 查出不认光标位置的应用记下来，之后在它里面不再补结尾（#489：结尾闪一下又被删）；正常编辑框不记。 */
+    @Test fun anAppThatIgnoresTheCaretIsRemembered() {
+        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
+        }
+        val (text, caret) = PairedSymbols.commitFor("（")
+        assertTrue(connection.commitTextWithCaret(text, caret, "normal.app"))
+        settle()
+        assertFalse(PairedSymbols.ignoresCaret("normal.app"))
+        assertTrue(ignoring.commitTextWithCaret(text, caret, "com.philkes.notallyx"))
+        settle()
+        assertTrue(PairedSymbols.ignoresCaret("com.philkes.notallyx"))
+        assertFalse(PairedSymbols.ignoresCaret(null))
     }
 
     private fun settle() {

@@ -1133,8 +1133,7 @@ object SchemaManager {
         val result = SchemaManifestManager.uninstallWithManifest(context, packageId)
         if (!result.success) return result
         SettingsPreferences.removeInstalledMarketId(context, packageId)
-        val installed = discoverSchemas(context).associateBy { it.schemaId }
-        val available = installed.keys
+        val available = discoverSchemas(context).map { it.schemaId }.toSet()
         val previous = getEnabledSchemas(context)
         val remaining = previous.filter { it in available }
         if (remaining != previous) setEnabledSchemas(context, remaining)
@@ -1143,10 +1142,8 @@ object SchemaManager {
             val fallback = remaining.firstOrNull() ?: fallbackNativeSchema(available).firstOrNull()
             if (fallback != null) {
                 SettingsPreferences.setCurrentSchema(context, fallback)
-                val replacement = installed[fallback]
-                if (replacement != null && InputModes.selectedProfiles(context)[replacement.language] == current) {
-                    InputModes.selectProfile(context, replacement.toSchemaInfo())
-                }
+                // 下次启动按「该语言选中的方案」恢复（InputProfile），只回退 currentSchema 会继续指向已删的包。
+                InputModes.selectProfile(context, fallback)
             }
         }
         return result

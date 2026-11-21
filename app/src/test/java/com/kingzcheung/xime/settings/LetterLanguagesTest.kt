@@ -57,7 +57,7 @@ class LetterLanguagesTest {
             assertEquals(fresh + letters.language, LanguagePreferences.withSchemaLanguage(fresh, letters.schemaId))
             assertFalse(letters.schemaId in CyimeInputDefaults.recommended)
         }
-        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.JAPANESE, InputLanguage.ENGLISH), InputLanguage.speech)
+        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE), InputLanguage.speech)
     }
 
     @Test fun `schemas are bundled and only mark the language`() {

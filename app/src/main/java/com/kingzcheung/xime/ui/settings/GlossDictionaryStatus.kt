@@ -57,7 +57,7 @@ internal fun GlossDictionaryStatus(startRequest: Int) {
                 is ModelDownloadState.Downloading ->
                     if (state.progress > 0f) "正在下载释义词典 ${(state.progress * 100).toInt()}%…" else "正在下载释义词典…"
                 is ModelDownloadState.Error -> "释义词典下载失败：${state.message}"
-                else -> "释义词典还没下载(约 $size)，现在仍显示拼音。"
+                else -> "释义词典还没下载(约 $size)。"
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (state is ModelDownloadState.Downloading) MaterialTheme.colorScheme.onSurfaceVariant

@@ -436,6 +436,76 @@ T9RightCommitHandler::ComputeRightCommitConsumption(
 }
 
 // ════════════════════════════════════════════════════════════════
+// 双拼九键：按键数消费
+// ════════════════════════════════════════════════════════════════
+
+int T9RightCommitHandler::DoublePinyinConsumedKeys(const T9Buffer& buf,
+                                                   const std::string& rime_input,
+                                                   size_t end) {
+    if (buf.selections.empty()) return -1;
+    int consumed = buf.consumed_count - buf.selections_digit_length();
+    if (consumed < 0) return -1;
+    end = std::min(end, rime_input.size());
+    size_t pos = 0;
+    auto skip_delimiters = [&] {
+        while (pos < rime_input.size() && (rime_input[pos] == '\'' || rime_input[pos] == ' ')) ++pos;
+    };
+    for (const auto& sel : buf.selections) {
+        skip_delimiters();
+        if (pos >= end) return consumed;
+        if (sel.pinyin.empty() || rime_input.compare(pos, sel.pinyin.size(), sel.pinyin) != 0) return -1;
+        pos += sel.pinyin.size();
+        if (end < pos) return consumed;  // 候选停在这个字的键位中间：这个字不算消费
+        consumed += sel.digit_length;
+    }
+    for (size_t k = pos; k < end; ++k) {
+        if (rime_input[k] >= '0' && rime_input[k] <= '9') ++consumed;
+    }
+    return consumed;
+}
+
+bool T9RightCommitHandler::HandleDoublePinyinCommit(
+    Context& ctx,
+    int consumed_keys,
+    const std::optional<SyllableOption>& prev_selected_option,
+    const std::optional<std::string>& prev_selection_candidate_digits,
+    const std::string& prev_confirmed_pinyin) {
+    const T9Buffer buf = ctx.input_buffer;
+    const int total = static_cast<int>(buf.digit_sequence.size());
+    if (consumed_keys >= total) {
+        ClearAndEnterIdle(ctx);
+        return true;
+    }
+    // 候选覆盖到哪个选中段为止：整段覆盖的去掉，后面的段原样保留。
+    int covered = buf.consumed_count - buf.selections_digit_length();
+    size_t cut = 0;
+    std::string consumed_pinyin;
+    while (cut < buf.selections.size() &&
+           covered + buf.selections[cut].digit_length <= consumed_keys) {
+        covered += buf.selections[cut].digit_length;
+        consumed_pinyin += buf.selections[cut].pinyin;
+        ++cut;
+    }
+    ctx.left_column_locked = false;
+    if (cut < buf.selections.size()) {
+        // 同 RemoveConsumedSelections：保留 consumed_count，剩下的选中段仍在。
+        ctx.state_machine.RemoveConsumedHistoryEntries(consumed_pinyin);
+        std::vector<SyllableOption> rest(buf.selections.begin() + cut, buf.selections.end());
+        ctx.input_buffer = T9Buffer(buf.digit_sequence, rest, buf.consumed_count,
+                                    buf.total_digits_entered);
+        RCLOG(">>   doublePinyin: cut=%zu, keep %zu selections", cut, rest.size());
+        return RestorePrevState(ctx, prev_selected_option,
+                                prev_selection_candidate_digits, prev_confirmed_pinyin);
+    }
+    // 选中段全部覆盖，未分配数字消费了一部分：剩下的数字重新输入（同 WithRemainingDigits）。
+    const std::string remaining = buf.digit_sequence.substr(consumed_keys);
+    RCLOG(">>   doublePinyin: all selections covered, remaining='%s'", remaining.c_str());
+    ctx.input_buffer = buf.WithRemainingDigits(remaining, buf);
+    ctx.TransitionToInput(false);
+    return ctx.input_buffer.is_empty();
+}
+
+// ════════════════════════════════════════════════════════════════
 // T9RightCommitHandler::HandleRightCommit 三层分流入口
 // ════════════════════════════════════════════════════════════════
 //
@@ -490,9 +560,14 @@ bool T9RightCommitHandler::HandleRightCommit(
     // 消除 ParseSyllables / PinyinToDigitCode 重复调用（S7 目标）。
     auto alignment = SyllableAlignment::FromCandidatePinyin(candidate_pinyin);
 
-    auto consumption = ComputeRightCommitConsumption(
-        buf, alignment, candidate_pinyin, route, rime_consumed_digits,
-        is_t9_user_word);
+    // 双拼九键有选中段：选中段是双拼键位，下面按全拼字母算的消费对不上
+    // （选 gua、hao 后选「挂号」剩下一个 2），改按 RIME 候选 end 换算的键数消费。
+    const bool by_keys = ctx.double_pinyin && has_selections && rime_consumed_digits >= 0;
+    auto consumption = by_keys
+        ? std::pair<std::string, std::string>{}
+        : ComputeRightCommitConsumption(
+            buf, alignment, candidate_pinyin, route, rime_consumed_digits,
+            is_t9_user_word);
     const std::string& remaining_digits = consumption.second;
 
     RCLOG(">> HandleRightCommit: hasSels=%d, hasUnassigned=%d, route=%d, unassigned='%s'",
@@ -525,8 +600,12 @@ bool T9RightCommitHandler::HandleRightCommit(
     ctx.last_choice_consumed_digits = std::nullopt;
 
     // 三层分流（策略模式，S3：基于 ClassifyRoute 结果 switch 分发）
-    bool is_full_commit;
-    switch (route) {
+    bool is_full_commit = false;
+    if (by_keys) {
+        RCLOG(">> BRANCH: doublePinyin keys (consumedKeys=%d)", rime_consumed_digits);
+        is_full_commit = HandleDoublePinyinCommit(
+            ctx, rime_consumed_digits, prev_opt, prev_digits, prev_conf);
+    } else switch (route) {
         case RouteType::kLetterBuffer_Selection:
             RCLOG(">> BRANCH: letterBuffer (selection state with unassigned)");
             is_full_commit = letter_buffer_strategy_->Handle(

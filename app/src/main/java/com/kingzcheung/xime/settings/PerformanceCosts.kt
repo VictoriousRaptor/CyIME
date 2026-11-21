@@ -41,6 +41,10 @@ object PerformanceCosts {
         CHINESE_GLIDE("chinese_glide", "中文滑行"),
         TRADITIONAL("traditional_output", "繁体输出"),
         RARE_CHARACTERS("rare_characters", "生僻字"),
+        // 11-20 从生僻字分出来的三张表，表小（几百条），开着时每键多查一次。
+        JAPANESE_KANJI("japanese_kanji", "日文汉字"),
+        KOREAN_HANJA("korean_hanja", "韩文汉字"),
+        CANTONESE_CHARACTERS("cantonese_characters", "粤语字"),
         DATETIME("datetime_candidates", "时间日期候选"),
         EMOJI("candidate_emoji", "候选里显示表情"),
         SYMBOL_NAMES("symbol_names", "打符号名出符号"),
@@ -173,6 +177,9 @@ object PerformanceCosts {
             Item.CHINESE_GLIDE -> input.chineseGlideTyping
             Item.TRADITIONAL -> input.traditionalOutput
             Item.RARE_CHARACTERS -> input.rareCharacters
+            Item.JAPANESE_KANJI -> input.japaneseKanji
+            Item.KOREAN_HANJA -> input.koreanHanja
+            Item.CANTONESE_CHARACTERS -> input.cantoneseCharacters
             Item.DATETIME -> input.datetimeCandidates
             Item.EMOJI -> input.candidateEmoji
             Item.SYMBOL_NAMES -> input.symbolNames
@@ -248,6 +255,9 @@ object PerformanceCosts {
             Item.CHINESE_GLIDE -> input.copy(chineseGlideTyping = on).save(context)
             Item.TRADITIONAL -> input.copy(traditionalOutput = on).save(context)
             Item.RARE_CHARACTERS -> input.copy(rareCharacters = on).save(context)
+            Item.JAPANESE_KANJI -> input.copy(japaneseKanji = on).save(context)
+            Item.KOREAN_HANJA -> input.copy(koreanHanja = on).save(context)
+            Item.CANTONESE_CHARACTERS -> input.copy(cantoneseCharacters = on).save(context)
             Item.DATETIME -> input.copy(datetimeCandidates = on).save(context)
             Item.EMOJI -> input.copy(candidateEmoji = on).save(context)
             Item.SYMBOL_NAMES -> input.copy(symbolNames = on).save(context)
@@ -520,8 +530,7 @@ object PerformanceCosts {
         val mb = source?.device?.voiceResident?.memoryMb?.takeIf { it >= 1 }
         val amount = if (source == null || mb == null) "语音模型会一直占着内存"
             else "语音模型会一直占着 ${mb.roundToInt()} MB 内存" + if (source.sameModel) "" else "(${deviceName(source.device)} 实测)"
-        return "$amount，其他应用退到后台后更容易被系统关掉。系统内存紧张时会自动卸掉语音模型，" +
-            "下次按麦克风先重新加载(平板实测 1.9 秒)，打字不受影响。"
+        return "$amount。内存紧张时系统会自动卸掉，下次按麦克风要先重新加载，打字不受影响。"
     }
 
     data class Total(

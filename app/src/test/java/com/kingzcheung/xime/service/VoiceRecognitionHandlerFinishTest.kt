@@ -570,6 +570,15 @@ class VoiceRecognitionHandlerFinishTest {
         assertEquals("How are you Fine", editor.toString())
     }
 
+    @Test fun `whole sentence keeps punctuation when the segment language is unspecified`() {
+        // #415：段语言不是恰好「中文」（未标注语言也按中文识别）时，开着自动加标点也只剩空格。
+        wholeSentence = true
+        autoPunctuation = true
+        startToolbar()
+        segmentedResult(SpeechSegment("今天天气不错，我们去公园吧。", InputLanguage.UNSPECIFIED, false))
+        assertEquals("今天天气不错，我们去公园吧。", editor.toString())
+    }
+
     @Test fun `whole sentence leaves Japanese with the old spacing`() {
         wholeSentence = true
         autoPunctuation = true

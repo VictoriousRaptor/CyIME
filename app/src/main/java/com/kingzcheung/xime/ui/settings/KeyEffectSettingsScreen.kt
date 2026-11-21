@@ -145,7 +145,7 @@ fun KeyEffectSettingsContent(
                         )
                         Text(
                             // 有人调了半天不知道强弱在哪调（用户转述 10-31）：直接说强弱归谁管。
-                            text = "跟随系统：强弱跟手机设置里的触感强度；想自己调强弱，选「启用」",
+                            text = "跟随系统：强弱跟系统设置一致",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -334,8 +334,8 @@ fun KeyEffectSettingsContent(
                         }
 
                         Text(
-                            text = if (uiState.hapticPrimitives) "为 0(「系统默认」)时用内置的轻触强度。「长按振动振幅」管按住删除键连删时的每一下，为 0 时和按键振动一样。"
-                                else "都为 0(「系统默认」)时用系统默认振动。「长按」两项管按住删除键连删时的每一下，为 0 时和按键振动一样。",
+                            text = if (uiState.hapticPrimitives) "设为 0 时用默认强度"
+                                else "设为 0 时用系统默认振动",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
@@ -368,7 +368,7 @@ internal fun KeyVisualEffectSettings(
             KeyVisualEffectToggle("键内炫光", "点按时显示半秒渐变光效。",
                 glowEnabled, onGlowChange, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GLOW)
             Spacer(Modifier.height(12.dp))
-            KeyVisualEffectToggle("键缝动效", "点按时光线沿键缝往四周走，删除时往回收，颜色跟主题。",
+            KeyVisualEffectToggle("键缝动效", "点按时光沿键缝扩散",
                 gapLight.enabled, onGapLightChange, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT)
             if (gapLight.enabled) KeyGapLightDetailSettings(gapLight, onGapLightConfigChange)
             Spacer(Modifier.height(12.dp))
@@ -464,17 +464,17 @@ private fun KeyGapLightDetailSettings(
             onChange(config.copy(layers = Math.round(it)))
         }
         // 画多少跟这三根滑条走：调大了每帧要画的线段更多。
-        Text("范围、层数、拖尾调大，每帧要画的线段更多。", style = MaterialTheme.typography.bodySmall,
+        Text("调大更耗电。", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
         // 每一种单独记性能开销（用户 11-11「性能一定要分的细一点」）：觉得卡可以只关最费的那种。
         // 每种动效的代价项见 PerformanceCosts.Item.KEY_GAP_LIGHT_*。
         KeyGapLightEventToggle("打字", "按键时光线往四周走。", config.typing, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_TYPING) { onChange(config.copy(typing = it)) }
         KeyGapLightEventToggle("删除", "删除时光线往回收。", config.delete, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_DELETE) { onChange(config.copy(delete = it)) }
-        KeyGapLightEventToggle("上屏和发送", "点空格一块光往上走，点回车整排往上扫。", config.commit, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_COMMIT) { onChange(config.copy(commit = it)) }
-        KeyGapLightEventToggle("切换大小写", "大写出现时从 Shift 扩开，取消时收回去。", config.switch, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SWITCH) { onChange(config.copy(switch = it)) }
-        KeyGapLightEventToggle("长按进度", "按住时线沿键边走一圈，走满就是长按生效。", config.hold, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_HOLD) { onChange(config.copy(hold = it)) }
-        KeyGapLightEventToggle("空格移光标", "进入时扩开一次，光柱跟着手指走，每走一格留一个刻度。", config.space, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SPACE) { onChange(config.copy(space = it)) }
-        KeyGapLightEventToggle("语音音量", "听写时两排键之间的键缝当音量条，从中间往两边长。", config.voice, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_VOICE) { onChange(config.copy(voice = it)) }
+        KeyGapLightEventToggle("上屏和发送", "点空格、回车时的光效", config.commit, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_COMMIT) { onChange(config.copy(commit = it)) }
+        KeyGapLightEventToggle("切换大小写", "切换大小写时的光效", config.switch, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SWITCH) { onChange(config.copy(switch = it)) }
+        KeyGapLightEventToggle("长按进度", "按住时沿键边显示进度", config.hold, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_HOLD) { onChange(config.copy(hold = it)) }
+        KeyGapLightEventToggle("空格移光标", "滑动空格移动光标时的光效", config.space, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SPACE) { onChange(config.copy(space = it)) }
+        KeyGapLightEventToggle("语音音量", "说话时键缝显示音量", config.voice, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_VOICE) { onChange(config.copy(voice = it)) }
     }
 }
 
@@ -526,7 +526,7 @@ private fun KeySoundCapturableSetting() {
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text("录屏时包含按键音", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Text("开启后录屏能录到按键音；按键音改跟随媒体音量，静音和振动模式下仍不出声",
+            Text("录屏时能录到按键音",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = capturable, onCheckedChange = null)

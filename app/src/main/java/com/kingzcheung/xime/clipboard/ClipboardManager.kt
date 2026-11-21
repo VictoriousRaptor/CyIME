@@ -947,12 +947,12 @@ class ClipboardManager private constructor(private val context: Context) {
         } else null
     }
 
-    fun getRecentItems(seconds: Int = 30): List<ClipboardItem> {
+    fun getRecentItems(seconds: Int = 30, includeCopied: Boolean = true): List<ClipboardItem> {
         val now = System.currentTimeMillis()
         val cutoff = now - seconds * 1000L
         // 候选栏只展示未消费的最近剪贴板项（用户点选上屏后标记 consumed 不再显示）
         val sms = _verificationCode.value?.takeIf { smsCodeSuggested(it.timestamp, now) }
-        return listOfNotNull(sms) + _clipboardItems.value.filter { it.timestamp >= cutoff && !it.consumed && it.text != sms?.text }
+        return recentBarItems(sms, _clipboardItems.value, cutoff, includeCopied)
     }
 
     /**

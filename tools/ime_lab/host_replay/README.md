@@ -140,6 +140,12 @@ the grammar file: the four flick cases, all 12 phrase lookups and the hidden che
 words are first both with the old schema (no filters) and with `cyime_candidate_policy` + `uniquifier`, the
 only difference being that the hidden 童话 is no longer offered.
 
+`NineKeyFuzzyProbe.java` (library dir, a disposable deployed user directory with `t9_pinyin` and
+`double_pinyin_flypy_t9`; compile with `LayoutSyncProbe.java` and the replay's `RimeEngine.java`) chooses
+rail readings and then a word on full-pinyin and Xiaohe double-pinyin nine keys and checks what is left.
+It includes two rail choices before the word (4942 → gx, hc → 挂号 must leave nothing; the rail holds
+double-pinyin keys while the candidate comment is full pinyin).
+
 `SharedShortcutProbe.java` checks shared symbol shortcuts on full and double pinyin with nine, 26
 and 14 keys. Set `CYIME_PHRASE_PROBE_DIR` to an empty scratch directory when running
 `PersonalDictManagerTest`, then copy its exported tables and patches into a disposable user directory

@@ -41,35 +41,35 @@ internal fun keyTipGroups(settings: KeyboardInputPreferences): List<KeyTipGroup>
             KeyTip("点一下 Shift", "下一个字母大写，打完自动回到小写。"),
             KeyTip("连点两下 Shift", "大写锁定，再点一下解除。"),
             KeyTip("按住 Shift 再点字母", "按住期间一直是大写。"),
-            KeyTip("从 Shift 拖到字母上松手", "只把这一个字母打成大写。14 键拖动时双字母键拆成单字母，停在哪个出哪个。"),
-            KeyTip("按住 Shift 看候选", "有英文的候选中英对调，这时点候选或按空格上屏英文。"),
+            KeyTip("从 Shift 拖到字母上松手", "只把这一个字母打成大写。"),
+            KeyTip("按住 Shift 看候选", "有英文的候选换成英文。"),
             KeyTip("从 Shift 拖到候选上松手", "这条候选有英文就上屏英文。"),
-            KeyTip("长按空格移光标时按住 Shift", "选中文字，和电脑上 Shift 加方向键一样。"),
+            KeyTip("长按空格移光标时按住 Shift", "选中文字。"),
         )),
         KeyTipGroup("Ctrl(左下角 !@# 键)", buildList {
-            add(KeyTip("按住 !@#", "按满 $hold 秒，这个键写成 Ctrl，字母键渐变成显示快捷键：全选、复制、粘贴、剪切、撤销、重做、保存、查找等；点一下开符号时键面不变。"))
-            add(KeyTip("按住 !@# 拖到字母上松手", "发送 Ctrl 加这个字母，和实体键盘一样；也可以另一根手指直接点字母。不用等快捷键显示出来。"))
-            add(KeyTip("按住 !@# 点回车", "发送消息，同 Ctrl+回车；也可以拖到回车上松手。还在打字时只上屏编码。"))
-            add(KeyTip("按住 !@# 点删除", "同 Ctrl+删除：系统输入框里删到上一个词的开头，不认 Ctrl 的应用当普通删除。还在打字时只删编码。"))
+            add(KeyTip("按住 !@#", "按满 $hold 秒，这个键变成 Ctrl，字母键上显示快捷键。"))
+            add(KeyTip("按住 !@# 拖到字母上松手", "发送 Ctrl 加这个字母，如 Ctrl+C 复制。"))
+            add(KeyTip("按住 !@# 点回车", "发送消息，同 Ctrl+回车。"))
+            add(KeyTip("按住 !@# 点删除", "删掉前一个词，同 Ctrl+删除。"))
             add(KeyTip("按住 !@# 长按空格拖动", "选中文字，同按住 Shift。"))
             add(KeyTip("点一下 !@#", "$hold 秒内、没拖动就松手才打开符号面板；时限在「按键与手势 › 符号键松手打开符号的时限」里调。",
                 listOf("按键与手势 › 符号键松手打开符号的时限")))
         }),
         KeyTipGroup("九键", buildList {
-            add(KeyTip("按住 !@# 拖到数字键上松手", "1 关闭、2 刷新、3 重做、4 全选、5 剪切、6 查找、7 撤销、8 复制、9 粘贴；也可以另一根手指直接点数字键。回车、空格同 26 键。"))
+            add(KeyTip("按住 !@# 拖到数字键上松手", "1 关闭、2 刷新、3 重做、4 全选、5 剪切、6 查找、7 撤销、8 复制、9 粘贴。"))
             // 「去掉 0 键，回车加高」开着时没有「下一项」键，这两条不写（用户 11-15）。
             if (!settings.t9MergeZeroIntoEnter) {
-                add(KeyTip("长按「下一项」", "等于按住 Shift：候选中英对调，松手恢复。"))
+                add(KeyTip("长按「下一项」", "同按住 Shift，候选换成英文。"))
                 add(KeyTip("从「下一项」拖到候选上松手", "这条候选有英文就上屏英文。"))
             } else if (settings.cornerSymbolInput) {
-                add(KeyTip("回车${if (settings.reverseSymbolSwipe) "上拉" else "下拉"}", "打 0(打字选词时不接)。已去掉 0 键，见「九键与 14 键 › 去掉 0 键，回车加高」。",
+                add(KeyTip("回车${if (settings.reverseSymbolSwipe) "上拉" else "下拉"}", "打 0，打字选词时不接。0 键已去掉，见「九键与 14 键 › 去掉 0 键，回车加高」。",
                     listOf("九键与 14 键 › 去掉 0 键，回车加高")))
             }
         }),
         KeyTipGroup("其他按键", listOf(
             KeyTip("${upper}字母键", "输入键上方的角标；${lower}输入下方的角标。"),
             KeyTip("长按空格左右拖", "移动光标。"),
-            KeyTip("删除键${clearSwipe}", "清空输入框；随后${restoreSwipe}删除键撤回这次清空。"),
+            KeyTip("删除键${clearSwipe}", "清空输入框，${restoreSwipe}可撤回。"),
             KeyTip("长按语言键", "弹出语言列表。"),
             KeyTip("长按候选", "确认后删掉这个词的学习记录。"),
         )),

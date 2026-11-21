@@ -37,7 +37,7 @@ internal fun SpeechCorrectionSettings() {
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("语音纠错", style = MaterialTheme.typography.bodyLarge)
-                Text("上屏前把认错的词换成对的，每行一条：错词 空格 正词。",
+                Text("每行一条：错词 空格 正词。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = enabled, onCheckedChange = null, colors = settingsSwitchColors())

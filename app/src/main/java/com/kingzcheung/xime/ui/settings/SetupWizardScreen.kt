@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.kingzcheung.xime.rime.PreparationProgress
 import com.kingzcheung.xime.rime.RimeConfigHelper
 import com.kingzcheung.xime.rime.RimeEngine
 import com.kingzcheung.xime.settings.ChineseSchemas
@@ -41,6 +42,59 @@ internal data class SetupStatus(
 ) {
     val ready: Boolean get() = !preparing && error == null && schemas.isNotEmpty()
     val complete: Boolean get() = imeEnabled && imeSelected && ready
+}
+
+/**
+ * 准备词库太久没有动静时向导显示的提示（11-20 小米 HyperOS 4 用户卡在「正在准备词库」，不知道在干什么、卡在哪）：
+ * 停了多久、停在哪一步、日志里最近几行，以及用户能做什么。
+ */
+internal data class PreparationStall(
+    val seconds: Long,
+    val where: String,
+    val logTail: List<String>,
+    val advice: List<String>,
+)
+
+/** 多久没有新进展算超时。编译大词典时一个文件可能一两分钟不变大，留足余量。 */
+internal const val PREPARATION_STALL_MS = 180_000L
+
+/** 纯函数，可单测：日志里和准备词库有关的最近几行（只留时间和内容，太长的截断）。 */
+internal fun preparationLogTail(text: String, lines: Int = 8): List<String> {
+    val tags = listOf("PreparationProgress", "RimeConfigHelper", "AutomaticPreparation", "SetupWizard", "RimeEngine")
+    return text.lineSequence().filter { line -> tags.any { " $it:" in line } }.toList().takeLast(lines)
+        .map { line -> line.substringAfter(' ').let { if (it.length > 160) it.take(159) + "…" else it } }
+}
+
+private fun readPreparationLogTail(): List<String> = runCatching {
+    com.kingzcheung.xime.util.FileLogger.flushNow()
+    val file = com.kingzcheung.xime.util.FileLogger.getCurrentLogFile() ?: return emptyList()
+    java.io.RandomAccessFile(file, "r").use { raf ->
+        val start = (raf.length() - 64 * 1024).coerceAtLeast(0L)
+        val bytes = ByteArray((raf.length() - start).toInt())
+        raf.seek(start)
+        raf.readFully(bytes)
+        preparationLogTail(String(bytes, Charsets.UTF_8))
+    }
+}.getOrDefault(emptyList())
+
+/** 把今天的日志交给分享面板（发微信、存文件都行），反馈时不用再去设置里找日志页。 */
+private fun exportPreparationLog(context: Context) {
+    try {
+        com.kingzcheung.xime.util.FileLogger.flushNow()
+        val file = com.kingzcheung.xime.util.FileLogger.getCurrentLogFile() ?: return
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "CyIME 准备词库日志 - ${file.name}")
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = android.content.ClipData.newRawUri(null, uri)
+        }
+        context.startActivity(Intent.createChooser(send, "导出日志").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        Log.e("SetupWizard", "Could not export the log", e)
+        android.widget.Toast.makeText(context, "导出日志失败：${e.message}", android.widget.Toast.LENGTH_LONG).show()
+    }
 }
 
 /**
@@ -77,6 +131,11 @@ fun SetupWizardScreen(
     // 后台线程写的重试原因单独放一个状态：status 由主线程每 500ms 整体改写，混写会互相覆盖。
     var preparationDetail by remember { mutableStateOf<String?>(null) }
     val pickerFallbackHint = remember { imePickerFallbackHint(AndroidPlatform.vendor) }
+    // 准备到哪一步（应用启动时的预准备和这里共用一份），每秒刷新一次已用时间；很久没动静就提示超时。
+    val progress by PreparationProgress.state.collectAsState()
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    var preparingSince by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    var stall by remember { mutableStateOf<PreparationStall?>(null) }
 
     fun refreshImeState() {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -97,6 +156,7 @@ fun SetupWizardScreen(
         if (!visible) return@LaunchedEffect
         status = status.copy(preparing = true, error = null)
         preparationDetail = null
+        preparingSince = android.os.SystemClock.elapsedRealtime()
         try {
             val schemas = withContext(Dispatchers.IO) {
                 // 准备没过时会一直自动重试；把原因摆出来，不再只有一根进度条转十几分钟看不出卡在哪（GitHub #36）。
@@ -119,8 +179,30 @@ fun SetupWizardScreen(
             status = status.copy(preparing = false, error = "词库准备失败，请重试")
         }
     }
+    LaunchedEffect(visible, status.preparing) {
+        while (visible && status.preparing) { now = android.os.SystemClock.elapsedRealtime(); delay(1_000L) }
+    }
+    val lastChange = maxOf(progress.lastChangeAt, preparingSince)
+    val quiet = status.preparing && now - lastChange >= PREPARATION_STALL_MS
+    LaunchedEffect(quiet, lastChange) {
+        if (!quiet) { stall = null; return@LaunchedEffect }
+        val seconds = (now - lastChange) / 1000
+        val where = progress.step?.let { "${it.label}${progress.detail.takeIf { d -> d.isNotEmpty() }?.let { d -> "：$d" }.orEmpty()}" }
+            ?: "还没开始（在等另一项准备结束）"
+        val lowStorage = context.filesDir.usableSpace < 300L * 1024 * 1024
+        stall = withContext(Dispatchers.IO) {
+            PreparationProgress.logStall(seconds)
+            Log.w("SetupWizard", "Preparation stalled ${seconds}s at $where")
+            PreparationStall(seconds, where, readPreparationLogTail(),
+                PreparationProgress.stallAdvice(progress.step, AndroidPlatform.vendor, lowStorage))
+        }
+    }
     if (visible) SetupWizardContent(
         status = status.copy(detail = preparationDetail.takeIf { status.preparing }),
+        progress = progress,
+        stepElapsedMs = if (progress.stepStartedAt > 0) now - progress.stepStartedAt else now - preparingSince,
+        stall = stall?.takeIf { status.preparing }?.copy(seconds = (now - lastChange) / 1000),
+        onExportLog = { exportPreparationLog(context) },
         onEnable = { openImeSettings(context) },
         onSchemas = onNavigateToSchemaSettings,
         onRetry = { attempt++ },
@@ -156,6 +238,10 @@ internal fun SetupWizardContent(
     onFinish: () -> Unit,
     pickerFallbackHint: String? = null,
     onOpenImeSettings: () -> Unit = {},
+    progress: PreparationProgress.State = PreparationProgress.State(),
+    stepElapsedMs: Long = 0L,
+    stall: PreparationStall? = null,
+    onExportLog: () -> Unit = {},
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("设置向导") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).settingsVerticalScroll()
@@ -173,12 +259,25 @@ internal fun SetupWizardContent(
                 when { status.preparing -> "准备中"; status.error != null -> "需要处理"; status.ready -> "已就绪"; else -> "待准备" }) {
                 when {
                     status.preparing -> {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        val step = progress.step?.takeIf { it != PreparationProgress.Step.DONE }
+                        if (step == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        else LinearProgressIndicator(progress = { PreparationProgress.fraction(progress) }, modifier = Modifier.fillMaxWidth())
                         Text("正在准备词库，首次使用可能需要几分钟…")
+                        // 现在在做哪一步、哪个文件、这一步用了多久：卡住时一眼看出停在哪（11-20 用户反馈）。
+                        if (step != null) {
+                            Text("第 ${step.ordinal + 1}/${PreparationProgress.Step.entries.size - 1} 步：${step.label}（${stepElapsedMs / 1000} 秒）",
+                                style = MaterialTheme.typography.bodyMedium)
+                            if (step == PreparationProgress.Step.COMPILE && progress.total > 0)
+                                Text("已编译词典 ${progress.done}/${progress.total}", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (progress.detail.isNotEmpty()) Text(progress.detail, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         status.detail?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        stall?.let { PreparationStallNotice(it, onExportLog) }
                     }
                     status.error != null -> {
                         Text(status.error, color = MaterialTheme.colorScheme.error)
@@ -214,6 +313,33 @@ internal fun SetupWizardContent(
             Button(onClick = onFinish, enabled = status.complete, modifier = Modifier.fillMaxWidth()) {
                 Text(if (status.complete) "开始使用" else "完成三项后即可开始使用")
             }
+        }
+    }
+}
+
+@Composable
+private fun PreparationStallNotice(stall: PreparationStall, onExportLog: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val minutes = stall.seconds / 60
+            Text(if (minutes > 0) "超时了：已经 $minutes 分钟没有新进展" else "超时了：已经 ${stall.seconds} 秒没有新进展",
+                color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.SemiBold)
+            Text("停在：${stall.where}", color = MaterialTheme.colorScheme.onErrorContainer)
+            if (stall.logTail.isNotEmpty()) {
+                Text("最近的日志：", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(stall.logTail.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            Text("可以这样做：", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            stall.advice.forEach { line ->
+                Row {
+                    Text("•", Modifier.padding(end = 6.dp), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+            OutlinedButton(onClick = onExportLog) { Text("导出日志") }
         }
     }
 }

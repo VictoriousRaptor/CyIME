@@ -76,7 +76,7 @@ internal fun OfflineModelCard() {
                 }
             }
         }
-        Text("修改在下一次录音生效。录音中切换语言时，兼容同一模型就继续用，否则保留已识别的字并换模型，麦克风继续收音。",
+        Text("下次说话时生效。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     editing?.let { language ->
@@ -125,10 +125,10 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
                 SpeechModelSelection.Finish.NONE -> "不校正" to
                     (if (senseVoiceAlone) "每次停顿由 SenseVoice 直接出字" else "直接用说话时出的字")
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
-                    ("每次停顿 (最长 6 秒) 复核一次" + if (senseReady) "" else " (需下载 SenseVoice)")
+                    ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> (if (xasrReady) "整句定稿 · X-ASR" else "整句定稿 · SenseVoice") to
-                    ("停顿 1 秒或点结束后整句再认一遍 (更准, 多等一会儿)" +
-                        if (xasrReady) "" else "; 下载 X-ASR 错字少三分之一")
+                    ("说完后整句再认一遍，更准但稍慢" +
+                        if (xasrReady) "" else "; 下载 X-ASR 更准")
             }
             val enabled = finish == current || when (finish) {
                 SpeechModelSelection.Finish.NONE -> true
@@ -271,7 +271,7 @@ internal fun SpeechPunctuationSettings() {
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("自动加标点", style = MaterialTheme.typography.bodyLarge)
-            Text("留下在线接口和中文整句定稿按意思加的标点，不是每停一下就加。本地中文要在「说完后」选整句定稿。口述的标点照常输入。",
+            Text("按意思自动加标点。本地中文要在「说完后」选整句定稿",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = autoPunctuation, onCheckedChange = null,
@@ -332,7 +332,7 @@ internal fun SpeechNumberSettings() {
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("数字转阿拉伯数字", style = MaterialTheme.typography.bodyLarge)
-            Text("中文说的数字写成 325、3.5、50%；一个、第一、一心一意这类不变。",
+            Text("说的数字写成 325、3.5、50% 这样",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = arabic, onCheckedChange = null, colors = settingsSwitchColors())

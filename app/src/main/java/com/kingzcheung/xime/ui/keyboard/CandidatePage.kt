@@ -145,6 +145,8 @@ data class CandidatePageCallbacks(
     val onKeyRelease: ((String) -> Unit)? = null,
     val onClearComposition: (() -> Unit)? = null,
     val onUndoClear: (() -> Unit)? = null,
+    /** 在候选区左右划过门槛：收回展开页，回到键盘（用户 11-20，右边不再有收回按钮）。 */
+    val onCollapse: (() -> Unit)? = null,
 )
 
 /** 左栏快捷符号（对齐主流输入法候选展开页的符号栏）。 */
@@ -163,7 +165,7 @@ private const val debugPerfLogging = true
  * │ 候选/单字│                          │ │       │
  * └────────┴────────────────────────────┴───────┘
  * 左栏样式对齐数字键盘左栏：上部快捷符号键、底部"候选/单字"切换。
- * 数据源为跨页全量候选，不做本地分页；收起按钮在上方候选栏右侧；
+ * 数据源为跨页全量候选，不做本地分页；收回：在候选区左右划、返回键或选词（上方候选栏右边是收起键盘）；
  * 编码删空时由宿主自动收起本页；翻页键 = 视口滚动一屏（上下到头自动置灰），
  * [pageScrollEvents] 供硬件键盘 DPAD 上/下联动同样的滚动。
  */
@@ -369,7 +371,7 @@ private fun CandidatePageContent(
                 }
                 // ── 中间：候选行分组列表（LazyColumn 只渲染可见行），联想词在末尾
                 // 随内容一并滚动 ──
-                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight().swipeToCollapse(callbacks.onCollapse)) {
                     val showComments = candidateCommentsVisible(maxWidth.value, LocalDensity.current.fontScale,
                         candidateTextSize.toFloat(), rememberCandidateCommentsAllowed())
                     val rowWidthUnits = with(LocalDensity.current) {

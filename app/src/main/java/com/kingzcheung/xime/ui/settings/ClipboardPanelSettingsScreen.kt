@@ -46,6 +46,8 @@ import com.kingzcheung.xime.clipboard.ClipboardImages
 import com.kingzcheung.xime.clipboard.ImageAccessActivity
 import com.kingzcheung.xime.settings.PerformanceCosts
 import com.kingzcheung.xime.clipboard.CLIPBOARD_IMAGE_HEIGHT_KEY
+import com.kingzcheung.xime.clipboard.CLIPBOARD_SHOW_IN_BAR_KEY
+import com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar
 import com.kingzcheung.xime.clipboard.ClipboardImageHeight
 import com.kingzcheung.xime.clipboard.clipboardImageHeight
 import com.kingzcheung.xime.clipboard.CLIPBOARD_RECENT_IMAGE_COUNT_KEY
@@ -126,7 +128,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         SettingsItem(
             icon = Icons.TwoTone.Folder,
             title = "剪贴板分组",
-            subtitle = "自带分类，和自己建的常用语、工作等分组",
+            subtitle = "分类和自建分组",
             onClick = onNavigateToGroups,
             showArrow = true,
             status = groups.groups.size.takeIf { it > 0 }?.let { "$it 个" },
@@ -150,7 +152,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         // 用户 11-09：图片卡片太矮。固定的图片照旧只露一条。
         Column(Modifier.settingsSearchAnchor("图片高度").fillMaxWidth().padding(16.dp)) {
             Text("图片高度", style = MaterialTheme.typography.titleSmall)
-            Text("剪贴板里图片卡片的高度，固定的图片不变", style = MaterialTheme.typography.bodySmall,
+            Text("剪贴板里图片的显示高度", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ClipboardImageHeight.entries.forEach { option ->
                 Row(Modifier.fillMaxWidth().testTag("clipboard-image-height:${option.key}")
@@ -171,7 +173,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         // 用户 11-17：一打开剪贴板全是图片。「全部」只放最新几张，其余在「图片」里。
         Column(Modifier.settingsSearchAnchor("显示几张图片").fillMaxWidth().padding(16.dp)) {
             Text("显示几张图片", style = MaterialTheme.typography.titleSmall)
-            Text("「全部」里只显示最新的几张没固定的图片，其余在「图片」里看", style = MaterialTheme.typography.bodySmall,
+            Text("「全部」里显示的图片数，截图、相册照片、复制的图各至少一张，其余在「图片」里", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ClipboardRecentImageCounts.forEach { option ->
                 Row(Modifier.fillMaxWidth().testTag("clipboard-image-count:$option")
@@ -188,7 +190,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         SettingsToggleItem(
             icon = Icons.TwoTone.PhotoLibrary,
             title = "最近截图",
-            subtitle = "「全部」和「图片」里显示最近的截图，需要相册权限",
+            subtitle = "在剪贴板里显示最近的截图",
             checked = screenshotsOn,
             onCheckedChange = { on ->
                 if (!on) images.enableRecentScreenshots(false)
@@ -203,7 +205,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         SettingsToggleItem(
             icon = Icons.TwoTone.PhotoLibrary,
             title = "也显示相册照片",
-            subtitle = "截图之外，再显示相册里最新的 ${com.kingzcheung.xime.clipboard.ScreenshotImageSource.RECENT_PHOTO_LIMIT} 张照片",
+            subtitle = "也显示相册里最新的照片",
             checked = photosToo && screenshotsOn,
             onCheckedChange = { on ->
                 photosToo = on
@@ -220,11 +222,23 @@ private fun ClipboardPasteSettings() {
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     // Same switch as the clipboard's own ⋯ menu (same preference).
     var closeAfterPaste by remember { mutableStateOf(clipboardClosesAfterPaste(prefs)) }
+    var showInBar by remember { mutableStateOf(clipboardShowsInCandidateBar(context)) }
     SettingsSection(title = "粘贴", content = {
+        // 用户 11-20 转来的反馈：最新复制的内容要能选不显示。默认开，和以前一样。
+        SettingsToggleItem(
+            icon = Icons.TwoTone.ContentPaste,
+            title = "候选栏显示刚复制的内容",
+            subtitle = "复制后打开键盘，候选栏先放刚复制的文字和图片；验证码不受影响",
+            checked = showInBar,
+            onCheckedChange = {
+                showInBar = it
+                prefs.edit().putBoolean(CLIPBOARD_SHOW_IN_BAR_KEY, it).apply()
+            },
+        )
         SettingsToggleItem(
             icon = Icons.TwoTone.ContentPaste,
             title = "上屏后自动关闭剪贴板",
-            subtitle = "关掉后留在剪贴板里，可以连续贴多条",
+            subtitle = "关掉后可以连续粘贴多条",
             checked = closeAfterPaste,
             onCheckedChange = {
                 closeAfterPaste = it

@@ -86,9 +86,14 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
             dragConnection = ic
         }
         val text = dragText ?: return
-        if (ic !== dragConnection || service.inlinePinyinText() != text || service.inlinePinyinCaret() != dragCaret ||
-            runCatching { !ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(true)) return
+        if (ic !== dragConnection || service.inlinePinyinText() != text || service.inlinePinyinCaret() != dragCaret) return
         val range = owner.displaySelection(text) ?: return
+        val shown = dragOwner?.let { it.displaySelection(text) }
+        if (shown == range) { dragOwner = owner; return }
+        // 只在第一次写之前问一次应用里有没有选中文字。这是同步跨进程调用，应用刚收到上一次改写、正在排版时要等它
+        // （忙的应用上百毫秒），拖动每换一个字都问一次，放大镜和高亮就一顿一顿（1.15.100 用户反馈）。
+        // 拖动中手指在键盘上，应用里的选区不会变。
+        if (dragOwner == null && runCatching { !ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(true)) return
         val styled = android.text.SpannableString(text).apply {
             setSpan(android.text.style.BackgroundColorSpan(0x663399ff), range.first, range.last + 1,
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -131,18 +136,20 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         if (start !in 0..end || end > base.length) return
         val before = base.take(start)
         val after = base.drop(end)
-        val text = if (code.isNotEmpty()) before + code + after else {
+        // 选中的编码还没改时照旧显示原来带音节分隔的那段，打开改局部不让输入框里的编码挤到一起（PR #517）。
+        val shownCode = if (code == owner.originalCode) base.substring(start, end) else code
+        val text = if (code.isNotEmpty()) before + shownCode + after else {
             val left = before.trimEnd(' ', '\'')
             val right = after.trimStart(' ', '\'')
             val separator = before.lastOrNull()?.takeIf { it == ' ' || it == '\'' }
                 ?: after.firstOrNull()?.takeIf { it == ' ' || it == '\'' }
             left + (if (left.isNotEmpty() && right.isNotEmpty()) separator?.toString().orEmpty() else "") + right
         }
-        val caret = if (code.isNotEmpty()) start + code.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
+        val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
         val styled = android.text.SpannableString(text)
         if (code.isNotEmpty()) styled.setSpan(android.text.style.BackgroundColorSpan(0x663399ff), start,
-            start + code.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            start + shownCode.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         ic.beginBatchEdit()
         try {
             if (runCatching { ic.setComposingText(styled, 1) }.getOrDefault(false)) {

@@ -114,8 +114,8 @@ class StrokeMergeZeroEnterTest {
     }
 
     @Test fun subtitleSaysWhereZeroWent() {
-        assertTrue(strokeMergeZeroSubtitle(true, false).contains("回车上下滑打"))
-        assertTrue(strokeMergeZeroSubtitle(true, true).contains("回车上上滑打"))
-        assertTrue(strokeMergeZeroSubtitle(false, false).contains("不能打 0"))
+        assertTrue(strokeMergeZeroSubtitle(true, false).contains("回车上下滑输入"))
+        assertTrue(strokeMergeZeroSubtitle(true, true).contains("回车上上滑输入"))
+        assertTrue(strokeMergeZeroSubtitle(false, false).contains("数字键盘"))
     }
 }

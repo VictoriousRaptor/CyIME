@@ -16,6 +16,12 @@ enum class UiNodeType {
     MULTI_SELECT,
     SWITCH,
     NUMBER,
+    /**
+     * 一组可增删、改名、拖动排序的条目（Lua type = "entries"，宿主 1.15.101 起）。值是 JSON 数组
+     * `[{"name": …, "text": …, …}]`；条目上宿主不认识的字段（如插件自己的 id）原样保留。
+     * [UiNode.defaultValue] 是「恢复默认」用的数组，[UiNode.placeholder] 是新条目提示词框的提示。
+     */
+    ENTRIES,
     /** 按钮：设置页触发 [IPluginConfigurable.onAction]，面板触发 onPanelAction（key 即 action id）。 */
     BUTTON,
 

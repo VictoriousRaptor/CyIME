@@ -52,8 +52,7 @@ internal fun FrostedThemeControls(config: FrostedGlassConfig, isDark: Boolean,
             actualSuffix(config.keyOpacity, effective?.keyOpacity), config.keyOpacity) {
             onChange(config.copy(keyOpacity = (it * 100).roundToInt() / 100f))
         }
-        if (!compact) Text("浅色、深色各自保存；取消不保存。文字和图标不随这两个透明度淡化。" +
-            "调得过透时，键盘会自动加深到在白色和黑色页面上都能看清按键文字。",
+        if (!compact) Text("浅色、深色分别保存。太透时会自动加深，保证文字清楚。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -161,7 +161,7 @@ class EnglishWordsSchemeTest {
         // cyime_en_memory 和雾凇共用（构建时拷进 rime_ice/lua）；单词方案自己的过滤器随中文资源装。
         repoFile("data/cyime_en_memory.lua")
         val filter = repoFile("src/main/assets/rime_chinese/lua/cyime_english_words.lua").readText()
-        assertTrue(filter.contains("return cyime_english_words"))
+        assertTrue(filter.contains("func = cyime_english_words"))
         assertTrue(filter.contains("Candidate(\"raw\""))
     }
 

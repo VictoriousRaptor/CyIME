@@ -319,16 +319,30 @@ class RimeEngine {
     }
 
     internal fun applySentenceEdit(snapshot: SentenceEditSnapshot, start: Int, end: Int,
-                                   segments: List<SentenceEditCandidate>): RimeProcessResult? = editPinyinAndReadState {
-        val code = segments.joinToString("") { it.code }
-        val replacement = segments.joinToString("") { it.text }
-        val lengths = segments.flatMap { listOf(it.code.length, it.text.length) }.toIntArray()
-        val choices = segments.flatMap { segment ->
-            listOf(segment.selected.size) + segment.selected.flatMap { listOf(it.syllableId, it.start, it.end) }
-        }.toIntArray()
-        if (candidateRevision.get() != snapshot.revision || !nativeHasSession() ||
-            !nativeApplySentenceEdit(snapshot.input, snapshot.sentence, start, end, code, replacement, lengths, choices)) false
-        else { candidateRevision.incrementAndGet(); true }
+                                   segments: List<SentenceEditCandidate>): RimeProcessResult? {
+        val result = editPinyinAndReadState {
+            val code = segments.joinToString("") { it.code }
+            val replacement = segments.joinToString("") { it.text }
+            val lengths = segments.flatMap { listOf(it.code.length, it.text.length) }.toIntArray()
+            val choices = segments.flatMap { segment ->
+                listOf(segment.selected.size) + segment.selected.flatMap { listOf(it.syllableId, it.start, it.end) }
+            }.toIntArray()
+            if (candidateRevision.get() != snapshot.revision || !nativeHasSession() ||
+                !nativeApplySentenceEdit(snapshot.input, snapshot.sentence, start, end, code, replacement, lengths, choices)) false
+            else { candidateRevision.incrementAndGet(); true }
+        } ?: return null
+        if (!doublePinyinKeysPreedit || result.inputText.isEmpty() || result.preeditText != result.inputText) return result
+        val updated = sentenceEditSnapshot(result.engineRevision) ?: return result
+        if (updated.input != result.inputText) return result
+        val formatted = buildString {
+            updated.boundaries.zipWithNext().forEachIndexed { index, (startOffset, endOffset) ->
+                if (startOffset < 0 || endOffset > updated.input.length || startOffset >= endOffset) return result
+                if (index > 0 && lastOrNull() != '\'' && lastOrNull()?.isWhitespace() != true &&
+                    updated.input[startOffset] != '\'' && !updated.input[startOffset].isWhitespace()) append('\'')
+                append(updated.input, startOffset, endOffset)
+            }
+        }
+        return result.copy(preeditText = formatted)
     }
 
     private external fun nativeSentenceEditSnapshot(): Array<String>
@@ -1805,6 +1819,19 @@ class RimeEngine {
         val keys = t9KeysOfReading(candidateSpan(word)?.second ?: return@editPinyinAndReadState true)
         if (keys <= 0 || keys >= codeKeysBefore(input, input.length)) return@editPinyinAndReadState true
         if (placeT9CodeCaret(keys, input) && candidateSpan(word) == null) nativeSetCaret(input.length)
+        true
+    }
+
+    /**
+     * 九键拖选重选：前面的词已由九键选词选定后，把光标放到前 [keys] 个数字键后面（拖选的最后一个字后面）。
+     * 双拼九键的注释是全拼、和数字键数对不上，不挪光标；[keys] 不在剩下的数字里面时也不挪。
+     */
+    internal fun placeT9CaretAfterKeys(keys: Int, doublePinyin: Boolean): RimeProcessResult? = editPinyinAndReadState {
+        if (!isInitialized || !nativeHasSession() || nativeIsMaintaining() || nativeIsAsciiMode() || doublePinyin)
+            return@editPinyinAndReadState false
+        val input = nativeGetInput().orEmpty()
+        if (keys <= 0 || keys >= codeKeysBefore(input, input.length)) return@editPinyinAndReadState true
+        placeT9CodeCaret(keys, input)
         true
     }
 

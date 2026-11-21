@@ -114,7 +114,8 @@ class CangjieSchemeTest {
         for (file in listOf("cyime_cangjie", "cyime_quick")) {
             val filters = repoFile("src/main/assets/rime_chinese/$file.schema.yaml").readText()
                 .substringAfter("  filters:\n").substringBefore("\n\n").lines().filter { it.trim().startsWith("- ") }.map { it.trim().removePrefix("- ") }
-            assertEquals(file, listOf("simplifier", "single_char_filter", "uniquifier"), filters)
+            // 日文汉字、韩文汉字、粤语字的开关（11-20）在最前面，关着时那些字不出。
+            assertEquals(file, listOf("lua_filter@*cyime_char_lists", "simplifier", "single_char_filter", "uniquifier"), filters)
         }
     }
 }

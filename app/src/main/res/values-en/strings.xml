@@ -41,7 +41,7 @@
     <string name="item_prediction_title">Smart prediction</string>
     <string name="item_prediction_summary">Basic prediction, personal learning and optional model boost</string>
     <string name="item_speech_title">Voice to text</string>
-    <string name="item_speech_summary">On-device, online, captions</string>
+    <string name="item_speech_summary">Models, online voice, punctuation, corrections</string>
     <string name="item_handwriting_title">Handwriting</string>
     <string name="item_handwriting_summary">Recognize on pause, formula marks, handwriting models</string>
     <string name="section_system">System</string>

@@ -109,9 +109,9 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("pinyin26WordModel", 5)
     inputs.property("pinyinUAsV", 1)
     inputs.property("candidateComments", 1)
-    inputs.property("cyimeTerms", 1)
+    inputs.property("cyimeTerms", 3)
     inputs.property("taiwanTraditional", 1)
-    inputs.property("rareCharacters", 2)
+    inputs.property("rareCharacters", 4)
     inputs.property("datetimeHints", 2)
     inputs.property("symbolNames", 1)
     inputs.property("greekLetters", 1)
@@ -139,6 +139,8 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(removedWords)
     val removedNames = file("data/cyime_removed_names.txt")
     inputs.file(removedNames)
+    val removedPoetry = file("data/cyime_removed_poetry.txt")
+    inputs.file(removedPoetry)
     val removedParticleHomophones = file("data/cyime_removed_particle_homophones.txt")
     inputs.file(removedParticleHomophones)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
@@ -151,6 +153,13 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(mixedInput)
     val rareChars = file("data/cyime_rare_chars.lua")
     inputs.file(rareChars)
+    // 日文汉字、韩文汉字、粤语字（他 11-20：是什么就叫什么），各自一个默认关的开关，不进主词库也不算生僻字。
+    val japaneseKanji = file("data/cyime_japanese_kanji.txt")
+    inputs.file(japaneseKanji)
+    val koreanChars = file("data/cyime_korean_chars.txt")
+    inputs.file(koreanChars)
+    val cantoneseChars = file("data/cyime_cantonese_chars.txt")
+    inputs.file(cantoneseChars)
     val greekLetters = file("data/cyime_greek_letters.lua")
     inputs.file(greekLetters)
     val shortcutOrder = file("data/cyime_shortcut_order.lua")
@@ -253,6 +262,10 @@ val prepareChineseDictionaries by tasks.registering {
         // common surname, appear whole in a public list of Chinese personal names, and are not famous (base.dict, the
         // chat and subtitle word model, or weight 150 and up keep them).
         removedNames.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // Classical poetry lines and rare four-character verses (2026-11-20: nine-key gezhileyi gave 何枝可依, not 搁置了一;
+        // the word model scores 何枝可依 as one word, so one rare word beat three common ones). They belong in the
+        // optional 古诗词名句 pack; how the list was chosen is in its header.
+        removedPoetry.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
         // A common word plus a homophone of a sentence-final particle that chat writes far less often than the word plus
         // the particle (2026-11-15: shengxiaoma gave 生肖马, not 生效吗, on every keyboard). One whole word beat 生效 + 吗 in
         // the sentence; the list is built by tools/ime_lab/particle_homophone_words.py, which never lists a base.dict word.
@@ -914,6 +927,26 @@ val prepareChineseDictionaries by tasks.registering {
         check(doublePinyin.readText().split("  dependencies:\n").size == 2) { "Upstream double_pinyin_flypy dependencies changed" }
         doublePinyin.writeText(doublePinyin.readText().replace("  dependencies:\n", "  dependencies:\n    - $pauseId\n") +
             "\ncyime_omission_schema: $pauseId\n\ncyime_pause_correction:\n  margin: 3.0\n  max_keys: 24\n")
+        // 14-key full pinyin after a pause (2026-11-20, 九键14键纠错方案 A): 14 keys had no correction at all. The input
+        // is merged keys (QETUOADGJZCB, l and m alone), so this prism spells every syllable with merged keys only and
+        // adds it with one key left out, one key pressed twice and two keys typed in the wrong order, inside one
+        // syllable, as fuzzy spellings like the double pinyin pause prism (the reading as typed keeps the lead). Marked
+        // with ~ until all rules have run so that one edit cannot feed another (as cyime_digit_edit). It is read only
+        // after a pause and gated by the word model (cyime_pause_correction in assets/rime_chinese/pinyin_14jian.schema.yaml);
+        // letters: one key a letter, so the slip kind (and its switch) comes from the reading's letters against the keys.
+        val k14PauseId = "cyime_pause_14jian"
+        val k14Key = "[A-Zlm]"
+        File(root, "$k14PauseId.schema.yaml").writeText(buildString {
+            append("schema:\n  schema_id: $k14PauseId\n  name: 14键停顿纠错索引\n  version: '1'\n")
+            append("translator:\n  dictionary: rime_ice\n  prism: $k14PauseId\n  enable_user_dict: false\n")
+            append("speller:\n  alphabet: QETUOADGJZCBlm\n  delimiter: \" '\"\n  algebra:\n")
+            append("    - erase/^[A-Z]\$/\n")
+            append("    - xlit/qwertyuiopasdfghjkzxcvbn/QQEETTUUOOAADDGGJJZZCCBB/\n")
+            for (i in 0..5) append("    - fuzz/^($k14Key{$i})$k14Key($k14Key${if (i == 0) "+" else "*"})\$/~\$1\$2/\n")
+            for (i in 0..5) append("    - fuzz/^($k14Key{$i})($k14Key)($k14Key*)\$/~\$1\$2\$2\$3/\n")
+            for (i in 0..4) append("    - fuzz/^($k14Key{$i})($k14Key)($k14Key)($k14Key*)\$/~\$1\$3\$2\$4/\n")
+            append("    - xform/^~//\n")
+        })
         // Built-in letter arrangements (settings/BuiltinLetterLayouts.kt): same schema, own ID and name.
         for ((id, name) in listOf("pinyin_qwjrtk" to "QWJRTK（双拇指）", "pinyin_cyletix10" to "Cyletix10（实验）",
                 "pinyin_colemak" to "Colemak", "pinyin_typewise" to "Typewise")) {
@@ -924,7 +957,11 @@ val prepareChineseDictionaries by tasks.registering {
 
         // 用户 11-11（B 站）说打不出的字：8105 里没有，原来只在默认关着的生僻字开关里（读音取 rime-ice 41448）。
         // 直接进主词库，单字权重 1 排在同音字最后，不抢常用字；生僻字表不再重复带它们。雫 8105 只有 xia，补上 na。
-        val directRareChars = linkedMapOf("吔" to "ye", "蚵" to "ke", "槻" to "gui", "榎" to "jia", "塁" to "lei")
+        // 槻 榎 塁 原来也在这里，11-20 挪到「日文汉字」（日本的字，他：不该在主词库里）。
+        val directRareChars = linkedSetOf("吔\tye", "蚵\tke",
+            // 用户 11-19（蛇喰梦子）：can qi sun 都打不出喰，它只在词里（东京喰种）。补上字典里的三个读音。
+            "喰\tcan", "喰\tqi", "喰\tsun")
+        val directRareTexts = directRareChars.mapTo(HashSet()) { it.substringBefore('\t') }
         // Same IME vocabulary as CyIME-Windows data/rime/cyime_terms.dict.yaml; imported after upstream
         // tables so upstream weights win on duplicates.
         File(root, "cyime_terms.dict.yaml").writeText(
@@ -942,7 +979,7 @@ val prepareChineseDictionaries by tasks.registering {
                 "搜索键\tsou suo jian\t5000", "十四键\tshi si jian\t5000", "悬浮键盘\txuan fu jian pan\t5000",
                 "单手键盘\tdan shou jian pan\t5000", "键盘高度\tjian pan gao du\t5000",
                 "雫\tna\t1", "吔屎\tye shi\t10", "蚵仔煎\tke zai jian\t50").joinToString("\n", postfix = "\n") +
-            directRareChars.entries.joinToString("\n", postfix = "\n") { (text, code) -> "$text\t$code\t1" } +
+            directRareChars.joinToString("\n", postfix = "\n") { "$it\t1" } +
             // Only words rime-ice lacks: a second copy of an existing entry is just more to look up.
             (domainFloors.keys - domainPresent).joinToString("\n", postfix = "\n") { it + "\t" + domainFloors.getValue(it) })
         // rime-ice reads the adverbial 地 in 慢慢地/默默地 only as de; many people type it as di (manmandi), which
@@ -970,13 +1007,66 @@ val prepareChineseDictionaries by tasks.registering {
         // 黁 nun). The large table itself is no longer bundled: the generated list is about half its size.
         val common = HashSet<String>()
         val commonCodes = HashSet<String>()
+        val commonReadings = HashMap<String, MutableSet<String>>()
         var commonBody = false
         File(root, "cn_dicts/8105.dict.yaml").forEachLine { line ->
             if (!commonBody) { commonBody = line.trimEnd() == "..."; return@forEachLine }
             val fields = line.split('\t')
-            if (!line.startsWith("#") && fields.size >= 2) { common += fields[0]; commonCodes += fields[1] }
+            if (!line.startsWith("#") && fields.size >= 2) {
+                common += fields[0]; commonCodes += fields[1]
+                commonReadings.getOrPut(fields[0]) { HashSet() } += fields[1]
+            }
+        }
+        // 日文汉字（他 11-20：沢 这种字他从没见过，凭什么打得出来；是日语的字就叫日语的字，词组也一样）：
+        // data/cyime_japanese_kanji.txt 里的字和日本人名、地名、作品名不进主词库，挪到 cyime_japanese.txt，
+        // 「日文汉字」开着才出（lua/cyime_rare_chars.lua，默认关）。韩国自造的字、粤语字也各自一张表、一个开关。
+        fun charList(file: File): Pair<Set<String>, Set<String>> {
+            val chars = LinkedHashSet<String>()
+            val words = LinkedHashSet<String>()
+            file.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { line ->
+                if (line.startsWith("|")) words += line.drop(1)
+                else line.codePoints().forEach { chars += String(Character.toChars(it)) }
+            }
+            return chars to words
+        }
+        val (japaneseChars, japaneseWords) = charList(japaneseKanji)
+        val koreanSet = charList(koreanChars).first
+        val cantoneseSet = charList(cantoneseChars).first
+        check(japaneseChars.size > 400 && japaneseWords.isNotEmpty() && koreanSet.isNotEmpty() && cantoneseSet.size > 100) {
+            "Character lists in data/ are empty"
+        }
+        val japaneseRows = mutableListOf<String>()
+        for (name in listOf("base", "ext", "tencent", "others")) {
+            val dict = File(root, "cn_dicts/$name.dict.yaml")
+            var body = false
+            val kept = dict.readLines().filter { line ->
+                if (!body) { body = line.trim() == "..."; return@filter true }
+                val fields = line.split('\t')
+                val text = fields[0]
+                val japanese = !line.startsWith("#") && fields.size >= 2 &&
+                    (text in japaneseWords || text.codePoints().anyMatch { String(Character.toChars(it)) in japaneseChars })
+                if (japanese) japaneseRows += text + "\t" + fields[1]
+                !japanese
+            }
+            dict.writeText(kept.joinToString("\n", postfix = "\n"))
+        }
+        // 主词库里带日本字的词都要在表里（上游改了才会多出来，要人看过再分），表里的词也都要找到。
+        val movedWords = japaneseRows.map { it.substringBefore('\t') }.toSet()
+        check(movedWords == japaneseWords) {
+            "Japanese words in rime-ice changed: not listed ${movedWords - japaneseWords}, not found ${japaneseWords - movedWords}"
         }
         val largeTable = File(root, "cn_dicts/41448.dict.yaml")
+        // 常用字的少见读音（他 11-20：开了生僻字还缺不缺字？谜 读 mei，8105 只有 mi）：大字表里有、8105 这个字没有的读音，
+        // 跟生僻字开关走（lua 里排在这个读音的生僻字前面，上屏不记次数）。雫 na 已经在 cyime_terms 里。
+        var readingsBody = false
+        val rareReadings = largeTable.readLines().filter { line ->
+            if (!readingsBody) { readingsBody = line.trimEnd() == "..."; return@filter false }
+            val fields = line.split('\t')
+            !line.startsWith("#") && fields.size == 2 && fields[0] in common && fields[1] in commonCodes &&
+                fields[1] !in commonReadings.getValue(fields[0]) && line != "雫\tna"
+        }.distinct()
+        check(rareReadings.any { it == "谜\tmei" } && rareReadings.size in 300..2000) { "Upstream readings changed: ${rareReadings.size}" }
+        File(root, "cyime_rare_readings.txt").writeText(rareReadings.joinToString("\n", postfix = "\n"))
         var largeBody = false
         val rare = largeTable.readLines().filter { line ->
             if (!largeBody) { largeBody = line.trimEnd() == "..."; return@filter false }
@@ -984,13 +1074,26 @@ val prepareChineseDictionaries by tasks.registering {
             val text = fields[0]
             !line.startsWith("#") && fields.size == 2 && text.codePointCount(0, text.length) == 1 &&
                 text.codePointAt(0) < 0x10000 && Character.isIdeographic(text.codePointAt(0)) && text !in common &&
-                text !in directRareChars &&
+                text !in directRareTexts &&
                 fields[1] in commonCodes
         }
         check(rare.any { it == "瀺\tchan" } && rare.size > 15000) { "Upstream 41448.dict.yaml changed" }
         // Within a reading the large table goes by code point, Ext A (㙴) first; the URO ones (瀺) are the likelier.
-        File(root, "cyime_rare.txt").writeText(rare.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 }
-            .joinToString("\n", postfix = "\n"))
+        fun writeList(name: String, rows: List<String>) = File(root, name).writeText(
+            rows.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 }.joinToString("\n", postfix = "\n"))
+        val (japaneseCharRows, notJapanese) = rare.partition { it.substringBefore('\t') in japaneseChars }
+        val (koreanRows, notKorean) = notJapanese.partition { it.substringBefore('\t') in koreanSet }
+        val (cantoneseRows, chineseRows) = notKorean.partition { it.substringBefore('\t') in cantoneseSet }
+        // 表里的字都要在大字表里找得到（𠮟 是扩展 B，字体多半没有，不收）。
+        val found = (japaneseCharRows + koreanRows + cantoneseRows).map { it.substringBefore('\t') }.toSet()
+        check(found == (japaneseChars + koreanSet + cantoneseSet).filter { it.codePointAt(0) < 0x10000 }.toSet() &&
+            japaneseCharRows.any { it == "沢\tze" }) { "Character lists no longer match 41448.dict.yaml" }
+        writeList("cyime_rare.txt", chineseRows)
+        // Words keep their order (by reading as in rime-ice) after the characters.
+        File(root, "cyime_japanese.txt").writeText((japaneseCharRows.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 } +
+            japaneseRows.distinct()).joinToString("\n", postfix = "\n"))
+        writeList("cyime_korean.txt", koreanRows)
+        writeList("cyime_cantonese.txt", cantoneseRows)
         largeTable.delete()
         val iceDict = File(root, "rime_ice.dict.yaml")
         val othersImport = "  - cn_dicts/others   # 一些杂项\n"

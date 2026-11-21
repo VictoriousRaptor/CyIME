@@ -109,13 +109,31 @@ fun glideCased(word: String, shifted: Boolean, capsLocked: Boolean): String = wh
     else -> word
 }
 
+/** 中文滑行出码用的编码：[doublePinyin] 为空是全拼，否则按这套双拼换码。 */
+class ChineseGlideEncoding(val doublePinyin: com.kingzcheung.xime.settings.DoublePinyinScheme?)
+
 /**
  * 中文滑行适用的键盘：全拼、双拼的字母键盘（26 键、分体、自定义字母排列）。
  * 14 键、九键、注音、日文、五笔不滑行；双拼只认得出键位表的方案。
+ * 导入的自定义编码方案（字母键盘）在用户给它选了编码时也滑行（#303，见 [ExternalGlideEncodings]），[external] 是这份选择。
+ * 不滑行时为空。
  */
-fun chineseGlideSupported(profile: com.kingzcheung.xime.settings.InputProfile, schemaId: String): Boolean =
-    profile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE &&
-        profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC &&
-        (profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN ||
-            profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN &&
-            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(schemaId) != null)
+fun chineseGlideEncoding(profile: com.kingzcheung.xime.settings.InputProfile, schemaId: String,
+    external: Map<String, String> = emptyMap()): ChineseGlideEncoding? {
+    if (profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC) return null
+    if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.EXTERNAL) {
+        val encoding = external[schemaId] ?: return null
+        if (encoding == ExternalGlideEncodings.PINYIN) return ChineseGlideEncoding(null)
+        return com.kingzcheung.xime.settings.DoublePinyinSchemes.find(encoding)?.let { ChineseGlideEncoding(it) }
+    }
+    if (profile.language != com.kingzcheung.xime.settings.InputLanguage.CHINESE) return null
+    return when (profile.scheme) {
+        com.kingzcheung.xime.settings.InputScheme.PINYIN -> ChineseGlideEncoding(null)
+        com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN ->
+            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(schemaId)?.let { ChineseGlideEncoding(it) }
+        else -> null
+    }
+}
+
+fun chineseGlideSupported(profile: com.kingzcheung.xime.settings.InputProfile, schemaId: String,
+    external: Map<String, String> = emptyMap()): Boolean = chineseGlideEncoding(profile, schemaId, external) != null

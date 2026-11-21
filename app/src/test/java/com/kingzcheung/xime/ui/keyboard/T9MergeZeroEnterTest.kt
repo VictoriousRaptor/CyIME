@@ -149,9 +149,8 @@ class T9MergeZeroEnterTest {
     @Test fun settingsSubtitleSaysWhatIsLostAndWhereZeroIs() {
         val normal = t9MergeZeroSubtitle(cornerSymbolInput = true, reverseSymbolSwipe = false)
         assertTrue(normal.contains("没有「下一项」键"))
-        assertTrue(normal.contains("长按换英文、拖到候选上屏英文也用不了"))
-        assertTrue(normal.contains("数字 0 在回车上下滑打"))
-        assertTrue(t9MergeZeroSubtitle(true, true).contains("数字 0 在回车上上滑打"))
-        assertTrue(t9MergeZeroSubtitle(false, false).contains("回车上不能打 0，到数字键盘里打"))
+        assertTrue(normal.contains("0 改在回车上下滑输入"))
+        assertTrue(t9MergeZeroSubtitle(true, true).contains("0 改在回车上上滑输入"))
+        assertTrue(t9MergeZeroSubtitle(false, false).contains("0 到数字键盘里打"))
     }
 }

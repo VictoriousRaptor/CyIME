@@ -90,4 +90,17 @@ class OmissionPauseTest {
         assertFalse(wanted(true, false, extra, swap))
         assertFalse(wanted(true, true))
     }
+
+    /** 14 键（11-20）停顿纠错查合并键的大写代表字母和 l、m；26 键照旧只查小写。 */
+    @Test fun mergedKeysInputIsLookedUpOnlyOn14Keys() {
+        assertTrue(pauseInputLetters("GAOlAO", merged14 = true))
+        assertTrue(pauseInputLetters("BUGAOmA", merged14 = true))
+        assertTrue(pauseInputLetters("nihao", merged14 = false))
+        assertFalse(pauseInputLetters("GAOlAO", merged14 = false))
+        // 选过拼音后留下的精确字母（小写 a、s 等）纠错索引不认。
+        assertFalse(pauseInputLetters("BUGaO", merged14 = true))
+        assertFalse(pauseInputLetters("GAO1", merged14 = true))
+        // 只有合并键的代表字母算：别的大写（26 键里 Shift 打的大写）不算。
+        assertFalse(pauseInputLetters("GAOW", merged14 = true))
+    }
 }

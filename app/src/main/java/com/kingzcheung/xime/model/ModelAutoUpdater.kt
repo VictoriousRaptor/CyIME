@@ -31,8 +31,13 @@ object ModelAutoUpdater {
     internal const val MAX_ATTEMPTS = 3
     /** 两次自动尝试同一个新版本至少隔多久。 */
     internal const val RETRY_INTERVAL_MS = 6 * 60 * 60 * 1000L
-    /** 网络回调很频繁：两次检查至少隔多久。 */
-    private const val SCAN_INTERVAL_MS = 10 * 60 * 1000L
+    /**
+     * 两次检查至少隔多久，按墙上时间记在 [KEY_LAST_SCAN]，进程重启也不重查。
+     * 以前是 10 分钟、只记在内存：Wi-Fi 信号一变网络回调就来，常驻的输入法进程每 10 分钟拉一次模型目录、
+     * 解析一遍，进程每次重启又重查（用户 11-19：耗电、费流量）。新模型最晚 6 小时后自动下，同失败重试间隔。
+     */
+    internal const val SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000L
+    private const val KEY_LAST_SCAN = "last_scan_at"
     /** 进程刚启动时先让键盘和词库加载完。 */
     private const val STARTUP_DELAY_MS = 30_000L
 
@@ -127,14 +132,24 @@ object ModelAutoUpdater {
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     } catch (_: Exception) { false }
 
+    /** 离上次检查（墙上时间）够久了；时钟往回调过也算到期。 */
+    internal fun scanDue(lastScanAt: Long, now: Long): Boolean =
+        lastScanAt <= 0L || now < lastScanAt || now - lastScanAt >= SCAN_INTERVAL_MS
+
     /** 应用启动、网络变化时调用；不在 Wi-Fi、关掉了或刚查过时直接返回。 */
     fun start(context: Context, force: Boolean = false) {
         val app = context.applicationContext
-        if (!isEnabled(app) || !onUnmeteredNetwork(app)) return
         val now = SystemClock.elapsedRealtime()
+        // 网络回调很频繁：内存里先挡一道，不用每次都读设置、查网络。
         if (!force && lastScan != 0L && now - lastScan < SCAN_INTERVAL_MS) return
+        if (!isEnabled(app) || !onUnmeteredNetwork(app)) return
+        val wallNow = System.currentTimeMillis()
+        val lastAt = prefs(app).getLong(KEY_LAST_SCAN, 0L)
+        // 还没到期：内存里记成上次检查的时刻，到期后第一次网络回调就查。
+        if (!force && !scanDue(lastAt, wallNow)) { lastScan = now - (wallNow - lastAt); return }
         if (!running.compareAndSet(false, true)) return
         lastScan = now
+        prefs(app).edit().putLong(KEY_LAST_SCAN, wallNow).apply()
         scope.launch {
             try {
                 if (!firstScanDone) { delay(STARTUP_DELAY_MS); firstScanDone = true }
@@ -147,6 +162,8 @@ object ModelAutoUpdater {
 
     private suspend fun scan(app: Context) {
         ModelManager.initialize()
+        // 网上模型目录里有更新的版本（不用升级 App 就能换新模型）。
+        ModelManager.loadFromRemote(app)
         for (model in ModelManager.getAllModels()) {
             if (!isEnabled(app) || !onUnmeteredNetwork(app)) return
             if (!allowedForBuild(model)) continue

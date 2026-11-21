@@ -48,7 +48,7 @@ class StrokeSchemaBundleTest {
     @Test
     fun `lua modules named by the schema are bundled`() {
         val modules = Regex("""lua_(?:translator|filter)@\*(\w+)""").findAll(schema).map { it.groupValues[1] }.toList()
-        assertEquals(listOf("cyime_stroke_wildcard", "cyime_stroke_phrase", "cyime_stroke_rank"), modules)
+        assertEquals(listOf("cyime_stroke_wildcard", "cyime_stroke_phrase", "cyime_char_lists", "cyime_stroke_rank"), modules)
         for (module in modules) repoFile("src/main/assets/rime_chinese/lua/$module.lua")
     }
 

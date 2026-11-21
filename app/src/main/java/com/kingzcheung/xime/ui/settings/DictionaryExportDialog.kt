@@ -58,7 +58,7 @@ internal fun DictionaryExportDialog(
                 ExportChoice("${option.label} (.${option.extension})", option.note, format == option,
                     "dictionary-export-format:${option.name}") { format = option }
             }
-            Text("只导出两个字以上、带拼音的词。搜狗 .bin、.scel 和微软拼音 .dat 是各家自己的二进制格式，写不出来。",
+            Text("只导出两个字以上、带拼音的词。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp))
         }

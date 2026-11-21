@@ -122,3 +122,30 @@ internal fun avoidHardwareCaretLine(
             .thenBy { overlap(it, toolbar, 0) }
             .thenBy { kotlin.math.abs(it.y - preferred.y) })
 }
+
+/**
+ * 浮窗固定在某一边时，拼音和候选卡贴着工具条放，不跟光标、不躲输入行：顶部的放在工具条下面，
+ * 底部的放在上面，左侧的放在右边，右侧的放在左边；放不下时夹在屏幕内。[toolbar] 是宿主内坐标。
+ */
+internal fun fixedHardwareCandidatePosition(
+    edge: com.kingzcheung.xime.settings.HardwareToolbarEdge,
+    toolbar: HardwareCandidateExclusion,
+    cardWidth: Int,
+    cardHeight: Int,
+    viewWidth: Int,
+    viewHeight: Int,
+    marginPx: Int,
+): HardwareCandidatePosition {
+    fun clampX(x: Int) = x.coerceIn(marginPx, maxOf(marginPx, viewWidth - cardWidth - marginPx))
+    fun clampY(y: Int) = y.coerceIn(marginPx, maxOf(marginPx, viewHeight - cardHeight - marginPx))
+    return when (edge) {
+        com.kingzcheung.xime.settings.HardwareToolbarEdge.TOP ->
+            HardwareCandidatePosition(clampX(toolbar.left), clampY(toolbar.bottom + marginPx))
+        com.kingzcheung.xime.settings.HardwareToolbarEdge.BOTTOM ->
+            HardwareCandidatePosition(clampX(toolbar.left), clampY(toolbar.top - cardHeight - marginPx))
+        com.kingzcheung.xime.settings.HardwareToolbarEdge.LEFT ->
+            HardwareCandidatePosition(clampX(toolbar.right + marginPx), clampY(toolbar.top))
+        com.kingzcheung.xime.settings.HardwareToolbarEdge.RIGHT ->
+            HardwareCandidatePosition(clampX(toolbar.left - cardWidth - marginPx), clampY(toolbar.top))
+    }
+}

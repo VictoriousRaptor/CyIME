@@ -54,6 +54,8 @@ engine:
     - lua_translator@*cyime_stroke_wildcard
     - lua_translator@*cyime_stroke_phrase
   filters:
+    # 日文汉字、韩文汉字、粤语字（设置 › 中文输入，默认关）：开关关着时这些字不出（11-20 他：仓颉、注音都要一样），见 lua/cyime_char_lists.lua。
+    - lua_filter@*cyime_char_lists
     - lua_filter@*cyime_stroke_rank
 
 speller:

@@ -9,8 +9,8 @@ import com.kingzcheung.xime.util.FileLogger
 import com.kingzcheung.xime.settings.InputLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 离线语音识别服务客户端，绑定 [AsrInferenceService]（:asr 独立进程）。
@@ -29,13 +29,8 @@ class AsrInferenceClient(context: Context) {
     }
 
     @Volatile private var service: IInferenceAsrService? = null
-    @Volatile private var bound = false
     @Volatile private var sessionFailure: String? = null
-
-    /** 连接等待锁：一次性 CountDownLatch，countDown 后即失效——
-     *  重绑前必须在 [ensureBound] 中重建，否则断线重连后会立即假醒。 */
-    @Volatile
-    private var connectLatch = CountDownLatch(1)
+    private var binding: Binding? = null
 
     private val callbackGeneration = java.util.concurrent.atomic.AtomicLong()
     private data class Session(val generation: Long, val callback: IInferenceAsrCallback)
@@ -54,61 +49,85 @@ class AsrInferenceClient(context: Context) {
         }
     }
 
-    private val connection = object : ServiceConnection {
+    private inner class Binding : ServiceConnection {
+        var ready = CompletableDeferred<Boolean>()
+        /** 连上过又断了（语音进程被系统收回），正在等系统把它重新拉起来。 */
+        @Volatile var lost = false
+
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            service = IInferenceAsrService.Stub.asInterface(binder)
-            bound = true
-            connectLatch.countDown()
-            FileLogger.i(TAG, "Connected to AsrInferenceService")
+            synchronized(this@AsrInferenceClient) {
+                if (binding !== this) return
+                service = IInferenceAsrService.Stub.asInterface(binder)
+                lost = false
+                ready.complete(true)
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
-            service = null
-            bound = false
-            FileLogger.w(TAG, "AsrInferenceService disconnected (crash?)")
+            synchronized(this@AsrInferenceClient) {
+                if (binding !== this) return
+                service = null
+                lost = true
+                // Android keeps this registration and reconnects it when the service returns.
+                if (ready.isCompleted) ready = CompletableDeferred()
+            }
+            FileLogger.w(TAG, "AsrInferenceService disconnected")
         }
 
         override fun onBindingDied(name: ComponentName) {
-            service = null
-            bound = false
-            connectLatch.countDown()
-            FileLogger.e(TAG, "AsrInferenceService binding died")
+            discard(this)
+            FileLogger.w(TAG, "AsrInferenceService binding died")
         }
+
+        override fun onNullBinding(name: ComponentName) {
+            discard(this)
+            FileLogger.w(TAG, "AsrInferenceService returned a null binding")
+        }
+    }
+
+    @Synchronized private fun discard(old: Binding) {
+        if (binding !== old) return
+        binding = null
+        service = null
+        old.ready.complete(false)
+        try { context.unbindService(old) } catch (_: IllegalArgumentException) {}
     }
 
     suspend fun ensureBound(): Boolean {
-        if (bound && service != null) return true
-
-        // bindService 必须在主线程调用；等待结果放到 IO 线程避免阻塞 UI
-        val boundOk = withContext(Dispatchers.Main) {
+        if (service != null) return true
+        val (attempt, ready) = withContext(Dispatchers.Main.immediate) {
             synchronized(this@AsrInferenceClient) {
-                if (bound && service != null) {
-                    true
-                } else {
-                    // 服务进程可能崩溃/被回收后重启：latch 是一次性的，重绑前必须重建，
-                    // 否则旧 latch 已 countDown 会让 await 立即假醒（实际未连接），
-                    // 重绑后的第一次 startAsr 必然失败（同 InferenceClient 的修复）
-                    connectLatch = CountDownLatch(1)
-                    val intent = Intent(context, AsrInferenceService::class.java)
-                    context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+                // 语音进程被收回后，系统按原来的绑定把它拉起来；有的系统（#336 小米 K30 Pro，MIUI / Android 12）后台不让
+                // 拉，这次点麦克风就一直等不到，开一次设置页（应用到了前台）才连上。点麦克风时还在等就丢掉旧绑定、重新绑定。
+                binding?.takeIf { it.lost }?.let { stale ->
+                    FileLogger.w(TAG, "AsrInferenceService still gone after a disconnect: binding again")
+                    discard(stale)
                 }
+                val active = binding ?: Binding().also {
+                    binding = it
+                    try {
+                        if (!context.bindService(Intent(context, AsrInferenceService::class.java), it, Context.BIND_AUTO_CREATE))
+                            discard(it)
+                    } catch (error: Exception) {
+                        discard(it)
+                        throw error
+                    }
+                }
+                active to active.ready
             }
         }
-        if (!boundOk) return false
-        return withContext(Dispatchers.IO) {
-            connectLatch.await(5, TimeUnit.SECONDS)
-            bound && service != null
+        val connected = withTimeoutOrNull(5_000L) { ready.await() }
+        return synchronized(this) {
+            if (connected == null && binding === attempt && attempt.ready === ready && service == null)
+                discard(attempt)
+            binding === attempt && service != null
         }
     }
 
-    fun unbind() {
+    @Synchronized fun unbind() {
         callbackGeneration.incrementAndGet()
         session = null
-        try {
-            context.unbindService(connection)
-        } catch (_: Exception) {}
-        bound = false
-        service = null
+        binding?.let(::discard)
     }
 
     private fun requireService(): IInferenceAsrService {

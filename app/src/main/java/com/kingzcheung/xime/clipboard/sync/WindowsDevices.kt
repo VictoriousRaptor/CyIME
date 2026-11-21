@@ -427,7 +427,8 @@ object WindowsDevices {
                 }
                 throw requireNotNull(failure)
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { _status.value = e.message ?: "二维码无效" }
+            // 扫码同样要手机连进电脑，被防火墙挡住时说一样的原因（#500）。
+            catch (e: Exception) { _status.value = WindowsNearbyPairing.failureMessage(e, "二维码无效") }
         }
     }
     fun confirmConnection(requestId: Long) = nearbyPairing.confirm(requestId)

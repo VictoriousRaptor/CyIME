@@ -131,6 +131,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     t9_display_sentences_ = static_cast<size_t>(std::max(0, display));
     config->GetDouble("t9/spelling_penalty", &t9_spelling_penalty_);
     config->GetDouble("t9/word_penalty", &t9_word_penalty_);
+    config->GetDouble("t9/tail_completion_weight", &t9_tail_completion_weight_);
     config->GetString("t9/sentence_model", &t9_sentence_model_);
     config->GetDouble("t9/sentence_weight", &t9_sentence_weight_);
     string ngram_model;

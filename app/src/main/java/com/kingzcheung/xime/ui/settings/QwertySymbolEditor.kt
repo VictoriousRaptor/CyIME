@@ -246,7 +246,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                 SettingsPreferences.setSwipeUpHintsEnabled(context, it) }
             SymbolSwitchRow("下方角标提示", "显示按键左下角的小符号", hints.down, "symbol-switch-down") {
                 SettingsPreferences.setSwipeDownHintsEnabled(context, it) }
-            Text("现在编辑「${variant.label}」这一套。三个开关组合出六套，各自保存，互不影响。", modifier = Modifier.testTag("symbol-variant"),
+            Text("正在编辑「${variant.label}」这一套。", modifier = Modifier.testTag("symbol-variant"),
                 style = MaterialTheme.typography.bodyMedium)
         }
         Text("点按键修改，${topGesture}输入上方，${bottomGesture}输入下方" + (if (merged != null) ""
@@ -348,8 +348,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             title = { Text("从另一套复制") },
             text = {
                 Column {
-                    Text("现在这一套是「${variant.label}」。选一套，把它的全部上下角标和跟随全角半角的设置搬过来，" +
-                        "现在这一套原有的符号会被覆盖；被复制的那一套不变。", style = MaterialTheme.typography.bodySmall)
+                    Text("选一套复制到「${variant.label}」，这一套的符号会被覆盖。", style = MaterialTheme.typography.bodySmall)
                     CornerVariant.entries.filter { it != variant }.forEach { other ->
                         Row(Modifier.fillMaxWidth().testTag("symbol-copy:${other.id}").clickable { source = other }
                             .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -440,7 +439,11 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
         ?.let { "现在是「${LetterSwipeBindings.label(it)}」，清掉下面的滑动动作才输入符号" }
     val upNote = shadowedBy(upperSlot)
     val downNote = shadowedBy(lowerSlot)
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("symbol-editor-dialog"),
+    fun finish() = onDone(upText, downText, swipeDraft, upFollows.takeIf { followUp != null }, downFollows.takeIf { followDown != null })
+    val changed = upText != up || downText != down || swipeDraft != swipes ||
+        (followUp != null && upFollows != (followUp == true)) || (followDown != null && downFollows != (followDown == true))
+    var leaving by remember(key) { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = { if (changed) leaving = true else onDismiss() }, modifier = Modifier.testTag("symbol-editor-dialog"),
         title = { Text(key.uppercase()) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -461,10 +464,28 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
                 }
             }
         },
-        confirmButton = { TextButton(onClick = {
-            onDone(upText, downText, swipeDraft, upFollows.takeIf { followUp != null }, downFollows.takeIf { followDown != null })
-        }) { Text("完成") } },
+        confirmButton = { TextButton(onClick = { finish() }) { Text("完成") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    if (leaving) UnsavedChangesDialog(onSave = { leaving = false; finish() }, onDiscard = { leaving = false; onDismiss() },
+        onKeepEditing = { leaving = false })
+}
+
+/**
+ * 小框里改了还没点「完成」时点了框外（比如顶部的页签）或返回：不直接关掉、丢掉改的字，先问一句
+ * （用户 11-19：改到一半切顶部语言，改的全没了）。点「取消」是明确不要，不问。
+ */
+@Composable
+internal fun UnsavedChangesDialog(onSave: () -> Unit, onDiscard: () -> Unit, onKeepEditing: () -> Unit) {
+    AlertDialog(onDismissRequest = onKeepEditing, modifier = Modifier.testTag("symbol-unsaved-dialog"),
+        title = { Text("改的还没保存") },
+        text = { Text("要保存这次的修改吗？") },
+        confirmButton = { TextButton(onClick = onSave, modifier = Modifier.testTag("symbol-unsaved-save")) { Text("保存") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDiscard, modifier = Modifier.testTag("symbol-unsaved-discard")) { Text("不保存") }
+                TextButton(onClick = onKeepEditing, modifier = Modifier.testTag("symbol-unsaved-keep")) { Text("接着改") }
+            }
+        })
 }
 
 /** 本页的开关一律是「标题 + 一行说明 + 右侧 Switch」的整行开关。 */
@@ -493,7 +514,8 @@ private fun FollowWidthRow(symbol: String, checked: Boolean, tag: String, onChan
 }
 
 /**
- * 「整排输入」：三排键的上方、下方各一行字，一次改完一整排（格式见 [SymbolRowText]）。显示的那一边排在前面。
+ * 「整排输入」：三排键的上方、下方各一行字，一次改完一整排（格式见 [SymbolRowText]：一个字符一格，空格是空位）。
+ * 显示的那一边排在前面。每行下面照键盘排出这一行读成什么，多写、少写一眼看得出。
  */
 @Composable
 private fun SymbolRowsDialog(values: Map<String, String>, variant: CornerVariant, onDismiss: () -> Unit,
@@ -502,36 +524,63 @@ private fun SymbolRowsDialog(values: Map<String, String>, variant: CornerVariant
     val names = listOf("第一排 Q 到 P", "第二排 A 到 L", "第三排 Z 到 M")
     fun shown(direction: String) = if (direction == "up") variant.showsUp else variant.showsDown
     val directions = listOf("up" to "上方", "down" to "下方").sortedByDescending { shown(it.first) }
-    val drafts = remember {
-        mutableStateMapOf<String, String>().apply {
+    val initial = remember {
+        buildMap {
             for ((direction, _) in directions) rows.forEachIndexed { index, row ->
                 put("$direction.$index", SymbolRowText.format(row.map { values["$direction.$it"].orEmpty() }))
             }
         }
     }
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("symbol-rows-dialog"),
+    val drafts = remember { mutableStateMapOf<String, String>().apply { putAll(initial) } }
+    var leaving by remember { mutableStateOf(false) }
+    fun finish() = onDone(values + buildMap {
+        for ((direction, _) in directions) rows.forEachIndexed { index, row ->
+            SymbolRowText.parse(drafts.getValue("$direction.$index"), row.size)
+                .forEachIndexed { column, cell -> put("$direction.${row[column]}", cell) }
+        }
+    })
+    AlertDialog(onDismissRequest = { if (drafts.toMap() != initial) leaving = true else onDismiss() },
+        modifier = Modifier.testTag("symbol-rows-dialog"),
         title = { Text("整排输入") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("一个字符一格，从左到右对应这一排的键；空着的格子写 ${SymbolRowText.EMPTY}。要放短语时，用空格把各格隔开。",
+                Text("一个字符一格，从左到右对应这一排的键；打空格就是空着的格子。几个字的短语用「」括起来算一格。",
                     style = MaterialTheme.typography.bodySmall)
-                for ((direction, directionName) in directions) rows.indices.forEach { index ->
-                    OutlinedTextField(value = drafts.getValue("$direction.$index"), onValueChange = { drafts["$direction.$index"] = it },
+                for ((direction, directionName) in directions) rows.forEachIndexed { index, row ->
+                    val text = drafts.getValue("$direction.$index")
+                    OutlinedTextField(value = text, onValueChange = { drafts["$direction.$index"] = it },
                         singleLine = true,
                         label = { Text("${names[index]} $directionName" + if (shown(direction)) "" else "（键盘上不显示）") },
+                        supportingText = { SymbolRowPreview(row, text) },
                         modifier = Modifier.fillMaxWidth().testTag("symbol-row:$direction.$index"))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = {
-            onDone(values + buildMap {
-                for ((direction, _) in directions) rows.forEachIndexed { index, row ->
-                    SymbolRowText.parse(drafts.getValue("$direction.$index"), row.size)
-                        .forEachIndexed { column, cell -> put("$direction.${row[column]}", cell) }
-                }
-            })
-        }) { Text("完成") } },
+        confirmButton = { TextButton(onClick = { finish() }) { Text("完成") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    if (leaving) UnsavedChangesDialog(onSave = { leaving = false; finish() }, onDiscard = { leaving = false; onDismiss() },
+        onKeepEditing = { leaving = false })
+}
+
+/** 整排输入框下面：这一行读成哪个键放什么，空着的格子画个淡点；写多了说一声多出的不要。 */
+@Composable
+private fun SymbolRowPreview(row: List<String>, text: String) {
+    val cells = SymbolRowText.parse(text, row.size)
+    val extra = SymbolRowText.cellCount(text) - row.size
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            row.forEachIndexed { column, key ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(key.uppercase(), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    val cell = cells[column]
+                    Text(cell.ifEmpty { "·" }, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                        modifier = Modifier.alpha(if (cell.isEmpty()) 0.38f else 1f))
+                }
+            }
+        }
+        if (extra > 0) Text("多写了 $extra 格，最后 $extra 格不放", color = MaterialTheme.colorScheme.error)
+    }
 }
 
 @Composable

@@ -4,6 +4,8 @@ object SettingsRoutes {
     const val HardwareKeyboard = "hardware_keyboard"
     const val Main = "main"
     const val Schema = "schema"
+    /** 「已安装的方案」并直接开始选文件导入（语言与方案页的「导入方案」）。 */
+    const val SchemaImport = "schema_import"
     const val DoublePinyin = "double_pinyin"
     const val ChineseInput = "chinese_input"
     const val EnglishInput = "english_input"

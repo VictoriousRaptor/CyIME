@@ -1894,5 +1894,85 @@ TEST(T9RightCommitHandlerTest, FuzzyReadingInUnassignedDigitsConsumesWholeSyllab
     EXPECT_TRUE(ctx.input_buffer.is_empty());
 }
 
+// ── 双拼九键：左栏选中段是双拼键位（小鹤 gua=gx→49，hao=hc→42），候选注释是全拼 ──
+
+TEST(T9RightCommitHandlerTest, DoublePinyinConsumedKeysCountsSelectionKeys) {
+    T9Buffer both("4942", {SyllableOption("gx", 2), SyllableOption("hc", 2)}, 4, 4);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(both, "gx'hc", 5), 4);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(both, "gx'hc", 2), 2);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(both, "ab'hc", 5), -1);
+    T9Buffer first("4942", {SyllableOption("gx", 2)}, 2, 4);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(first, "gx'42", 5), 4);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(first, "gx'42", 2), 2);
+    // 前面已经右选掉 2 个键：换算结果含这段前缀。
+    T9Buffer after("964942", {SyllableOption("gx", 2)}, 4, 6);
+    EXPECT_EQ(T9RightCommitHandler::DoublePinyinConsumedKeys(after, "gx'42", 5), 6);
+}
+
+TEST(T9RightCommitHandlerTest, DoublePinyinBothSyllablesChosenFullCommit) {
+    // 用户报：小鹤双拼九键 4942，左栏选 gua、hao 后选「挂号」，以前剩下一个 2（显示「挂号b」）。
+    SyllableOption gx("gx", 2), hc("hc", 2);
+    auto ctx = MakeContext({"4942", {gx, hc}, 4, T9StateMachine::State::kSelection,
+                            hc, std::string("42"), "gx", {gx, hc}});
+    ctx.double_pinyin = true;
+    T9RightCommitHandler handler;
+    EXPECT_TRUE(handler.HandleRightCommit(ctx, std::optional<std::string>("gua hao"), 2,
+                                          /*rime_consumed_digits=*/4));
+    EXPECT_TRUE(ctx.input_buffer.is_empty());
+    EXPECT_TRUE(ctx.state_machine.is_idle());
+}
+
+TEST(T9RightCommitHandlerTest, DoublePinyinFirstSyllableChosenFullCommit) {
+    // 只选了 gua，后面 42 还没分配：「挂号」覆盖全部 4 个键。
+    SyllableOption gx("gx", 2);
+    auto ctx = MakeContext({"4942", {gx}, 2, T9StateMachine::State::kSelection,
+                            gx, std::string("4942"), "", {gx}});
+    ctx.double_pinyin = true;
+    T9RightCommitHandler handler;
+    EXPECT_TRUE(handler.HandleRightCommit(ctx, std::optional<std::string>("gua hao"), 2, 4));
+    EXPECT_TRUE(ctx.input_buffer.is_empty());
+    EXPECT_TRUE(ctx.state_machine.is_idle());
+}
+
+TEST(T9RightCommitHandlerTest, DoublePinyinSingleCharKeepsLaterSelection) {
+    // 选了 gua、hao 后选单字「挂」：只去掉 gua，hao 仍是选中段。
+    SyllableOption gx("gx", 2), hc("hc", 2);
+    auto ctx = MakeContext({"4942", {gx, hc}, 4, T9StateMachine::State::kSelection,
+                            hc, std::string("42"), "gx", {gx, hc}});
+    ctx.double_pinyin = true;
+    T9RightCommitHandler handler;
+    EXPECT_FALSE(handler.HandleRightCommit(ctx, std::optional<std::string>("gua"), 1, 2));
+    ASSERT_EQ(ctx.input_buffer.selections.size(), 1u);
+    EXPECT_EQ(ctx.input_buffer.selections[0].pinyin, "hc");
+    EXPECT_EQ(ctx.input_buffer.consumed_count, 4);
+    EXPECT_TRUE(ctx.input_buffer.unassigned().empty());
+    EXPECT_TRUE(ctx.state_machine.is_selection());
+    ASSERT_EQ(ctx.state_machine.selection_history().size(), 1u);
+    EXPECT_EQ(ctx.state_machine.selection_history()[0].pinyin, "hc");
+}
+
+TEST(T9RightCommitHandlerTest, DoublePinyinPartialLeavesTypedDigitsOnly) {
+    // 选 gua 后 4942 42 只选「挂号」：剩下的是用户真打了的 42，不多不少。
+    SyllableOption gx("gx", 2);
+    auto ctx = MakeContext({"494242", {gx}, 2, T9StateMachine::State::kSelection,
+                            gx, std::string("494242"), "", {gx}});
+    ctx.double_pinyin = true;
+    T9RightCommitHandler handler;
+    EXPECT_FALSE(handler.HandleRightCommit(ctx, std::optional<std::string>("gua hao"), 2, 4));
+    EXPECT_TRUE(ctx.input_buffer.selections.empty());
+    EXPECT_EQ(ctx.input_buffer.unassigned(), "42");
+    EXPECT_TRUE(ctx.state_machine.is_input());
+}
+
+TEST(T9RightCommitHandlerTest, DoublePinyinFlagOffKeepsFullPinyinPath) {
+    // 全拼九键不受影响：gua(482)+hao(426) 选「挂号」照旧整段上屏。
+    SyllableOption gua("gua", 3), hao("hao", 3);
+    auto ctx = MakeContext({"482426", {gua, hao}, 6, T9StateMachine::State::kSelection,
+                            hao, std::string("426"), "gua", {gua, hao}});
+    T9RightCommitHandler handler;
+    EXPECT_TRUE(handler.HandleRightCommit(ctx, std::optional<std::string>("gua hao"), 2, 6));
+    EXPECT_TRUE(ctx.input_buffer.is_empty());
+}
+
 }  // namespace
 }  // namespace rime

@@ -33,6 +33,18 @@ object InputModes {
         prefs.edit().putString(LANGUAGE_ORDER_KEY, orderWithLanguageLast(saved, language).joinToString("\n")).apply()
     }
 
+    /**
+     * 各页列语言共用的先后：用户在「语言与方案」拖出来的顺序，没排过的是中文、英文、日语，其余在后，未标注语言最后。
+     * 关着的语言也有位置，所以「已安装的方案」里关着的方案、布局管理的语言菜单都按同一个顺序排。
+     */
+    fun languageRank(ids: List<String>): (InputLanguage) -> Int {
+        val order = languageOrder(ids)
+        return { language -> order.indexOf(language).takeIf { it >= 0 } ?: order.size }
+    }
+
+    fun languageRank(context: Context): (InputLanguage) -> Int = languageRank(
+        SettingsPreferences.getPrefsPublic(context).getString(LANGUAGE_ORDER_KEY, "").orEmpty().lines())
+
     fun languageOrder(context: Context): List<InputLanguage> = languageOrder(
         SettingsPreferences.getPrefsPublic(context).getString(LANGUAGE_ORDER_KEY, "").orEmpty().lines())
         .filter { it in LanguagePreferences.enabled(context) }
@@ -90,7 +102,7 @@ object InputModes {
 
     /** One entry per language, pointing to that language's last available mode. */
     fun languageChoices(schemas: List<SchemaInfo>, currentModeId: String,
-        remembered: Map<InputLanguage, String>, languageOrder: List<InputLanguage> = InputLanguage.entries,
+        remembered: Map<InputLanguage, String>, languageOrder: List<InputLanguage> = defaultLanguageOrder,
         selectedProfiles: Map<InputLanguage, String> = emptyMap(), fieldNativeModeId: String? = null): List<SchemaInfo> {
         val modes = available(schemas)
         val order = languageOrder + if (modes.any { it.language == InputLanguage.UNSPECIFIED })

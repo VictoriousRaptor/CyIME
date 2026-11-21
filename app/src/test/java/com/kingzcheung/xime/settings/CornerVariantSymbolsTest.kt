@@ -145,16 +145,28 @@ class CornerVariantSymbolsTest {
 
     @Test fun `a whole row is written as one line`() {
         assertEquals("1234567890", SymbolRowText.format("1234567890".map(Char::toString)))
-        assertEquals("（）□、", SymbolRowText.format(listOf("（", "）", "", "、")))
-        assertEquals(listOf("（", "）", "", "、"), SymbolRowText.parse("（）□、", 4))
+        // 空着的格子就是一个空格（用户 11-19：不用打 □）。
+        assertEquals("（） 、", SymbolRowText.format(listOf("（", "）", "", "、")))
+        assertEquals(listOf("（", "）", "", "、"), SymbolRowText.parse("（） 、", 4))
+        // 前后的空格不去掉，它们也是空位；全角空格一样。
+        assertEquals(listOf("", "a", "", ""), SymbolRowText.parse(" a  ", 4))
+        assertEquals(listOf("a", "", "b"), SymbolRowText.parse("a\u3000b", 3))
+        assertEquals(listOf("", "", ""), SymbolRowText.parse("   ", 3))
         // 写少了后面空着，写多了丢掉。
         assertEquals(listOf("a", "b", ""), SymbolRowText.parse("ab", 3))
         assertEquals(listOf("a", "b"), SymbolRowText.parse("abc", 2))
-        // 有短语时用空格隔开。
-        assertEquals("你好 ! □", SymbolRowText.format(listOf("你好", "!", "")))
-        assertEquals(listOf("你好", "!", ""), SymbolRowText.parse(" 你好  ! □ ", 3))
+        assertEquals(4, SymbolRowText.cellCount("a b "))
+        // 短语用「」括起来算一格；「」里只有一个字或没有字时，「」是普通符号。
+        assertEquals("「你好」! ", SymbolRowText.format(listOf("你好", "!", "")))
+        assertEquals(listOf("你好", "!", ""), SymbolRowText.parse("「你好」! ", 3))
+        assertEquals(listOf("「", "」", "a"), SymbolRowText.parse("「」a", 3))
+        assertEquals(listOf("「", "，", "」"), SymbolRowText.parse("「，」", 3))
+        assertEquals(listOf("「", "a", "", "b"), SymbolRowText.parse("「a b」", 4))
         // 表情这类占两个 char 的字符算一格。
         assertEquals(listOf("😀", "a"), SymbolRowText.parse("😀a", 2))
         assertEquals(listOf("", "", ""), SymbolRowText.parse("", 3))
+        // 写出来再读回去不变。
+        val row = listOf("“", "", "你好", "\\", "", "「", "")
+        assertEquals(row, SymbolRowText.parse(SymbolRowText.format(row), row.size))
     }
 }

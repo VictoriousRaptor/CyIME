@@ -7,7 +7,7 @@ internal data class LetterKeyboardFrame(val rowUnits: List<Int>) {
     val columns: Float get() = 10f
 
     fun geometry(cellWidth: Float, stagger: Float): LetterRowGeometry {
-        val progress = stagger.coerceIn(0f, 1f)
+        val progress = stagger.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX)
         val middleFree = columns - rowUnits[1]
         val middleStart = middleFree * (.5f - .25f * progress)
         val bottomFree = columns - rowUnits[2]

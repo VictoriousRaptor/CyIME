@@ -32,6 +32,25 @@ class TxtCellDictionaryTest {
     }
 
     @Test
+    fun `stroke dictionary lines are kept for stroke input instead of skipped`() {
+        assertEquals("猫娘", TxtCellDictionary.strokeWord("猫娘 pz"))
+        assertEquals("猫娘", TxtCellDictionary.strokeWord("猫娘\tpzpshhsszhsh'zphnzhhzpn\t100"))
+        assertEquals("骆驼", TxtCellDictionary.strokeWord("zzhpzns 骆驼"))
+        assertNull(TxtCellDictionary.strokeWord("你好 hello"))
+        assertNull(TxtCellDictionary.strokeWord("你好"))
+        assertNull(TxtCellDictionary.strokeWord("你 p"))
+        val words = ArrayList<String>()
+        val text = "猫娘 pz\n你好 ni hao\n骆驼 zz\n猫娘 pzps'zphn\n你好 hello\n"
+        val summary = TxtCellDictionary.read({ text.byteInputStream() }, { words += it }) { }
+        assertEquals(listOf("猫娘", "骆驼"), words)
+        assertEquals(1, summary.count)
+        assertEquals(2, summary.stroke)
+        assertEquals(1, summary.skipped)
+        // 只有笔画编码的文件也能导入，不再报「没有读到带拼音的词条」。
+        assertEquals(1, TxtCellDictionary.read({ "猫娘 pz\n".byteInputStream() }) { }.stroke)
+    }
+
+    @Test
     fun `encodings and rime header`() {
         val text = "# comment\n---\nname: x\n...\n你好\tni hao\n世界\tshi jie\n"
         val parsed = TxtCellDictionary.parse(text.toByteArray(Charsets.UTF_8))

@@ -109,9 +109,20 @@ internal fun avoidHardwareEditor(
     fun overlap(p: HardwareToolbarOffset) = (minOf(p.x + width, right) - maxOf(p.x, left)).coerceAtLeast(0f) *
         (minOf(p.y + height, bottom) - maxOf(p.y, top)).coerceAtLeast(0f)
     if (overlap(preferred) == 0f) return preferred
+    // 只上下挪开，不横着跳：光标每打一个字都往右走，横向避让会让工具条跟着光标左右跳（用户 11-20，与 Windows 一致）。
     return listOf(preferred, geometry.constrain(preferred.x, top - height),
-        geometry.constrain(preferred.x, bottom), geometry.constrain(left - width, preferred.y),
-        geometry.constrain(right, preferred.y)).minWith(compareBy<HardwareToolbarOffset> { overlap(it) }.thenBy {
+        geometry.constrain(preferred.x, bottom)).minWith(compareBy<HardwareToolbarOffset> { overlap(it) }.thenBy {
             val dx = it.x - preferred.x; val dy = it.y - preferred.y; dx * dx + dy * dy
         })
+}
+
+/**
+ * 固定在某一边时工具条的位置：底部 = 原来的贴底（[isBottomDocked]）；左右 = 原来靠边的竖条，上下居中；
+ * 顶部 = 顶边居中的横条（不占 App 底部，不给 App 留白）。
+ */
+internal fun com.kingzcheung.xime.settings.HardwareToolbarEdge.toolbarPosition(): HardwareToolbarPosition = when (this) {
+    com.kingzcheung.xime.settings.HardwareToolbarEdge.TOP -> HardwareToolbarPosition(0.5f, 0f)
+    com.kingzcheung.xime.settings.HardwareToolbarEdge.BOTTOM -> HardwareToolbarPosition(0.5f, 1f)
+    com.kingzcheung.xime.settings.HardwareToolbarEdge.LEFT -> HardwareToolbarPosition(0f, 0.5f)
+    com.kingzcheung.xime.settings.HardwareToolbarEdge.RIGHT -> HardwareToolbarPosition(1f, 0.5f)
 }

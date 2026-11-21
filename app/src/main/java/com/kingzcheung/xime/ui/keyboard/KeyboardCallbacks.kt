@@ -79,6 +79,8 @@ data class KeyboardCallbacks(
     val sentenceWords: (String) -> List<String>? = { null },
     /** 长按卡片里点了整句的第几个词：只重选这个词，前后的字不动。 */
     val onReselectSentenceWord: ((List<String>, Int) -> Unit)? = null,
+    /** 九键首选上拖选了第 start 到 end 个字（首选、start、end）：从这里重选，见 [usesT9DragReselect]。 */
+    val onReselectSentenceRange: ((String, Int, Int) -> Unit)? = null,
     /** 用户展开候选页时请求服务层拉取跨页全量候选（本地分页数据源）。 */
     val onRequestExpandedCandidates: (() -> Unit)? = null,
     /** 收起的候选栏滑到最后几个：服务层把展开列表接到候选栏后面。 */

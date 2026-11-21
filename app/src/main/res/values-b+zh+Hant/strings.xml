@@ -41,7 +41,7 @@
     <string name="item_prediction_title">智慧聯想</string>
     <string name="item_prediction_summary">基礎聯想、個人學習與可選模型增強</string>
     <string name="item_speech_title">語音轉文字</string>
-    <string name="item_speech_summary">本機辨識、線上語音、字幕</string>
+    <string name="item_speech_summary">語音模型、線上語音、標點、糾錯</string>
     <string name="item_handwriting_title">手寫</string>
     <string name="item_handwriting_summary">停頓辨識、公式標記、手寫模型</string>
     <string name="section_system">系統</string>

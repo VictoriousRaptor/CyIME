@@ -16,6 +16,10 @@ object CellDictionaryRime {
         profile.mode == InputMode.KEYBOARD && profile.engineProfile is EngineProfile.Rime &&
         profile.scheme in setOf(InputScheme.PINYIN, InputScheme.DOUBLE_PINYIN)
 
+    /** 笔画方案：导入的词换成笔画首笔另编一个词表（[StrokeCellDictionary]），不走拼音词库包。 */
+    internal fun usesStrokeCells(profile: InputProfile): Boolean = profile.language == InputLanguage.CHINESE &&
+        profile.engineProfile is EngineProfile.Rime && profile.scheme == InputScheme.STROKE
+
     internal fun packName(dictionary: String): String = "user_cyime_cells_" +
         CellDictionaryStore.digest(dictionary.toByteArray()).take(16)
 
@@ -29,18 +33,41 @@ object CellDictionaryRime {
         val base = original.replace(managed, "")
         if (pack == null) return base
         require(pack.matches(Regex("user_cyime_cells_[a-f0-9]{16}")))
-        val source = if (base.lineSequence().all { it.isBlank() || it.trimStart().startsWith('#') })
-            base + (if (base.isEmpty() || base.endsWith('\n')) "" else "\n") + "patch:\n" else base
-        val node = SchemaManager.yaml.parseToYamlNode(source)
-        require(node is YamlMap || node is YamlNull) { "方案自定义文件不是 YAML 映射" }
-        val root = node as? YamlMap
-        val patchNode = root?.node("patch")
-        val map = patchNode as? YamlMap
+        val map = patchMap(base)
         require(map?.node("translator/packs/+") == null && map?.node("translator/packs/@next") == null) {
             "方案已自定义追加词库，暂不能自动合并；原配置已保留"
         }
         val englishLines = english?.let { kind -> CellDictionaryEnglish.patchLines(kind) { map?.node(it) != null } }
         require(english == null || englishLines != null) { "方案已自定义追加翻译器，暂不能自动合并英文词；原配置已保留" }
+        // user_* also satisfies the legacy T9 pack validator; the file already exists before deployment.
+        return withBlock(base, listOf("\"translator/packs/+\": [\"$pack\"]") + englishLines.orEmpty())
+    }
+
+    /** 笔画方案：导入的词库换成笔画首笔写成 [StrokeCellDictionary.NAME]，列进方案依赖一起编译；[enabled] 为假时只去掉旧块。 */
+    internal fun strokePatch(original: String, enabled: Boolean): String {
+        val base = patch(original, null)
+        if (!enabled) return base
+        val map = patchMap(base)
+        require(map?.node("schema/dependencies") == null && map?.node("schema/dependencies/+") == null) { "方案已自定义依赖，暂不能自动合并；原配置已保留" }
+        return withBlock(base, listOf("\"schema/dependencies/+\": [${StrokeCellDictionary.NAME}]"))
+    }
+
+    private fun patchSource(base: String): String =
+        if (base.lineSequence().all { it.isBlank() || it.trimStart().startsWith('#') })
+            base + (if (base.isEmpty() || base.endsWith('\n')) "" else "\n") + "patch:\n" else base
+
+    private fun patchMap(base: String): YamlMap? {
+        val node = SchemaManager.yaml.parseToYamlNode(patchSource(base))
+        require(node is YamlMap || node is YamlNull) { "方案自定义文件不是 YAML 映射" }
+        return (node as? YamlMap)?.node("patch") as? YamlMap
+    }
+
+    /** 把 [lines] 作为受管块插在 patch: 下面（[base] 已去掉旧块）。 */
+    private fun withBlock(base: String, lines: List<String>): String {
+        val source = patchSource(base)
+        val root = SchemaManager.yaml.parseToYamlNode(source) as? YamlMap
+        val patchNode = root?.node("patch")
+        val map = patchNode as? YamlMap
         // Reject flow maps/aliases instead of rewriting third-party YAML and losing its semantics.
         val line = Regex("(?m)^patch:[ \\t]*(?:#[^\\r\\n]*)?(?:\\r?\\n|$)").find(source)
         require(line != null || patchNode == null) { "暂不支持此方案的 patch 写法；原配置已保留" }
@@ -49,8 +76,6 @@ object CellDictionaryRime {
             val following = source.substring(requireNotNull(line).range.last + 1)
             Regex("(?m)^([ ]+)\\S").find(following)?.groupValues?.get(1) ?: "  "
         } else "  "
-        // user_* also satisfies the legacy T9 pack validator; the file already exists before deployment.
-        val lines = listOf("\"translator/packs/+\": [\"$pack\"]") + englishLines.orEmpty()
         val block = "$indentation$START$newline" + lines.joinToString("") { "$indentation$it$newline" } + "$indentation$END$newline"
         val output = if (line == null) {
             val withoutEnd = source.trimEnd().removeSuffix("...").trimEnd()
@@ -96,10 +121,22 @@ object CellDictionaryRime {
         val mainTable = updates.mainTable()
         // A changed version line changes the pack file, which is what makes the deployment hash ask for a rebuild.
         val version = if (mainTable != null || ids.any { !updates.dictionaries[it].isNullOrEmpty() }) "1.${updates.revision}" else "1"
+        var strokeCells = false
+        val strokeTable = File(rimeDir, "stroke.dict.yaml")
         for (schema in schemas) {
             val customFile = File(rimeDir, "${schema.schemaId}.custom.yaml")
             val original = customFile.takeIf { it.isFile }?.readText().orEmpty()
-            val supported = supports(schema.toSchemaInfo().profile)
+            val profile = schema.toSchemaInfo().profile
+            if (usesStrokeCells(profile)) {
+                // 笔画方案自己的配置写不进去时只是笔画用不上导入的词，不挡拼音那边应用。
+                val enabled = ids.isNotEmpty() && strokeTable.isFile
+                runCatching { strokePatch(original, enabled) }.onSuccess { patched ->
+                    if (patched != original) writes[customFile] = patched
+                    strokeCells = strokeCells || enabled
+                }
+                continue
+            }
+            val supported = supports(profile)
             // The maintainer's online words need the pack even when no cell dictionary is on.
             if ((ids.isEmpty() && mainTable == null) || !supported) {
                 if (original.contains(START)) writes[customFile] = patch(original, null)
@@ -139,8 +176,19 @@ object CellDictionaryRime {
             if (updates.dictionaries[id].isNullOrEmpty()) copies[target] = store.dictionaryFile(id)
             else writes[target] = updates.extend(id, store.dictionaryFile(id).readText())
         }
+        if (strokeCells)
+            writes[File(rimeDir, "${StrokeCellDictionary.NAME}.schema.yaml")] = StrokeCellDictionary.schema
         writes.forEach { (file, text) -> CellDictionaryStore.writeAtomic(file, text) }
         copies.forEach { (file, source) -> CellDictionaryStore.copyAtomic(source, file) }
+        val strokeDictionary = File(rimeDir, "${StrokeCellDictionary.NAME}.dict.yaml")
+        if (strokeCells) {
+            StrokeCellDictionary.write(strokeDictionary, strokeTable, ids.sorted().flatMap {
+                listOf(File(rimeDir, "cyime_cells/cell_$it.dict.yaml"), store.strokeWordsFile(it)).filter(File::isFile)
+            })
+        } else {
+            strokeDictionary.delete()
+            File(rimeDir, "${StrokeCellDictionary.NAME}.schema.yaml").delete()
+        }
         return bindings
     }
 }

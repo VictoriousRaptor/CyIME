@@ -54,13 +54,13 @@ private fun updateSubtitle(state: AppUpdateState): String {
         }
         is AppUpdateState.Available -> state.release.asset?.let { asset ->
             "${state.release.version} $editionName ${formatModelMegabytes(asset.sizeBytes)}，点一下下载"
-        } ?: if (AppUpdater.privateBuild) "${state.release.version} 已发布；自用版不在这里一键更新(会换掉个人模型)，点一下打开发布页"
+        } ?: if (AppUpdater.privateBuild) "${state.release.version} 已发布，点一下打开发布页"
         else "${state.release.version} 没有适合这台设备的安装包，点一下打开发布页"
         is AppUpdateState.Downloading -> {
             val total = if (state.total > 0) " / ${formatModelMegabytes(state.total)}" else ""
             "正在下载 ${state.release.version}：${formatModelMegabytes(state.downloaded)}$total，点一下暂停"
         }
-        is AppUpdateState.ReadyToInstall -> "${state.release.version} 已下载，点一下安装；安装时键盘会关掉再打开"
+        is AppUpdateState.ReadyToInstall -> "${state.release.version} 已下载，点一下安装"
         is AppUpdateState.Failed -> "${state.message}，点一下重试"
     }
 }
@@ -122,7 +122,7 @@ internal fun AppUpdateSection() {
         SettingsToggleItem(
             icon = Icons.TwoTone.Update,
             title = "自动检查更新",
-            subtitle = "打开设置时每天最多查一次，有新版本在设置首页提示，不会自己下载",
+            subtitle = "有新版本时在设置首页提示，不自动下载",
             checked = autoCheck,
             onCheckedChange = { enabled ->
                 autoCheck = enabled
@@ -137,7 +137,7 @@ internal fun AppUpdateSection() {
         SettingsToggleItem(
             icon = Icons.TwoTone.NewReleases,
             title = "更新后提示更新内容",
-            subtitle = "更新后第一次打开设置，首页顶上提示一次，点开或关掉就不再出现",
+            subtitle = "更新后在设置首页提示一次",
             checked = notesPrompt,
             onCheckedChange = { enabled ->
                 notesPrompt = enabled

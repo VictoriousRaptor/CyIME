@@ -62,7 +62,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * 上屏后的联想不放收起键盘按钮，最右箭头与组词共用展开/返回语义。
+ * 候选栏一边只有一个按钮（用户 11-20）：空闲、联想、打字最右都是收起键盘；展开靠在候选上横着拉。
  * 设了 CYIME_RENDER_OUT=<目录> 时另出一张各主题的对照图 association-hide.png。
  */
 @RunWith(AndroidJUnit4::class)
@@ -105,35 +105,44 @@ class AssociationHideButtonTest {
         }
     }
 
-    @Test fun composingAndAssociationUseTheSameRightEdgeToExpand() {
+    @Test fun everyStateKeepsHideOnTheRightAndExpandsByPulling() {
         KeyboardThemes.initFromConfig(ApplicationProvider.getApplicationContext<Context>())
         val actions = mutableListOf<String>()
         rule.setContent {
             Column {
-                Bar(CandidateBarState.Idle)
-                Bar(association, onOpen = { actions += "open-association" }, onHide = { actions += "hide" })
-                Bar(composing, onOpen = { actions += "open-composing" })
+                Bar(CandidateBarState.Idle, onHide = { actions += "hide-idle" })
+                Bar(association, onOpen = { actions += "open-association" }, onHide = { actions += "hide-association" })
+                Bar(composing, onOpen = { actions += "open-composing" }, onHide = { actions += "hide-composing" })
             }
         }
         rule.waitForIdle()
-        val hides = rule.onAllNodesWithTag("toolbar-hide", useUnmergedTree = true).fetchSemanticsNodes()
-        // 只有空闲有；联想和打字候选都没有。
-        assertEquals(1, hides.size)
-        val arrows = rule.onAllNodesWithTag("candidate-expansion", useUnmergedTree = true)
-        val (assoc, typing) = arrows.fetchSemanticsNodes().map { it.boundsInRoot }
+        // 一边只有一个按钮（用户 11-20）：右边空闲、联想、打字都是收起键盘，同一个位置；没有展开按钮。
+        val idle = rule.onNodeWithTag("toolbar-hide", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val hides = rule.onAllNodesWithTag("candidate-hide", useUnmergedTree = true)
+        val (assoc, typing) = hides.fetchSemanticsNodes().map { it.boundsInRoot }
+        assertEquals(idle.right, assoc.right, 0.5f)
         assertEquals(typing.right, assoc.right, 0.5f)
-        arrows[0].performClick(); arrows[1].performClick()
-        assertEquals(listOf("open-association", "open-composing"), actions)
+        rule.onNodeWithTag("candidate-expansion", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag("toolbar-hide", useUnmergedTree = true).performClick()
+        hides[0].performClick(); hides[1].performClick()
+        // 展开：在候选上横着拉过门槛松手。
+        val pulls = rule.onAllNodesWithTag("candidate-pull-expand", useUnmergedTree = true)
+        pulls[0].pullAcross(); pulls[1].pullAcross(leftward = false)
+        assertEquals(listOf("hide-idle", "hide-association", "hide-composing", "open-association", "open-composing"), actions)
     }
 
-    @Test fun expandedAssociationShowsOnlyTheBackButton() {
+    @Test fun expandedAssociationStillHidesOnTheRight() {
         KeyboardThemes.initFromConfig(ApplicationProvider.getApplicationContext<Context>())
         var backed = 0
-        rule.setContent { Bar(association, expanded = true, onBack = { backed++ }) }
+        var hidden = 0
+        var opened = 0
+        rule.setContent { Bar(association, expanded = true, onBack = { backed++ }, onHide = { hidden++ }, onOpen = { opened++ }) }
         rule.waitForIdle()
-        assertEquals(0, rule.onAllNodesWithTag("toolbar-hide", useUnmergedTree = true).fetchSemanticsNodes().size)
-        rule.onNodeWithTag("candidate-expansion", useUnmergedTree = true).performClick()
-        assertEquals(1, backed)
+        rule.onNodeWithTag("candidate-expansion", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag("candidate-hide", useUnmergedTree = true).performClick()
+        // 已经展开着：栏上再拉不会再展开一次（收回在展开页上划）。
+        rule.onNodeWithTag("candidate-pull-expand", useUnmergedTree = true).pullAcross()
+        assertEquals(listOf(0, 1, 0), listOf(backed, hidden, opened))
     }
 
     @Test fun keyboardOpensPredictionsAndCommitsTheTappedWordWithoutPagingTheEngine() {
@@ -158,7 +167,7 @@ class AssociationHideButtonTest {
                 candidateState = snapshot, inputSessionManagedByHost = true)
         }
         for (word in words.drop(1)) {
-            rule.onNodeWithTag("candidate-expansion").performClick()
+            rule.pullOpenCandidates()
             rule.onNodeWithTag("expanded-candidates").assertExists()
             rule.onNodeWithTag("expanded-filter-key").assertDoesNotExist()
             if (word == words[1]) saveWindow("association-expanded.png", "feedback-keyboard")
@@ -168,7 +177,7 @@ class AssociationHideButtonTest {
         assertEquals(words.drop(1), committed)
         assertEquals(0, engineRequests)
         // An async prediction replaces the row between pointer-down and selection.
-        rule.onNodeWithTag("candidate-expansion").performClick()
+        rule.pullOpenCandidates()
         rule.onNodeWithText("上午").performTouchInput { down(center) }
         rule.runOnIdle {
             snapshot.value = CandidateState(associationCandidates = listOf("明天", "下午", "出发"))
@@ -178,19 +187,31 @@ class AssociationHideButtonTest {
         rule.onNodeWithText("下午").performClick()
         assertEquals("下午", committed.last())
         rule.runOnIdle { snapshot.value = CandidateState(associationCandidates = listOf("唯一")) }
-        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
-        rule.runOnIdle {
-            snapshot.value = CandidateState(pendingEnglishText = "He", associationCandidates = listOf("Hello", "Help"))
-        }
+        // 只有一个联想：拉不开。
+        rule.pullOpenCandidates()
+        rule.onNodeWithTag("expanded-candidates").assertDoesNotExist()
         rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
         rule.runOnIdle {
             snapshot.value = CandidateState(inputText = "ming", candidates = listOf("明天", "明"),
                 isComposing = true, hasNextPage = true)
         }
-        rule.onNodeWithTag("candidate-expansion").performClick()
+        rule.pullOpenCandidates()
         rule.onNodeWithTag("expanded-filter-key").performClick()
         rule.runOnIdle { assertTrue(viewModel.singleCharFilter.value) }
         assertEquals(1, engineRequests)
+        // 英文补全也能拉开展开页，在展开页上横着划收回（用户 11-20）。
+        rule.runOnIdle {
+            viewModel.setCandidatePageExpanded(false)
+            snapshot.value = CandidateState(pendingEnglishText = "He", associationCandidates = listOf("Hello", "Help", "Here",
+                "Hey", "Head", "Heart", "Heavy", "Hero", "Health", "Hearing", "Heaven", "Height"))
+        }
+        rule.pullOpenCandidates()
+        rule.onNodeWithTag("expanded-candidates").assertExists()
+        // 划得不够：弹回，不收回。
+        rule.onNodeWithTag("expanded-candidates", useUnmergedTree = true).pullAcross(leftward = false, fraction = 0.1f)
+        rule.onNodeWithTag("expanded-candidates").assertExists()
+        rule.swipeCloseCandidates()
+        rule.onNodeWithTag("expanded-candidates").assertDoesNotExist()
     }
 
     private fun saveWindow(name: String, cropTag: String? = null) {

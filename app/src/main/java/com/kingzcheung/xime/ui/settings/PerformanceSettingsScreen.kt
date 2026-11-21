@@ -71,9 +71,9 @@ internal val tierNames = mapOf(PerformanceTier.HIGH to "高配", PerformanceTier
  * 用户 11-03「档位要更强」：中配、低配还会关掉液态玻璃等，高配不替用户打开没开过的效果。
  */
 private fun tierHint(tier: PerformanceTier, speech: Boolean): String = when (tier) {
-    PerformanceTier.HIGH -> "动效和炫光全开，其他效果保持原样" + if (speech) "；语音模型常驻，二次校正空闲 30 分钟后释放" else ""
-    PerformanceTier.MEDIUM -> "保留按键动效，关炫光和液态玻璃" + if (speech) "；语音空闲 5 分钟先释放二次校正，30 分钟后全部释放" else ""
-    PerformanceTier.LOW -> "关动效、炫光、键缝动效、液态玻璃、点按气泡、滑行实时显示词、手写边写边识别" + if (speech) "；语音用完 1 分钟就释放" else ""
+    PerformanceTier.HIGH -> "动效和炫光全开"
+    PerformanceTier.MEDIUM -> "保留按键动效，关炫光和玻璃"
+    PerformanceTier.LOW -> "关掉动效和特效，最省电"
 }
 
 /** 开销页要的几样，都要读文件或偏好，在后台读。 */
@@ -274,7 +274,7 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
                     // 「自定义」一直列着但不能点：手动改过明细或动效、值对不上任何一档时自动选中，表示当前状态。
                     val isCustom = !auto && current == null
                     RowDivider()
-                    TierRow("自定义", "单独改过档位管的任一项后自动选中", isCustom, enabled = false) {}
+                    TierRow("自定义", "单独改过某项设置时", isCustom, enabled = false) {}
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     // 「自动」按这个定算力档；主频、核数只在顶上显示，不算分。点一下重测（刚玩完游戏发热时测低了可以再测）。
@@ -301,12 +301,12 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (hasSecondPass) {
                             IdleLevelSlider("语音二次校正空闲后释放", settings.speechRefinerIdleMinutes,
-                                "先卸掉二次校正模型，再用时第一句定稿稍慢",
+                                "释放后再用时稍慢",
                                 "speech-refiner-idle-slider") { custom(settings.copy(speechRefinerIdleMinutes = it)) }
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
                         }
                         IdleLevelSlider("语音模型空闲后全部释放", settings.speechEngineIdleMinutes,
-                            "“永不”= 一直常驻，按麦克风最快，占内存最多",
+                            "“永不”最快，但最占内存",
                             "speech-engine-idle-slider",
                             neverWarning = PerformanceCosts.voiceResidentWarning(costSource)) {
                             custom(settings.copy(speechEngineIdleMinutes = it))
@@ -331,8 +331,8 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
                 }
             }
             item {
-                Text(if (speech) "语音设置在下次开始说话时生效。字幕模式开着时不会释放语音模型。"
-                    else "语音转文本关着，语音模型不加载，语音释放的设置不显示。",
+                Text(if (speech) "下次说话时生效。"
+                    else "语音转文本关着。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 24.dp))
             }

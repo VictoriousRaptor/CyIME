@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kingzcheung.xime.clipboard.CLIPBOARD_SHOW_IN_BAR_KEY
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_MAX_LINES_KEY
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CLOSE_AFTER_PASTE_KEY
 import com.kingzcheung.xime.ui.theme.XimeTheme
@@ -36,14 +37,16 @@ class ClipboardPanelSettingsTest {
     @Test fun everyClipboardSettingIsOnThePageAndWritesThePanelsValue() {
         prefs.edit().clear().commit()
         rule.setContent { XimeTheme(darkTheme = false) { ClipboardPanelSettingsContent(onBack = {}, onNavigateToGroups = {}) } }
-        listOf("剪贴板分组", "卡片显示行数", "最近截图", "上屏后自动关闭剪贴板", "历史记录", "数量上限", "保留时间").forEach {
+        listOf("剪贴板分组", "卡片显示行数", "最近截图", "上屏后自动关闭剪贴板", "候选栏显示刚复制的内容", "历史记录", "数量上限", "保留时间").forEach {
             rule.onNodeWithText(it).performScrollTo()
         }
         rule.onNodeWithTag("clipboard-card-lines:8").performScrollTo().performClick()
         rule.onNodeWithText("上屏后自动关闭剪贴板").performScrollTo().performClick()
+        rule.onNodeWithText("候选栏显示刚复制的内容").performScrollTo().performClick()
         rule.waitForIdle()
         assertEquals(8, prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))
         assertFalse(prefs.getBoolean(CLIPBOARD_CLOSE_AFTER_PASTE_KEY, true))
+        assertFalse(prefs.getBoolean(CLIPBOARD_SHOW_IN_BAR_KEY, true))
         System.getenv("CYIME_RENDER_OUT")?.takeIf { it.isNotEmpty() }?.let { out ->
             rule.onNodeWithText("剪贴板分组").performScrollTo()
             rule.waitForIdle()

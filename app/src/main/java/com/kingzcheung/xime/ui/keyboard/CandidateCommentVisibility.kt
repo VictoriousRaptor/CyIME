@@ -78,6 +78,22 @@ internal fun rememberCorrectionMarksVisible(): Boolean {
 }
 
 @Composable
+internal fun rememberLearnedMarkVisible(): Boolean {
+    val context = LocalContext.current
+    val preferences = remember(context) { SettingsPreferences.getPrefsPublic(context) }
+    var visible by remember(preferences) { mutableStateOf(SettingsPreferences.showLearnedMark(context)) }
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == SettingsPreferences.KEY_SHOW_LEARNED_MARK)
+                visible = SettingsPreferences.showLearnedMark(context)
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return visible
+}
+
+@Composable
 internal fun rememberDoublePinyinKeysShown(): Boolean {
     val context = LocalContext.current
     val preferences = remember(context) { SettingsPreferences.getPrefsPublic(context) }
@@ -91,4 +107,17 @@ internal fun rememberDoublePinyinKeysShown(): Boolean {
         onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     return keysShown
+}
+
+/**
+ * 「拼音显示声调」开着时的读音表；没开、还没读完时为 null（拼音照原样）。开了才在后台读表，读完界面自动换成标调的拼音。
+ */
+@Composable
+internal fun rememberPreeditToneData(enabled: Boolean): com.kingzcheung.xime.rime.PinyinTones.Data? {
+    if (!enabled) return null
+    val context = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.kingzcheung.xime.rime.PinyinTones.load(context) }
+    // 读 revision 让表读完时重组。
+    com.kingzcheung.xime.rime.PinyinTones.revision
+    return com.kingzcheung.xime.rime.PinyinTones.data
 }

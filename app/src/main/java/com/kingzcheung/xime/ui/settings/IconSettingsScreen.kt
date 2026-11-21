@@ -59,11 +59,11 @@ internal fun IconSettingsContent(onBack: () -> Unit, onChanged: () -> Unit) {
                         }
                     }
                     Text(when (choice) {
-                        DesktopIconChoice.THEME -> "换键盘主题时，桌面图标换成同色的图标。"
-                        DesktopIconChoice.VISUAL_STYLE -> "桌面图标和键盘的视觉样式一起换；视觉样式在「主题与外观」里选。"
-                        DesktopIconChoice.CUSTOM -> "在下面挑图标，键盘外观不跟着变。"
+                        DesktopIconChoice.THEME -> "图标颜色跟随键盘主题。"
+                        DesktopIconChoice.VISUAL_STYLE -> "图标跟随「主题与外观」里的视觉样式。"
+                        DesktopIconChoice.CUSTOM -> "从下面选一个图标。"
                     }, style = MaterialTheme.typography.bodySmall)
-                    Text("桌面可能要过一会儿才刷新。三星等桌面每换一次图标会先移除再添加，图标可能跑到应用列表最后，要重新拖回原位。",
+                    Text("桌面图标可能稍后才更新，位置可能会变。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     // 字幕的桌面图标开关在字幕插件页（和字幕的其他设置在一起），这里只指路，不放第二个开关；没装字幕插件不提。
                     if (com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(androidx.compose.ui.platform.LocalContext.current))
@@ -90,7 +90,7 @@ internal fun IconSettingsContent(onBack: () -> Unit, onChanged: () -> Unit) {
                             }
                         }
                     }
-                    Text("带底板和别的桌面图标一样大、外框统一；无底板图案更突出。有的桌面仍会自动加底板。",
+                    Text("带底板时和其他图标大小一致",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

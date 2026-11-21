@@ -38,7 +38,7 @@ class AsrSupportStartupTest {
         whenever(preferences.getBoolean(any(), any())).thenReturn(true)
         AsrSupport.releaseModel()
         mockConstruction(OfflineAsrBackend::class.java) { backend, construction ->
-            assertSame("The shared backend must retain the application context", application, construction.arguments().single())
+            assertSame("The shared backend must retain the application context", application, construction.arguments().first())
             whenever(backend.initialize(any())).thenReturn(true)
         }.use { backends ->
             try {

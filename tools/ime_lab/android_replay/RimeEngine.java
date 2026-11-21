@@ -28,6 +28,10 @@ public final class RimeEngine {
     public native String[] nativePinyinEditSnapshot();
     public native void nativeSetCaret(int caret);
     public native String[] nativePinyinSyllableOptions();
+    public native String[] nativeSentenceEditSnapshot();
+    public native String[] nativeSentenceEditCandidates(String code, int[] selected, int originalBegin, int originalEnd);
+    public native boolean nativeApplySentenceEdit(String input, String sentence, int start, int end,
+                                                  String code, String replacement, int[] lengths, int[] choices);
     public native boolean nativeSelectPinyinSyllable(String expectedInput, String expectedSchema, int start, int end, int syllableId);
     public native int nativePinyinSyllablesChosen();
     public native boolean nativeUndoPinyinSyllable(String expectedInput, String expectedSchema);

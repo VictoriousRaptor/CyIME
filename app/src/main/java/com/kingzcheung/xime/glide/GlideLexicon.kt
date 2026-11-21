@@ -192,14 +192,21 @@ object GlideLexicon {
         if (dictionary) {
             val decoder = cachedDecoder(if (doublePinyin == null) "t9" else "t9sp", doublePinyin, T9Glide.keyboard(keys),
                 T9Glide.MAX_ENDPOINT) { t9Codes(context, doublePinyin).index.keys.toList() }
-            val found = decoder.decode(xs, ys, limit = 1 + alternatives.coerceAtLeast(0))
-            found.firstOrNull()?.let { first ->
+            val found = decoder.decode(xs, ys, limit = 1 + alternatives.coerceAtLeast(0)).map { it.word }
+            if (found.isNotEmpty()) {
+                // 这条线上次点过备选的，先出点过的那个词（[T9GlideMemory]）；记不住、查不到时照旧。
+                val ranked = runCatching {
+                    val codes = t9Codes(context, doublePinyin)
+                    val line = GlideDecoder.collapseRepeats(found.first())
+                    T9GlideMemory.promote(found, T9GlideMemory.preferred(context.filesDir, line),
+                        codes.lines[line].orEmpty(), t9WordOf(context, doublePinyin))
+                }.getOrElse { found }
                 val words = if (alternatives <= 0) emptyList() else runCatching {
                     val codes = t9Codes(context, doublePinyin)
-                    T9Glide.alternatives(found.map { it.word }, { codes.lines[it].orEmpty() }, t9WordOf(context, doublePinyin))
+                    T9Glide.alternatives(ranked, { codes.lines[it].orEmpty() }, t9WordOf(context, doublePinyin))
                         .take(alternatives)
                 }.getOrElse { emptyList() }
-                return T9GlideResult(first.word, words)
+                return T9GlideResult(ranked.first(), words)
             }
         }
         return T9GlideResult(T9Glide.turnDigits(xs, ys, keys), emptyList())
@@ -220,6 +227,12 @@ object GlideLexicon {
                 for ((code, entry) in T9Glide.codeEntries(pinyin(context), doublePinyin)) put(code, entry)
             }).also { t9Codes[key] = it }
         }
+
+    /** 点了九键滑行的备选 [word]（这一笔打入的是 [digits]）：记下来，下次划同一条线先出它。须在后台线程调用。 */
+    fun rememberT9Choice(context: Context, digits: String, word: String) {
+        if (digits.isEmpty()) return
+        T9GlideMemory.remember(context.filesDir, GlideDecoder.collapseRepeats(digits), word)
+    }
 
     /** 九键滑行在首选之后给几个备选。 */
     const val T9_ALTERNATIVES = 2

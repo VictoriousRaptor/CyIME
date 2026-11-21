@@ -213,6 +213,8 @@ internal fun KeyboardResizeOverlay(
         val viewRect = viewRectOf(maxWidth.value * density.density, maxHeight.value * density.density)
         val previewState = LocalKeyboardResizePreviewState.current
         var dragRect by remember(floatingMode, maxWidth, maxHeight) { mutableStateOf<ResizeRect?>(null) }
+        // 调节界面里拖边、拖角、拖着移动时按屏幕最高刷新率跟手（用户 11-19）。
+        HighRefreshWhile(dragRect != null)
         var dragEdge by remember { mutableStateOf(ResizeHandle.NONE) }
         // 悬浮键盘转着时，边框、把手和按钮跟键盘一起绕键盘中心转；手势在键盘自己的（未旋转）坐标里算。
         // 手势进行中以按下时的中心为轴：手势坐标 = 把真实矩形的中心绕轴转回去，写回时再转过来。

@@ -144,7 +144,7 @@ fun ClipboardGroupSettingsContent(onBack: () -> Unit) {
                     }
                 }
                 item(key = "note") {
-                    SettingsNote("长按分组上下拖动，调整键盘分类栏的顺序。长按剪贴板记录，选「分组」放入。关掉的分类不在分类栏显示，记录仍在「全部」里。")
+                    SettingsNote("长按拖动调整顺序。关掉的分类不显示，记录仍在「全部」里。")
                 }
             }
         }

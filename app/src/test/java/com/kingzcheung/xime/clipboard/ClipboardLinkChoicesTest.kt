@@ -35,6 +35,25 @@ class ClipboardLinkChoicesTest {
         assertEquals("https://example.com/?si=1", ClipboardLinkChoices.cleanLink("https://example.com/?si=1"))
     }
 
+    @Test fun bilibiliPagesOtherThanVideosKeepTheirParameters() {
+        // 搜索、收藏夹靠参数打开：只去跟踪参数，不能只剩前半段（11-18）。
+        assertEquals("https://search.bilibili.com/all?keyword=CyIME&from_source=webtop_search",
+            ClipboardLinkChoices.cleanLink("https://search.bilibili.com/all?keyword=CyIME&from_source=webtop_search&spm_id_from=333.1007&vd_source=abc"))
+        assertEquals("https://space.bilibili.com/123/favlist?fid=456&ftype=create",
+            ClipboardLinkChoices.cleanLink("https://space.bilibili.com/123/favlist?fid=456&ftype=create&spm_id_from=333.1007"))
+        // 番剧页和视频页一样只留分 P、时间。
+        assertEquals("https://www.bilibili.com/bangumi/play/ep123?t=30",
+            ClipboardLinkChoices.cleanLink("https://www.bilibili.com/bangumi/play/ep123?from_spmid=666.25&t=30"))
+    }
+
+    @Test fun closingBracketThatBelongsToTheLinkIsKept() {
+        // 维基的括号是链接的一部分；多出来的右括号（链接写在括号里）照旧不算。
+        assertEquals(listOf("https://en.wikipedia.org/wiki/Mercury_(planet)"),
+            choices("看 https://en.wikipedia.org/wiki/Mercury_(planet) 这个"))
+        assertEquals(listOf("https://example.com/page"), choices("(see https://example.com/page)."))
+        assertEquals(emptyList<String>(), choices("https://en.wikipedia.org/wiki/Mercury_(planet)"))
+    }
+
     @Test fun nothingExtraWhenTheCopyIsAlreadyACleanLinkOrHasNoLink() {
         assertEquals(emptyList<String>(), choices("https://example.com/page"))
         assertEquals(emptyList<String>(), choices("明天下午三点开会"))

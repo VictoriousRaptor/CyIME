@@ -1,6 +1,9 @@
 package com.kingzcheung.xime.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.twotone.OpenWith
 import androidx.compose.material.icons.twotone.SpaceBar
@@ -19,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.settings.SpellingPatches
@@ -33,9 +38,9 @@ import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 
 internal enum class LayoutInputCategory(val route: String, val title: String, val description: String) {
     Qwerty("layout_input_qwerty", "26 键", "中英混输、字母错位、底栏顺序、分词键"),
-    Nine("layout_input_nine", "九键与 14 键", "拂动选字母、14 键双字母键、触发距离、方向圆盘与假名提示"),
+    Nine("layout_input_nine", "九键与 14 键", "拂动选字母、双字母键、假名提示"),
     /** 英文、中文 26 键和九键滑行原来分在 26 键、九键两页三个开关（用户 11-09「三个入口太乱」），合到这一页；存的值不变。 */
-    Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行，实时显示词，逐字删除"),
+    Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行"),
 }
 
 /** 日语 26 键的长音 ー 放在哪：三张带图例的卡片，默认 L 键（见 JapaneseLongVowelKey）。 */
@@ -47,7 +52,7 @@ internal fun JapaneseLongVowelKeySettings(
     Column(Modifier.settingsSearchAnchor("长音键").padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("长音键", style = MaterialTheme.typography.titleSmall)
-        Text("日语 26 键打 ー 的键。选单独键或 Shift 时 L 是字母 l，代替 Shift 时按住仍是 Shift。",
+        Text("日语 26 键上输入 ー 的键",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().choiceCardRowHeight(108.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             com.kingzcheung.xime.ui.keyboard.JapaneseLongVowelKey.entries.forEach { mode ->
@@ -79,14 +84,14 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 // 邻键纠错、模糊音 11-01 搬到「语言与方案」（跟着方案走，九键和 26 键页不再各放一份）。
                 SettingsSection(title = "大小写", content = {
                     SettingsToggleItem(Icons.TwoTone.Abc, "首字母大写",
-                        "英文(含英文单词方案)和西、德、法、意、俄、越南、马来语键盘上，新句子和新段落的第一个字母自动大写。",
+                        "英文等拉丁字母键盘上，句首字母自动大写",
                         checked = settings.englishSentenceCaps, onCheckedChange = {
                             settings = settings.copy(englishSentenceCaps = it); settings.save(context)
                         })
                 })
                 SettingsSection(title = "混输", content = {
                     SettingsToggleItem(Icons.TwoTone.Abc, "中英混输",
-                        "仅用于中文全拼 26 键；拼音里夹着英文词(nihaohello)时首选“你好hello”。本身像拼音的英文词(game、nice)认不出。",
+                        "全拼 26 键里夹着英文单词时，照样认出来",
                         checked = settings.mixedInput, onCheckedChange = {
                             settings = settings.copy(mixedInput = it); settings.save(context)
                         }, costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.MIXED_INPUT)
@@ -105,9 +110,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     HorizontalDivider()
                     // 逗号键分词（默认关）：下角标的方向跟「反转上下滑方向」走，说明照实际方向写。
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "逗号键分词",
-                        "中文全拼、双拼的 26 键和 14 键：逗号键左下角加 '(只开句号键时在句号键上)，" +
-                            "打拼音时${if (settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe) "下滑" else "上滑"}插入分词(xi'an)，F 键的 ' 仍跟随字母键手势；" +
-                            "没在打拼音时输入 '。英文和西、德、法、意、马来语也有这个 '，打单词时接进词里(what's、l'eau)。九键照旧用 1 键分词。",
+                        "打拼音时在逗号键上${if (settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe) "下滑" else "上滑"}插入分词符 '",
                         checked = settings.syllableSplitKey, onCheckedChange = {
                             settings = settings.copy(syllableSplitKey = it); settings.save(context)
                         })
@@ -117,9 +120,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "Shift 键分词",
-                        "中文全拼、双拼的 26 键和 14 键：打拼音时 Shift 键写「分词」，点一下插入分词(xi'an)；" +
-                            "没在打拼音时照旧切换大小写，按住 Shift 打大写也不变。" +
-                            "英文和西、德、法、意、马来语打单词时 Shift 键写 '，点一下打撇号(what's、l'eau)。",
+                        "打拼音时 Shift 键变成分词键",
                         checked = settings.shiftSyllableSplit, onCheckedChange = {
                             settings = settings.copy(shiftSyllableSplit = it); settings.save(context)
                         },
@@ -154,8 +155,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                             com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_FLICK_LETTERS, true)
                         SettingsToggleItem(Icons.TwoTone.OpenWith, "拂动选字母",
-                            "左、上、右、下依次输入键上的第 1～4 个字母(7、9 用到下)，点按仍是九键输入；" +
-                                "开启后长按输入数字、不再弹出字母菜单。",
+                            "向不同方向拂动直接输入键上的字母，长按输入数字",
                             checked = settings.t9FlickLetters && glideLock == null, onCheckedChange = {
                                 settings = settings.copy(t9FlickLetters = it); settings.save(context)
                             },
@@ -173,15 +173,14 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                                 valueRange = 20f..80f, steps = 5,
                                 onValueChange = { settings = settings.copy(candidateDragPercent = normalizeCandidateDragPercent(it)) },
                                 onValueChangeFinished = { settings.save(context) })
-                            Text(if (settings.t9MergeZeroIntoEnter) "已打开上面的「去掉 0 键，回车加高」，没有「下一项」键可拖，这项不起作用。"
-                                else "默认 50%。按住「下一项」拖过这么远才算拖到候选选词；没拖这么远仍是「下一项」自己的左滑、右滑。",
+                            Text(if (settings.t9MergeZeroIntoEnter) "已去掉 0 键，这项不起作用"
+                                else "拖动「下一项」超过这个距离才算选词",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     })
                     SettingsSection(title = "双字母键", content = {
                         SettingsToggleItem(Icons.TwoTone.SwapHoriz, "左右滑动选字母",
-                            "例如 qw：左滑输入 q，右滑输入 w，松手确认；点按仍使用合并键。" +
-                                "适用于拼音和小鹤双拼 14 键，以及自己合并成一格的两个字母(如自建 18 键的 as)。",
+                            "双字母键左滑输入左边的字母，右滑输入右边的",
                             checked = settings.fourteenLetterSwipe, onCheckedChange = {
                                 settings = settings.copy(fourteenLetterSwipe = it); settings.save(context)
                             })
@@ -194,7 +193,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                                 valueRange = 12f..72f, steps = 29,
                                 onValueChange = { settings = settings.copy(fourteenLetterSwipeDp = normalizeLetterSwipeDistance(it)) },
                                 onValueChangeFinished = { settings.save(context) })
-                            Text("默认 24 dp，越大越不易误触。九键拂动选字母、14 键和自建合并键左右滑选字母、日语九键假名拂动共用。",
+                            Text("越大越不容易误触",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     })
@@ -207,7 +206,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
                 SettingsSection(title = "布局", content = {
                     SettingsToggleItem(Icons.TwoTone.Gesture, "英文滑行",
-                        "英文 26 键手指划过字母出整词，候选栏可换成其他词；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
+                        "在英文 26 键上划过字母输入整个单词",
                         checked = settings.glideTyping, onCheckedChange = {
                             settings = settings.copy(glideTyping = it); settings.save(context)
                         },
@@ -215,15 +214,16 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_TYPING)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "中文滑行",
-                        "中文全拼、双拼 26 键划一个词的拼音，接着划或点按都接在后面，照常选字；字母键向任何方向滑动都用于滑词，到相邻字母即可松手。",
+                        "在全拼、双拼 26 键上划过拼音输入词语",
                         checked = settings.chineseGlideTyping, onCheckedChange = {
                             settings = settings.copy(chineseGlideTyping = it); settings.save(context)
                         },
                         lockMessage = glideLock?.takeIf { !settings.chineseGlideTyping }?.message,
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CHINESE_GLIDE)
+                    ExternalGlideSchemeItems(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行",
-                        "一笔划过一个词的几个键，松手后按词库认出这笔划的是哪几个键，再照常选词：划 5→2→4 可以选“来”，从 9 直接划到 4 是 94，路过的键不算。开启后 2～9 键滑动只用于滑词。",
+                        "在九键上一笔划过几个键输入词语",
                         checked = settings.t9GlideTyping, onCheckedChange = {
                             settings = settings.copy(t9GlideTyping = it); settings.save(context)
                         },
@@ -233,7 +233,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 SettingsSection(title = "选项", content = {
                     // 别的用户 11-02 提的（用惯 Gboard）：默认关；英文、中文滑行都没开时没有作用，关着就置灰。
                     SettingsToggleItem(Icons.TwoTone.Gesture, "滑行时实时显示词",
-                        "划的过程中按编码显示位置展示识别结果，中文显示拼音；抬手后按最终结果输入。只用于 26 键。",
+                        "滑行时边划边显示认出的词",
                         checked = settings.glidePreview, onCheckedChange = {
                             settings = settings.copy(glidePreview = it); settings.save(context)
                         },
@@ -242,7 +242,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLIDE_PREVIEW)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "逐字删除中文滑行",
-                        "开启后，删除键一次删除中文滑行输入中最后一个字对应的编码。",
+                        "删除键一次删掉滑行输入的一个字",
                         checked = settings.deleteChineseGlideCharacter, onCheckedChange = {
                             settings = settings.copy(deleteChineseGlideCharacter = it); settings.save(context)
                         })
@@ -251,8 +251,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 }
             }
             SettingsJumpText((if (category == LayoutInputCategory.Glide) "" else "滑行在「键盘布局 › 滑行输入」；") +
-                "分体键盘、按键符号在上一页「键盘布局」；角标、光标与空格在「按键与手势」；字号在「主题与外观 › 按键字号」；" +
-                "拼音纠错、模糊音在「语言与方案 › 中文输入」。",
+                "分体、按键符号见「键盘布局」；角标、光标见「按键与手势」；字号见「主题与外观 › 按键字号」；纠错、模糊音见「语言与方案 › 中文输入」。",
                 jumps = listOf("键盘布局 › 滑行输入", "键盘布局", "按键与手势", "主题与外观 › 按键字号", "语言与方案 › 中文输入"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -277,9 +276,11 @@ internal fun NeighborCorrectionSection() {
     var typos by remember { mutableStateOf(SpellingPatches.Typo.entries.associateWith { SpellingPatches.typo(context, it) }) }
     val needsNeighbor = if (settings.neighborCorrection) null else "要先打开「邻键纠错」"
     // 双拼 26 键停一下后也补顺序、多键（只有同一个键多按一下）、漏键三种（11-16）。
-    val fullOrDouble = if (support.fullPinyin || support.doublePinyin) null else "只用于 26 键全拼、双拼"
+    // 14 键全拼停一下后也补顺序、多键、漏键三种（11-20）。
+    val fullOrDouble = if (support.fullPinyin || support.doublePinyin || support.merged14) null else "只用于 26 键全拼、双拼、14 键"
     // 九键全拼停一下后也补邻键、顺序、漏键三种（多键没有）。
-    val anyKeyboard = if (support.fullPinyin || support.doublePinyin || support.nineKey) null else "只用于 26 键全拼、双拼、九键"
+    val anyKeyboard = if (support.fullPinyin || support.doublePinyin || support.nineKey || support.merged14) null
+        else "只用于 26 键全拼、双拼、九键、14 键"
     // 强度（11-16）：邻键纠错和九键各一条滑条，每一档下面写实测效果；最后几行是现在这种开关和强度组合测出来的效果。
     val on = typos.filterValues { it }.keys
     var lead by remember { mutableStateOf(TypoStrength.lead(context)) }
@@ -288,17 +289,17 @@ internal fun NeighborCorrectionSection() {
         value = kotlinx.coroutines.withContext(Dispatchers.IO) { runCatching { TypoEffects.table(context) }.getOrNull() }
     }
     SettingsSection(title = "拼音纠错", content = {
-        Text("26 键全拼四种都有；双拼 26 键有邻键纠错，停一下后还补顺序、多键(只有同一个键多按一下)、漏键；九键有邻键、顺序、漏键三种(停一下才出)；14 键不纠错。", style = MaterialTheme.typography.bodySmall,
+        Text("打错时也给出想打的词，原来的候选还在", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         SettingsToggleItem(Icons.TwoTone.Spellcheck, "邻键纠错",
-            "按偏到旁边的键时，也给出本来想打的词，原来的候选还在",
+            "按到旁边的键时也能出想打的词",
             checked = settings.neighborCorrection, onCheckedChange = {
                 settings.copy(neighborCorrection = it).save(context)
             }, lockMessage = anyKeyboard,
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.NEIGHBOR_CORRECTION)
         if (settings.neighborCorrection && support.fullPinyin) {
             TypoLevelSlider("邻键纠错强度", TypoStrength.Lead.entries, lead, { it.title },
-                "纠正出来的词什么时候排到你打的词前面。越保守越少抢第一，纠正的词仍在后面几个候选里。只用于 26 键全拼；改完要几秒重新部署",
+                "越保守，纠正的词越少排到第一",
                 effect = { level -> effects?.let { TypoEffects.leadText(it.fullPinyin, level, on) } }, tag = "typo-lead-strength") { chosen ->
                 TypoStrength.setLead(context, chosen)
                 lead = chosen
@@ -308,7 +309,7 @@ internal fun NeighborCorrectionSection() {
         if (showDouble) {
             HorizontalDivider()
             SettingsToggleItem(Icons.TwoTone.Spellcheck, "双拼邻键纠错",
-                "双拼 26 键按偏到旁边的键时，也给出本来想打的词(关着时只纠拼不成字的两个键)；改完要几秒重新部署",
+                "双拼按到旁边的键时也能出想打的词",
                 checked = settings.doublePinyinCorrection, onCheckedChange = {
                     settings.copy(doublePinyinCorrection = it).save(context)
                     scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
@@ -333,7 +334,7 @@ internal fun NeighborCorrectionSection() {
         if (support.nineKey) {
             HorizontalDivider()
             TypoLevelSlider("九键纠错强度", TypoStrength.Digit.entries, digit, { it.title },
-                "九键停一下后补出来的纠正给得多还是少(按到上下左右的键、少按一个、两个按反，各跟上面的邻键、漏键、顺序开关)；改完要几秒重新部署",
+                "九键停顿后给出纠正的多少",
                 effect = { level -> effects?.let { TypoEffects.digitText(it.nineKey, level) } }, tag = "typo-t9-strength") { chosen ->
                 TypoStrength.setDigit(context, chosen)
                 digit = chosen
@@ -346,7 +347,7 @@ internal fun NeighborCorrectionSection() {
         if (summary.isNotEmpty()) {
             HorizontalDivider()
             Column(Modifier.fillMaxWidth().padding(16.dp).testTag("typo-effect-summary"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("按现在的设置(26 键全拼，实测)", style = MaterialTheme.typography.bodyMedium,
+                Text("当前设置的效果", style = MaterialTheme.typography.bodyMedium,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                 summary.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 // 速度只跟开关有关，强度不改每键的工作量（各档实测每键耗时一样）。
@@ -407,15 +408,16 @@ private fun <T> TypoLevelSlider(
 }
 
 private fun typoCaption(typo: SpellingPatches.Typo): String = when (typo) {
-    SpellingPatches.Typo.TRANSPOSITION -> "相邻两个字母打反也出想打的词(如 shenem 出“什么”)，双拼是两个键按反、九键是两个数字按反，这两种停一下才出；改完要几秒重新部署"
-    SpellingPatches.Typo.EXTRA -> "多按一下或多碰到旁边的键也出想打的词(如 woomen 出“我们”)，双拼只补同一个键多按一下、停一下才出；改完要几秒重新部署"
-    SpellingPatches.Typo.OMISSION -> "漏打一个字母也出想打的词(如 chengong 出“成功”)，有的停一下才出，双拼是少按一个键、停一下才出；改完要几秒重新部署"
+    SpellingPatches.Typo.TRANSPOSITION -> "两个字母打反也能出想打的词，如 shenem 出“什么”"
+    SpellingPatches.Typo.EXTRA -> "多按了一个键也能出想打的词，如 woomen 出“我们”"
+    SpellingPatches.Typo.OMISSION -> "漏打一个字母也能出想打的词，如 chengong 出“成功”"
 }
 
-/** 已启用的中文方案里有没有 26 键全拼、26 键双拼、九键全拼：纠错只在这三种上起作用（九键只有邻键、顺序、漏键，停一下才出；双拼的顺序、多键、漏键也是停一下才出），都没有时对应的开关灰掉。 */
-internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean, val nineKey: Boolean = false) {
+/** 已启用的中文方案里有没有 26 键全拼、26 键双拼、九键全拼、14 键全拼：纠错只在这几种上起作用（九键只有邻键、顺序、漏键，停一下才出；双拼、14 键的顺序、多键、漏键也是停一下才出），都没有时对应的开关灰掉。 */
+internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean, val nineKey: Boolean = false,
+                                          val merged14: Boolean = false) {
     companion object {
-        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true, nineKey = true)
+        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true, nineKey = true, merged14 = true)
 
         fun of(context: android.content.Context): TypoCorrectionSupport =
             of(com.kingzcheung.xime.settings.SchemaManager.getEnabledSchemas(context) + SettingsPreferences.getCurrentSchema(context))
@@ -429,6 +431,9 @@ internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePin
                 doublePinyin = profiles.any { it.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN },
                 // 九键双拼不算：它不用九键全拼的数字纠错表。
                 nineKey = chinese.any { it.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9 &&
+                    it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN },
+                // 14 键双拼不算：它没有停顿纠错索引。
+                merged14 = chinese.any { it.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14 &&
                     it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN })
         }
     }
@@ -448,21 +453,19 @@ internal fun FuzzyPinyinSection() {
     val showDoublePinyinSwitch = remember { !doublePinyin }
     Column(Modifier.settingsSearchAnchor("模糊音")) {
         SettingsSection(title = "模糊音", content = {
-            Text("14 键双拼不适用。九键按数字后点左侧读音，带下划线、颜色浅一些的是相近读音。" +
-                "改完要几秒重新部署。",
+            Text("九键点左侧读音时，颜色浅的是相近读音。14 键双拼不适用。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             // 用户 11-02：九键按数字也模糊很耗性能，做成开关、默认关，开关和每组下面写实测代价，卡了自己关。
             SettingsToggleItem(Icons.TwoTone.Hearing, "九键按数字也模糊",
-                "九键直接按数字也出下面所开各组的相近读音(如 74 也出“是”)，不用再点左侧读音。" +
-                    "候选变多、每键变慢，首选也更容易不是想要的字；开的组越多越明显，打字卡了就关掉。改完要几秒重新部署。",
+                "九键按数字时也用下面开着的模糊音，开得越多越慢",
                 checked = t9Digits, onCheckedChange = { on ->
                     SpellingPatches.setFuzzyT9Digits(context, on)
                     t9Digits = on
                     scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
                 },
                 // 它只把下面开着的组用到数字上；一组都没开时没有效果，置灰写明（存的值不变）。
-                lockMessage = if (enabled.isEmpty()) "下面各组都没开，开了才起作用" else null,
+                lockMessage = if (enabled.isEmpty()) "下面至少开一组才起作用" else null,
                 extraCost = {
                     PerformanceCostTotalNote(enabled.mapTo(linkedSetOf()) { com.kingzcheung.xime.settings.PerformanceCosts.Item.t9Fuzzy(it) },
                         label = "性能开销(已开的 ${enabled.size} 组合计)", tag = "t9-fuzzy-digits")
@@ -470,13 +473,13 @@ internal fun FuzzyPinyinSection() {
             if (showDoublePinyinSwitch) {
                 HorizontalDivider()
                 SettingsToggleItem(Icons.TwoTone.Hearing, "模糊音也用于双拼",
-                    "关着时下面各组只对全拼起作用；打开后双拼也按读音模糊(in 和 ing 互通)",
+                    "双拼也用下面的模糊音",
                     checked = doublePinyin, onCheckedChange = { on ->
                         SpellingPatches.setFuzzyDoublePinyin(context, on)
                         doublePinyin = on
                         scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
                     })
-                if (usingDoublePinyin && !doublePinyin) Text("你现在用的是双拼：要打开上面这个开关，下面打开的各组才对双拼起作用。",
+                if (usingDoublePinyin && !doublePinyin) Text("你在用双拼，打开上面的开关后模糊音才对双拼生效",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp).testTag("fuzzy-double-pinyin-hint"))
             }
@@ -497,6 +500,7 @@ internal fun FuzzyPinyinSection() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QwertyStaggerSettings(
     settings: com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences,
@@ -505,8 +509,7 @@ private fun QwertyStaggerSettings(
     val modes = com.kingzcheung.xime.ui.keyboard.QwertyStaggerMode.entries
     Column(Modifier.settingsSearchAnchor("三行字母错位").padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("三行字母错位", style = MaterialTheme.typography.titleSmall)
-        Text("实体键盘：A 行右移 1/4 键、Z 行右移 3/4 键；手机常见：Z 与 S 上下对齐；按尺寸自动：手机用手机排布，" +
-            "平板逐渐过渡到实体排布。", style = MaterialTheme.typography.bodySmall,
+        Text("三行字母左右错开的方式", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().choiceCardRowHeight(108.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             modes.forEach { mode ->
@@ -524,13 +527,50 @@ private fun QwertyStaggerSettings(
         }
         if (settings.qwertyStagger == com.kingzcheung.xime.ui.keyboard.QwertyStaggerMode.CUSTOM) {
             var custom by remember(settings.qwertyStaggerCustom) { mutableStateOf(settings.qwertyStaggerCustom) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("手机", style = MaterialTheme.typography.bodySmall)
-                Slider(value = custom, onValueChange = { custom = it },
-                    onValueChangeFinished = { onChange(settings.copy(qwertyStaggerCustom = custom)) },
-                    valueRange = 0f..1f, modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                        .testTag("qwerty-stagger-custom"))
-                Text("实体", style = MaterialTheme.typography.bodySmall)
+            var sliderWidth by remember { mutableIntStateOf(0) }
+            var draggingEdge by remember { mutableStateOf<Float?>(null) }
+            val currentSettings by rememberUpdatedState(settings)
+            val currentOnChange by rememberUpdatedState(onChange)
+            fun Modifier.edgeDrag(endpoint: Float): Modifier {
+                if (draggingEdge != endpoint && kotlin.math.abs(-custom - endpoint) > 0.0001f) return this
+                return pointerInput(sliderWidth, endpoint) {
+                    var sliderValue = endpoint
+                    detectHorizontalDragGestures(
+                        onDragStart = { draggingEdge = endpoint; sliderValue = -custom },
+                        onHorizontalDrag = { change, distance ->
+                            if (sliderWidth > 0) {
+                                sliderValue = (sliderValue + 2f * distance / sliderWidth).coerceIn(-1f, 1f)
+                                custom = com.kingzcheung.xime.ui.keyboard.customStaggerFromSlider(sliderValue)
+                                change.consume()
+                            }
+                        },
+                        onDragEnd = {
+                            currentOnChange(currentSettings.copy(qwertyStaggerCustom = custom))
+                            draggingEdge = null
+                        },
+                        onDragCancel = { draggingEdge = null },
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Box(Modifier.height(48.dp).edgeDrag(-1f), contentAlignment = Alignment.Center) {
+                    Text("向左", style = MaterialTheme.typography.bodySmall)
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Slider(value = -custom, onValueChange = { custom = com.kingzcheung.xime.ui.keyboard.customStaggerFromSlider(it) },
+                            onValueChangeFinished = { onChange(settings.copy(qwertyStaggerCustom = custom)) },
+                            valueRange = com.kingzcheung.xime.ui.keyboard.QWERTY_STAGGER_MIN..com.kingzcheung.xime.ui.keyboard.QWERTY_STAGGER_MAX,
+                            track = { sliderState -> SliderDefaults.Track(sliderState = sliderState, drawStopIndicator = {}) },
+                            modifier = Modifier.fillMaxWidth().onSizeChanged { sliderWidth = it.width }.testTag("qwerty-stagger-custom"))
+                        Box(Modifier.size(4.dp).background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
+                    }
+                    Text("S 与 Z 对齐", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Box(Modifier.height(48.dp).edgeDrag(1f), contentAlignment = Alignment.Center) {
+                    Text("向右", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
@@ -542,16 +582,13 @@ private fun QwertyStaggerSettings(
  */
 /** 笔画键盘「去掉 0 键，回车加高」的说明：笔画的 0 键打字时也是「下一项」（11-18），去掉后和九键一样没有。 */
 internal fun strokeMergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe: Boolean): String {
-    val zero = if (cornerSymbolInput) "数字 0 在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}打(和 1～9 的数字一样，打字选词时不接)，数字键盘里也有。"
-        else "「上下滑输入符号」关着，回车上不能打 0，到数字键盘里打。"
-    return "笔画键盘右边一列只留删除、重输和占两格高的回车。没有「下一项」键：不能点它切下一项、左滑上一项，选词直接点候选。$zero"
+    val zero = if (cornerSymbolInput) "0 改在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}输入" else "0 到数字键盘里打"
+    return "没有「下一项」键，$zero"
 }
 
 internal fun t9MergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe: Boolean): String {
-    val zero = if (cornerSymbolInput) "数字 0 在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}打(和 1～9 的数字一样，打字选词时不接)，数字键盘里也有。"
-        else "「上下滑输入符号」关着，回车上不能打 0，到数字键盘里打。"
-    return "右边一列只留删除、重输和占两格高的回车。没有「下一项」键：不能点它切下一项、左滑上一项，" +
-        "长按换英文、拖到候选上屏英文也用不了，选词直接点候选。$zero"
+    val zero = if (cornerSymbolInput) "0 改在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}输入" else "0 到数字键盘里打"
+    return "没有「下一项」键，$zero"
 }
 
 /**
@@ -572,7 +609,7 @@ internal fun StrokeGlyphPreeditToggle() {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     SettingsToggleItem(Icons.TwoTone.Abc, "笔画编码显示成 一丨丿丶乛",
-        "关着时输入串和候选后面的剩余笔画显示 h s p n z(横竖撇点折)，打开后都显示成 一丨丿丶乛。改完要几秒重新部署",
+        "笔画编码显示成笔画，不显示 hspnz",
         checked = enabled, onCheckedChange = { on ->
             SpellingPatches.setStrokeGlyphPreedit(context, on)
             enabled = on

@@ -63,14 +63,73 @@ class OfflineAsrStartupTest {
         on { this.mode } doReturn mode
     }
 
+    /** 手动计时器：记下排了哪个任务、延迟多久，测试里自己决定什么时候跑。 */
+    private class ManualTimer : OfflineAsrBackend.IdleUnbindTimer {
+        var task: Runnable? = null
+        var delayMs: Long? = null
+        override fun schedule(delayMs: Long, task: Runnable) { this.task = task; this.delayMs = delayMs }
+        override fun cancel(task: Runnable) { if (this.task === task) { this.task = null; delayMs = null } }
+        fun fire() { task?.also { task = null; delayMs = null }?.run() }
+    }
+
+    @Test fun idleUnbindWaitsForTheUnloadTimeAndNeverHappensWhenResident() {
+        assertEquals(5 * 60_000L + OfflineAsrBackend.UNBIND_AFTER_RELEASE_MS, OfflineAsrBackend.idleUnbindDelayMs(5))
+        assertNull(OfflineAsrBackend.idleUnbindDelayMs(0))
+    }
+
+    @Test fun finishedSessionUnbindsTheVoiceProcessAfterTheUnloadTime() {
+        val timer = ManualTimer()
+        withBackend({ selection(SpeechModelCatalog.PARAFORMER) }, engineIdleMinutes = 5, timer = timer) { backend, client, _ ->
+            assertTrue(backend.prepareForRecording(InputLanguage.CHINESE))
+            assertTrue(backend.start(InputLanguage.CHINESE))
+            assertNull("No unbind is pending while the user is speaking", timer.task)
+            backend.stop()
+            assertEquals(5 * 60_000L + OfflineAsrBackend.UNBIND_AFTER_RELEASE_MS, timer.delayMs)
+            timer.fire()
+            verify(client).unbind()
+            // 下一次按话筒重新绑定。
+            assertTrue(backend.start(InputLanguage.CHINESE))
+            runBlocking { verify(client, times(2)).ensureBound() }
+        }
+    }
+
+    @Test fun newSessionCancelsAPendingUnbind() {
+        val timer = ManualTimer()
+        withBackend({ selection(SpeechModelCatalog.PARAFORMER) }, engineIdleMinutes = 5, timer = timer) { backend, client, _ ->
+            assertTrue(backend.prepareForRecording(InputLanguage.CHINESE))
+            assertTrue(backend.start(InputLanguage.CHINESE))
+            backend.cancel()
+            val pending = checkNotNull(timer.task)
+            assertTrue(backend.start(InputLanguage.CHINESE))
+            assertNull(timer.task)
+            pending.run() // 计时器已经拿出来的任务晚到了：正在说话，不解绑。
+            verify(client, never()).unbind()
+        }
+    }
+
+    @Test fun residentVoiceModelKeepsTheProcessBound() {
+        val timer = ManualTimer()
+        withBackend({ selection(SpeechModelCatalog.PARAFORMER) }, engineIdleMinutes = 0, timer = timer) { backend, client, _ ->
+            assertTrue(backend.prepareForRecording(InputLanguage.CHINESE))
+            assertTrue(backend.start(InputLanguage.CHINESE))
+            backend.stop()
+            assertNull(timer.task)
+            verify(client, never()).unbind()
+        }
+    }
+
     private fun withBackend(
         select: (InputLanguage) -> AsrModelManager.Selection,
+        engineIdleMinutes: Int? = null,
+        timer: OfflineAsrBackend.IdleUnbindTimer = ManualTimer(),
         test: (OfflineAsrBackend, AsrInferenceClient, MockedConstruction<AsrModelManager>) -> Unit,
     ) {
         val context = mock<Context>()
         val preferences = mock<SharedPreferences>()
         whenever(context.getSharedPreferences(any(), any())).thenReturn(preferences)
         whenever(preferences.getBoolean(any(), any())).thenReturn(true)
+        if (engineIdleMinutes != null) whenever(preferences.getInt(
+            eq(com.kingzcheung.xime.settings.SettingsPreferences.KEY_STT_ENGINE_IDLE_MINUTES), any())).thenReturn(engineIdleMinutes)
         // 整句定稿 keeps its own default (off) here; this test covers the normal finish limit.
         whenever(preferences.getBoolean(eq(com.kingzcheung.xime.settings.SettingsPreferences.KEY_STT_WHOLE_SENTENCE), any())).thenReturn(false)
 
@@ -84,7 +143,7 @@ class OfflineAsrStartupTest {
             mockConstruction(AsrModelManager::class.java) { manager, _ ->
                 whenever(manager.selectionForLanguage(any())).thenAnswer { select(it.getArgument(0)) }
             }.use { managers ->
-                val backend = OfflineAsrBackend(context)
+                val backend = OfflineAsrBackend(context, timer)
                 test(backend, clients.constructed().single(), managers)
             }
         }

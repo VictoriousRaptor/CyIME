@@ -59,7 +59,9 @@ internal fun LayoutMenuManagement(initialLanguage: InputLanguage?, layoutStatus:
     val choices = LayoutMenuPreferences.observe(language)
     val layouts = choices.ordered(InputProfileSelection.layoutRow(group, all))
     val shown = choices.shown(layouts)
-    val languages = (all.map { it.profile.language } + language).distinct()
+    // 语言菜单和别处同一个先后：中文、英文、日语…（以前跟着方案顺序，日语会排到英文前面）。
+    val languageRank = remember(entries) { InputModes.languageRank(context) }
+    val languages = (all.map { it.profile.language } + language).distinct().sortedBy(languageRank)
     key(language) {
         val drag = rememberDragOrder(layouts.map { it.id }) { LayoutMenuPreferences.reorder(context, language, it) }
         val byId = layouts.associateBy { it.id }
@@ -102,8 +104,8 @@ internal fun LayoutMenuManagement(initialLanguage: InputLanguage?, layoutStatus:
             item {
                 SettingsNote(failure ?: when {
                     entries == null -> "正在读取布局…"
-                    rows.isEmpty() -> "在「已安装的方案」中启用并部署此语言的方案后，布局会显示在这里。"
-                    else -> "开启的布局显示在键盘切换栏，长按可拖动排序。"
+                    rows.isEmpty() -> "启用这个语言的方案后，布局会显示在这里。"
+                    else -> "开着的布局显示在切换栏，长按拖动排序。"
                 })
                 TextButton(onClick = { context.startActivity(settingsActivityIntent(context, SettingsRoutes.Schema)) }) {
                     Text("已安装的方案")

@@ -10,7 +10,7 @@ object CandidateModelCatalog {
     val models = listOf(
         // 引擎按方案的 t9/ngram_model 在 rime 用户目录找 t9_ngram.lm；文件名必须保持 .lm。
         // 完整版与精简版写同一个文件名，装哪个九键就用哪个；紧凑格式（c3）内容与原 370 MB 文件相同，旧文件仍可读。
-        ModelInfo(NGRAM, "词组模型(完整，203 MB)", "让九键、26 键全拼和双拼按整句常用说法组词和排序，安装后重新启动输入法生效；不下载时九键使用旧算法，全拼长句只按词频出。CyIME 自行训练，默认推荐。", ModelCategory.CANDIDATE,
+        ModelInfo(NGRAM, "词组模型(完整，203 MB)", "九键、全拼和双拼按整句常用说法组词，长句更准。推荐。", ModelCategory.CANDIDATE,
             versions = listOf(
             // 2026-11-05：语料里的「觉的」改成「觉得」（2445 处），其余与 v3-ls-tri-c3 相同；回放候选不变、「就」后 58333 出「觉得」。
             ModelVersion(version = "v3-ls-tri-jue1105-c3", size = "202.9 MB", changelog = "「觉的」改成「觉得」，其余不变。", files = listOf(

@@ -162,15 +162,17 @@ class InferenceService : Service() {
             assets.open("handwriting/hanzi_frequency.tsv").bufferedReader(Charsets.UTF_8).useLines(HandwritingInference::loadFrequency)
         }.onFailure { Log.w(TAG, "hanzi frequency table unreadable", it) }
         // 字表外生僻字模板：特征按内置模型算的，换了别的模型就不用；个人模型是在内置模型上微调的，照用
-        HandwritingInference.loadRareTemplates(runCatching {
-            val personal = File(modelPath).name == "ochwpro-personal.onnx"
-            HanziRareTemplates.decode(
-                // 轻量版的生僻字模板是跟手写模型一起下载的（HandwritingAssets），没下好时这一步失败，不出生僻字。
-                com.kingzcheung.xime.handwriting.HandwritingAssets.readText(this, "hanzi_rare_och.json"),
-                com.kingzcheung.xime.handwriting.HandwritingAssets.readBytes(this, "hanzi_rare_och.bin"),
-                if (personal) null else sha256(File(modelPath)),
-            )
-        }.onFailure { Log.w(TAG, "rare hanzi templates unreadable", it) }.getOrNull())
+        // 轻量版的生僻字模板是跟手写模型一起下载的（HandwritingAssets），没下好时没有，不出生僻字。
+        // 下载的和安装包里的都有时先试下载的：手写模型从网上换了新版后只有它对得上。
+        val personal = File(modelPath).name == "ochwpro-personal.onnx"
+        val modelSha = runCatching { if (personal) null else sha256(File(modelPath)) }.getOrNull()
+        HandwritingInference.loadRareTemplates(
+            com.kingzcheung.xime.handwriting.HandwritingRarePack.copies(this).firstNotNullOfOrNull { read ->
+                runCatching {
+                    HanziRareTemplates.decode(String(read(com.kingzcheung.xime.handwriting.HandwritingRarePack.META), Charsets.UTF_8),
+                        read(com.kingzcheung.xime.handwriting.HandwritingRarePack.BIN), modelSha)
+                }.onFailure { Log.w(TAG, "rare hanzi templates unreadable", it) }.getOrNull()
+            })
         return true
     }
 

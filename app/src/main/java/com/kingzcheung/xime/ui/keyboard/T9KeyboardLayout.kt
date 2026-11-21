@@ -547,8 +547,9 @@ private fun T9KeyboardContent(
                 val candidateFontSize = metrics.fontSizeSp * minOf(1f, availableTextWidth / sample.size.width.coerceAtLeast(1))
                 // 超出四格时右缘显示滚动条；空闲的符号列末尾放「编辑」，点开这一栏的符号设置。
                 val railState = androidx.compose.foundation.lazy.rememberLazyListState()
-                // 符号列滑下去后开始打字，拼音列要从第一个起。
-                androidx.compose.runtime.LaunchedEffect(showCandidates) { railState.scrollToItem(0) }
+                // 符号列滑下去后开始打字，拼音列要从第一个起；读音换了（选完一段到下一段、又按了键）也回到第一个
+                // （用户 11-19：拉到底选了第一段，第二段的拼音还停在下面）。只换候选、读音没变时不动。
+                androidx.compose.runtime.LaunchedEffect(showCandidates, displayItems) { railState.scrollToItem(0) }
                 LazyColumn(
                     state = railState,
                     modifier = Modifier.fillMaxSize().testTag("t9-pinyin-options")

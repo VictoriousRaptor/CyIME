@@ -53,14 +53,34 @@ internal object ClipboardLinkChoices {
         return listOfNotNull(clean.takeIf { it != text.trim() }, bv?.takeIf { it != clean && it != text.trim() }).distinct()
     }
 
-    // 链接到空白、引号、尖括号或中文标点为止；末尾的英文标点（句号、逗号、右括号）不算链接。
+    // 链接到空白、引号、尖括号或中文标点为止；末尾的英文标点（句号、逗号、多出来的右括号）不算链接。
     private val linkPattern = Regex(
         "(?:https?://|www\\.|(?<![\\w.])(?:b23\\.tv|bili2233\\.cn)/)[^\\s<>\"'，。、；：！？（）【】「」《》“”‘’]+",
         RegexOption.IGNORE_CASE)
-    private val trailing = Regex("[.,;:!?)\\]}]+$")
+    private const val TRAILING_PUNCTUATION = ".,;:!?"
+    private val closers = mapOf(')' to '(', ']' to '[', '}' to '{')
 
     fun firstLink(text: String): String? =
-        linkPattern.find(text)?.value?.replace(trailing, "")?.takeIf { it.length > 4 }
+        linkPattern.find(text)?.value?.let { trimTrailing(it) }?.takeIf { it.length > 4 }
+
+    /**
+     * 去掉链接末尾的句读。右括号只在比左括号多时才去：维基这类 Mercury_(planet) 的括号是链接的一部分，
+     * 原来一律去掉，前面那项「干净链接」就少了结尾（11-18 一加 Ace 5：粘到浏览器只有前半段）。
+     */
+    private fun trimTrailing(link: String): String {
+        var end = link.length
+        while (end > 0) {
+            val last = link[end - 1]
+            val opener = closers[last]
+            val drop = if (opener != null) {
+                val part = link.substring(0, end)
+                part.count { it == opener } < part.count { it == last }
+            } else last in TRAILING_PUNCTUATION
+            if (!drop) break
+            end--
+        }
+        return link.substring(0, end)
+    }
 
     /**
      * 长数字：至少 [MIN_NUMBER_DIGITS] 位，数字之间可以隔一个空格或横线（138 1234 5678、090-1234-5678），
@@ -95,9 +115,23 @@ internal object ClipboardLinkChoices {
     private fun isBilibili(host: String) =
         host == "bilibili.com" || host.endsWith(".bilibili.com") || host == "b23.tv" || host == "bili2233.cn"
 
+    /**
+     * 只有视频页的参数全是来源记录。搜索（keyword）、收藏夹（fid）、稍后再看（bvid）这些页面靠参数打开，
+     * 原来按整个 B 站只留 p、t，干净链接打开就是搜索首页、空收藏夹（11-18：粘到浏览器只剩前半段）。
+     */
+    private fun isBilibiliVideoPage(host: String, base: String): Boolean {
+        if (!isBilibili(host)) return false
+        if (host == "b23.tv" || host == "bili2233.cn") return true
+        val path = base.substringAfter("://", base).substringAfter('/', "")
+        return path.startsWith("video/") || path.startsWith("bangumi/play/")
+    }
+
     private fun isOneOf(host: String, vararg domains: String) = domains.any { host == it || host.endsWith(".$it") }
 
-    /** B 站只留分 P 和时间；别的网站去掉常见的跟踪参数，其余参数原样留着（有的网站要靠它打开）。 */
+    /**
+     * B 站视频页（含番剧、短链接）只留分 P 和时间；B 站别的页面和别的网站一样，只去常见的跟踪参数，
+     * 其余参数原样留着（有的网站要靠它打开）。
+     */
     private val bilibiliKeep = setOf("p", "t")
     private val trackingExact = setOf(
         "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "igshid", "igsh", "mc_cid", "mc_eid",
@@ -123,7 +157,7 @@ internal object ClipboardLinkChoices {
         if (queryAt < 0) return url
         val base = beforeFragment.substring(0, queryAt)
         val host = host(base)
-        val bilibili = isBilibili(host)
+        val bilibili = isBilibiliVideoPage(host, base)
         val kept = beforeFragment.substring(queryAt + 1).split('&').filter { it.isNotEmpty() }.filter { pair ->
             val name = pair.substringBefore('=')
             if (bilibili) name.lowercase() in bilibiliKeep else !isTracking(name, host)

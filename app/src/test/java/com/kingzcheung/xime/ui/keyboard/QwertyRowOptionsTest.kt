@@ -17,10 +17,26 @@ class QwertyRowOptionsTest {
         // 手机常见：S 占 [1.5, 2.5]，Z 也从 1.5 开始，上下对齐。
         val phone = frame.geometry(1f, resolvedQwertyStagger(QwertyStaggerMode.PHONE, 1f, 40f, null))
         assertEquals(phone.middleRowInsetDp + 1f, phone.outerKeyWeight, 0.0001f)
-        // 自定义夹在两者之间；自动沿用按尺寸的原有曲线。
+        // 自定义可继续向右，保持字母宽度，左右功能键仍有空间。
+        val extra = frame.geometry(1f, resolvedQwertyStagger(QwertyStaggerMode.CUSTOM, -1f, 40f, null))
+        assertEquals(0.75f, extra.middleRowInsetDp, 0.0001f)
+        assertEquals(2.25f, extra.outerKeyWeight, 0.0001f)
+        assertEquals(0.75f, extra.deleteKeyWeight, 0.0001f)
+        assertEquals(-1f, resolvedQwertyStagger(QwertyStaggerMode.CUSTOM, -9f, 40f, null), 0.0001f)
+        // 原有设置和自动按尺寸的曲线不变。
         assertEquals(0.3f, resolvedQwertyStagger(QwertyStaggerMode.CUSTOM, 0.3f, 40f, null), 0.0001f)
         assertEquals(1f, resolvedQwertyStagger(QwertyStaggerMode.CUSTOM, 7f, 40f, null), 0.0001f)
         assertEquals(wideQwertyStagger(90f, 98f), resolvedQwertyStagger(QwertyStaggerMode.AUTO, 0f, 90f, 98f), 0.0001f)
+    }
+
+    @Test fun customSliderMovesRowsInItsDirectionAndSnapsToPhoneLayout() {
+        val frame = LetterKeyboardFrame(listOf(10, 9, 7))
+        val left = frame.geometry(1f, customStaggerFromSlider(-1f))
+        val right = frame.geometry(1f, customStaggerFromSlider(1f))
+        assertTrue(left.outerKeyWeight < right.outerKeyWeight)
+        assertEquals(0f, customStaggerFromSlider(0.04f), 0f)
+        assertEquals(0f, customStaggerFromSlider(-0.04f), 0f)
+        assertEquals(-0.1f, customStaggerFromSlider(0.1f), 0f)
     }
 
     @Test fun spacePunctuationFollowsTheChosenKeysAndWidth() {

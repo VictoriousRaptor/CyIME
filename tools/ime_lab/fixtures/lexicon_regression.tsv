@@ -1244,3 +1244,13 @@ product-cysync	26	cysync	CySync	1	用户反馈目标	2026-11-15	同上，另一�
 product-cyime-14	14	CTUmE	CyIME	3	用户反馈目标	2026-11-15	同上，14 键
 product-cyime-win	win26	cyime	CyIME	1	用户反馈目标	2026-11-15	同上，电脑版
 product-cyletix-win	win26	cyletix	Cyletix	1	用户反馈目标	2026-11-15	同上，电脑版
+user-shecanmengzi-26	26	shecanmengzi	蛇喰梦子	1	user	2026-11-19	can qi sun 都打不出「喰」，它只在词里（东京喰种）
+user-sun-26	26	sun	喰	10	user	2026-11-19	同上，单字补了 can qi sun，权重 1 排在同音字最后
+user-goushangren-26	26	goushangren	够伤人	1	user	2026-11-19	首选曾是「狗伤人」（腾讯词表有这个词，够伤人不是词）
+user-goushangren-9	9	46874264736	够伤人	1	user	2026-11-19	同上，九键
+user-goushangren-14	14	GOUAGABGEEB	够伤人	1	user	2026-11-19	同上，14 键
+user-shia-26	26	shia	是啊	1	user	2026-11-19	双拼简拼 uia 时是啊排第 13（rime-ice 词频 2700），用户修正表提到 300000
+user-gezhileyi	9	439445394	!何枝可依	1	user	2026-11-20	打到「搁置了一」首选曾是古诗词「何枝可依」（整句出「何枝可依断食加」）
+must-gezhileyiduanshijian	9	43944539438267445426	搁置了一段时间	1	user	2026-11-20	排序必过句（11-20 九键反馈，古诗词移出词库）
+must-gezhileyiduanshijian-26	26	gezhileyiduanshijian	搁置了一段时间	1	user	2026-11-20	排序必过句
+user-gezhileyiduanshijia-9	9	4394453943826744542	搁置了一段时间	1	user	2026-11-20	最后一个音节 jian 只打到 jia（542）时整句曾是「何止可以断食加」

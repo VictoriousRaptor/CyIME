@@ -452,7 +452,7 @@ class VoiceRecognitionHandler(
             return
         }
 
-        val cleanText = normalizeResult(text, parts)
+        val cleanText = normalizeResult(text, parts, isFinal = true)
         remoteSink?.let { sink ->
             // 隔空输入：整句发到电脑；规则同本机上屏（错误文字不发，工具栏模式 stop 时重发的上一句只发一次）。
             val error = text.trimStart().startsWith("错误:") || text.trimStart().startsWith("错误：")
@@ -592,11 +592,12 @@ class VoiceRecognitionHandler(
         return true
     }
 
-    private fun normalizeResult(text: String, parts: List<SpeechSegment>?): String {
+    private fun normalizeResult(text: String, parts: List<SpeechSegment>?, isFinal: Boolean = false): String {
         val language = normalizationLanguage ?: getState().inputProfile.language
         val segments = parts ?: listOf(SpeechSegment(text, inputLanguage ?: language, false))
         val automatic = SettingsPreferences.isSttAutoPunctuation(context)
-        val localSentences = SettingsPreferences.isSttUseLocal(context) && SettingsPreferences.isSttWholeSentence(context)
+        val local = SettingsPreferences.isSttUseLocal(context)
+        val localSentences = local && SettingsPreferences.isSttWholeSentence(context)
         val marks = voiceMarks()
         // 预览和定稿走同一条转换，说到一半出的 300 和说完的 325 是同一种写法，不会中文、数字来回跳。
         val arabicNumbers = SettingsPreferences.isSttArabicNumbers(context)
@@ -608,8 +609,14 @@ class VoiceRecognitionHandler(
                 if (traditional == null || rules.isEmpty()) rules
                 else traditionalRules.takeIf { it.first == rules }?.second ?: traditional(rules).also { traditionalRules = rules to it }
             }) else null
+        // 定稿时记一笔标点走了哪条路（不记文字本身）：下次有人说没有标点，日志里能看出是识别没出标点还是这里没留。
+        if (isFinal) FileLogger.i(TAG, "voice punctuation: auto=$automatic local=$local whole=$localSentences " +
+            "segments=${segments.joinToString { "${it.language.id}/server=${it.serverPunctuation}/marks=${it.text.any { c -> c in "，。？！、；,.?!;" }}" }}")
         return segments.mapIndexed { index, part ->
-            val keep = automatic && (part.serverPunctuation || (localSentences && part.language == InputLanguage.CHINESE))
+            // 本地整句定稿只在中文上带模型标点。段语言是「未标注语言」时也按中文识别，标点一样留（#415）。
+            // 英文、日语照旧换成空格。
+            val keep = automatic && (part.serverPunctuation || (localSentences &&
+                (part.language == InputLanguage.CHINESE || part.language == InputLanguage.UNSPECIFIED)))
             normalizeVoiceText(part.text, language, keep, if (index == segments.lastIndex) marks else marks.copy(trailing = true),
                 arabicNumbers)
         }.filter(String::isNotEmpty).joinToString(" ").let { traditional?.invoke(it) ?: it }

@@ -72,7 +72,7 @@ class CandidateBarFeedbackTest {
         val preview = androidx.compose.runtime.mutableStateOf("ni hao")
         rule.setContent {
             CompositionLocalProvider(LocalKeyboardInputPreferences provides KeyboardInputPreferences(
-                inlinePreeditPreview = true,
+                preeditStyle = SettingsPreferences.PREEDIT_STYLE_LINE,
                 inputTextLocation = if (candidateLocation.value) SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR
                     else SettingsPreferences.INPUT_TEXT_INPUT_BOX)) {
                 CandidateBar(state = CandidateBarState.Idle, glidePreviewText = preview.value,
@@ -136,7 +136,7 @@ class CandidateBarFeedbackTest {
         var clicks = 0
         rule.setContent { Bar(association, onCancel = { clicks++ }) }
         val root = rule.activity.window.decorView
-        for (tag in listOf("association-cancel-cross", "candidate-expansion")) {
+        for (tag in listOf("association-cancel-cross", "candidate-hide")) {
             val node = rule.onNodeWithTag(tag, useUnmergedTree = true)
             val rect = node.fetchSemanticsNode().boundsInWindow
             fun image(phase: String): Bitmap = rule.runOnIdle {
@@ -175,7 +175,8 @@ class CandidateBarFeedbackTest {
             val hide = bounds("toolbar-hide")
             val toolbarWidth = hide.right - bounds("toolbar-leading").left
             rule.runOnIdle { state.value = composing }
-            val expand = bounds("candidate-expansion")
+            // 打字时最右是收起键盘（用户 11-20），窄键盘和空闲时的收起同一个位置。
+            val expand = bounds("candidate-hide")
             val slot = (toolbarWidth - 8f * rule.density.density) / (count + 2)
             if (available < 600) {
                 assertEquals(hide.center.x, expand.center.x, 1f)
@@ -191,20 +192,20 @@ class CandidateBarFeedbackTest {
         }
     }
 
-    @Test fun associationShowsCloseOnTheLeftAndExpandOnTheRight() {
+    @Test fun associationShowsCloseOnTheLeftAndHideOnTheRight() {
         var cancelled = 0
         rule.setContent { Bar(association, onCancel = { cancelled++ }) }
         rule.waitForIdle()
-        // 联想：默认左边和打字时一样是「<」（关闭联想），最右一个展开；没有 ⊗，也没有收起键盘。
+        // 联想：默认左边和打字时一样是「<」（关闭联想），最右是收起键盘（用户 11-20）；没有 ⊗，没有展开按钮。
         assertEquals(1, count("关闭联想"))
         assertEquals(1, countTag("association-cancel"))
         assertEquals(0, countTag("association-cancel-cross"))
         assertEquals(0, count("取消输入"))
-        assertEquals(0, countTag("toolbar-hide"))
-        assertEquals(1, countTag("candidate-expansion"))
+        assertEquals(1, countTag("candidate-hide"))
+        assertEquals(0, countTag("candidate-expansion"))
         val first = bounds("bar-association:0")
         assertTrue("「<」在第一个联想词左边", cancelBounds("关闭联想").right <= first.left + 0.5f)
-        assertTrue("展开在联想词右边", bounds("candidate-expansion").left >= first.right - 0.5f)
+        assertTrue("收起在联想词右边", bounds("candidate-hide").left >= first.right - 0.5f)
         rule.onNodeWithContentDescription("关闭联想", useUnmergedTree = true).performClick()
         assertEquals(1, cancelled)
     }
@@ -222,7 +223,7 @@ class CandidateBarFeedbackTest {
         assertEquals(1, cancelled)
     }
 
-    @Test fun expandButtonStaysAtTheSameRightEdgeWhileTypingAndAssociating() {
+    @Test fun hideButtonStaysAtTheSameRightEdgeWhileTypingAndAssociating() {
         val state = androidx.compose.runtime.mutableStateOf<CandidateBarState>(composing)
         rule.setContent { Bar(state.value) }
         rule.waitForIdle()
@@ -230,31 +231,32 @@ class CandidateBarFeedbackTest {
         assertEquals(1, count("取消输入"))
         assertEquals(0, count("关闭联想"))
         assertEquals(0, countTag("toolbar-hide"))
-        val typing = bounds("candidate-expansion")
+        val typing = bounds("candidate-hide")
         assertTrue("「<」在第一个候选左边", cancelBounds().right <= bounds("bar-candidate:0").left + 0.5f)
         rule.runOnIdle { state.value = association }
         rule.waitForIdle()
         assertEquals(1, count("关闭联想"))
-        assertEquals(typing.right, bounds("candidate-expansion").right, 0.5f)
-        assertEquals(typing.left, bounds("candidate-expansion").left, 0.5f)
+        assertEquals(typing.right, bounds("candidate-hide").right, 0.5f)
+        assertEquals(typing.left, bounds("candidate-hide").left, 0.5f)
     }
 
-    @Test fun hideKeyboardOnlyWhenThereAreNoCandidates() {
+    @Test fun idleHasOnlyTheToolbarHide() {
         rule.setContent { Bar(CandidateBarState.Idle) }
         rule.waitForIdle()
         assertEquals(1, countTag("toolbar-hide"))
-        assertEquals(0, countTag("candidate-expansion"))
+        assertEquals(0, countTag("candidate-hide"))
         assertEquals(0, count("取消输入"))
     }
 
-    @Test fun cancelOffLeavesOnlyTheExpandButton() {
+    @Test fun cancelOffLeavesOnlyTheHideButton() {
         SettingsPreferences.setShowCandidateCancelButton(context, false)
         rule.setContent { Column { Bar(association); Bar(composing) } }
         rule.waitForIdle()
         assertEquals(0, count("取消输入"))
         assertEquals(0, count("关闭联想"))
         assertEquals(0, countTag("toolbar-hide"))
-        assertEquals(2, countTag("candidate-expansion"))
+        assertEquals(2, countTag("candidate-hide"))
+        assertEquals(0, countTag("candidate-expansion"))
     }
 
     /** 相邻两个候选的起点距离（像素，留白算在候选里）：打字候选和联想各量一次。 */

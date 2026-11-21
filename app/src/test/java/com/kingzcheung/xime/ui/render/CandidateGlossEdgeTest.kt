@@ -62,8 +62,7 @@ class CandidateGlossEdgeTest {
         } }
         fun inRow(gloss: Boolean, tag: String) = rule.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("row-$gloss")))
         saveComparison()
-        // 右边放不下的候选照常显示、被栏边裁掉，不再整项藏起来（用户 11-11）。
-        inRow(false, "bar-candidate:2").assertExists()
+        // 候选栏一行不滚动（用户 11-20）：最右的候选字放得下、只有释义被栏边裁掉，照样显示、能点。
         val word = inRow(true, "bar-candidate:2")
         word.assertIsDisplayed()
         val edge = inRow(true, "candidate-fixed-strip").fetchSemanticsNode().boundsInWindow.right
@@ -71,12 +70,8 @@ class CandidateGlossEdgeTest {
         assertTrue(label.fetchSemanticsNode().boundsInWindow.right <= edge)
         word.performTouchInput { click(center) }
         rule.runOnIdle { assertEquals(2, picked) }
-        inRow(true, "candidate-scroll-row").performScrollToIndex(2)
-        rule.waitForIdle()
-        val note = rule.onNode(hasText(notes[2]) and hasAnyAncestor(hasTestTag("row-true")), useUnmergedTree = true)
-        val bounds = note.fetchSemanticsNode().boundsInWindow
-        assertTrue("Full gloss fits after scrolling", bounds.width >= note.fetchSemanticsNode().size.width - 1)
-        inRow(true, "candidate-expansion").performClick()
+        // 看全文：在候选上横着拉开展开页。
+        inRow(true, "candidate-pull-expand").pullAcross()
         rule.runOnIdle { assertTrue(expanded) }
     }
 
@@ -95,6 +90,32 @@ class CandidateGlossEdgeTest {
         rule.runOnIdle { focused = 1 }
         right.performClick()
         rule.runOnIdle { assertEquals(1, picked) }
+    }
+
+    // 用户 11-19：实体键盘开「拼音显示英文」只剩一个候选。最右的候选字放得下、只有释义被裁时，实体键盘也算它显示了，
+    // 否则每画一次少报一个，翻页分组跟着越缩越少。屏幕键盘照旧不算（展开页从它开始排，看得到全文）。
+    @Test fun hardwareRowCountsTheWordWhoseGlossIsClipped() {
+        val reported = mutableMapOf<Boolean, Int>()
+        var width by mutableStateOf(200.dp)
+        rule.setContent { Column {
+            for (edge in listOf(false, true)) FixedCandidateStrip(words, comments = notes,
+                callbacks = CandidateBarCallbacks(onCandidateSelect = {}, onVisibleCandidatesChanged = { reported[edge] = it.size }),
+                visuals = visuals, fontSize = 19.sp, modifier = Modifier.width(width).testTag("strip-$edge"),
+                commentsAreGlosses = true, commentMode = CandidateCommentMode.SHOW, glossEdgeCounts = edge)
+        } }
+        // 换几个宽度：最右候选只裁了释义时，实体键盘报的个数比屏幕键盘多一个，而且正好是画出来的个数。
+        var seen = false
+        for (w in 200..420 step 4) {
+            rule.runOnIdle { width = w.dp }
+            rule.waitForIdle()
+            val drawn = (words.indices).count { i ->
+                rule.onAllNodes(hasTestTag("bar-candidate:$i") and hasAnyAncestor(hasTestTag("strip-true"))).fetchSemanticsNodes().isNotEmpty() }
+            val hardware = reported.getValue(true); val screen = reported.getValue(false)
+            assertTrue("w=$w drawn=$drawn hardware=$hardware screen=$screen", hardware == drawn && (screen == drawn || screen == drawn - 1))
+            if (screen == drawn - 1) seen = true
+        }
+        if (seen) return
+        fail("没找到最右候选释义被裁掉的宽度")
     }
 
     private fun saveComparison() {

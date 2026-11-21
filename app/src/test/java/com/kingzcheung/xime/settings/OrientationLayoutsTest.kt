@@ -70,4 +70,34 @@ class OrientationLayoutsTest {
         assertNull(OrientationLayouts.slot(ctx, zh, false))
         assertEquals("rime_ice", OrientationLayouts.prepared(ctx, "rime_ice", entries))
     }
+
+    /**
+     * 用户 11-20：横竖屏选了自定义布局后转屏不换。双拼、码表、英文的字母排列不在方案 id 里，
+     * 现在也按方向记：竖屏 Colemak、横屏 26 键，转回去各是各的。
+     */
+    @Test fun letterLayoutsFollowTheOrientation() {
+        val prefs = SettingsPreferences.getPrefsPublic(ctx)
+        val usable: (InputLanguage, String) -> Boolean = { _, id -> id != "deleted" }
+        // 关着：什么都不记、不换。
+        assertEquals(emptyMap<InputLanguage, String?>(), OrientationLayouts.lettersToRestore(prefs, true, emptyMap(), usable))
+        OrientationLayouts.setEnabled(ctx, true)
+        // 竖屏用着 Colemak，转横屏点 26 键（null = 语言自己的 26 键）：横屏记 26 键，竖屏补记成 Colemak。
+        OrientationLayouts.recordLetters(prefs, zh, null, "colemak", landscape = true)
+        assertEquals(mapOf(zh to "colemak"), OrientationLayouts.lettersToRestore(prefs, false, emptyMap(), usable))
+        assertEquals(mapOf(zh to null), OrientationLayouts.lettersToRestore(prefs, true, mapOf(zh to "colemak"), usable))
+        // 已经是这个方向的排列：不动。
+        assertEquals(emptyMap<InputLanguage, String?>(), OrientationLayouts.lettersToRestore(prefs, false, mapOf(zh to "colemak"), usable))
+        // 英文另记，不影响中文。
+        OrientationLayouts.recordLetters(prefs, InputLanguage.ENGLISH, "qwjrtk", null, landscape = false)
+        assertEquals(mapOf(zh to "colemak", InputLanguage.ENGLISH to "qwjrtk"),
+            OrientationLayouts.lettersToRestore(prefs, false, emptyMap(), usable))
+        assertEquals(mapOf(zh to null), OrientationLayouts.lettersToRestore(prefs, true, mapOf(zh to "colemak"), usable))
+        // 记的布局被删了：留在现在的。
+        OrientationLayouts.recordLetters(prefs, zh, "deleted", null, landscape = false)
+        assertEquals(emptyMap<InputLanguage, String?>(),
+            OrientationLayouts.lettersToRestore(prefs, false, mapOf(InputLanguage.ENGLISH to "qwjrtk"), usable))
+        // 关掉清掉记录。
+        OrientationLayouts.setEnabled(ctx, false)
+        assertNull(prefs.getString(OrientationLayouts.letterKey(zh, true), null))
+    }
 }

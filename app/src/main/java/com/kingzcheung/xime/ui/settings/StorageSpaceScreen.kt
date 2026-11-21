@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -173,13 +174,13 @@ fun StorageSpaceScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "仅统计应用数据目录，不含应用本体",
+                                text = "不含应用本身",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             memory?.apkBytes?.let { apk ->
                                 Text(
-                                    text = "安装包本身另占 ${Formatter.formatFileSize(context, apk)}(系统管理，删不掉)",
+                                    text = "应用本身另占 ${Formatter.formatFileSize(context, apk)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -232,27 +233,28 @@ fun StorageSpaceScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = Formatter.formatFileSize(context, category.sizeBytes),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (category.clearable) {
-                                            TextButton(
-                                                enabled = cleaningId == null,
-                                                onClick = { pendingClear = category }
-                                            ) {
-                                                if (cleaningId == category.id) {
-                                                    CircularProgressIndicator(
-                                                        modifier = Modifier.size(14.dp),
-                                                        strokeWidth = 2.dp
-                                                    )
-                                                } else {
-                                                    Text("清理")
-                                                }
-                                            }
+                                    Text(
+                                        text = Formatter.formatFileSize(context, category.sizeBytes),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // 「清理」放在这一行右侧、和标题那一块上下居中（用户 11-19：以前贴在行底，看着像下一行的）。
+                                // 0 B 没东西可清，不显示；正在清的那行留着转圈。
+                                if (storageClearShown(category.clearable, category.sizeBytes, cleaningId == category.id)) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    TextButton(
+                                        enabled = cleaningId == null,
+                                        onClick = { pendingClear = category },
+                                        modifier = Modifier.testTag("storage-clear:${category.id}")
+                                    ) {
+                                        if (cleaningId == category.id) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text("清理")
                                         }
                                     }
                                 }
@@ -348,6 +350,10 @@ private fun MemorySection(
     }
 }
 
+/** 「清理」按钮出不出：能清、而且有东西可清（大于 0 B）；正在清的那行留着转圈。 */
+internal fun storageClearShown(clearable: Boolean, sizeBytes: Long, cleaning: Boolean): Boolean =
+    clearable && (sizeBytes > 0 || cleaning)
+
 private fun categoryIcon(id: String): ImageVector = when (id) {
     StorageStats.ID_MODELS -> Icons.TwoTone.Memory
     StorageStats.ID_SCHEMA_CACHE -> Icons.TwoTone.CloudDownload
@@ -362,16 +368,16 @@ private fun categoryIcon(id: String): ImageVector = when (id) {
 
 private fun clearConfirmText(id: String): String = when (id) {
     StorageStats.ID_MODELS ->
-        "将删除所有已下载的离线模型(手写 / 语音识别)，对应功能在重新下载模型前不可用。确定继续吗？"
+        "删除已下载的手写和语音模型？重新下载前这些功能不能用。"
     StorageStats.ID_SCHEMA_CACHE ->
-        "将删除输入方案的编译缓存与编译日志，不会影响词库和自定义配置；下次启动输入法时会自动重新编译。确定继续吗？"
+        "清除输入方案缓存？不影响词库和设置。"
     StorageStats.ID_MARKET_PACKAGES ->
-        "将删除方案市场中已下载的安装包(内置方案除外)。已安装的方案不受影响，但重新安装时需要重新下载。确定继续吗？"
+        "删除方案市场的安装包？已安装的方案不受影响。"
     StorageStats.ID_CLIPBOARD ->
-        "将清空本地剪贴板历史记录(保留固定内容)，且不可恢复。确定继续吗？"
+        "清空剪贴板历史？固定的会保留，删除后无法恢复。"
     StorageStats.ID_LOGS ->
-        "将删除历史运行日志(保留当日日志)。确定继续吗？"
+        "删除以前的日志？今天的会保留。"
     StorageStats.ID_CACHE ->
-        "将删除图片与临时文件缓存，清理后首次加载会稍慢。确定继续吗？"
+        "清除图片和临时文件缓存？"
     else -> "确定清理吗？"
 }

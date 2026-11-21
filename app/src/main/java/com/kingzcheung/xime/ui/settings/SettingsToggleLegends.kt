@@ -159,7 +159,7 @@ private fun CandidateLine(code: String, words: List<String>, extra: String?, ski
     }
 }
 
-/** 中文输出里补候选的开关（生僻字、时间日期、表情、符号名、希腊字母）：一条候选，开着时多出那一项。 */
+/** 中文输出里补候选的开关（生僻字、日文汉字、韩文汉字、粤语字、时间日期、表情、符号名、希腊字母）：一条候选，开着时多出那一项。 */
 @Composable
 internal fun CandidateExtraLegend(tag: String, code: String, words: List<String>, extra: String, on: Boolean,
                                   skipped: Boolean = false) {

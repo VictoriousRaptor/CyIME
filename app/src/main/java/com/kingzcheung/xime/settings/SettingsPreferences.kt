@@ -94,7 +94,7 @@ object SettingsPreferences {
     /**
      * 用户是否显式选择过标点宽度。
      *
-     * 未选择时界面回退到方案自身的 ascii_punct，显示与引擎同源，无需回写引擎；
+     * 未选择时按全角（中文默认），引擎只清掉 ascii_punct 与之对齐（#460）；
      * 只有用户显式选择过，全角/半角才是唯一权威状态，切换方案/中英时必须回写。
      */
     fun hasPunctuationFullWidth(context: Context): Boolean =
@@ -469,6 +469,7 @@ object SettingsPreferences {
     const val KEY_CANDIDATE_COMMENT_MODE = "candidate_comment_mode"
     const val KEY_CANDIDATE_COMMENT_CONTENT = "candidate_comment_content"
     const val KEY_SHOW_CORRECTION_MARKS = "show_correction_marks"
+    const val KEY_SHOW_LEARNED_MARK = "show_learned_mark"
     const val KEY_SHOW_CANDIDATE_CANCEL_BUTTON = "show_candidate_cancel_button"
     const val KEY_ASSOCIATION_CANCEL_CROSS = "association_cancel_cross"
     const val KEY_HANDWRITING_WUBI_HINTS = "handwriting_wubi_hints"
@@ -477,13 +478,59 @@ object SettingsPreferences {
     const val KEY_SHOW_PREEDIT_PREVIEW = "show_preedit_preview"
     const val KEY_INLINE_PREEDIT_PREVIEW = "inline_preedit_preview"
     const val KEY_PREEDIT_BUBBLE_OPACITY = "preedit_bubble_opacity"
+    /** 「拼音显示声调」（用户 11-20）：气泡／小签里的拼音按首选的读音标调，只改显示。新键，默认关（拼音显示默认照原样）。 */
+    const val KEY_PREEDIT_TONES = "preedit_tones"
+    fun preeditTones(context: Context) = getPrefs(context).getBoolean(KEY_PREEDIT_TONES, false)
+    fun setPreeditTones(context: Context, enabled: Boolean) =
+        getPrefs(context).edit().putBoolean(KEY_PREEDIT_TONES, enabled).apply()
 
     fun showPreeditPreview(context: Context) = getPrefs(context).getBoolean(KEY_SHOW_PREEDIT_PREVIEW, true)
     fun setShowPreeditPreview(context: Context, show: Boolean) =
         getPrefs(context).edit().putBoolean(KEY_SHOW_PREEDIT_PREVIEW, show).apply()
-    fun inlinePreeditPreview(context: Context) = getPrefs(context).getBoolean(KEY_INLINE_PREEDIT_PREVIEW, false)
-    fun setInlinePreeditPreview(context: Context, inline: Boolean) =
-        getPrefs(context).edit().putBoolean(KEY_INLINE_PREEDIT_PREVIEW, inline).apply()
+    /**
+     * 「显示在候选栏」时拼音放哪：默认跟原来一样是浮在应用上的气泡（用户 11-19：「默认和原来一致」）；
+     * [PREEDIT_STYLE_LINE]「紧贴候选上方」：贴在键盘边框上的拼音小签（11-20 他按微信那张图定的），纠错读音也在上面。
+     * 新键；没存过时看旧开关「拼音放在键盘内」：亲手开过的算小签，别的都是气泡。
+     */
+    const val KEY_PREEDIT_STYLE = "preedit_style"
+    const val PREEDIT_STYLE_LINE = "line"
+    const val PREEDIT_STYLE_BUBBLE = "bubble"
+    /** 「贴边方块」（用户 11-21 第二张图）：直角方块贴在键盘边框上，字和气泡一样大。 */
+    const val PREEDIT_STYLE_BLOCK = "block"
+    /** 「键盘顶上一行」（用户 11-21 第一张图）：整行宽、和键盘连成一体，像键盘往上多出一行；键盘本身高度不变。 */
+    const val PREEDIT_STYLE_STRIP = "strip"
+    const val PREEDIT_STYLE_LEFT = "left"
+    /** 设置里的顺序：气泡（默认）、圆角小签、贴边方块、顶上一行（用户 11-21：「总共是 4 种样式」）。 */
+    val PREEDIT_STYLES = listOf(PREEDIT_STYLE_BUBBLE, PREEDIT_STYLE_LINE, PREEDIT_STYLE_BLOCK, PREEDIT_STYLE_STRIP)
+    /** 「候选栏左侧」（和老开关「拼音放在键盘内」）11-20 他要求去掉：存过的按「紧贴候选上方」读，同样不浮气泡。只在读的时候换，不改存的值。 */
+    fun resolvePreeditStyle(saved: String?, legacyInline: Boolean?): String = when {
+        saved in PREEDIT_STYLES -> saved!!
+        saved == PREEDIT_STYLE_LEFT -> PREEDIT_STYLE_LINE
+        legacyInline == true -> PREEDIT_STYLE_LINE
+        else -> PREEDIT_STYLE_BUBBLE
+    }
+    fun preeditStyle(context: Context): String {
+        val prefs = getPrefs(context)
+        return resolvePreeditStyle(prefs.getString(KEY_PREEDIT_STYLE, null),
+            if (prefs.contains(KEY_INLINE_PREEDIT_PREVIEW)) prefs.getBoolean(KEY_INLINE_PREEDIT_PREVIEW, false) else null)
+    }
+    fun setPreeditStyle(context: Context, style: String) {
+        if (style in PREEDIT_STYLES) getPrefs(context).edit().putString(KEY_PREEDIT_STYLE, style).apply()
+    }
+    /**
+     * 拼音靠哪边：四种样式都能选靠左、居中、靠右（用户 11-21：「每种都能调整位置，左中右」）。
+     * 靠左、靠右的小签和方块贴死键盘边缘，卡片圆角在它下面补平；新键，没存过是靠左（气泡原来就靠左）。
+     */
+    const val KEY_PREEDIT_ALIGN = "preedit_align"
+    const val PREEDIT_ALIGN_LEFT = "left"
+    const val PREEDIT_ALIGN_CENTER = "center"
+    const val PREEDIT_ALIGN_RIGHT = "right"
+    val PREEDIT_ALIGNS = listOf(PREEDIT_ALIGN_LEFT, PREEDIT_ALIGN_CENTER, PREEDIT_ALIGN_RIGHT)
+    fun preeditAlign(context: Context): String =
+        getPrefs(context).getString(KEY_PREEDIT_ALIGN, null)?.takeIf { it in PREEDIT_ALIGNS } ?: PREEDIT_ALIGN_LEFT
+    fun setPreeditAlign(context: Context, align: String) {
+        if (align in PREEDIT_ALIGNS) getPrefs(context).edit().putString(KEY_PREEDIT_ALIGN, align).apply()
+    }
     /**
      * 浮在应用上面的拼音气泡和点开后的拼音编辑条共用这一个底色不透明度：20%~100%，按 5% 一档。
      * 默认 80%：能隐约看到下面的应用，拼音照样清楚（用户 11-16：实底挡住下面，点拼音编辑又变透明，两样不统一）。
@@ -503,10 +550,21 @@ object SettingsPreferences {
     const val INPUT_TEXT_CANDIDATE_BAR = "candidate_bar"
     const val DEFAULT_PAGE_SIZE = 20 // 手机候选栏每页候选词数；schema 里的 page_size 来自 PC 版（5），太短，默认用 20
 
-    fun showCorrectionMarks(context: Context): Boolean = getPrefs(context).getBoolean(KEY_SHOW_CORRECTION_MARKS, true)
+    /**
+     * 候选旁的纠错读音默认不显示（用户 11-19：「纠错也别显示了他屏幕就这么窄」）；纠错照常，拼音在候选上方一行时读音照样在那一行。
+     * 只改没存过时的默认，亲手开过或关过的照旧。11-19 拼音默认改回气泡时（e8e3dc48）把它一起改回了显示，那句只说拼音。
+     */
+    fun showCorrectionMarks(context: Context): Boolean = getPrefs(context).getBoolean(KEY_SHOW_CORRECTION_MARKS, false)
 
     fun setShowCorrectionMarks(context: Context, show: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SHOW_CORRECTION_MARKS, show).apply()
+    }
+
+    /** 学到的词在候选右上角画小铅笔，默认显示（用户 11-19 要一个开关）；关掉只是不画，照常学习。 */
+    fun showLearnedMark(context: Context): Boolean = getPrefs(context).getBoolean(KEY_SHOW_LEARNED_MARK, true)
+
+    fun setShowLearnedMark(context: Context, show: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SHOW_LEARNED_MARK, show).apply()
     }
 
     fun candidateCommentMode(context: Context): CandidateCommentMode {
@@ -735,6 +793,30 @@ object SettingsPreferences {
         }
     }
     private const val KEY_HAPTIC_MODE_BEFORE_MUTE = "haptic_mode_before_mute"
+    private const val KEY_SOUND_BEFORE_MUTE = "sound_before_mute"
+
+    /**
+     * 菜单「声音振动」一键开关：关的时候记下声音开没开，再打开时照原样恢复，只开过振动的不会连按键音一起打开
+     * （#486）。没有记录（从来没用这个键关过）时两样都打开，同以前。振动的原模式由 [setVibrationEnabled] 记。
+     */
+    fun setSoundAndVibrationEnabled(context: Context, enabled: Boolean) {
+        val prefs = getPrefs(context)
+        if (!enabled) {
+            prefs.edit().putBoolean(KEY_SOUND_BEFORE_MUTE, isSoundEnabled(context)).apply()
+            setSoundEnabled(context, false)
+            // 振动原来就关着时不留记录（setVibrationEnabled 直接返回），所以有记录就是原来开着。
+            setVibrationEnabled(context, false)
+            return
+        }
+        val soundRecorded = prefs.contains(KEY_SOUND_BEFORE_MUTE)
+        val soundBefore = prefs.getBoolean(KEY_SOUND_BEFORE_MUTE, true)
+        val vibrationBefore = prefs.contains(KEY_HAPTIC_MODE_BEFORE_MUTE)
+        prefs.edit().remove(KEY_SOUND_BEFORE_MUTE).apply()
+        // 没有记录，或者记录里两样都关着：同以前，两样都打开。
+        val both = !soundRecorded || (!soundBefore && !vibrationBefore)
+        setSoundEnabled(context, both || soundBefore)
+        if (both || vibrationBefore) setVibrationEnabled(context, true)
+    }
     
     
 
@@ -1257,8 +1339,8 @@ object SettingsPreferences {
     const val KEY_EDGE_TO_EDGE_KEYBOARD = "edge_to_edge_keyboard"
 
     /**
-     * 「手势导航时键盘贴底」默认开（11-03 用户「这个必须得给我解决了 拖了好几个版本」：手势导航下键盘底下那段默认就该没有）。
-     * 没动过这项的老用户也跟着开；自己关掉过的（存了 false）照旧关着。三键导航和任务栏不受它影响。
+     * 旧的「手势导航时键盘贴底」（界面已并进「底部位置」）。现在只用来给没选过底部位置的老用户定档：
+     * 关过的算「留出导航按钮」，见 [keyboardBottomPosition]。贴底算法和调低都不再看它（11-19 盘点）。
      */
     fun edgeToEdgeKeyboard(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_EDGE_TO_EDGE_KEYBOARD, true)
@@ -1274,9 +1356,9 @@ object SettingsPreferences {
      * 没选过时，关过贴底的老用户算「留出导航按钮」，其余算「自动」。
      */
     enum class KeyboardBottomPosition(val label: String, val description: String) {
-        AUTO("自动", "按导航方式自动判断，1.15.66 的贴底效果。"),
-        FLUSH("贴到最底", "不给导航按钮留位，键盘一直贴到屏幕底边。适合隐藏了切换输入法、收起键盘按钮的全面屏。"),
-        KEEP_BUTTONS("留出导航按钮", "整条导航栏都留着：底下有切换输入法、收起键盘按钮时，键盘不盖住它们，也不被它们盖住。"),
+        AUTO("自动", "按导航方式自动选择"),
+        FLUSH("贴到最底", "键盘贴到屏幕最底边"),
+        KEEP_BUTTONS("留出导航按钮", "给底部的导航按钮留出位置"),
     }
 
     const val KEY_KEYBOARD_BOTTOM_POSITION = "keyboard_bottom_position"
@@ -1330,13 +1412,23 @@ object SettingsPreferences {
      * 原来按系统建议调低的值不会被搬到贴底位置下面去，三键导航时也就不会压到系统按钮。
      */
     internal fun getKeyboardBottomAdjustmentDp(context: Context): Int =
-        getKeyboardBottomPaddingDp(context).takeIf { it > 0 }
-            ?: -bottomCalibrationDp(context, loweringKey(context))
+        getKeyboardBottomPaddingDp(context).takeIf { it > 0 } ?: -keyboardBottomLoweringDp(context)
 
     internal const val KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP = "keyboard_bottom_edge_lowering_dp"
 
-    private fun loweringKey(context: Context) =
-        if (edgeToEdgeKeyboard(context)) KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP else KEY_KEYBOARD_BOTTOM_LOWERING_DP
+    /**
+     * 「调低」只存一套（11-19 盘点冲突 2）：三档都从各自位置往下调，都读写 [KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP]。
+     * 原来跟着隐藏的贴底开关换键，在「留出导航按钮」和另两档之间切换时调低的值会丢掉或冒回来。
+     * 升级前停在「留出导航按钮」、调低存在旧键里的，新键还没写过时接着用旧键的值；之后都写新键。
+     */
+    private fun keyboardBottomLoweringDp(context: Context): Int {
+        val prefs = getPrefs(context)
+        val suffix = bottomOrientationSuffix(context)
+        val keys = listOf(KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP + suffix, KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP) +
+            if (keyboardBottomPosition(context) == KeyboardBottomPosition.KEEP_BUTTONS)
+                listOf(KEY_KEYBOARD_BOTTOM_LOWERING_DP + suffix, KEY_KEYBOARD_BOTTOM_LOWERING_DP) else emptyList()
+        return keys.firstOrNull(prefs::contains)?.let { prefs.getInt(it, 0) }?.coerceAtLeast(0) ?: 0
+    }
 
     fun setKeyboardBottomPaddingDp(context: Context, paddingDp: Int) {
         setKeyboardBottomAdjustmentDp(context, paddingDp.coerceAtLeast(0))
@@ -1346,7 +1438,7 @@ object SettingsPreferences {
         // 只写当前方向；调低清零时写 0 而不是删掉，不然会退回不带后缀的旧值。
         val suffix = bottomOrientationSuffix(context)
         getPrefs(context).edit().putInt(KEY_KEYBOARD_BOTTOM_PADDING_DP + suffix, adjustmentDp.coerceAtLeast(0))
-            .putInt(loweringKey(context) + suffix, (-adjustmentDp).coerceAtLeast(0)).apply()
+            .putInt(KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP + suffix, (-adjustmentDp).coerceAtLeast(0)).apply()
     }
 
     /** 键盘上次量到的「最多还能调低多少 dp」（系统建议值减安全下限，按当前方向）；没量过为 null。 */
@@ -1362,9 +1454,20 @@ object SettingsPreferences {
             getPrefs(context).edit().putInt(KEY_KEYBOARD_BOTTOM_LOWERING_LIMIT_DP, value).apply()
     }
 
+    /** 键盘上次量到的底部诊断行（[com.kingzcheung.xime.service.bottomNavDiagnostic]），设置页显示；没量过为 null。 */
+    internal const val KEY_KEYBOARD_BOTTOM_DIAGNOSTIC = "keyboard_bottom_diagnostic"
+
+    internal fun getKeyboardBottomDiagnostic(context: Context): String? =
+        getPrefs(context).getString(KEY_KEYBOARD_BOTTOM_DIAGNOSTIC, null)
+
+    /** 内容变了才写，免得每次 insets 回调都触发设置页刷新。 */
+    internal fun setKeyboardBottomDiagnostic(context: Context, line: String) {
+        if (getKeyboardBottomDiagnostic(context) != line)
+            getPrefs(context).edit().putString(KEY_KEYBOARD_BOTTOM_DIAGNOSTIC, line).apply()
+    }
+
     internal fun resetKeyboardBottomCalibration(context: Context) {
-        // 「恢复系统建议」就是用系统给的底边：明确记下贴底关，不回到默认的开。
-        // 「底部位置」回到自动（66 的效果），留白清零。
+        // 恢复默认：「底部位置」回到自动，留白和调低清零（贴底开关只为旧版本兼容一起写成开）。
         getPrefs(context).edit().putBoolean(KEY_EDGE_TO_EDGE_KEYBOARD, true)
             .putString(KEY_KEYBOARD_BOTTOM_POSITION, KeyboardBottomPosition.AUTO.name).apply {
                 for (key in listOf(KEY_KEYBOARD_BOTTOM_PADDING_DP, KEY_KEYBOARD_BOTTOM_LOWERING_DP, KEY_KEYBOARD_BOTTOM_EDGE_LOWERING_DP))

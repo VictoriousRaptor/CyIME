@@ -150,6 +150,8 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
                 val switched = RimeEngine.getInstance().switchSchema(schema.schemaId)
                 if (switched) {
                     com.kingzcheung.xime.settings.InputModes.selectProfile(context, schema.toSchemaInfo())
+                    // 引擎换了，开着的键盘界面（布局、方案名）也跟着换，不留着旧的（用户 11-20）。
+                    com.kingzcheung.xime.settings.ImeSchemaRequests.pick(schema.schemaId)
                     showToast("已切换到${schema.name}")
                 } else {
                     rollbackSchemaSelection(previous)

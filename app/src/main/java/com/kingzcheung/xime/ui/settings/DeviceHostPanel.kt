@@ -47,7 +47,7 @@ internal fun DeviceHostPanelContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("允许其他设备连接")
-                    Text("不用电脑，手机和平板直接互相同步复制的文字。只在同一 Wi-Fi 下、扫码配对过的设备才能读写；密码等敏感内容不会发出。",
+                    Text("同一 Wi-Fi 下的手机、平板直接同步复制的文字",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(checked = enabled, onCheckedChange = onEnabled, modifier = Modifier.testTag("device-host-switch"))
@@ -57,7 +57,7 @@ internal fun DeviceHostPanelContent(
                 Button(onClick = onShowCode, modifier = Modifier.fillMaxWidth().testTag("device-host-show-code")) {
                     Text("显示连接二维码")
                 }
-                Text("在另一部手机或平板的剪贴板同步里点“扫码添加另一台设备”，扫描这里的二维码。",
+                Text("在另一台设备上点“扫码添加另一台设备”，扫这个二维码。",
                     style = MaterialTheme.typography.bodyMedium)
                 devices.forEach { device ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

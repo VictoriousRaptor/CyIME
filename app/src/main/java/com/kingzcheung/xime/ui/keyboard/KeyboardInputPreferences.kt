@@ -99,9 +99,14 @@ data class KeyboardInputPreferences(
     val showPressBubble: Boolean = false,
     val showPreeditPreview: Boolean = true,
     val inputTextLocation: String = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR,
-    val inlinePreeditPreview: Boolean = false,
+    /** 「显示在候选栏」时拼音的位置，见 [SettingsPreferences.preeditStyle]。 */
+    val preeditStyle: String = SettingsPreferences.PREEDIT_STYLE_BUBBLE,
+    /** 拼音靠左、居中还是靠右，四种样式都用，见 [SettingsPreferences.preeditAlign]。 */
+    val preeditAlign: String = SettingsPreferences.PREEDIT_ALIGN_LEFT,
     /** 拼音气泡和拼音编辑条底色的不透明度，见 [SettingsPreferences.preeditBubbleOpacity]。 */
     val preeditBubbleOpacity: Float = SettingsPreferences.DEFAULT_PREEDIT_BUBBLE_OPACITY,
+    /** 拼音按首选的读音标调，见 [SettingsPreferences.preeditTones]。 */
+    val preeditTones: Boolean = false,
     val chineseLetterSwipes: Map<String, String> = emptyMap(),
     val englishLetterSwipes: Map<String, String> = emptyMap(),
     val splitKeyboardEnabled: Boolean = false,
@@ -118,7 +123,7 @@ data class KeyboardInputPreferences(
     /** 分体中缝比例（竖屏/横屏），null 为自动。 */
     val splitGapPortrait: Float? = null,
     val splitGapLandscape: Float? = null,
-    /** 26 键三行错位；自定义时取 [qwertyStaggerCustom]（0 手机常见，1 实体键盘）。 */
+    /** 26 键三行错位；自定义时取 [qwertyStaggerCustom]（0 手机常见，负数向右更多，1 实体键盘）。 */
     val qwertyStagger: QwertyStaggerMode = QwertyStaggerMode.AUTO,
     val qwertyStaggerCustom: Float = 0.5f,
     /** 空格左侧逗号键、右侧句号键。 */
@@ -164,8 +169,15 @@ data class KeyboardInputPreferences(
     val doublePinyinAuxCode: Boolean = false,
     /** 中文全拼 26 键中英混输（nihaohello → 你好hello），默认关；见 app/data/cyime_mixed_input.lua。 */
     val mixedInput: Boolean = false,
-    /** 中文全拼 26 键、双拼和九键补出生僻字（瀺 chan、槻 gui），默认关；见 app/data/cyime_rare_chars.lua。 */
+    /** 中文全拼 26 键、双拼和九键补出中文生僻字（瀺 chan），默认关；见 app/data/cyime_rare_chars.lua。 */
     val rareCharacters: Boolean = false,
+    /**
+     * 日文汉字（沢 ze、榎本武扬）、韩文汉字（乫 jia）、粤语字（佢 qu），11-20 从生僻字里分出来，各自默认关；同一个 lua。
+     * 没存过时跟「生僻字」原来的值（[splitFromRare]），开过生僻字的人更新后照样打得出。
+     */
+    val japaneseKanji: Boolean = false,
+    val koreanHanja: Boolean = false,
+    val cantoneseCharacters: Boolean = false,
     /**
      * 中文候选和上屏用台湾正体（台灣、計畫），默认关；Rime 选项 traditionalization，转换表见 assets/rime_chinese/opencc。
      * 注音也跟这一个开关（11-09 合并了原来单独的「注音输出简体」）：关时注音方案开 zhuyin_simplified 转简体。
@@ -183,8 +195,9 @@ data class KeyboardInputPreferences(
     val addressFieldsEnglish: Boolean = true,
     /** 中文候选在词后面多出对应表情（开心 😄），默认关；Rime 选项 emoji，表情表 opencc/emoji.json（雾凇）。 */
     val candidateEmoji: Boolean = false,
-    /** 打符号名出符号（加号 +、问号 ？ ?），别人请求，默认关；Rime 选项 cyime_symbol_names，符号表 assets/rime_chinese/opencc/cyime_symbols.txt。 */
-    val symbolNames: Boolean = false,
+    /** 打符号名出符号（加号 +、摄氏度 ℃、度 °、平方 ²、西塔 θ），默认开（B 站 11-18：用户以为这些打不出来）；
+     *  Rime 选项 cyime_symbol_names，符号表 assets/rime_chinese/opencc/cyime_symbols.txt。只在候选整词等于符号名时追加，不挪原词。 */
+    val symbolNames: Boolean = true,
     /** 打希腊字母名出希腊字母（xita θ、pi π、alpha α），别人请求，默认关；Rime 选项 cyime_greek_letters，见 app/data/cyime_greek_letters.lua。 */
     val greekLetters: Boolean = false,
     val cylmLongAlternative: Boolean = false,
@@ -228,6 +241,8 @@ data class KeyboardInputPreferences(
     val chineseGlideTyping: Boolean = false,
     /** Delete the last syllable of an uncommitted Chinese glide as one unit. */
     val deleteChineseGlideCharacter: Boolean = false,
+    /** 导入的自定义编码方案滑行用的编码（方案编号 → 全拼或双拼方案编号，#303），没选的不滑行。 */
+    val externalGlideEncodings: Map<String, String> = emptyMap(),
     /** 滑行时在输入框实时显示识别结果；滑动中反复识别，多占 CPU，默认关。 */
     val glidePreview: Boolean = false,
     /** 长按弹出字母气泡（26/14 键大小写和带音调字母、九键本键字母）；默认关，免得打断上下拖动输入角标。 */
@@ -268,11 +283,13 @@ data class KeyboardInputPreferences(
     val bottomLiftCursor: Boolean = false,
     /** 按住空格说话时上滑取消：手指往上滑出空格约一个键高再松手，这次说的话不上屏（默认关，别人提的需求，11-02）。 */
     val voiceSwipeCancel: Boolean = false,
+    /** 固定键盘按键区左右两边不触发系统边缘手势（返回、侧边栏），默认关（11-20 荣耀用户：边缘手势吞掉贴边按键）。 */
+    val edgeGestureExclusion: Boolean = false,
 ) {
     internal val showCodeInCandidateBar: Boolean get() = showPreeditPreview &&
         com.kingzcheung.xime.service.TerminalEditor.inputTextLocation { inputTextLocation } == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR
-    /** 拼音放进候选栏左侧：只在「显示在候选栏」下生效；切到输入框后留着的旧值不把气泡挤进栏里。 */
-    internal val preeditInsideKeyboard: Boolean get() = showCodeInCandidateBar && inlinePreeditPreview
+    /** 拼音贴在键盘边框上（圆角小签、贴边方块、顶上一行三种），不是浮着的气泡。 */
+    internal val preeditOnTopLine: Boolean get() = showCodeInCandidateBar && preeditStyle != SettingsPreferences.PREEDIT_STYLE_BUBBLE
     /** 删除键实际是否「上滑清空、下滑撤回」：跟「反转上下滑方向」走，「删除键单独反向」打开再对调一次。 */
     val deleteSwipeReversed: Boolean get() = reverseSymbolSwipe != reverseDeleteSwipe
     /** 删除键上下滑清空、撤回的触发距离（dp）。 */
@@ -301,6 +318,16 @@ data class KeyboardInputPreferences(
         const val MIXED_INPUT_KEY = "mixed_input"
         /** 生僻字开关；同繁体输出，输入法按字母、数字键前读它（ImeKeyRouter）。 */
         const val RARE_CHARACTERS_KEY = "rare_characters"
+        /** 日文汉字、韩文汉字、粤语字开关；同生僻字，按键前读。 */
+        const val JAPANESE_KANJI_KEY = "japanese_kanji"
+        const val KOREAN_HANJA_KEY = "korean_hanja"
+        const val CANTONESE_CHARACTERS_KEY = "cantonese_characters"
+
+        /**
+         * 11-20 前这些字都在「生僻字」里：新开关没存过时取生僻字的值，开过生僻字的人更新后不少字；没开过的照样是关。
+         */
+        fun splitFromRare(prefs: SharedPreferences, key: String): Boolean =
+            prefs.getBoolean(key, prefs.getBoolean(RARE_CHARACTERS_KEY, false))
         /** 繁体输出开关；同中英混输，输入法按键前读它（ImeKeyRouter）。 */
         const val TRADITIONAL_OUTPUT_KEY = "traditional_output"
         /** 旧的「注音输出简体」，已并入 [TRADITIONAL_OUTPUT_KEY]；不再读，[save] 顺手删掉。 */
@@ -349,7 +376,8 @@ data class KeyboardInputPreferences(
         const val ADDRESS_FIELDS_ENGLISH_KEY = "address_fields_english"
         /** 候选里显示表情开关；同繁体输出，输入法按键前读它（ImeKeyRouter）。 */
         const val CANDIDATE_EMOJI_KEY = "candidate_emoji"
-        /** 打符号名出符号开关；同表情，输入法按键前读它（ImeKeyRouter），写 Rime 选项 cyime_symbol_names。新键，读不到就是关。 */
+        /** 打符号名出符号开关；同表情，输入法按键前读它（ImeKeyRouter），写 Rime 选项 cyime_symbol_names。
+         *  默认由关改开（11-18）只改读不到时的默认：存过的值（包括 save() 顺手写下的旧默认 false）一律照旧，不把关掉的翻回开。 */
         const val SYMBOL_NAMES_KEY = "symbol_name_candidates"
         /** 打希腊字母名出希腊字母开关；同符号名，写 Rime 选项 cyime_greek_letters。新键，读不到就是关。 */
         const val GREEK_LETTERS_KEY = "greek_letter_candidates"
@@ -358,6 +386,8 @@ data class KeyboardInputPreferences(
         const val BOTTOM_LIFT_CURSOR_KEY = "bottom_lift_cursor"
         /** 按住说话上滑取消，见 [voiceSwipeCancel]。 */
         const val VOICE_SWIPE_CANCEL_KEY = "voice_swipe_cancel"
+        /** 按键区挡住屏幕边缘手势，见 [edgeGestureExclusion]。新键（11-20），读不到就是关。 */
+        const val EDGE_GESTURE_EXCLUSION_KEY = "keyboard_edge_gesture_exclusion"
         const val HANDWRITING_RECOGNIZE_EARLY_KEY = "handwriting_recognize_while_writing"
         const val LANGUAGE_KEY_IME_PICKER_KEY = "language_key_ime_picker"
         const val LANGUAGE_KEY_ON_LEFT_KEY = "language_key_on_left"
@@ -373,12 +403,13 @@ data class KeyboardInputPreferences(
         const val HIDE_FUNCTION_KEY_HINTS_KEY = "hide_function_key_hints"
         internal val watchedKeys: Set<String> by lazy {
             setOf(CORNER_SYMBOL_INPUT_KEY, KeyEffectPreferences.GLOW, KeyEffectPreferences.ANIMATION, SettingsPreferences.KEY_SHOW_PRESS_BUBBLE,
-                SettingsPreferences.KEY_SHOW_PREEDIT_PREVIEW, SettingsPreferences.KEY_INLINE_PREEDIT_PREVIEW, SettingsPreferences.KEY_INPUT_TEXT_LOCATION,
-                SettingsPreferences.KEY_PREEDIT_BUBBLE_OPACITY,
+                SettingsPreferences.KEY_SHOW_PREEDIT_PREVIEW, SettingsPreferences.KEY_INLINE_PREEDIT_PREVIEW, SettingsPreferences.KEY_PREEDIT_STYLE, SettingsPreferences.KEY_PREEDIT_ALIGN, SettingsPreferences.KEY_INPUT_TEXT_LOCATION,
+                SettingsPreferences.KEY_PREEDIT_BUBBLE_OPACITY, SettingsPreferences.KEY_PREEDIT_TONES,
                 CURSOR_MAGNIFIER_ENABLED_KEY, CURSOR_MAGNIFIER_WIDTH_KEY,
                 com.kingzcheung.xime.settings.LetterSwipeBindings.CHINESE, com.kingzcheung.xime.settings.LetterSwipeBindings.ENGLISH,
-                SettingsPreferences.KEY_SPLIT_KEYBOARD, SettingsPreferences.KEY_SPLIT_RIGHT_G, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK, SettingsPreferences.KEY_WIDE_KEYS, SettingsPreferences.KEY_EVEN_MERGED_KEYS, SettingsPreferences.KEY_NUMBER_ROW, SettingsPreferences.KEY_SPLIT_GAP_PORTRAIT, SettingsPreferences.KEY_SPLIT_GAP_LANDSCAPE, CHINESE_GLIDE_KEY, DELETE_CHINESE_GLIDE_CHARACTER_KEY, GLIDE_PREVIEW_KEY, ENGLISH_AUTO_SPACE_KEY, ENGLISH_PUNCTUATION_SPACE_KEY, EMAIL_SUFFIXES_KEY, ADDRESS_FIELDS_ENGLISH_KEY, SYMBOL_NAMES_KEY, GREEK_LETTERS_KEY, CYLM_LONG_ALTERNATIVE_KEY,
+                SettingsPreferences.KEY_SPLIT_KEYBOARD, SettingsPreferences.KEY_SPLIT_RIGHT_G, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK, SettingsPreferences.KEY_WIDE_KEYS, SettingsPreferences.KEY_EVEN_MERGED_KEYS, SettingsPreferences.KEY_NUMBER_ROW, SettingsPreferences.KEY_SPLIT_GAP_PORTRAIT, SettingsPreferences.KEY_SPLIT_GAP_LANDSCAPE, CHINESE_GLIDE_KEY, DELETE_CHINESE_GLIDE_CHARACTER_KEY, com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, GLIDE_PREVIEW_KEY, ENGLISH_AUTO_SPACE_KEY, ENGLISH_PUNCTUATION_SPACE_KEY, EMAIL_SUFFIXES_KEY, ADDRESS_FIELDS_ENGLISH_KEY, SYMBOL_NAMES_KEY, GREEK_LETTERS_KEY, CYLM_LONG_ALTERNATIVE_KEY,
                 "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "symbol_long_press_seconds_v2", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
+                JAPANESE_KANJI_KEY, KOREAN_HANJA_KEY, CANTONESE_CHARACTERS_KEY,
                 "fourteen_letter_swipe", "fourteen_letter_swipe_dp", "reverse_symbol_swipe", CLEAR_ALL_WHILE_COMPOSING_KEY, CLEAR_BEFORE_CURSOR_ONLY_KEY, SWIPE_DISTANCE_DELETE_KEY, com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.KEY, REVERSE_DELETE_SWIPE_KEY, CLEAR_SWIPE_PERCENT_KEY, JAPANESE_LONG_VOWEL_KEY, "syllable_split_key", "shift_syllable_split", "kana_direction_hints", "flick_direction_disc", "flick_direction_disc_v2",
                 "glide_typing", "glide_typing_v2", "letter_long_press_menu", "t9_flick_letters", "t9_glide_typing", "language_key_hold_seconds", "language_key_hold_seconds_v2", LANGUAGE_KEY_IME_PICKER_KEY, "symbol_key_hold_seconds", "t9_candidate_drag_percent", T9_MERGE_ZERO_ENTER_KEY, STROKE_MERGE_ZERO_ENTER_KEY,
                 SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, "qwerty_stagger_mode", "qwerty_stagger_custom", "qwerty_comma_key", "qwerty_period_key", "qwerty_period_key_v2", "bottom_punctuation_swipe_up_v3", com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS,
@@ -386,7 +417,7 @@ data class KeyboardInputPreferences(
                 com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_KEY,
                 SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED, SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
                 *SideSymbolTarget.entries.map { it.prefKey }.toTypedArray(),
-                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY, LANGUAGE_KEY_ON_LEFT_KEY, QwertyBottomRowConfig.PREF_KEY,
+                BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, EDGE_GESTURE_EXCLUSION_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY, LANGUAGE_KEY_ON_LEFT_KEY, QwertyBottomRowConfig.PREF_KEY,
                 "handwriting_pause_seconds", "handwriting_pause_seconds_v2", "handwriting_formula_delimiter") + FrostedGlassPreferences.keys +
                 com.kingzcheung.xime.settings.KeyGapLightPreferences.keys
         }
@@ -415,8 +446,10 @@ data class KeyboardInputPreferences(
                 showPressBubble = SettingsPreferences.shouldShowPressBubble(context),
                 showPreeditPreview = SettingsPreferences.showPreeditPreview(context),
                 inputTextLocation = SettingsPreferences.getInputTextLocation(context),
-                inlinePreeditPreview = SettingsPreferences.inlinePreeditPreview(context),
+                preeditStyle = SettingsPreferences.preeditStyle(context),
+                preeditAlign = SettingsPreferences.preeditAlign(context),
                 preeditBubbleOpacity = SettingsPreferences.preeditBubbleOpacity(context),
+                preeditTones = SettingsPreferences.preeditTones(context),
                 chineseLetterSwipes = com.kingzcheung.xime.settings.LetterSwipeBindings.load(context, false),
                 englishLetterSwipes = com.kingzcheung.xime.settings.LetterSwipeBindings.load(context, true),
                 splitKeyboardEnabled = SettingsPreferences.isSplitKeyboardEnabled(context),
@@ -429,7 +462,7 @@ data class KeyboardInputPreferences(
                 splitGapLandscape = SettingsPreferences.getSplitGapFraction(context, true),
                 qwertyStagger = QwertyStaggerMode.entries.firstOrNull { it.name == prefs.getString("qwerty_stagger_mode", null) }
                     ?: QwertyStaggerMode.AUTO,
-                qwertyStaggerCustom = prefs.getFloat("qwerty_stagger_custom", 0.5f).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f,
+                qwertyStaggerCustom = prefs.getFloat("qwerty_stagger_custom", 0.5f).takeIf { it.isFinite() }?.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX) ?: 0.5f,
                 // 11-09 起默认开。旧键 v2 会被 save() 连同其他设置写成旧默认 false，分不出是不是用户自己关的，只认新键。
                 bottomPunctuationSwipeUp = prefs.getBoolean("bottom_punctuation_swipe_up_v3", true),
                 handwritingWubiHints = prefs.getBoolean(SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, false),
@@ -457,6 +490,7 @@ data class KeyboardInputPreferences(
                 cursorStepSound = prefs.getBoolean("cursor_step_sound", false),
                 bottomLiftCursor = prefs.getBoolean(BOTTOM_LIFT_CURSOR_KEY, false),
                 voiceSwipeCancel = prefs.getBoolean(VOICE_SWIPE_CANCEL_KEY, false),
+                edgeGestureExclusion = prefs.getBoolean(EDGE_GESTURE_EXCLUSION_KEY, false),
                 languageMenuHoldSeconds = normalizeLanguageMenuHoldSeconds(languageHold),
                 languageKeyImePicker = prefs.getBoolean(LANGUAGE_KEY_IME_PICKER_KEY, false),
                 languageKeyOnLeft = prefs.getBoolean(LANGUAGE_KEY_ON_LEFT_KEY, false),
@@ -474,6 +508,9 @@ data class KeyboardInputPreferences(
                     prefs.getString(com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_KEY, null)) != null,
                 mixedInput = prefs.getBoolean(MIXED_INPUT_KEY, false),
                 rareCharacters = prefs.getBoolean(RARE_CHARACTERS_KEY, false),
+                japaneseKanji = splitFromRare(prefs, JAPANESE_KANJI_KEY),
+                koreanHanja = splitFromRare(prefs, KOREAN_HANJA_KEY),
+                cantoneseCharacters = splitFromRare(prefs, CANTONESE_CHARACTERS_KEY),
                 traditionalOutput = prefs.getBoolean(TRADITIONAL_OUTPUT_KEY, false),
                 datetimeCandidates = prefs.getBoolean(DATETIME_CANDIDATES_KEY, false),
                 englishAutoSpace = prefs.getBoolean(ENGLISH_AUTO_SPACE_KEY, false),
@@ -481,7 +518,7 @@ data class KeyboardInputPreferences(
                 emailSuffixes = prefs.getBoolean(EMAIL_SUFFIXES_KEY, true),
                 addressFieldsEnglish = prefs.getBoolean(ADDRESS_FIELDS_ENGLISH_KEY, true),
                 candidateEmoji = prefs.getBoolean(CANDIDATE_EMOJI_KEY, false),
-                symbolNames = prefs.getBoolean(SYMBOL_NAMES_KEY, false),
+                symbolNames = prefs.getBoolean(SYMBOL_NAMES_KEY, true),
                 greekLetters = prefs.getBoolean(GREEK_LETTERS_KEY, false),
                 cylmLongAlternative = prefs.getBoolean(CYLM_LONG_ALTERNATIVE_KEY, false),
                 fourteenLetterSwipe = prefs.getBoolean("fourteen_letter_swipe", true),
@@ -508,6 +545,8 @@ data class KeyboardInputPreferences(
                 glideTyping = prefs.getBoolean("glide_typing_v2", false),
                 chineseGlideTyping = prefs.getBoolean(CHINESE_GLIDE_KEY, false),
                 deleteChineseGlideCharacter = prefs.getBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, false),
+                externalGlideEncodings = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                    prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)),
                 glidePreview = prefs.getBoolean(GLIDE_PREVIEW_KEY, false),
                 letterLongPressMenu = prefs.getBoolean("letter_long_press_menu", false),
                 cornerSymbolInput = prefs.getBoolean(CORNER_SYMBOL_INPUT_KEY, true),
@@ -551,6 +590,9 @@ data class KeyboardInputPreferences(
             .putBoolean(DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY, doublePinyinSemicolonOnShift)
             .putBoolean(MIXED_INPUT_KEY, mixedInput)
             .putBoolean(RARE_CHARACTERS_KEY, rareCharacters)
+            .putBoolean(JAPANESE_KANJI_KEY, japaneseKanji)
+            .putBoolean(KOREAN_HANJA_KEY, koreanHanja)
+            .putBoolean(CANTONESE_CHARACTERS_KEY, cantoneseCharacters)
             .putBoolean(TRADITIONAL_OUTPUT_KEY, traditionalOutput)
             .remove(LEGACY_ZHUYIN_SIMPLIFIED_KEY)
             .putBoolean(DATETIME_CANDIDATES_KEY, datetimeCandidates)
@@ -582,6 +624,8 @@ data class KeyboardInputPreferences(
             .putBoolean("glide_typing", glideTyping)
             .putBoolean(CHINESE_GLIDE_KEY, chineseGlideTyping)
             .putBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, deleteChineseGlideCharacter)
+            .putString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
+                com.kingzcheung.xime.glide.ExternalGlideEncodings.format(externalGlideEncodings))
             .putBoolean(GLIDE_PREVIEW_KEY, glidePreview)
             .putBoolean("t9_flick_letters", t9FlickLetters)
             .putBoolean("t9_glide_typing", t9GlideTyping)
@@ -593,6 +637,7 @@ data class KeyboardInputPreferences(
             .putBoolean("cursor_step_sound", cursorStepSound)
             .putBoolean(BOTTOM_LIFT_CURSOR_KEY, bottomLiftCursor)
             .putBoolean(VOICE_SWIPE_CANCEL_KEY, voiceSwipeCancel)
+            .putBoolean(EDGE_GESTURE_EXCLUSION_KEY, edgeGestureExclusion)
             .putFloat("key_text_scale", keyTextScale.coerceIn(0.8f, 1.6f))
             .putFloat(CORNER_HINT_OPACITY_KEY, normalizeCornerHintOpacity(cornerHintOpacity))
             .putBoolean(HIDE_FUNCTION_KEY_HINTS_KEY, hideFunctionKeyHints)
@@ -604,7 +649,7 @@ data class KeyboardInputPreferences(
             .putString("handwriting_formula_delimiter", formulaDelimiter.name)
             .putString("fixed_symbols", fixedSymbols)
             .putString("qwerty_stagger_mode", qwertyStagger.name)
-            .putFloat("qwerty_stagger_custom", qwertyStaggerCustom.coerceIn(0f, 1f))
+            .putFloat("qwerty_stagger_custom", qwertyStaggerCustom.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX))
             .putBoolean("bottom_punctuation_swipe_up_v3", bottomPunctuationSwipeUp)
             .putBoolean(com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS, englishSentenceCaps)
             .putBoolean("qwerty_comma_key", qwertyCommaKey)

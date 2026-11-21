@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.twotone.Edit
 import androidx.compose.material.icons.twotone.Lock
 import androidx.compose.material.icons.twotone.VisibilityOff
 import androidx.compose.material3.Button
@@ -86,8 +87,7 @@ fun SmartPredictionSettingsContent(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { pendingImport = null },
             title = { Text("导入学习文件或文字") },
-            text = { Text("新增：保留已学的，加入文件里的条目，同一条取较大次数。\n替换：本机学习和个人语料方案整份换成文件内容，电脑上删掉的条目只有替换才生效。\n" +
-                "也可以选自己的文字（txt、md、csv、srt 等都行）：当作这些字都打过一遍来学，只新增不替换。\n不会修改 Rime 用户词库或模型。") },
+            text = { Text("新增：保留已学的，加入文件里的内容。\n替换：用文件内容替换已学的。\n也可以选普通文字文件，当作打过一遍来学。") },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { pendingImport = null; viewModel.importLearningData(uri, merge = false) }) { Text("替换") }
@@ -214,7 +214,7 @@ fun SmartPredictionSettingsContent(
                     SettingsToggleItem(
                         icon = Icons.TwoTone.VisibilityOff,
                         title = "无痕模式",
-                        subtitle = "打字不学新词和选词顺序；复制的内容不记进键盘剪贴板、不同步，系统的复制粘贴照常能用；密码框始终自动无痕",
+                        subtitle = "不学习打过的词，不记录剪贴板",
                         checked = toggles.incognito,
                         onCheckedChange = { SettingsPreferences.setIncognito(context, it) }
                     )
@@ -228,13 +228,13 @@ fun SmartPredictionSettingsContent(
                     SettingsToggleItem(
                         icon = Icons.AutoMirrored.TwoTone.Backspace,
                         title = "删掉刚打的词不学习",
-                        subtitle = "词一上屏就整个删掉(退格删完或上滑清空)，这一次不记进词库，误触打出的怪词不会排到前面",
+                        subtitle = "刚上屏就删掉的词不记进词库",
                         checked = unlearnRejected,
                         onCheckedChange = {
                             unlearnRejected = it
                             SettingsPreferences.setUnlearnRejectedCommit(context, it)
                         },
-                        lockMessage = if (toggles.incognito) "无痕模式开着时什么都不学，不需要这项" else null,
+                        lockMessage = if (toggles.incognito) "无痕模式开着时不需要" else null,
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
@@ -246,13 +246,30 @@ fun SmartPredictionSettingsContent(
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Lock,
                         title = "锁定词序",
-                        subtitle = "不再按使用次数调整词权，候选顺序固定，新词也不自动记；置顶、忘记和我的短语照常",
+                        subtitle = "候选顺序固定，不随使用改变，也不记新词",
                         checked = lockWordOrder,
                         onCheckedChange = {
                             lockWordOrder = it
                             SettingsPreferences.setLockWordOrder(context, it)
                         },
-                        lockMessage = if (toggles.incognito) "无痕模式开着时什么都不学，不需要这项" else null,
+                        lockMessage = if (toggles.incognito) "无痕模式开着时不需要" else null,
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    // 自造词角标（用户 11-19 要开关，默认显示，同以前）：关掉只是候选上不画小铅笔，照常学习。
+                    var showLearnedMark by remember { mutableStateOf(SettingsPreferences.showLearnedMark(context)) }
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.Edit,
+                        title = "显示自造词角标",
+                        subtitle = "学到的词在候选右上角显示小铅笔；关掉只是不显示，照常学习",
+                        checked = showLearnedMark,
+                        onCheckedChange = {
+                            showLearnedMark = it
+                            SettingsPreferences.setShowLearnedMark(context, it)
+                        },
                     )
                 })
             }
@@ -313,7 +330,7 @@ internal fun LearningDataControls(
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("本机学习：$unique 种组合 · 累计 $observations 次")
             Text("个人语料方案：$profileSize 条联想", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("输入后自动保存。导出不改动本机数据；导入可选新增或替换，电脑上删改过的文件用替换导入。",
+            Text("打字时自动学习，可导入导出。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // Stack actions so large fonts and narrow keyboards cannot clip labels.
             Button(onClick = onExport, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("导出文件") }

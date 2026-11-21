@@ -175,7 +175,7 @@ private fun ThemeSettingsPage(
                         }, costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GLASS)
                     // 液态玻璃不用先开玻璃：打开它就把玻璃一起打开。
                     SettingsToggleItem(icon = Icons.TwoTone.AutoAwesome, title = "液态玻璃",
-                        subtitle = "按键加细亮边，按住变亮；图片背景会在边缘折射",
+                        subtitle = "按键加亮边，按住时变亮",
                         checked = glass.dark.enabled && com.kingzcheung.xime.ui.theme.LiquidGlass.enabled(context),
                         onCheckedChange = { enabled ->
                             changeAppearance(context, onThemeChanged) {
@@ -214,7 +214,7 @@ private fun ThemeSettingsPage(
                 Text(
                     // 莫奈取色按每台设备的壁纸取色，不能说各设备相同。
                     text = if (shownTheme.isDynamic) "${shownTheme.name}跟随系统壁纸取色。点击可预览。"
-                        else "${shownTheme.name}在各设备使用相同配色。点击可预览。",
+                        else "${shownTheme.name}在各设备上颜色相同。点击可预览。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 6.dp)
@@ -417,12 +417,12 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
         val main = if (hasImage) com.kingzcheung.xime.ui.theme.CustomImageTheme.imageSource(context) else null
         if (main == null) {
             SettingsItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
-                subtitle = "从相册选一张图片做键盘背景，按键和文字的颜色沿用当前主题",
+                subtitle = "用相册里的图片做键盘背景",
                 onClick = { pickOne() }, showArrow = true)
         } else {
             SettingsToggleItem(icon = Icons.TwoTone.Image, title = "用自己的图片",
-                subtitle = if (imageOn) "开着：换配色只换按键和文字的颜色，图片留着（iOS 渐变除外）"
-                    else "关着：键盘用配色方案的底色，图片留着",
+                subtitle = if (imageOn) "换配色时保留背景图片"
+                    else "关着时用配色的底色",
                 checked = imageOn, onCheckedChange = onUseImage)
             BackgroundImageStrip(
                 main = main, slides = slides, imageOn = imageOn, motionOn = motion.enabled,
@@ -468,7 +468,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
                 Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
                     Text("遮罩", style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(horizontal = 16.dp))
-                    Text("越高图片越淡、按键上的字越清楚；浅色、深色键盘各一条",
+                    Text("越高图片越淡、字越清楚",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp))
                     CustomImageVeilSlider(dark = false, onChanged = onImageChanged)
@@ -530,7 +530,7 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("删除图片") },
-            text = { Text("这是最后一张，删掉后没有背景图片；正在用它时，键盘留下图片下面那套配色。") },
+            text = { Text("这是最后一张，删掉后就没有背景图片了。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

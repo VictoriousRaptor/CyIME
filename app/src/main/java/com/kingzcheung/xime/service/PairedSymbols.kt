@@ -24,6 +24,20 @@ internal object PairedSymbols {
     }
     private const val CARET_CHECK_DELAY_MS = 150L
 
+    /**
+     * 查出来不认光标位置的应用（包名）：这次运行里在它们中不再补结尾，免得结尾闪一下又被删掉（#489 NotallyX）。
+     * 只记在内存里，输入法重启后重新判断。
+     */
+    private val caretIgnoringApps = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun ignoresCaret(packageName: String?): Boolean = packageName != null && packageName in caretIgnoringApps
+
+    internal fun noteCaretIgnored(packageName: String?) {
+        if (!packageName.isNullOrEmpty()) caretIgnoringApps += packageName
+    }
+
+    internal fun forgetCaretIgnoringApps() = caretIgnoringApps.clear()
+
     fun closingFor(literal: String): String? = pairs[literal]
 
     fun isClosing(literal: String): Boolean = literal in closings
@@ -54,7 +68,7 @@ internal data class CommitCaret(val caretBack: Int = 0, val overtype: String? = 
 }
 
 /** 按 [caret] 上屏：结尾单独上屏并把光标放在它前面（newCursorPosition 0 = 插入文字的开头），整段算一次编辑。 */
-internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret): Boolean {
+internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret, packageName: String? = null): Boolean {
     val back = caret.caretBack.coerceIn(0, text.length)
     beginBatchEdit()
     try {
@@ -72,7 +86,8 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
         // 正常编辑框里刚补上的结尾也被删掉（11-16 用户反馈：开成对符号，右半出来又马上没了）。等编辑框处理完再查。
         val generation = ++PairedSymbols.commitGeneration
         PairedSymbols.deferCaretCheck {
-            if (generation == PairedSymbols.commitGeneration) dropClosingIfCaretIgnored(text, back)
+            if (generation == PairedSymbols.commitGeneration && dropClosingIfCaretIgnored(text, back))
+                PairedSymbols.noteCaretIgnored(packageName)
         }
     }
     return true
@@ -85,10 +100,10 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
  * 这类编辑框里没法可靠地把光标放进一对符号中间，所以把刚补上的结尾去掉，只留用户点的开头，
  * 和没开「输入成对符号」时一样；结尾由用户自己打，不会多出一个。正常的编辑框（光标前面不是整段）不受影响。
  */
-private fun InputConnection.dropClosingIfCaretIgnored(text: String, back: Int) {
+private fun InputConnection.dropClosingIfCaretIgnored(text: String, back: Int): Boolean {
     val before = runCatching { getTextBeforeCursor(text.length, 0)?.toString() }.getOrNull()
-    if (before != text || !getSelectedText(0).isNullOrEmpty()) return
-    deleteSurroundingText(back, 0)
+    if (before != text || !getSelectedText(0).isNullOrEmpty()) return false
+    return deleteSurroundingText(back, 0)
 }
 
 /** 光标夹在一对空符号中间时两边一起删掉；不是这种情况返回 false，由调用方照常退格。 */

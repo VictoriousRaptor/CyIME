@@ -671,8 +671,9 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
     /**
      * [stayInHandwriting]：手写开着时换方案，新语言能手写就留在手写（换语言的老规矩）；
      * 从布局选择里点了布局时为 false，回到所选键盘（平板复现：手写时点 26 键仍停在手写）。
+     * [quiet]：设置页已经说了换成什么（[com.kingzcheung.xime.settings.ImeSchemaRequests]），不再弹「已切换输入方案」。
      */
-    internal fun switchSchema(schemaId: String, stayInHandwriting: Boolean = true) {
+    internal fun switchSchema(schemaId: String, stayInHandwriting: Boolean = true, quiet: Boolean = false) {
         if (service.editorInputPolicy.locksNativeInput) return
         if (schemaId == com.kingzcheung.xime.settings.InputModes.ENGLISH) {
             service.keyRouter.postRimeJob {
@@ -760,7 +761,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                     reopenHandwriting(keepHandwriting, targetLanguage)
                     service.sessionController.updateSchemaName()
                     service.updateUI()
-                    Toast.makeText(service, "已切换输入方案", Toast.LENGTH_SHORT).show()
+                    if (!quiet) Toast.makeText(service, "已切换输入方案", Toast.LENGTH_SHORT).show()
                 }
                 // 显示状态同步后再回写标点宽度：此处 uiState 可能还残留英文态，
                 // 显式 asciiMode=false，保证中文/日文方案按用户选择输出标点。

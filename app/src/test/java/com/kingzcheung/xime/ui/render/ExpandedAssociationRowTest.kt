@@ -66,19 +66,19 @@ class ExpandedAssociationRowTest {
                 modifier = Modifier.width(411.dp).height(280.dp).testTag("keyboard"),
                 candidateState = snapshot, inputSessionManagedByHost = true)
         }
-        rule.onNodeWithTag("candidate-expansion").performClick()
+        rule.pullOpenCandidates()
         rule.waitForIdle()
         rule.onNodeWithTag("expanded-candidates").assertExists()
         val inBar = rule.onAllNodesWithTag("candidate-fixed-strip", true).fetchSemanticsNodes().let {
             assertEquals(1, it.size)
-            words.indices.count { i -> rule.onAllNodesWithTag("bar-candidate:$i", true).fetchSemanticsNodes().isNotEmpty() }
+            words.indices.count { i -> rule.onAllNodesWithTag("bar-association:$i", true).fetchSemanticsNodes().isNotEmpty() }
         }
         shot("expanded-association-row")
         assertTrue("栏里只放了 $inBar 个", inBar >= 4)
         // 每个词只出现一次：栏里放下的不再出现在展开页，放不下的都在展开页里。
         for (word in words) assertEquals(word, 1, rule.onAllNodesWithText(word, substring = false, useUnmergedTree = true)
             .fetchSemanticsNodes().size)
-        rule.onNodeWithTag("bar-candidate:1", true).performClick()
+        rule.onNodeWithTag("bar-association:1", true).performClick()
         rule.waitForIdle()
         assertEquals(listOf(1), committed)
         rule.onNodeWithTag("expanded-candidates").assertDoesNotExist()

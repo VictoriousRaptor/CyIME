@@ -54,7 +54,7 @@ internal fun DoublePinyinRawPreeditToggle() {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     SettingsToggleItem(Icons.TwoTone.Keyboard, "双拼编码显示全拼",
-        "开启后显示全拼（如 shuang pin），关闭时显示双拼键（如 ul pb）。改完要几秒重新部署",
+        "编码显示成全拼，如 shuang pin",
         checked = enabled, onCheckedChange = { on ->
             SpellingPatches.setDoublePinyinRawPreedit(context, !on)
             enabled = on
@@ -125,9 +125,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
             val current = draft
             val keyboardPrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
             if (current == null) {
-                SettingsJumpText("在「语言与方案」的方案一栏切换双拼。内置方案可以复制后修改键位，保存为自己的方案；" +
-                    "符号和词库与中文26键相同。在「语言与方案」点 QWJRTK、Colemak 或自己的字母布局，双拼也按那个排列打；" +
-                    "启用了中文14键或自己合并过按键的布局(如自己排的20键)时，在方案栏显示的双拼方案在那个布局上也能用：点合并键打键上第一个字母，长按选另一个字母。",
+                SettingsJumpText("在「语言与方案」里切换双拼。内置方案可以复制后改键位。",
                     jumps = listOf("语言与方案"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -138,7 +136,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                 Column(Modifier.settingsSearchAnchor("双拼简拼")) {
                     SettingsSection(title = "通用") {
                         SettingsToggleItem(Icons.TwoTone.ContentCut, "双拼简拼",
-                            "26 键只打声母也出词，如 wxzf 出“微信支付”；zh、ch、sh 也可打 z、c、s。改完要几秒重新部署",
+                            "只打声母也出词，如 wxzf 出“微信支付”",
                             checked = abbreviation, onCheckedChange = { on ->
                                 SpellingPatches.setDoublePinyinAbbreviation(context, on)
                                 abbreviation = on
@@ -163,8 +161,8 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DoublePinyinKeyMap(scheme)
                             // 九键没有分号键：ing 在分号上的方案（微软双拼）分号和 L 同在 5 键。
-                            listOf(Triple(scheme.id, "在方案栏显示", "打开后可在「语言与方案」里选它"),
-                                Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "用九键打${scheme.name}：每个字按两个双拼键所在的数字键")
+                            listOf(Triple(scheme.id, "在方案栏显示", "在「语言与方案」里可以选它"),
+                                Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "在九键上用${scheme.name}")
                             ).forEach { (id, title, subtitle) ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
@@ -193,7 +191,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                             if (scheme.usesSemicolon) Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text("ing 放在 Shift 键上", style = MaterialTheme.typography.bodyLarge)
-                                    Text("不加分号键，L 在第二排最右边；打了声母后左下角的 Shift 键变成 ing",
+                                    Text("打了声母后 Shift 键变成 ing",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (ingLock != null) SettingsLockNote(ingLock.message)
@@ -233,7 +231,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                     label = { Text("${finalLabel(item)} · ${key?.uppercaseChar() ?: "?"}") })
                             }
                         }
-                        Text("zh、ch、sh 以外的声母就在本字母键上；ue 是 jue、yue 的韵母，üe 是 lüe、nüe 的韵母。",
+                        Text("其他声母就在本字母键上。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -281,7 +279,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
         confirmButton = { TextButton(onClick = { discard = false; draft = null }) { Text("放弃") } },
         dismissButton = { TextButton(onClick = { discard = false }) { Text("继续编辑") } })
     deleteId?.let { target -> AlertDialog(onDismissRequest = { deleteId = null }, title = { Text("删除这个双拼方案？") },
-        text = { Text("只删除键位方案，不删除词库和学习记录。正在使用它时会切回小鹤双拼。") },
+        text = { Text("只删除键位，不删词库。正在用的话会换回小鹤双拼。") },
         confirmButton = { TextButton(onClick = {
             deleteId = null; busy = true
             scope.launch {

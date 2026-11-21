@@ -13,6 +13,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.*
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import android.os.Looper
+import java.util.concurrent.TimeUnit
 import org.robolectric.annotation.Config
 
 /** 用户 11-04：屏蔽外放音（压低音量 / 暂停播放 / 不屏蔽），默认不屏蔽；关麦恢复。 */
@@ -184,5 +187,39 @@ class VoiceAudioFocusTest {
     @Test fun unknownStoredValueFallsBackToOff() {
         SettingsPreferences.getPrefsPublic(app).edit().putString(SettingsPreferences.KEY_STT_OTHER_AUDIO, "x").commit()
         assertEquals(VoiceOtherAudio.OFF, SettingsPreferences.getSttOtherAudio(app))
+    }
+
+    /** 用户 11-12 转来：开了屏蔽抖音照样出声。给了焦点还在放，就改为临时静音，关麦还原、交还焦点。 */
+    @Test fun playerIgnoringFocusIsMutedInstead() {
+        SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.PAUSE)
+        focusAnswers(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        val focus = VoiceAudioFocus(context)
+        val owner = Any()
+        focus.acquire(owner)
+        verify(audio, never()).adjustStreamVolume(any(), any(), any())
+        shadowOf(Looper.getMainLooper()).idleFor(VoiceAudioFocus.IGNORED_FOCUS_CHECK_MS, TimeUnit.MILLISECONDS)
+        verify(audio).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        assertTrue(SettingsPreferences.isSttMusicMutedByVoice(app))
+        focus.release(owner)
+        verify(audio).abandonAudioFocusRequest(any())
+        verify(audio).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+        assertFalse(SettingsPreferences.isSttMusicMutedByVoice(app))
+    }
+
+    @Test fun playerThatPausedOrSessionThatEndedIsNotMuted() {
+        SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.PAUSE)
+        focusAnswers(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        val focus = VoiceAudioFocus(context)
+        val owner = Any()
+        focus.acquire(owner)
+        whenever(audio.isMusicActive).thenReturn(false)
+        shadowOf(Looper.getMainLooper()).idleFor(VoiceAudioFocus.IGNORED_FOCUS_CHECK_MS, TimeUnit.MILLISECONDS)
+        focus.release(owner)
+        // 说得很短：检查之前就关了麦，媒体还在放也不再静音。
+        whenever(audio.isMusicActive).thenReturn(true)
+        focus.acquire(owner)
+        focus.release(owner)
+        shadowOf(Looper.getMainLooper()).idleFor(VoiceAudioFocus.IGNORED_FOCUS_CHECK_MS, TimeUnit.MILLISECONDS)
+        verify(audio, never()).adjustStreamVolume(any(), any(), any())
     }
 }

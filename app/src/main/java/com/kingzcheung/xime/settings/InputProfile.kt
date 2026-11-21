@@ -11,9 +11,12 @@ enum class InputLanguage(val id: String, val displayName: String) {
     val typesLettersDirectly: Boolean get() = this == ENGLISH || LetterLanguage.of(this) != null
 
     companion object {
-        /** The elder package offers only Chinese and English; see docs/development/elder-pack-spec.md. */
+        /**
+         * The elder package offers only Chinese and English; see docs/development/elder-pack-spec.md.
+         * 这个顺序就是各页列语言的默认顺序：中文、英文、日语，其余在后（用户 11-19：有的页面日语排在英语上面）。
+         */
         val supported = if (com.kingzcheung.xime.BuildConfig.ELDER) listOf(CHINESE, ENGLISH)
-            else listOf(CHINESE, JAPANESE, ENGLISH, SPANISH, GERMAN, FRENCH, ITALIAN, RUSSIAN, KOREAN, VIETNAMESE, MALAY)
+            else listOf(CHINESE, ENGLISH, JAPANESE, SPANISH, GERMAN, FRENCH, ITALIAN, RUSSIAN, KOREAN, VIETNAMESE, MALAY)
         /** Languages a shipped speech recognizer can transcribe. The [LetterLanguage]s have none yet. */
         val speech: List<InputLanguage> get() = supported.filter { LetterLanguage.of(it) == null }
         fun fromId(id: String): InputLanguage? = entries.firstOrNull { it.id == id }

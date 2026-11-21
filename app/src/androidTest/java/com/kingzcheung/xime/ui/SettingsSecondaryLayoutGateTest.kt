@@ -251,7 +251,7 @@ class SettingsSecondaryLayoutGateTest {
             }
         }
         rule.waitUntil(20_000) {
-            rule.onAllNodesWithText("仅统计应用数据目录，不含应用本体").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText("不含应用本身").fetchSemanticsNodes().isNotEmpty()
         }
         for (v in viewports) {
             rule.runOnIdle { viewport.value = v }

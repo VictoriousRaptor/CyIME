@@ -10,6 +10,14 @@ enum class QwertyStaggerMode(val label: String) {
     AUTO("按尺寸自动"), PHYSICAL("实体键盘"), PHONE("手机常见"), CUSTOM("自定义")
 }
 
+/** 自定义可从手机常见位置继续向右；1 仍为实体键盘。 */
+internal const val QWERTY_STAGGER_MIN = -1f
+internal const val QWERTY_STAGGER_MAX = 1f
+
+/** 滑块向右表示键行向右；接近手机常见位置时吸附到中点。 */
+internal fun customStaggerFromSlider(value: Float): Float =
+    if (kotlin.math.abs(value) < 0.05f) 0f else -value.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX)
+
 /** 0 = 手机常见（s 与 z 对齐），1 = 实体键盘。 */
 internal fun resolvedQwertyStagger(
     mode: QwertyStaggerMode, custom: Float, cellWidthDp: Float, targetCellDp: Float?,
@@ -17,7 +25,7 @@ internal fun resolvedQwertyStagger(
     QwertyStaggerMode.AUTO -> wideQwertyStagger(cellWidthDp, targetCellDp)
     QwertyStaggerMode.PHYSICAL -> 1f
     QwertyStaggerMode.PHONE -> 0f
-    QwertyStaggerMode.CUSTOM -> custom.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0.5f
+    QwertyStaggerMode.CUSTOM -> custom.takeIf { it.isFinite() }?.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX) ?: 0.5f
 }
 
 /** 空格两侧的一个标点键：点按输入 [primary]，滑动输入 [alternate]。 */

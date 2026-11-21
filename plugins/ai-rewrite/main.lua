@@ -20,6 +20,9 @@ local KEY_BASE_URL = "baseUrl"
 local KEY_MODEL = "model"
 local KEY_CUSTOM_LABEL = "custom_label"
 local KEY_TARGET_LANG = "targetLang"
+-- 改写动作列表（0.6.0 起）：JSON 数组 [{name, text, id?}]，设置页里增删、改名、排序。
+-- id 只有自带的几条有（polish、fix…），用来套各自的校验范围；自己加的没有 id，按「自定义」只拦套话。
+local KEY_PROMPTS = "prompts"
 
 local DEFAULT_BASE_URL = "https://api.openai.com/v1"
 local DEFAULT_MODEL = "gpt-4o-mini"
@@ -68,6 +71,7 @@ local MODES = {
 
 local MODE_BY_ID = {}
 for _, m in ipairs(MODES) do MODE_BY_ID[m.id] = m end
+-- 0.6.0 起 custom 只当自己加的条目的模板，不再单独成一个动作
 
 -- ================= 文字工具 =================
 
@@ -353,26 +357,73 @@ local function configOr(key, default)
   return v
 end
 
-local function modeLabel(mode)
-  if mode.custom then return configOr(KEY_CUSTOM_LABEL, mode.label) end
-  return mode.label
+-- 出厂的动作列表（设置页「恢复默认」用这个）
+local function defaultEntries()
+  local list = {}
+  for _, m in ipairs(MODES) do
+    if not m.custom then list[#list + 1] = { id = m.id, name = m.label, text = m.prompt } end
+  end
+  return list
 end
 
+-- 0.6.0 之前每个动作一个提示词框（prompt_<id>，空着用默认）外加一个自定义动作。还没有列表时
+-- 按旧设置拼出来：改过的提示词和自定义动作都带过来；旧键不删，退回旧版也还在。
+local function migratedEntries()
+  local list = {}
+  for _, m in ipairs(MODES) do
+    if m.custom then
+      local text = trim(host.config.get(promptKey(m.id)) or "")
+      if text ~= "" then list[#list + 1] = { name = configOr(KEY_CUSTOM_LABEL, m.label), text = text } end
+    else
+      list[#list + 1] = { id = m.id, name = m.label, text = configOr(promptKey(m.id), m.prompt) }
+    end
+  end
+  return list
+end
+
+local function encodeEntries(list)
+  if #list == 0 then return "[]" end
+  return host.json.encode(list)
+end
+
+local function readEntries()
+  local raw = host.config.get(KEY_PROMPTS)
+  if raw == nil or trim(raw) == "" then return migratedEntries() end
+  local ok, data = pcall(host.json.decode, raw)
+  if not ok or type(data) ~= "table" then return migratedEntries() end
+  return data
+end
+
+-- 面板上的动作，按列表顺序；提示词空着的条目不显示。
+-- 每个动作带上同 id 自带动作的校验范围（没有 id 的按 custom），key 用来认按钮。
+local function availableModes()
+  local list = {}
+  for i, e in ipairs(readEntries()) do
+    local text = type(e) == "table" and trim(tostring(e.text or "")) or ""
+    if text ~= "" then
+      local id = type(e.id) == "string" and e.id or ""
+      local base = MODE_BY_ID[id]
+      if base == nil or base.custom then base = MODE_BY_ID["custom"] end
+      local mode = {}
+      for k, v in pairs(base) do mode[k] = v end
+      mode.key = base.custom and ("#" .. i) or id
+      mode.prompt = text
+      local name = trim(tostring(e.name or ""))
+      mode.label = name ~= "" and name or "未命名"
+      list[#list + 1] = mode
+    end
+  end
+  return list
+end
+
+-- 提示词里的 {lang} 换成目标语言（哪一条都可以用）
 local function modePrompt(mode, text)
-  local p = configOr(promptKey(mode.id), mode.prompt)
-  if mode.translate then
+  local p = mode.prompt
+  if contains(p, "{lang}") then
     local lang = targetLanguage(text)
     p = p:gsub("{lang}", function() return lang end)
   end
   return p
-end
-
-local function availableModes()
-  local list = {}
-  for _, m in ipairs(MODES) do
-    if not m.custom or trim(modePrompt(m)) ~= "" then list[#list + 1] = m end
-  end
-  return list
 end
 
 function plugin.getSettingsSchema()
@@ -385,34 +436,13 @@ function plugin.getSettingsSchema()
       optionLabels = { [SPARK] = "讯飞星火 X2" }, defaultValue = "自定义兼容接口", section = "接口" },
     { key = "testConnection", label = "测试接口", type = "button", section = "接口" },
   }
-  -- 提示词单独一组；框按内容长高
-  local hinted = false
-  local function prompt(field)
-    field.section = "提示词"
-    -- 「清空就恢复默认」只写在第一个提示词框下面，不每个都写一遍
-    if field.type == "textarea" and field.defaultValue ~= nil and not hinted then
-      hinted = true
-      field.helpText = field.helpText and (field.helpText .. "；清空就恢复默认") or "清空就恢复默认"
-    end
-    schema[#schema + 1] = field
-  end
-  for _, m in ipairs(MODES) do
-    if m.custom then
-      prompt { key = KEY_CUSTOM_LABEL, label = "自定义动作的名字", type = "text",
-        placeholder = "比如：翻成英文", helpText = "下面的提示词填了才会出现这个按钮" }
-      prompt { key = promptKey(m.id), label = "自定义动作的提示词", type = "textarea",
-        placeholder = "比如：把下面这段话翻译成英文。",
-        helpText = "自定义动作只拦套话和空结果，不比较长度和字" }
-    elseif m.translate then
-      prompt { key = KEY_TARGET_LANG, label = "翻译成", type = "text",
-        placeholder = "自动", helpText = "空着：中文译成英文，其他译成简体中文" }
-      prompt { key = promptKey(m.id), label = m.label, type = "textarea",
-        defaultValue = m.prompt, helpText = "{lang} 换成上面的目标语言" }
-    else
-      prompt { key = promptKey(m.id), label = m.label, type = "textarea",
-        defaultValue = m.prompt }
-    end
-  end
+  -- 提示词单独一组：一张可以增删、改名、拖动排序的列表（宿主 1.15.101 起认 type = "entries"）
+  if trim(host.config.get(KEY_PROMPTS) or "") == "" then host.config.set(KEY_PROMPTS, encodeEntries(migratedEntries())) end
+  schema[#schema + 1] = { key = KEY_PROMPTS, label = "改写动作", type = "entries", section = "提示词",
+    defaultValue = encodeEntries(defaultEntries()), placeholder = "比如：把下面这段话翻译成英文。",
+    helpText = "改写面板上的按钮按这个顺序显示。点一条改名字和提示词，长按拖动排序。" }
+  schema[#schema + 1] = { key = KEY_TARGET_LANG, label = "翻译成", type = "text", section = "提示词",
+    placeholder = "自动", helpText = "提示词里的 {lang} 换成这个；空着：中文译成英文，其他译成简体中文" }
   -- 旧宿主显示全部服务的独立字段；新版按所选服务显示并校验。
   local providerFields = {
     { value = "自定义兼容接口", fields = {
@@ -630,10 +660,14 @@ local function buildUi()
     ui[#ui + 1] = { type = "text", value = "点下面的结果替换原文；不满意可以换一种改法。", style = "caption" }
   end
   ui[#ui + 1] = { type = "divider" }
-  for _, m in ipairs(availableModes()) do
-    local label = modeLabel(m)
-    if m.id == lastModeId and (rejected ~= "" or result ~= "") then label = label .. "（再来一次）" end
-    ui[#ui + 1] = { type = "button", key = "mode:" .. m.id, label = label }
+  local modes = availableModes()
+  if #modes == 0 then
+    ui[#ui + 1] = { type = "text", value = "还没有改写动作：点「设置」加一个。", style = "caption" }
+  end
+  for _, m in ipairs(modes) do
+    local label = m.label
+    if m.key == lastModeId and (rejected ~= "" or result ~= "") then label = label .. "（再来一次）" end
+    ui[#ui + 1] = { type = "button", key = "mode:" .. m.key, label = label }
   end
   -- 宿主保留的动作：打开这个插件的设置页
   ui[#ui + 1] = { type = "button", key = "host:settings", label = "设置" }
@@ -674,7 +708,7 @@ end
 
 local function rewrite(mode)
   resetResult()
-  lastModeId = mode.id
+  lastModeId = mode.key
   if trim(source) == "" then return end
   if charCount(source) > MAX_CHARS then
     notice = "字太多了（超过 " .. MAX_CHARS .. " 字），先选中一段再改。"
@@ -707,8 +741,13 @@ local function rewrite(mode)
 end
 
 function plugin.onPanelAction(actionId)
-  local id = (actionId or ""):match("^mode:(.+)$")
-  local mode = id and MODE_BY_ID[id]
+  local key = (actionId or ""):match("^mode:(.+)$")
+  local mode = nil
+  if key ~= nil then
+    for _, m in ipairs(availableModes()) do
+      if m.key == key then mode = m break end
+    end
+  end
   if mode ~= nil and not generating then
     rewrite(mode)
   end

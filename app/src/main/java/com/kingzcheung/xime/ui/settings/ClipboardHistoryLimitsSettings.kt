@@ -58,18 +58,18 @@ internal fun ClipboardHistoryLimitsSetting() {
     }
     val shown = limits ?: ClipboardHistoryLimits(ClipboardRetention.DEFAULT_COUNT, ClipboardRetention.DEFAULT_DAYS)
     SettingsSection(title = "历史记录", content = {
-        HistoryLimitChoices("数量上限", "超出后先删最早的，固定和分组的不计入", ClipboardRetention.COUNT_OPTIONS,
+        HistoryLimitChoices("数量上限", "超出时删除最早的，固定和分组的不算", ClipboardRetention.COUNT_OPTIONS,
             shown.maxCount, ClipboardRetention::countLabel, "clipboard-max-count", enabled = limits != null) {
             choose(shown.copy(maxCount = it))
         }
-        HistoryLimitChoices("保留时间", "到期自动删除，固定和分组的不过期", ClipboardRetention.DAY_OPTIONS,
+        HistoryLimitChoices("保留时间", "到期自动删除，固定和分组的保留", ClipboardRetention.DAY_OPTIONS,
             shown.keepDays, ClipboardRetention::daysLabel, "clipboard-keep-days", enabled = limits != null) {
             choose(shown.copy(keepDays = it))
         }
         // 用户 11-17：剪贴板图片限制大小，默认 200 MB，可以调。
         val images = remember(context) { ClipboardImages.getInstance(context) }
         var imageMb by remember { mutableStateOf(images.cacheLimitMb()) }
-        HistoryLimitChoices("图片占用上限", "复制的图片最多占这么多空间，超出后先删最早的，固定的不删", CLIPBOARD_IMAGE_CACHE_MB_OPTIONS,
+        HistoryLimitChoices("图片占用上限", "超出时删除最早的图片，固定的保留", CLIPBOARD_IMAGE_CACHE_MB_OPTIONS,
             imageMb, ::clipboardImageCacheMbLabel, "clipboard-image-cache", enabled = true) {
             imageMb = it
             images.setCacheLimitMb(it)

@@ -64,11 +64,31 @@ object LetterLayouts {
     /** [layoutId] that is not a typable letter layout (the language's own 26 keys) clears the choice. */
     fun select(context: Context, language: InputLanguage, layoutId: String) {
         val id = layoutId.takeIf { it in sectionChoices(language) } ?: CustomKeyboardLayouts.find(layoutId)?.takeIf(::typable)?.id
+        // 横竖屏分开记布局开着时，记到这个方向（用户 11-20）。
+        OrientationLayouts.recordLetters(context, language, id, chosen[language])
         SettingsPreferences.getPrefsPublic(context).edit().apply {
             if (id == null) remove(PREFIX + language.id) else putString(PREFIX + language.id, id)
         }.apply()
         chosen = if (id == null) chosen - language else chosen + (language to id)
         KeysConfigHelper.applyLetterLayouts()
+    }
+
+    /**
+     * 横竖屏分开记布局开着时，换成这个方向记的字母排列（转屏后打开键盘时调）。只换，不再记录。
+     * 返回是否换了。
+     */
+    fun restoreForOrientation(context: Context): Boolean {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val changes = OrientationLayouts.lettersToRestore(prefs, OrientationLayouts.isLandscape(context), chosen) { language, id ->
+            id in sectionChoices(language) || CustomKeyboardLayouts.find(id)?.let(::typable) == true
+        }
+        if (changes.isEmpty()) return false
+        prefs.edit().apply {
+            changes.forEach { (language, id) -> if (id == null) remove(PREFIX + language.id) else putString(PREFIX + language.id, id) }
+        }.apply()
+        chosen = changes.entries.fold(chosen) { map, (language, id) -> if (id == null) map - language else map + (language to id) }
+        KeysConfigHelper.applyLetterLayouts()
+        return true
     }
 
     /** A layout tap resolved to [entry]; Chinese entries carry their layout in the schema itself. */

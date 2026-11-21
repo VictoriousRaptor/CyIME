@@ -82,7 +82,7 @@ internal fun LanguageKeySwitchSettings(
                 contentDescription = if (expanded) "收起语言键切换方式" else "展开语言键切换方式")
         }
         if (expanded) Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("屏幕键盘和物理浮条共用此设置；点按语言键切换，长按打开语言列表。物理键盘的 Shift 和 Ctrl + 空格快捷键保持各自功能。",
+            Text("点语言键切换，长按打开语言列表",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.selectableGroup()) {
                 SwitchModeRow("pair", "两种语言互切(默认)", pairMode) {
@@ -104,7 +104,7 @@ internal fun LanguageKeySwitchSettings(
                     (if (pairFirst == null) emptyList() else nativeLanguages.filter { it != pairFirst }), pairPartner) {
                     save(LanguageSwitchPreferences.pair(pairFirst, it))
                 }
-                if (nativeLanguages.isEmpty()) Text("别的语言要先在上面打开，等它的输入方案准备好后才能选。",
+                if (nativeLanguages.isEmpty()) Text("先在上面打开其他语言。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

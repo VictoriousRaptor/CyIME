@@ -36,6 +36,16 @@ internal object HandwritingAssets {
         }
     }
 
+    /**
+     * 一组文件（[names]，同属 [pack]）能读的几份：先下载的、再安装包里的，缺文件的那份不算。
+     * 手写模型从网上目录换成新版后，安装包里的模板对不上，下载的新模板才对得上（[HandwritingRarePack]）。
+     */
+    fun copies(context: Context, pack: String, names: List<String>): List<(String) -> ByteArray> = buildList {
+        val dir = ModelStorage.getModelDir(context, pack)
+        if (names.all { File(dir, it).isFile }) add { name: String -> File(dir, name).readBytes() }
+        if (names.all { bundled(context, it) }) add { name: String -> context.assets.open("handwriting/$name").use { it.readBytes() } }
+    }
+
     fun readText(context: Context, name: String): String = open(context, name).bufferedReader(Charsets.UTF_8).use { it.readText() }
     fun readBytes(context: Context, name: String): ByteArray = open(context, name).use { it.readBytes() }
 }

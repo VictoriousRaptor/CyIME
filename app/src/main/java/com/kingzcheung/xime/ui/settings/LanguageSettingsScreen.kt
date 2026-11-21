@@ -8,6 +8,7 @@ import androidx.compose.material.icons.twotone.ViewModule
 import androidx.compose.material.icons.twotone.Inventory
 import androidx.compose.material.icons.twotone.Translate
 import androidx.compose.material.icons.twotone.Abc
+import androidx.compose.material.icons.twotone.Download
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandMore
@@ -38,7 +39,8 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDoublePinyin: () -> Unit = {},
-    onOpenChineseInput: () -> Unit = {}, onOpenEnglishInput: () -> Unit = {}, onBack: () -> Unit) {
+    onOpenChineseInput: () -> Unit = {}, onOpenEnglishInput: () -> Unit = {}, onImportSchema: () -> Unit = {},
+    onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var languages by remember { mutableStateOf(LanguagePreferences.enabled(context)) }
@@ -76,7 +78,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
             .padding(horizontal = 16.dp, vertical = 8.dp),
             state = dragOrder.list, verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = keyboardPreviewContentPadding()) {
-            item { Text("点开语言，分别设置输入方案和键盘布局；下次切换到该语言时使用。长按可调整语言顺序。",
+            item { Text("点开语言选择方案和布局，长按调整顺序",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant) }
             // 拖动顺序要等下一帧才跟上开关：刚关掉的语言还在 dragOrder.order 里，又出现在未启用那段，
@@ -124,7 +126,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                         orderedLanguages = InputModes.languageOrder(context)
                                         profilesModel.refresh()
                                         if (enabled) expandedLanguage = language
-                                        message = if (enabled) "已开启，输入方案会在后台自动准备" else "已关闭，已下载词库保留"
+                                        message = if (enabled) "已开启" else "已关闭，已下载词库保留"
                                     } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                                     catch (error: Exception) { message = error.message ?: "保存失败，请稍后再试" }
                                     finally { saving = false }
@@ -138,7 +140,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                             Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) { entry ->
                             InputModes.selectProfile(context, entry)
                             remembered = remembered + (language to entry.schemaId)
-                            // 正在用的语言：同时改当前方案，键盘下次弹出就换（收起时在这里改了布局也算数）。
+                            // 正在用的语言：同时改当前方案，开着的键盘马上换过去（用户 11-20）；键盘收着时下次弹出就是新的。
                             val current = SettingsPreferences.getCurrentSchema(context)
                             val active = current.isNotBlank() && !com.kingzcheung.xime.ui.keyboard.isHandwritingSchema(current) &&
                                 InputModes.languageOf(current, availableProfiles) == language
@@ -146,9 +148,12 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                 // 英文直接输入不是 Rime 方案，不启用、不部署、不写成当前方案；切到英文时按这里的选择开 ascii。
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，下次切换到该语言时使用"
                             } else if (entry.schemaId in profilesState.enabledSchemas) {
-                                if (active) SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                if (active) {
+                                    SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                    ImeSchemaRequests.pick(entry.schemaId)
+                                }
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，" +
-                                    if (active) "键盘下次弹出时使用" else "下次切换到该语言时使用"
+                                    if (active) "键盘跟着换" else "下次切换到该语言时使用"
                             } else if (!saving) scope.launch {
                                 saving = true
                                 try {
@@ -162,10 +167,13 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                     // 关着的方案（笔画、仓颉等）点了也要像开着的一样换上：以前只启用不换，键盘还是拼音，
                                     // 以为点的是笔画、其实在拼音键盘上打（11-06）。部署完再换，没编译好的方案键盘会退回第一个方案。
                                     profilesModel.deploySchema {
-                                        if (active) SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                        if (active) {
+                                            SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                            ImeSchemaRequests.pick(entry.schemaId)
+                                        }
                                     }
                                     message = "已打开并选好：${language.displayName} · ${entry.selectionLabel}，正在部署，几秒后好；" +
-                                        if (active) "键盘下次弹出时使用" else "下次切换到该语言时使用"
+                                        if (active) "好了键盘自动换上" else "下次切换到该语言时使用"
                                 } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                                 catch (error: Exception) { message = error.message ?: "打开方案失败，请稍后再试" }
                                 finally { saving = false }
@@ -176,6 +184,18 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                             WordListStatus(it, Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
                         }
                     }
+                }
+            }
+            // 页面从上往下按做事的先后（用户 11-19：顺序诡异、找不到导入方案）：
+            // 语言 → 方案（导入、已安装、双拼）→ 导入方案的语言 → 输入设置（中文、英文、语言键）。
+            item(key = "schema-resources") {
+                SettingsSection(title = "方案") {
+                    SettingsItem(Icons.TwoTone.Download, "导入方案", "选 Rime 方案文件或压缩包导入",
+                        onClick = onImportSchema, showArrow = true)
+                    SettingsItem(Icons.TwoTone.Inventory, "已安装的方案",
+                        "启用、停用和排序语言、方案与布局的组合", onClick = onOpenSchemaResources, showArrow = true)
+                    SettingsItem(Icons.TwoTone.ViewModule, "双拼方案",
+                        "选择双拼方案，或自建方案", onClick = onOpenDoublePinyin, showArrow = true)
                 }
             }
             // 没写语言的导入方案（声笔等，GitHub #86）：在这里选一次语言，字母布局、语音、手写跟着走。
@@ -203,18 +223,6 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                     }, onDismiss = { picking = null })
                 }
             }
-            // 已装的方案组合（启停、排序、应用更改）和导入，原首页「输入资源」。
-            item(key = "schema-resources") {
-                SettingsSection(title = "方案资源") {
-                    SettingsItem(Icons.TwoTone.Inventory, "已安装的方案",
-                        "启用、停用和排序语言、方案与布局的组合，导入方案文件", onClick = onOpenSchemaResources, showArrow = true)
-                    SettingsItem(Icons.TwoTone.ViewModule, "双拼方案",
-                        "小鹤、自然码、微软等 6 种内置双拼的键位，新建和修改自己的双拼方案", onClick = onOpenDoublePinyin, showArrow = true)
-                }
-            }
-            item(key = "language-key-switch") {
-                LanguageKeySwitchSettings(availableProfiles, orderedLanguages, profilesState.currentSchema)
-            }
             // 中文输出、拼音纠错、模糊音和英文输入 11-02 各收进一页（原样搬过去，名字和存的值不变），这页只留入口。
             item(key = "input-settings") {
                 SettingsSection(title = "输入设置") {
@@ -223,6 +231,10 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                     SettingsItem(Icons.TwoTone.Abc, "英文输入", "自动切英文、自动加空格、邮箱后缀",
                         onClick = onOpenEnglishInput, showArrow = true)
                 }
+            }
+            // 语言键切换方式放在输入设置后面收尾，不再夹在方案和输入设置中间。
+            item(key = "language-key-switch") {
+                LanguageKeySwitchSettings(availableProfiles, orderedLanguages, profilesState.currentSchema)
             }
             item { if (message.isNotEmpty()) Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             item { Spacer(Modifier.height(16.dp)) }

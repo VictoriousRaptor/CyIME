@@ -10,8 +10,6 @@ object BuiltinModelCatalog {
     const val OCR_MODEL = "ocr-ppocr-v5"
     /** 拍照识别引擎（OpenCV 原生库）。轻量版不带，和拍照识别模型一起下载（ocr/OcrEngine.kt）。 */
     const val OCR_ENGINE = "ocr-engine"
-    /** 语音引擎（sherpa-onnx 原生库）。轻量版不带，和语音模型一起下载（speech/SherpaLibrary.kt、SpeechEnginePack.kt）。 */
-    const val SPEECH_ENGINE = "speech-engine"
     /** 手写生僻字模板、日语手写模板（assets/handwriting 里的几份大文件）。轻量版不带，和手写模型、「日语」插件一起下载（handwriting/HandwritingAssets.kt）。 */
     const val HANDWRITING_RARE = "handwriting-rare"
     const val JAPANESE_HANDWRITING = "japanese-handwriting"
@@ -72,28 +70,6 @@ object BuiltinModelCatalog {
                     archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-arm64-v8a.tar.bz2", sha256 = "6a9571b82d6f7fae849a230a0db44e009e8681b611791e00ef3d0c2975ac9eb1",
                     archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "ocr-engine-opencv-4.12.0-arm64-v8a.tar.bz2"),
                     files = listOf(ModelFile("libopencv_java4.so", "", "144bbc9ad0b0bac4ba58f7d53198aead64379e5314f68200968c703d2c1c14ab", 23465088L)))
-            })),
-        // 语音引擎：sherpa-onnx 1.13.8（静态链接 onnxruntime 的 AAR，tasks-speech.gradle.kts 固定哈希）里的 libsherpa-onnx-jni.so，
-        // 和以前打进安装包的逐字节相同，每个 ABI 打成一个 tar.bz2 传到 Release `models` 和魔搭。轻量版和语音模型一起下载；
-        // 完整版、离线包仍在安装包里。32 位 x86 那份要安装包里的 libonnxruntime.so（和以前一样）。
-        ModelInfo(SPEECH_ENGINE, "语音引擎", "语音输入和字幕识别用的程序库（sherpa-onnx）。轻量版下载语音模型时一起下载，完整版已内置。", ModelCategory.OTHER,
-            versions = listOf(when (NativeAbi.current) {
-                "armeabi-v7a" -> ModelVersion(version = "1.13.8", size = "7.3 MB",
-                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-armeabi-v7a.tar.bz2", sha256 = "7894451dbe5b40aa4d9aeba0037a7863a4ea32aa9c4c332c71ff770405348882",
-                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-armeabi-v7a.tar.bz2"),
-                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "2c0350f9c23dda60318c0d195fcc02d505f05cdbfba89492a4468d2c4276be28", 16437284L)))
-                "x86_64" -> ModelVersion(version = "1.13.8", size = "8.6 MB",
-                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-x86_64.tar.bz2", sha256 = "13559cfcf1ec2935a72eb0541fff99531a6fd60e696c51df36c34b108c66d217",
-                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-x86_64.tar.bz2"),
-                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "968e24f61d1e4dae0d5e7860aded42fee45b0f804e1c5a42dfa49186864cefc4", 27359872L)))
-                "x86" -> ModelVersion(version = "1.13.8", size = "1.9 MB",
-                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-x86.tar.bz2", sha256 = "abeaf9f3acb91535b1a72fa180fa0a2f183ef4f5602671ae0cfb623ad1ba49ce",
-                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-x86.tar.bz2"),
-                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "914ce3d8e77c4ec13b178a8657b2bb9d6187ea6deddbdd519be0373c71eb681d", 5540732L)))
-                else -> ModelVersion(version = "1.13.8", size = "7.8 MB",
-                    archiveUrl = RELEASE + "speech-engine-sherpa-onnx-1.13.8-arm64-v8a.tar.bz2", sha256 = "038427c68909fae26c5c2a4ceb080b13e75a6d3c0f688700915530c019761f74",
-                    archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "speech-engine-sherpa-onnx-1.13.8-arm64-v8a.tar.bz2"),
-                    files = listOf(ModelFile("libsherpa-onnx-jni.so", "", "b4a53d915c19cb6d09b1cdc9a8084be54419b647aab9097ffdfb46f30c3c4dd8", 24169352L)))
             })),
         // 手写生僻字模板、日语手写模板：app/src/main/assets/handwriting 里的原文件（scripts/packs/make_packs.py 打包，
         // 换了文件重跑它并改这里，HandwritingPackCatalogTest 对得上才过）。轻量版不带，完整版、离线包仍在安装包里。

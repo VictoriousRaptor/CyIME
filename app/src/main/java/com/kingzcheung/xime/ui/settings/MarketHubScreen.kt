@@ -579,7 +579,7 @@ private fun ModelsMarketTab(
                         item {
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "共 ${uiState.filteredModels.size} 个模型 · 模型为本地推理，耗电较高请斟酌使用",
+                                "共 ${uiState.filteredModels.size} 个模型 · 在本机运行，较耗电",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
@@ -1414,7 +1414,7 @@ private fun ModelDetailBody(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "使用本地模型是有代价的，它可能会占用内存和 CPU，导致手机发热，请斟酌使用。",
+                        "本地模型会占用内存和 CPU，手机可能发热。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )

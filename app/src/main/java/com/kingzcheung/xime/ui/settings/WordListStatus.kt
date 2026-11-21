@@ -47,7 +47,7 @@ internal fun WordListStatus(language: LetterLanguage, modifier: Modifier = Modif
                 is ModelDownloadState.Downloading ->
                     if (state.progress > 0f) "正在下载补全词表 ${(state.progress * 100).toInt()}%…" else "正在下载补全词表…"
                 is ModelDownloadState.Error -> "补全词表下载失败：${state.message}"
-                else -> "补全词表还没下载(约 $size)，现在能打字，但没有单词补全。"
+                else -> "补全词表还没下载(约 $size)，暂时没有单词补全。"
             },
             style = MaterialTheme.typography.bodySmall,
             color = if (state is ModelDownloadState.Downloading) MaterialTheme.colorScheme.onSurfaceVariant

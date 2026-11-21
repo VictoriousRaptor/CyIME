@@ -17,6 +17,8 @@ data class InstalledCellDictionary(
     val sha256: String,
     /** English words of a mixed list, offered by the English candidates (CellDictionaryEnglish). */
     val english: Int = 0,
+    /** 笔画词库的词（「词 笔画编码」，没有拼音），只给笔画方案用（StrokeCellDictionary）。 */
+    val stroke: Int = 0,
 )
 
 @Serializable
@@ -121,6 +123,9 @@ class CellDictionaryStore(val directory: File) {
     }
 
     private fun englishFile(id: String): File = File(directory, dictionaryFile(id).name.removeSuffix(".dict.yaml") + ".en.txt")
+
+    /** 笔画词库的词，一行一个；没有时不存在。应用词库时进笔画方案的 stroke_cells（[StrokeCellDictionary]）。 */
+    fun strokeWordsFile(id: String): File = File(directory, dictionaryFile(id).name.removeSuffix(".dict.yaml") + ".stroke.txt")
 
     fun englishWords(id: String): List<String> = englishFile(id).takeIf { it.isFile }?.readLines()
         ?.filter { it.isNotBlank() }.orEmpty()
@@ -231,24 +236,30 @@ class CellDictionaryStore(val directory: File) {
         val id = "local_${hash.take(24)}"
         read().installed.firstOrNull { it.id == id }?.let { if (dictionaryFile(id).isFile) return it }
         val converted = File.createTempFile(".import-", ".tmp", directory)
+        val strokeWords = File.createTempFile(".import-", ".tmp", directory)
         try {
             val summary = converted.bufferedWriter().use { output ->
-                output.write(ScelDictionary.rimeHeader("cell_$id"))
-                TxtCellDictionary.read({ source.inputStream() }) { output.rimeLine(it) }
+                strokeWords.bufferedWriter().use { stroke ->
+                    output.write(ScelDictionary.rimeHeader("cell_$id"))
+                    TxtCellDictionary.read({ source.inputStream() }, { stroke.append(it).append('\n') }) { output.rimeLine(it) }
+                }
             }
             return synchronized(lock) {
                 val old = read()
                 old.installed.firstOrNull { it.id == id }?.let { if (dictionaryFile(id).isFile) return@synchronized it }
                 val entry = InstalledCellDictionary(id, "本地词库", "本地导入", summary.count, summary.skipped, "", hash,
-                    summary.english.size)
+                    summary.english.size, summary.stroke)
                 Files.move(converted.toPath(), dictionaryFile(id).toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE)
+                if (summary.stroke == 0) strokeWordsFile(id).delete()
+                else Files.move(strokeWords.toPath(), strokeWordsFile(id).toPath(), StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE)
                 if (summary.english.isEmpty()) englishFile(id).delete()
                 else writeAtomic(englishFile(id), summary.english.joinToString("\n", postfix = "\n"))
                 save(old.copy(installed = old.installed.filterNot { it.id == id } + entry))
                 entry
             }
-        } finally { converted.delete() }
+        } finally { converted.delete(); strokeWords.delete() }
     }
 
     /**
@@ -292,6 +303,7 @@ class CellDictionaryStore(val directory: File) {
         require(id !in old.applied) { "请先关闭这个词库并应用更改，再删除" }
         dictionaryFile(id).delete()
         englishFile(id).delete()
+        strokeWordsFile(id).delete()
         save(old.copy(installed = old.installed.filterNot { it.id == id }, selected = old.selected - id))
     }
 

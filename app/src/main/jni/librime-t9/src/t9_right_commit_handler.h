@@ -69,6 +69,9 @@ public:
         std::optional<std::string> separator_consumed_digits;
         std::optional<std::string> last_choice_consumed_digits;
         char manual_delimiter = '\'';   // 分隔符字符，从 speller.delimiter 配置读取
+        // 双拼九键：左栏选中的段存的是双拼键位（小鹤 hao → hc），候选注释却是全拼，
+        // 按拼音字母算消费对不上，有选中段时只按 RIME 候选 end 换算的键数消费。
+        bool double_pinyin = false;
 
         // 回调（由 T9Processor 注入）
         std::function<void()> sync_state = []{};
@@ -139,6 +142,13 @@ public:
 
     // ── 策略共享静态工具 ──
 
+    // 双拼九键：RIME input 是已选段的双拼键位（' 隔开）加未分配数字。
+    // 把候选 end 换算成整段按键里消费到第几个键（含之前已右选掉的前缀）；
+    // input 和已选段对不上时返回 -1。
+    static int DoublePinyinConsumedKeys(const T9Buffer& buf,
+                                        const std::string& rime_input,
+                                        size_t end);
+
     // 谓词：是否为 letter-buffer 模式下的 SELECTION 态。
     // 条件：prev_opt 存在 && selected_pinyin 以 prev_opt.pinyin 结尾且更长。
     // 此时候选词音节覆盖部分 selections + unassigned，应走 LetterBufferStrategy。
@@ -188,6 +198,14 @@ private:
         RouteType route,
         int rime_consumed_digits = -1,
         bool is_t9_user_word = false);
+
+    // 双拼九键有选中段时按键数消费（consumed_keys 来自 DoublePinyinConsumedKeys）。
+    bool HandleDoublePinyinCommit(
+        Context& ctx,
+        int consumed_keys,
+        const std::optional<SyllableOption>& prev_selected_option,
+        const std::optional<std::string>& prev_selection_candidate_digits,
+        const std::string& prev_confirmed_pinyin);
 };
 
 }  // namespace rime

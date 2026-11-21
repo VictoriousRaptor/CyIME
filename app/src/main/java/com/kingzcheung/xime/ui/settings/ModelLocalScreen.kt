@@ -151,7 +151,7 @@ fun ModelLocalContent(
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Update,
                         title = "自动更新模型",
-                        subtitle = "已装的模型有新版本时，连着 Wi-Fi 在后台下载，核对无误再替换；失败保留原模型",
+                        subtitle = "有新版本时连着 Wi-Fi 自动更新",
                         checked = autoUpdate,
                         onCheckedChange = { enabled ->
                             autoUpdate = enabled
@@ -247,7 +247,7 @@ private fun DownloadRegionSection(
                 }
             }
             ModelRowDivider()
-            ModelSectionNote("每条线路下载后都会核对文件，一条失败自动换下一条。")
+            ModelSectionNote("下载失败会自动换线路。")
         }
     }
 }
@@ -267,7 +267,7 @@ private fun ModelImportSection(
     }
     SettingsSection(title = "从本机导入") {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("可选模型文件、官方压缩包、整合包(.zip)，或一个存放模型的文件夹；按文件内容自动认出是哪个模型，认不出的不会安装。",
+            Text("选模型文件、压缩包或文件夹，自动识别是哪个模型。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically) {

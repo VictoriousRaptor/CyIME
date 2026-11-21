@@ -68,10 +68,10 @@ internal fun <T> KeyboardPanelGrid(
         val menuColumns = ((maxWidth.value + 8f) / (64f * LocalDensity.current.fontScale + 8f))
             .toInt().coerceIn(1, if (lowWidePanel) 8 else 4)
         val inlineEditor = LocalInlineQuickActionEditor.current
-        // 菜单里直接编辑时格子大小固定：按满页的列数、行数和页码点的位置排，不随格子个数变。
-        // 原来只有一页时列数等于格子数、只排一行、不留页码点，格子被撑大，拖进菜单的预览也跟着变大，
-        // 拖动中格子数一变整块还会跳。
-        val fixedEditGrid = inlineEditor?.active == true && !compactCards
+        // 菜单面板（有内联编辑宿主时无论是否点进编辑，都按满页的列数、行数和页码点留位排）：
+        // 避免平时只有一页（<=8 或 <=4 项）时卡片被撑大拉长，点编辑才缩回正常尺寸；
+        // 未挂内联编辑宿主的独立面板测试（如短面板单行回归）保持原自适应规则。
+        val fixedEditGrid = inlineEditor != null && !compactCards
         val columns = (if (twoRowModes) 2 else if (compactCards) 4 else menuColumns)
             .let { if (fixedEditGrid) it else minOf(items.size, it) }
         val spacing = 8.dp

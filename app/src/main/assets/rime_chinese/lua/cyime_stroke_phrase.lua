@@ -9,9 +9,8 @@
 --   1) 原样保留内置分词打词（词表整词 / 拼句 / 长词 / 分段词）；
 --   2) 短码补字：按分词键后，符合首段编码的单字不再消失（全量按码表给，
 --      并用 user_lookup / iter_user 让用户提过频的字排前面）；
---   3) 自动造词：逐字选出的 2~8 字纯汉字组合自动记住，下次打同串出整词。
---      修了原版「逐字选词时剩余编码覆盖完整编码 → 三字以上学不会」的 bug，
---      并把上限由 4 字放宽到 8 字。
+--   3) 自动造词：选上屏的 2~8 字纯汉字词按每字首笔记住，下次分词打（每段笔画多少都行）出整词；
+--      一个字一个字上屏、同样连着打过两次的两到四个字也记成词（11-19，见「三、自动造词」）。
 --
 -- 所有 librime-lua 扩展 API 都做了 pcall 降级，旧版 librime 最多没有
 -- 补字/造词，内置单字、通配符、词表词组完全不受影响。
@@ -152,17 +151,19 @@ local function lookup_words(env, parts, from, to, limit, seen)
   for i = from, to do slice[#slice + 1] = parts[i] end
   local budget = #codes == 1 and SCAN_EXACT or math.max(SCAN_PER_CODE, math.floor(SCAN_EXACT / #codes))
   local found, taken = {}, {}
-  for _, code in ipairs(codes) do
-    if env.phrases:dict_lookup(code, false, 0) then
-      local scanned, kept = 0, 0
-      for entry in env.phrases:iter_dict() do
-        scanned = scanned + 1
-        if scanned > budget or kept >= limit then break end
-        local text = entry.text
-        if not taken[text] and not (seen and seen[text]) and matches(env, text, slice) then
-          taken[text] = true
-          kept = kept + 1
-          found[#found + 1] = { text = text, weight = entry.weight, order = #found }
+  for _, mem in ipairs(env.word_tables) do
+    for _, code in ipairs(codes) do
+      if mem:dict_lookup(code, false, 0) then
+        local scanned, kept = 0, 0
+        for entry in mem:iter_dict() do
+          scanned = scanned + 1
+          if scanned > budget or kept >= limit then break end
+          local text = entry.text
+          if not taken[text] and not (seen and seen[text]) and matches(env, text, slice) then
+            taken[text] = true
+            kept = kept + 1
+            found[#found + 1] = { text = text, weight = entry.weight, order = #found }
+          end
         end
       end
     end
@@ -264,11 +265,7 @@ local function static_words(env, head)
   return { exact = exact, partial = partial }
 end
 
-local function emit_char_heads(env, parts, seg)
-  if not env.chars then return end
-  local head = parts[1]
-  -- 第一段空着（先打了分词号）：不知道第一个字，不补单字。
-  if head == "" then return end
+local function cached_static(env, head)
   local static = env.cache[head]
   if not static then
     static = static_words(env, head)
@@ -276,7 +273,42 @@ local function emit_char_heads(env, parts, seg)
     if env.cache_n > CACHE_MAX then env.cache, env.cache_n = {}, 0 end
     env.cache[head] = static
   end
+  return static
+end
+
+-- 笔画打得比哪个字都长时（#445：连打 nzhspnph 没有一个字的笔画是这样开头的），往前退到还有字的那几笔，
+-- 出这几笔的字，选了上屏，后面多打的笔画留着接着打。不然候选清空，编码也变回字母。
+-- 返回能对上字的笔数，一个都对不上返回 nil。
+-- 只看有没有字以这几笔开头，取到一个就停（短编码开头的字成千上万，不能全取出来排序）。
+local function has_char(env, code)
+  if not env.chars:dict_lookup(code, true, 1) then return false end
+  for _ in env.chars:iter_dict() do return true end
+  return false
+end
+
+local function longest_head(env, head)
+  for k = #head - 1, 1, -1 do
+    local code = head:sub(1, k)
+    if has_char(env, code) then return k, cached_static(env, code) end
+  end
+  return nil
+end
+
+local function emit_char_heads(env, parts, seg)
+  if not env.chars then return end
+  local head = parts[1]
+  -- 第一段空着（先打了分词号）：不知道第一个字，不补单字。
+  if head == "" then return end
+  local static = cached_static(env, head)
   local stop = seg.start + #head + 1
+  local shown = head .. "'"
+  if #static.exact == 0 and #static.partial == 0 then
+    -- 第一段打多了，补的字只盖住对得上的那几笔。
+    local k, prefix = longest_head(env, head)
+    if not k then return end
+    head, static = head:sub(1, k), prefix
+    stop, shown = seg.start + k, head
+  end
   local seen = {}
   local function out(list)
     for _, t in ipairs(list) do
@@ -284,7 +316,7 @@ local function emit_char_heads(env, parts, seg)
         seen[t] = true
         local cand = Candidate("stroke", seg.start, stop, t, "")
         cand.quality = HEAD_QUALITY
-        cand.preedit = stroke_preedit(head .. "'")
+        cand.preedit = stroke_preedit(shown)
         yield(cand)
       end
     end
@@ -298,57 +330,196 @@ end
 -- 三、自动造词（原 V3 cyime_stroke_learn.lua，含两处修复）
 -- ============================================================
 
-local function learned(env, key)
-  local ok, list = pcall(function()
-    if not env.mem:user_lookup(key, true) then return nil end
-    local found = {}
-    for entry in env.mem:iter_user() do
-      local cc = entry.custom_code
-      if cc == nil or cc == key then
-        found[#found + 1] = { text = entry.text, commits = entry.commit_count or 0 }
+-- 学到的词按每个字的第一笔记（和词表一样，编码前加 PREFIX），查的时候和词表词一样按每段笔画对字，
+-- 所以下次只打头一两笔、或者笔画多打少打几笔都能出来（11-19：以前只认一模一样的整串，等于没记）。
+-- 以前按整串记的词（=pzps'zphn）照样能查到。
+-- 一个字一个字上屏的，连着的两到四个字先记在 SEEN 名下（不出候选）；同样几个字第二次连着上屏才算词，
+-- 记成 commits 为 0（没被整个选过），排在词表前几个词后面；被整个选过一次就排最前。
+-- 只出现一次的连字（的猫、娘要）不进候选，免得每打一个字就多一堆怪词。
+local HISTORY_MAX = 4          -- 逐字上屏连起来最多记四个字
+local HISTORY_GAP = 20         -- 两次上屏隔了这么多秒就不连
+local HISTORY_AFTER = 3        -- 没选过的连字词排在词表前三个词后面
+
+-- 词的每种首笔编码（个别字有两种笔顺，最多 4 种），字没有笔画码时返回 nil。
+local function word_codes(env, text)
+  local codes = { "" }
+  for _, cp in utf8.codes(text) do
+    local firsts, have = {}, {}
+    for _, code in ipairs(codes_of(env, utf8.char(cp))) do
+      local f = code:sub(1, 1)
+      if f ~= "" and not have[f] then have[f] = true; firsts[#firsts + 1] = f end
+    end
+    if #firsts == 0 then return nil end
+    local expanded = {}
+    for _, prefix in ipairs(codes) do
+      for _, f in ipairs(firsts) do
+        if #expanded < 4 then expanded[#expanded + 1] = prefix .. f end
       end
     end
-    return found
+    codes = expanded
+  end
+  return codes
+end
+
+local function learned(env, input, parts)
+  local keys = {}
+  for _, code in ipairs(first_codes(parts, 1, #parts) or {}) do keys[#keys + 1] = PREFIX .. code end
+  keys[#keys + 1] = PREFIX .. input
+  local found, at = {}, {}
+  local ok = pcall(function()
+    for _, key in ipairs(keys) do
+      if env.mem:user_lookup(key, true) then
+        for entry in env.mem:iter_user() do
+          local text = entry.text
+          local commits = entry.commit_count or 0
+          if commits >= 0 and han_len(text) == #parts and matches(env, text, parts) then
+            local i = at[text]
+            if not i then
+              found[#found + 1] = { text = text, commits = commits, order = #found, entry = entry }
+              at[text] = #found
+            elseif commits > found[i].commits then
+              found[i].commits, found[i].entry = commits, entry
+            end
+          end
+        end
+      end
+    end
   end)
-  if not ok or not list then return nil end
-  return list
+  if not ok then return nil end
+  table.sort(found, function(a, b)
+    if a.commits ~= b.commits then return a.commits > b.commits end
+    return a.order < b.order
+  end)
+  return found
+end
+
+local SEEN = "~"
+
+-- 一个词只记一条（一种首笔编码），长按「忘记」删掉它就真没了（11-19）。[code] 是打的时候用的首笔
+-- （个别字有两种笔顺，按用户打的那种记，下次同样打法才查得到）；没给时用码表第一种笔顺。
+local function save_word(env, text, commits, prefix, code)
+  if not code then
+    local codes = word_codes(env, text)
+    if not codes then return end
+    code = codes[1]
+  end
+  local made, entry = pcall(DictEntry)
+  if not made or not entry then return end
+  entry.text = text
+  entry.custom_code = (prefix or PREFIX) .. code
+  entry.weight = 0
+  pcall(function() return env.mem:update_userdict(entry, commits, "") end)
+end
+
+-- 每种首笔编码都看：整词选的按打的笔顺记，可能不是码表第一种。
+local function has_word(env, prefix, text)
+  local codes = word_codes(env, text)
+  if not codes then return false end
+  local ok, found = pcall(function()
+    for _, code in ipairs(codes) do
+      if env.mem:user_lookup(prefix .. code, true) then
+        for entry in env.mem:iter_user() do
+          if entry.text == text and (entry.commit_count or 0) >= 0 then return true end
+        end
+      end
+    end
+    return false
+  end)
+  return ok and found
+end
+
+-- 词表里已经有的词不用逐字连着记。
+local function in_phrases(env, text)
+  if not env.phrases then return false end
+  local codes = word_codes(env, text)
+  if not codes or not env.phrases:dict_lookup(codes[1], false, 0) then return false end
+  local scanned = 0
+  for entry in env.phrases:iter_dict() do
+    if entry.text == text then return true end
+    scanned = scanned + 1
+    if scanned > SCAN_EXACT then break end
+  end
+  return false
+end
+
+-- 分词打出来的词按打的首笔记；空段（没打笔画的字）用码表第一种笔顺。对不上时返回 nil。
+local function typed_code(env, text, input)
+  local parts = input and split(input)
+  if not parts or han_len(text) ~= #parts or not matches(env, text, parts) then return nil end
+  local firsts, i = {}, 0
+  for _, cp in utf8.codes(text) do
+    i = i + 1
+    local first = parts[i]:sub(1, 1)
+    if first == "" then first = (codes_of(env, utf8.char(cp))[1] or ""):sub(1, 1) end
+    if first == "" then return nil end
+    firsts[i] = first
+  end
+  return table.concat(firsts)
 end
 
 local function on_commit(ctx, env)
   local ok, text = pcall(function() return ctx:get_commit_text() end)
-  if not ok or not text or text == "" then return end
-  local code = env.pending_code
+  local typed = env.pending_code
   env.pending_code = nil
+  if not ok or not text or text == "" then return end
   local n = han_len(text)
-  if not n or n < MIN_WORD or n > MAX_WORD_LEARN or not code then return end
-  local parts = split(code)
-  if not parts or #parts ~= n then return end
-  local made, entry = pcall(DictEntry)
-  if not made or not entry then return end
-  entry.text = text
-  entry.custom_code = PREFIX .. code
-  entry.weight = 0
-  local saved = pcall(function() return env.mem:update_userdict(entry, 1, "") end)
-  if saved then env.learn_cache, env.learn_n = {}, 0 end
+  local now = os.time()
+  -- 标点、字母、隔了很久：不和前面的字连成词。
+  if not n or (env.history_at and now - env.history_at > HISTORY_GAP) then env.history = {} end
+  env.history_at = now
+  if not n then return end
+  if n >= MIN_WORD then
+    -- 整个选的词（分词打的、词表的、通配组的）：记一次，下次排在最前。
+    if n <= MAX_WORD_LEARN then save_word(env, text, 1, PREFIX, typed_code(env, text, typed)) end
+    env.history = {}
+    return
+  end
+  -- 一个字一个字上屏：和前面连着上屏的字连成两到四字的词，第二次这样连着打才记成词，先不往前排。
+  local history = env.history
+  history[#history + 1] = text
+  while #history > HISTORY_MAX do table.remove(history, 1) end
+  for len = MIN_WORD, #history do
+    local word = table.concat(history, "", #history - len + 1, #history)
+    if not has_word(env, PREFIX, word) and not in_phrases(env, word) then
+      if has_word(env, SEEN, word) then
+        -- 第二次连着打：记成词，「连着打过一次」的记录作废。词被「忘记」以后要再连着打两次才回来。
+        save_word(env, word, 0)
+        save_word(env, word, -1, SEEN)
+      else
+        save_word(env, word, 1, SEEN)
+      end
+    end
+  end
 end
 
-local function emit_learned(env, input, seg)
-  if not env.mem then return end
-  local key = PREFIX .. input
-  local list = env.learn_cache[key]
-  if list == nil then
-    list = learned(env, key) or false
-    env.learn_n = env.learn_n + 1
-    if env.learn_n > CACHE_MAX then env.learn_cache, env.learn_n = {}, 0 end
-    env.learn_cache[key] = list
-  end
-  if not list then return end
-  table.sort(list, function(a, b) return a.commits > b.commits end)
+-- 每次都现查用户词典，不缓存：长按「忘记」时引擎直接删记录（不经过 lua），缓存会让删掉的词还留在候选里。
+-- 一般只查一两个编码，比打一个字的其余工作量小得多。
+local function learned_for(env, input, parts)
+  if not env.mem then return {} end
+  return learned(env, input, parts) or {}
+end
+
+-- 学到的词用用户词典里那条记录造候选（Phrase），长按「忘记」时引擎按这条记录删（rime_jni forgetCandidate）；
+-- 以前是普通候选，引擎认不出是学来的，忘不掉（11-19 平板）。
+local function learned_candidate(env, item, seg, input)
+  local quality = BASE_QUALITY + math.min(item.commits, 4)
+  local ok, cand = pcall(function()
+    local phrase = Phrase(env.mem, "stroke", seg.start, seg._end, item.entry)
+    phrase.quality = quality
+    phrase.preedit = stroke_preedit(input)
+    phrase.comment = ""
+    return phrase:toCandidate()
+  end)
+  if ok and cand then return cand end
+  cand = Candidate("stroke", seg.start, seg._end, item.text, "")
+  cand.quality = quality
+  cand.preedit = stroke_preedit(input)
+  return cand
+end
+
+local function emit_learned(env, input, seg, list, used)
   for _, item in ipairs(list) do
-    local cand = Candidate("stroke", seg.start, seg._end, item.text, "")
-    cand.quality = BASE_QUALITY + math.min(item.commits, 4)
-    cand.preedit = stroke_preedit(input)
-    yield(cand)
+    if (item.commits > 0) == used then yield(learned_candidate(env, item, seg, input)) end
   end
 end
 
@@ -360,12 +531,28 @@ function M.init(env)
   glyphs = env.engine.schema.config:get_string("translator/preedit_format/@0") ~= nil
   env.codes = {}
   env.cache, env.cache_n = {}, 0
-  env.learn_cache, env.learn_n = {}, 0
+  env.history, env.history_at = {}, nil
   env.pending_code = nil
   env.conn = nil
 
   -- 内置分词打词用的词表与笔顺反查
   pcall(function() env.phrases = Memory(env.engine, Schema("stroke_phrase")) end)
+  -- 用户导入的词库（设置「导入词库」里选上的），应用词库时换成每字首笔写成 stroke_cells（StrokeCellDictionary.kt）。
+  -- 没导入时没有这个词表，只查内置的。导入的词权重低，同一编码下排在内置词后面。
+  env.word_tables = { env.phrases }
+  local config = env.engine.schema.config
+  local imported = false
+  pcall(function()
+    for i = 0, (config:get_list_size("schema/dependencies") or 0) - 1 do
+      if config:get_string("schema/dependencies/@" .. i) == "stroke_cells" then imported = true end
+    end
+  end)
+  if imported then
+    pcall(function()
+      local cells = Memory(env.engine, Schema("stroke_cells"))
+      if cells then env.word_tables[#env.word_tables + 1] = cells end
+    end)
+  end
   pcall(function() env.strokes = ReverseLookup("stroke") end)
   -- 补字与造词各用一个独立 Memory，互不干扰
   pcall(function() env.chars = Memory(env.engine, env.engine.schema) end)
@@ -384,20 +571,28 @@ function M.fini(env)
   if env.conn and env.conn.disconnect then pcall(env.conn.disconnect, env.conn) end
   env.conn = nil
   env.phrases, env.strokes, env.chars, env.mem = nil, nil, nil, nil
+  env.word_tables = nil
   env.codes = nil
   env.cache, env.cache_n = nil, nil
-  env.learn_cache, env.learn_n = nil, nil
+  env.history, env.history_at = nil, nil
   env.pending_code = nil
   collectgarbage()
 end
 
+-- 没打分词号、整串笔画又没有一个字对得上（#445）：内置的整字查询什么都不出，这里补上前面对得上的那几笔的字。
+local function emit_overlong(env, input, seg)
+  if not env.chars or input:find("[^hspnz]") or has_char(env, input) then return end
+  emit_char_heads(env, { input }, seg)
+end
+
 function M.func(input, seg, env)
   local parts = split(input)
-  if not parts then return end
+  if not parts then
+    emit_overlong(env, input, seg)
+    return
+  end
 
-  -- 只保留本次组词过程中最长的编码。逐字选词时剩余编码（如 pp'nn）比完整
-  -- 编码短，不再覆盖，上屏时才能拿到完整编码、段数才和字数对得上。
-  -- 不是上一次编码的后半截（打一半清空后重打），就从这次重新记。
+  -- 记下这次组词打的整串（上屏时按它记词的首笔）。逐字选词时剩下的编码是整串的后半截，不覆盖。
   local pending = env.pending_code
   if not pending or #input > #pending or pending:sub(-#input) ~= input then
     env.pending_code = input
@@ -405,11 +600,22 @@ function M.func(input, seg, env)
 
   -- 顺序要紧：学过的词必须先 yield。补字会吐几百上千个单字候选，librime
   -- 取够候选即停止迭代，放后面就没机会执行了。
-  emit_learned(env, input, seg)
+  local learned_list = learned_for(env, input, parts)
+  emit_learned(env, input, seg, learned_list, true)
+  local fresh_pending = true
+  local function emit_fresh()
+    if fresh_pending then
+      fresh_pending = false
+      emit_learned(env, input, seg, learned_list, false)
+    end
+  end
+  local learned_seen = {}
+  for _, item in ipairs(learned_list) do learned_seen[item.text] = true end
 
   -- 内置词表：整词 / 拼句 / 更长的词
   if env.phrases then
     local seen = {}
+    for text in pairs(learned_seen) do seen[text] = true end
     local function emit(text, stop)
       seen[text] = true
       local cand = Candidate("stroke_phrase", seg.start, stop or seg._end, text, "")
@@ -423,8 +629,10 @@ function M.func(input, seg, env)
       for _, item in ipairs(lookup_words(env, parts, 1, #parts, MAX_EXACT, seen)) do
         exact = exact + 1
         emit(item.text)
+        if exact == HISTORY_AFTER then emit_fresh() end
       end
     end
+    emit_fresh()
 
     if #parts >= 4 and exact == 0 then
       local text = sentence(env, parts)
@@ -465,6 +673,7 @@ function M.func(input, seg, env)
     end
   end
 
+  emit_fresh()
   -- 补字单字放最后（quality 最低，本来就该排在词后面）
   emit_char_heads(env, parts, seg)
 end

@@ -34,6 +34,13 @@ internal fun pauseLookupWanted(
         else omission || (neighbor && (swap || typo(com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
 }
 
+/**
+ * 停顿纠错查的输入：26 键只有小写字母；14 键只有合并键的大写代表字母（QETUOADGJZCB）和 l、m。
+ * 14 键里选过拼音后出现的单个精确字母（小写 a、s 等）纠错索引不认，这时不查。
+ */
+internal fun pauseInputLetters(input: String, merged14: Boolean): Boolean =
+    if (merged14) input.all { it in "QETUOADGJZCBlm" } else input.all { it in 'a'..'z' }
+
 /** 方案里也有、但由设置页开关决定的 Rime 开关：不从 user.yaml 恢复，见 [ImeSessionController.applyCandidateOptions]。 */
 private val SETTING_SWITCHES = setOf("traditionalization", "emoji")
 
@@ -61,14 +68,17 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val profile = ui.inputProfile
         // 双拼 26 键（11-16）停一下后也补：少打一个键、同一个键多按一下、两个键打反。
         val doublePinyin = profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+        // 14 键全拼（11-20）停一下后也补，三种同双拼；输入是合并键的大写代表字母（QETUOADGJZCB），l、m 单独。
+        val merged14 = profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN &&
+            profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.MERGED
         if (ascii || !service.isChineseMode || !state.isComposing || state.hasPrevPage ||
             profile.language != InputLanguage.CHINESE ||
             (profile.scheme != com.kingzcheung.xime.settings.InputScheme.PINYIN && !doublePinyin) ||
-            profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC ||
+            (profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !merged14) ||
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
-            state.inputText.length !in 4..80 || state.inputText.any { it !in 'a'..'z' }) return
-        // 停顿后只补漏键和打反两种读法（双拼还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
-        if (!pauseLookupWanted(doublePinyin, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
+            state.inputText.length !in 4..80 || !pauseInputLetters(state.inputText, merged14)) return
+        // 停顿后只补漏键和打反两种读法（双拼、14 键还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
+        if (!pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
                 com.kingzcheung.xime.settings.SpellingPatches.typo(service, it)
             }) return
         val length = state.inputText.length
@@ -572,7 +582,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
      *
      * 全角/半角只作用于中文与日文：英文（ASCII）模式固定半角，只清掉全角字符输出
      * （ascii_punct 在英文态由 ascii_composer 接管，不动它，退出英文后中文标点不会被改写）。
-     * 用户从未选择过宽度时同样不动引擎——此时界面显示值取自方案自身的 ascii_punct，两者本来一致。
+     * 用户从未选择过宽度时界面按全角显示，引擎也清掉 ascii_punct 和它对齐：雾凇的 ascii_punct 会存进用户目录，
+     * 笔画等方案不在开方案时复位，英文态留下的半角会一直带到中文里（#460）。
      *
      * @param asciiMode 权威的中英状态，由调用方给出；不要读 uiState，切换方案/退出英文时
      *   uiState 尚未同步，会误判成英文而把中文键盘按半角处理。
@@ -588,7 +599,10 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.rimeEngine.setOption("full_shape", false)
             return
         }
-        if (!SettingsPreferences.hasPunctuationFullWidth(service)) return
+        if (!SettingsPreferences.hasPunctuationFullWidth(service)) {
+            service.rimeEngine.setOption("ascii_punct", false)
+            return
+        }
         val full = SettingsPreferences.punctuationFullWidth(service, true)
         service.rimeEngine.setOption("ascii_punct", !full)
         service.rimeEngine.setOption("full_shape", full)
@@ -622,11 +636,15 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             }
             add("_cyime_datetime_off" to !prefs.getBoolean(KeyboardInputPreferences.DATETIME_CANDIDATES_KEY, false))
             add("emoji" to prefs.getBoolean(KeyboardInputPreferences.CANDIDATE_EMOJI_KEY, false))
-            add("cyime_symbol_names" to prefs.getBoolean(KeyboardInputPreferences.SYMBOL_NAMES_KEY, false))
+            add("cyime_symbol_names" to prefs.getBoolean(KeyboardInputPreferences.SYMBOL_NAMES_KEY, true))
             add("cyime_greek_letters" to prefs.getBoolean(KeyboardInputPreferences.GREEK_LETTERS_KEY, false))
             val cylmAlternative = prefs.getBoolean(KeyboardInputPreferences.CYLM_LONG_ALTERNATIVE_KEY, false)
             if (persist || cylmAlternative) add("cyime_cylm_alternative" to cylmAlternative)
             add("cyime_rare_chars" to prefs.getBoolean(KeyboardInputPreferences.RARE_CHARACTERS_KEY, false))
+            // 日文汉字、韩文汉字、粤语字（11-20 从生僻字分出来），同一个 lua 按各自的选项查各自的表。
+            add("cyime_japanese_kanji" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.JAPANESE_KANJI_KEY))
+            add("cyime_korean_hanja" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.KOREAN_HANJA_KEY))
+            add("cyime_cantonese_chars" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.CANTONESE_CHARACTERS_KEY))
             // 九键停一下后的数字纠错跟「拼音纠错」的开关走：按到上下左右的键跟邻键纠错，两个数字按反跟顺序纠错
             // （设置页里它要先开邻键纠错），少按一个跟漏键纠错。选项为真 = 关，没写过时都开。
             val neighbor = prefs.getBoolean("neighbor_correction", true)

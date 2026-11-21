@@ -64,6 +64,8 @@ fun SymbolKeyboardLayout(
     onSelect: (String) -> Unit,
     onBack: () -> Unit,
     onKeyPressDown: ((String) -> Unit)? = null,
+    /** 删除键松手，同 26 键删除键的 onRelease（松手振动设置）。 */
+    onKeyRelease: ((String) -> Unit)? = null,
     backgroundColor: Color,
     textColor: Color,
     accentColor: Color,
@@ -277,6 +279,9 @@ fun SymbolKeyboardLayout(
                     androidx.compose.material.icons.Icons.AutoMirrored.Filled.Backspace),
                 onClick = { onSelect("delete") },
                 onLongClick = { onSelect("delete") }, distanceDelete = true,
+                // 按键音和振动在按下时给，长按连删每一下也给，同 26 键删除键（11-21「符号页删除键没有按键声音」）。
+                onPress = { if (onKeyPressDown != null) onKeyPressDown("delete") else onHapticFeedback?.invoke() },
+                onRelease = { onKeyRelease?.invoke("delete") },
                 // 清空、撤回同其他键盘的删除键（11-05「部分页面的删除键功能缺失」），方向跟删除键设置走。
                 followSymbolSwipeDirection = true,
                 upFeedback = KeyFlickFeedback.DELETE, swipeUpLabel = "上滑清空",

@@ -65,6 +65,19 @@ class WindowsNearbyPairingTest {
         assertTrue(h.pairing.confirm(id))
     }
 
+    /** #500：搜得到电脑但连不进去（电脑防火墙挡住），说清原因，不显示英文超时。 */
+    @Test fun unreachableComputerSaysWhatToChange() = runTest {
+        val h = harness(exchange = { _, _ -> throw java.net.SocketTimeoutException("failed to connect to /192.168.1.5 (port 18740) after 4000ms") })
+        h.pairing.connect(peer); runCurrent()
+        assertNull(h.pairing.confirmation.value)
+        assertEquals(WindowsNearbyPairing.UNREACHABLE, h.messages.last())
+        // A changed certificate keeps its own reason.
+        assertEquals("电脑证书已变化，请重新配对",
+            WindowsNearbyPairing.failureMessage(javax.net.ssl.SSLHandshakeException("电脑证书已变化，请重新配对")))
+        assertEquals("电脑未允许连接（403），请开启加密连接和附近发现",
+            WindowsNearbyPairing.failureMessage(IllegalStateException("电脑未允许连接（403），请开启加密连接和附近发现")))
+    }
+
     @Test fun cancellationDiscardsUnconfirmedCredentials() = runTest {
         val h = harness()
         h.pairing.connect(peer); runCurrent()

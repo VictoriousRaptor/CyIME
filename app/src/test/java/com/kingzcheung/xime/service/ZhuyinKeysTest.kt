@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.service
 
+import android.view.KeyEvent
 import com.kingzcheung.xime.settings.InputLanguage
 import com.kingzcheung.xime.settings.InputLayout
 import com.kingzcheung.xime.settings.InputProfiles
@@ -70,6 +71,32 @@ class ZhuyinKeysTest {
         assertEquals(InputLayout.ZHUYIN, profile.layout)
         assertFalse("注音没有拼音编辑", profile.capabilities.editablePinyin)
         assertEquals(LayoutKind.ZHUYIN, InputProfiles.resolveLayout("zhuyin").kind)
+    }
+
+    /** 注音用户 11-20：实体键盘打不出标点。, . 是 ㄝ ㄡ，标点在 Shift 上，Shift+, 是「，」（同 Rime 注音）。 */
+    @Test fun `shifted punctuation goes to the schema punctuator`() {
+        fun punct(key: String, code: Int, shift: Boolean = true, ctrl: Boolean = false) =
+            isZhuyinHardwarePunctuation(key, code, shift, ctrl, alt = false, meta = false)
+        assertTrue(punct("<", KeyEvent.KEYCODE_COMMA))
+        assertTrue(punct(">", KeyEvent.KEYCODE_PERIOD))
+        assertTrue(punct("?", KeyEvent.KEYCODE_SLASH))
+        assertTrue(punct(":", KeyEvent.KEYCODE_SEMICOLON))
+        assertTrue(punct("!", KeyEvent.KEYCODE_1))
+        assertFalse("不按 Shift 的 , 是 ㄝ", punct(",", KeyEvent.KEYCODE_COMMA, shift = false))
+        assertFalse("大写字母不是标点", punct("A", KeyEvent.KEYCODE_A))
+        assertFalse("Ctrl 组合键交给应用", punct("<", KeyEvent.KEYCODE_COMMA, ctrl = true))
+        assertFalse("数字小键盘照旧", punct("*", KeyEvent.KEYCODE_NUMPAD_MULTIPLY))
+        // , . - 不翻页（是注音键或 Shift 标点），[ ] = 照旧翻页。
+        assertFalse(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_COMMA))
+        assertFalse(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_PERIOD))
+        assertFalse(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_MINUS))
+        assertTrue(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_LEFT_BRACKET))
+        assertTrue(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_EQUALS))
+        val punctuator = schema.substringAfter("\npunctuator:").substringBefore("\nkey_binder:")
+        for (shape in listOf("half_shape", "full_shape")) {
+            assertTrue(shape, punctuator.contains("$shape/<: { commit: \"，\" }"))
+            assertTrue(shape, punctuator.contains("$shape/>: { commit: \"。\" }"))
+        }
     }
 
     @Test fun `enter commits the bopomofo on screen, not the key codes`() {

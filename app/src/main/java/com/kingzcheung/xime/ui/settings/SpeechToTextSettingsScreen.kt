@@ -17,7 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.twotone.GraphicEq
 import androidx.compose.material.icons.twotone.Tune
-import androidx.compose.material.icons.twotone.DirectionsCar
+import androidx.compose.material.icons.twotone.RecordVoiceOver
 import androidx.compose.material.icons.twotone.Computer
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.twotone.VolumeOff
@@ -92,6 +92,10 @@ private fun VoiceOtherAudioItem() {
                             fontWeight = if (mode == current) FontWeight.Medium else FontWeight.Normal)
                     }
                 }
+                // 用户 11-12 转来：抖音暂停后不会接着放。接着放要播放的应用自己做，输入法替不了。
+                Text("暂停播放：说完由播放的应用自己接着放，抖音等部分应用不会接着放，用它们时选「压低音量」。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp))
             }
         },
         confirmButton = { TextButton(onClick = { picking = false }) { Text("关闭") } },
@@ -147,24 +151,25 @@ fun SpeechToTextSettingsContent(
             var sttEnabled by remember { mutableStateOf(SettingsPreferences.isSttEnabled(context)) }
             SettingsSection(title = "语音输入") {
                 SettingsToggleItem(icon = Icons.TwoTone.GraphicEq, title = "语音转文本",
-                    subtitle = if (sttEnabled) "点工具栏麦克风说话，转成文字上屏；想按住空格说话，在「按键与手势 › 长按空格」选「语音开关」"
-                        else "已关闭：键盘上不显示麦克风，按住空格和 Alt + H 不开麦，不自动下载语音模型",
+                    subtitle = if (sttEnabled) "点工具栏麦克风说话，转成文字"
+                        else "关着时不显示麦克风，也不下载语音模型",
                     subtitleJumps = listOf("按键与手势 › 长按空格"),
                     checked = sttEnabled, onCheckedChange = { sttEnabled = it; SettingsPreferences.setSttEnabled(context, it) })
-                // 开车连续语音：别人提的需求，默认关（VoicePillResume）。只在语音打开时生效，关着语音就不显示。
+                // 连续语音：别人提的需求，默认关（VoicePillResume）。只在语音打开时生效，关着语音就不显示。
+                // 原名「开车连续语音」：开车只是用户举的例子（11-12），改叫连续语音、换掉汽车图标；设置键名不变。
                 if (sttEnabled) {
                     // 屏蔽外放音：用户 11-04 要的，选项照他的截图，默认不屏蔽（VoiceAudioFocus）。
                     VoiceOtherAudioItem()
                     var pillResume by remember { mutableStateOf(SettingsPreferences.isSttPillResume(context)) }
-                    SettingsToggleItem(icon = Icons.TwoTone.DirectionsCar, title = "开车连续语音",
-                        subtitle = "语音收起成悬浮条后，发送完回到输入框自动接着听",
+                    SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "连续语音",
+                        subtitle = "点麦克风说话时，发完消息在同一个输入框里接着听；收成悬浮条时回到这个应用也接着听",
                         checked = pillResume, onCheckedChange = { pillResume = it; SettingsPreferences.setSttPillResume(context, it) })
                     // 隔空输入（用户 11-02 要的，参照微信）：默认关；走剪贴板同步已配对的电脑。
                     var remoteTyping by remember { mutableStateOf(SettingsPreferences.isSttRemoteTyping(context)) }
                     val computers = com.kingzcheung.xime.clipboard.sync.WindowsDevices.saved.value
                     SettingsToggleItem(icon = Icons.TwoTone.Computer, title = "隔空输入",
-                        subtitle = if (computers.isEmpty()) "说的话发到电脑光标处；先在「剪贴板同步」连上电脑"
-                            else "说的话发到电脑光标处(电脑要用 CyIME)，手机上不上屏",
+                        subtitle = if (computers.isEmpty()) "说的话发到电脑上，需先在「剪贴板同步」连上电脑"
+                            else "说的话发到电脑上，不在手机上屏",
                         checked = remoteTyping, onCheckedChange = { remoteTyping = it; SettingsPreferences.setSttRemoteTyping(context, it) })
                 }
             }
@@ -172,7 +177,7 @@ fun SpeechToTextSettingsContent(
             // 模型名（Paraformer、SenseVoice…）多数人看不懂：先给一个按手机和用法自动选好的入口。
             SettingsSection(title = "不知道怎么选") {
                 SettingsItem(icon = Icons.TwoTone.Tune, title = "按设备推荐配置",
-                    subtitle = "回答几个问题，自动选好语音模型，删掉用不到的",
+                    subtitle = "回答几个问题，选好语音模型",
                     onClick = onNavigateToSetupGuide, showArrow = true)
             }
 
@@ -187,17 +192,11 @@ fun SpeechToTextSettingsContent(
             if (OfflineAsrSettings.isSupported()) {
                 // 不再有「使用本地模型」开关：一律先用本地模型；在线接口测试通过后才可选「优先使用在线接口」。
                 run {
-                    // 模型常驻与空闲释放统一在「性能与省电」设置，这里不再重复（两处会互相覆盖）。
-                    SettingsSection(title = "本地识别") {
-                        SettingsJumpText(
-                            text = "语音模型是否常驻、空闲多久释放，在「性能与省电」中设置。",
-                            jumps = listOf("性能与省电"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)
-                        )
-                        // 调优录音是开发者工具：只在自用测试包和调试包里显示。
-                        if (com.kingzcheung.xime.BuildConfig.DEV_TOOLS || com.kingzcheung.xime.BuildConfig.DEBUG) Column(Modifier.settingsSearchAnchor("保存语音调优录音").fillMaxWidth().padding(16.dp)) {
+                    // 「本地识别」一组公开版里只剩一句「常驻、释放在性能与省电里设置」的提示，什么也改不了，排版还上松下紧
+                    // （用户 11-12「不明所以」）：去掉。常驻与释放照旧只在「性能与省电」设置，那页搜「语音」能找到。
+                    // 调优录音是开发者工具：只在自用测试包和调试包里显示，这组也只在那时出现。
+                    if (com.kingzcheung.xime.BuildConfig.DEV_TOOLS || com.kingzcheung.xime.BuildConfig.DEBUG) SettingsSection(title = "本地识别") {
+                        Column(Modifier.settingsSearchAnchor("保存语音调优录音").fillMaxWidth().padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "保存语音调优录音",
@@ -214,7 +213,7 @@ fun SpeechToTextSettingsContent(
                                 )
                             }
                             Text(
-                                text = "每次本地语音的录音和识别过程只存在本机应用目录，用于连接电脑后回放分析、调整断句和模型；最多保留 300 段或 500 MB，不会上传。",
+                                text = "录音只存在本机，用来改进断句和模型；最多留 300 段或 500 MB，不会上传。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -320,7 +319,7 @@ internal fun OnlineSpeechApiSection() {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (configured) SettingsToggleItem(icon = Icons.TwoTone.GraphicEq, title = "优先使用在线语音",
-            subtitle = "失败时这次改用本地模型，并在键盘上提示",
+            subtitle = "在线识别失败时改用本地模型",
             checked = preferOnline, onCheckedChange = {
                 preferOnline = it
                 if (it) SettingsPreferences.setSttOnlinePluginId(context, com.kingzcheung.xime.speech.OnlineSpeechApi.BUILTIN_ID)

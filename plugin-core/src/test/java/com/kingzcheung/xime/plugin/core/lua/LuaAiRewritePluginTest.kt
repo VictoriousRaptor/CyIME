@@ -80,12 +80,14 @@ class LuaAiRewritePluginTest {
 
     private val source = "这个方案我觉得还行吧，不过预算那块可能得再看看，别超了。"
 
-    private fun setup(): Triple<LuaScriptRuntime, LuaToolPluginAdapter, FakeApi> {
+    private fun setup(config: Map<String, String> = emptyMap()): Triple<LuaScriptRuntime, LuaToolPluginAdapter, FakeApi> {
         val dir = File("../plugins/ai-rewrite")
         assertTrue("ai-rewrite 插件目录应存在: ${dir.absolutePath}", dir.exists())
         val store = InMemoryConfigStore()
         store.set("apiKey", "test-key")
         store.set("baseUrl", "https://api.example.com/v1/")
+        config.forEach { (k, v) -> store.set(k, v) }
+        lastStore = store
         val api = FakeApi()
         val runtime = LuaScriptRuntime("com.kingzcheung.xime.plugin.ai_rewrite", dir, "main.lua", store, httpHostApi = api)
         assertTrue("main.lua 应能加载", runtime.load())
@@ -222,5 +224,79 @@ class LuaAiRewritePluginTest {
         api.content = "这个方案我觉得还不错，不过预算部分可能需要再看看，别超支了。"
         adapter.onPanelAction("mode:polish")
         assertTrue(api.lastBody?.contains("\"temperature\"") == true)
+    }
+
+    // ---- 改写动作列表（0.6.0，11-19「每个都是一条可编辑删改重命名调整顺序的条目」） ----
+
+    private var lastStore: PluginConfigStore? = null
+
+    @Suppress("UNCHECKED_CAST")
+    private fun entries(json: String?): List<Map<String, Any?>> =
+        com.kingzcheung.xime.plugin.core.lua.sdk.SimpleJson.decode(json!!) as List<Map<String, Any?>>
+
+    private fun buttons(adapter: LuaToolPluginAdapter): List<Pair<String, String>> =
+        adapter.getPanelState(source).ui.orEmpty().filter { it.type == com.kingzcheung.xime.plugin.core.config.UiNodeType.BUTTON }
+            .map { it.key.orEmpty() to it.label.orEmpty() }
+
+    private fun prompts(adapter: LuaToolPluginAdapter): List<Map<String, Any?>> {
+        val field = adapter.getSettingsSchema().single { it.key == "prompts" }
+        assertEquals(com.kingzcheung.xime.plugin.core.config.UiNodeType.ENTRIES, field.type)
+        return entries(field.defaultValue)
+    }
+
+    @Test
+    fun `没改过的：默认六条，按原来的顺序`() {
+        val (_, adapter, _) = setup()
+        val defaults = prompts(adapter)
+        assertEquals(listOf("润色", "改错字", "更正式", "更口语", "缩短", "翻译"),
+            defaults.map { it["name"] })
+        assertEquals(listOf("润色", "改错字", "更正式", "更口语", "缩短", "翻译", "设置"), buttons(adapter).map { it.second })
+    }
+
+    @Test
+    fun `旧版改过的提示词和自定义动作带进列表，旧键不删`() {
+        val (_, adapter, api) = setup(mapOf(
+            "prompt_polish" to "我自己的润色要求",
+            "custom_label" to "日语",
+            "prompt_custom" to "把下面这段话翻译成日语。",
+        ))
+        adapter.getSettingsSchema()
+        val saved = entries(lastStore!!.get("prompts"))
+        assertEquals(7, saved.size)
+        assertEquals("我自己的润色要求", saved[0]["text"])
+        assertEquals("polish", saved[0]["id"])
+        assertEquals("日语", saved[6]["name"])
+        assertEquals("把下面这段话翻译成日语。", saved[6]["text"])
+        assertEquals("我自己的润色要求", lastStore!!.get("prompt_polish"))
+        assertEquals("日语", buttons(adapter)[6].second)
+        api.content = "这个方案我觉得还不错，不过预算部分可能需要再看看，别超支了。"
+        adapter.onPanelAction("mode:polish")
+        assertTrue(api.lastBody!!.contains("我自己的润色要求"))
+    }
+
+    @Test
+    fun `面板按列表的顺序和名字显示，删掉的不显示，自己加的能用`() {
+        val list = """[{"name":"英文","text":"把下面这段话翻译成英文。"},""" +
+            """{"id":"fix","name":"纠错","text":"只改错别字。"},{"name":"空的","text":"  "}]"""
+        val (_, adapter, api) = setup(mapOf("prompts" to list))
+        val shown = buttons(adapter)
+        assertEquals(listOf("英文", "纠错", "设置"), shown.map { it.second })
+        api.content = "This plan looks fine, but the budget part may need another look."
+        adapter.onPanelAction(shown[0].first)
+        assertTrue(api.lastBody!!.contains("把下面这段话翻译成英文。"))
+        assertEquals(1, adapter.getPanelState("").items.size)
+        // 改了名字和提示词的自带条目，照旧用改错字的校验
+        adapter.getPanelState(source)
+        api.content = "这个方案我觉得还不错，不过预算部分可能需要再看看，别超支了。"
+        adapter.onPanelAction("mode:fix")
+        assertTrue(api.lastBody!!.contains("只改错别字。"))
+    }
+
+    @Test
+    fun `全删光了：面板说去设置里加`() {
+        val (_, adapter, _) = setup(mapOf("prompts" to "[]"))
+        val state = adapter.getPanelState(source)
+        assertEquals(listOf("设置"), buttons(adapter).map { it.second })
+        assertTrue(state.ui.orEmpty().any { it.value?.contains("还没有改写动作") == true })
     }
 }

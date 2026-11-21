@@ -16,10 +16,29 @@ object HandwritingRarePack {
     private const val KEY_MIGRATED = "handwriting_rare_migrated"
     private const val HANDWRITING_MODEL = "ochwpro"
 
-    fun missing(context: Context): Boolean =
-        !HandwritingAssets.bundled(context, "hanzi_rare_och.bin") &&
-            ModelManager.getModel(BuiltinModelCatalog.HANDWRITING_RARE) != null &&
-            !ModelManager.isModelDownloaded(context, BuiltinModelCatalog.HANDWRITING_RARE)
+    internal const val META = "hanzi_rare_och.json"
+    internal const val BIN = "hanzi_rare_och.bin"
+
+    /** 能读的几份模板：下载的在前，安装包里的在后（[HandwritingAssets.copies]）。 */
+    internal fun copies(context: Context): List<(String) -> ByteArray> =
+        HandwritingAssets.copies(context, BuiltinModelCatalog.HANDWRITING_RARE, listOf(META, BIN))
+
+    /**
+     * 要下载模板：轻量版还没下；或者完整版里带的模板配不上已经从网上目录换成新版的手写模型
+     * （模板记着建它时的模型哈希，对不上就整组不用，见 [HanziRareTemplates.modelMatches]）。
+     */
+    fun missing(context: Context): Boolean {
+        val pack = ModelManager.getModel(BuiltinModelCatalog.HANDWRITING_RARE) ?: return false
+        if (ModelManager.isModelDownloaded(context, pack)) return false
+        val copies = copies(context)
+        if (copies.isEmpty()) return true
+        val model = ModelManager.getModel(HANDWRITING_MODEL) ?: return false
+        val sha = ModelManager.installedVersionOf(context, model)?.files
+            ?.firstOrNull { it.name == "ochwpro.onnx" }?.sha256?.takeIf { it.isNotEmpty() } ?: return false
+        return copies.none { read ->
+            runCatching { HanziRareTemplates.modelMatches(org.json.JSONObject(String(read(META), Charsets.UTF_8)), sha) }.getOrDefault(false)
+        }
+    }
 
     /** 排进默认模型队列（没网、失败时以后自动再试；在模型管理里删掉就不再自动补），并马上开始下。 */
     fun request(context: Context) {

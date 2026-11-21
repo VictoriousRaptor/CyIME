@@ -46,10 +46,13 @@ engine:
   translators:
     - punct_translator
     - script_translator
+    # 生僻字、日文汉字、韩文汉字、粤语字（设置 › 中文输入，默认关；关着时只看一下开关就返回），见 lua/cyime_rare_chars.lua：
+    # 按下面的拼写规则把读音算成大千键码再查（同 14 键），打满一个注音音节时补在同音字后面（11-20）。
+    - lua_translator@*cyime_rare_chars
   # 先按正体匹配声调，再确定输出字形；候选隐藏及去重使用最后显示的字。
   # 时间日期、表情、符号名同 14 键（设置 › 语言与方案 › 中文输出，默认关）：表按简体词查，所以放在转正体之前，
   # 雾凇词库出来的还是简体（开心 → 😄，时间 → 15:35）。注音原来没接，开了也不出（用户反馈 11-12）。
-  # 希腊字母、生僻字按拼音编码认，注音的大千键码对不上，不接。
+  # 希腊字母按拼音编码认，注音的大千键码对不上，不接。
   filters:
     - cyime_datetime
     - simplifier@emoji
@@ -59,6 +62,8 @@ engine:
     - simplifier@zhuyin_simplified
     - cyime_candidate_policy
     - uniquifier
+
+cyime_rare_merged_keys: true
 
 speller:
   alphabet: "1qaz2wsxedcrfv5tgbyhnujm8ik,9ol.0p;/- 6347"
@@ -157,6 +162,13 @@ menu:
 punctuator:
   import_preset: default
   __include: cyime_punctuator:/punctuator
+  # 大千的 , . 是 ㄝ ㄡ，标点在 Shift 上：Shift+, 出「，」、Shift+. 出「。」（同 Rime 注音 bopomofo 方案、微软注音），
+  # 不是表里的《》菜单。打字中按下去先上屏转好的字再接标点（ㄅㄨˋㄓˉㄉㄠˋ + Shift+, = 不知道，）。只有实体键盘会送 < >。
+  __patch:
+    half_shape/<: { commit: "，" }
+    half_shape/>: { commit: "。" }
+    full_shape/<: { commit: "，" }
+    full_shape/>: { commit: "。" }
 
 # 不引默认的 key_binder：它把有候选时的数字键、空格当选词键，而大千的数字键是 ㄅㄉ…，空格是第一声。
 key_binder:

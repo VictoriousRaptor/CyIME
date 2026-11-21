@@ -16,16 +16,18 @@ import org.robolectric.shadows.ShadowBuild
 import java.io.File
 
 /**
- * 固定键盘贴底的回归基线（用户 11-08：66 版是大家公认贴得好的版本，68 改了算法后全面屏贴不到底）。
- * `bottom-edge-66-golden-*.tsv`：「底部位置 = 自动」的输出，就是 1.15.66 的贴底算法（贴底开/关两种存量状态），
+ * 固定键盘底部的回归基线。
+ * `bottom-unified-golden-*.tsv`：「底部位置 = 自动」按决策表（[classifyBottomNav]，11-19 统一规则）的输出，
  * 覆盖手势导航、三键导航、把整条导航框报成可点区域的机型、只有手势条的机型、横屏、悬浮键盘下限、留白 0／抬高 16／调低 16／调到底。
- * `bottom-position-choices-golden-*.tsv`：另外两档（贴到最底、留出导航按钮）的固定规则。
- * 以后改贴底的任何代码，输出都必须和这几份文件一致；真要改结果，先拿到用户同意，再用环境变量重写文件并在提交里说明：
- * 自动档 `CYIME_BOTTOM_GOLDEN_WRITE_66=1`（66 基线，一般不该重写），另两档 `CYIME_BOTTOM_GOLDEN_WRITE=1`。
+ * 和 1.15.66 基线比，固定键盘只有「三星 + navigation_mode=0」的行变了（三键导航整条留着，11-19 三星三键被挡）；
+ * 悬浮键盘下限在按 inset 认成手势的行跟着变成避开手势区。
+ * `bottom-position-choices-golden-*.tsv`：另外两档（贴到最底、留出导航按钮）的固定规则，没变。
+ * 以后改底部的任何代码，输出都必须和这几份文件一致；真要改结果，先拿到用户同意，再用环境变量重写文件并在提交里说明：
+ * 自动档 `CYIME_BOTTOM_GOLDEN_WRITE_AUTO=1`，另两档 `CYIME_BOTTOM_GOLDEN_WRITE=1`。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class, qualifiers = "sw360dp-w360dp-h800dp-mdpi")
-class FixedKeyboardBottom66GoldenTest {
+class FixedKeyboardBottomGoldenTest {
     private val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
     private val tab = "\t"
     private val newline = "\n"
@@ -54,20 +56,17 @@ class FixedKeyboardBottom66GoldenTest {
 
     private fun autoRows(orientation: String): List<String> = buildList {
         for (maker in listOf("OPPO", "samsung", "unknown")) for (mode in listOf("unset", "0", "2")) for (b in bars)
-            for (edge in listOf(true, false)) for (adjust in listOf(0, 16, -16, -80)) {
+            for (adjust in listOf(0, 16, -16, -80)) {
                 ShadowBuild.setManufacturer(maker)
                 navigationMode(mode)
                 SettingsPreferences.setKeyboardBottomPosition(activity, KeyboardBottomPosition.AUTO)
-                SettingsPreferences.setEdgeToEdgeKeyboard(activity, edge)
                 SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, adjust)
                 val insets = insetsOf(b)
                 val normal = extractBottomInset(insets, activity.window)
                 val minimum = fixedKeyboardMinimumInsetPx(insets, activity.window, normal)
                 val fixed = fixedKeyboardBottomInsetPx(insets, activity.window, normal, minimum)
-                val floating = floatingMinimumInsetPx(activity.window, insets,
-                    fixedKeyboardMinimumInsetPx(insets, activity.window, normal, edge = false, position = KeyboardBottomPosition.AUTO))
-                add(listOf(orientation, maker, mode, b.name, if (edge) "edge" else "no-edge", adjust,
-                    normal, minimum, fixed, floating).joinToString(tab))
+                val floating = floatingMinimumInsetPx(activity.window, insets, normal)
+                add(listOf(orientation, maker, mode, b.name, adjust, normal, minimum, fixed, floating).joinToString(tab))
             }
     }
 
@@ -96,18 +95,18 @@ class FixedKeyboardBottom66GoldenTest {
         assertEquals(message, expected.joinToString(newline), actual.joinToString(newline))
     }
 
-    private fun checkAuto(orientation: String) = compare(File("src/test/resources/bottom-edge-66-golden-$orientation.tsv"),
-        listOf("orientation", "maker", "navigation_mode", "bars", "edge", "adjust_dp", "normal", "minimum", "fixed", "floating_minimum")
-            .joinToString(tab), autoRows(orientation), "CYIME_BOTTOM_GOLDEN_WRITE_66", "自动档和 1.15.66 不一致（$orientation）")
+    private fun checkAuto(orientation: String) = compare(File("src/test/resources/bottom-unified-golden-$orientation.tsv"),
+        listOf("orientation", "maker", "navigation_mode", "bars", "adjust_dp", "normal", "minimum", "fixed", "floating_minimum")
+            .joinToString(tab), autoRows(orientation), "CYIME_BOTTOM_GOLDEN_WRITE_AUTO", "自动档和决策表基线不一致（$orientation）")
 
     private fun checkChoices(orientation: String) = compare(File("src/test/resources/bottom-position-choices-golden-$orientation.tsv"),
         listOf("orientation", "position", "maker", "navigation_mode", "bars", "adjust_dp", "normal", "minimum", "fixed").joinToString(tab),
         choiceRows(orientation), "CYIME_BOTTOM_GOLDEN_WRITE", "两档固定位置的结果变了（$orientation）")
 
-    @Test fun portraitAutoMatches66() = checkAuto("portrait")
+    @Test fun portraitAutoMatchesTheDecisionTable() = checkAuto("portrait")
 
     @Test @Config(qualifiers = "sw360dp-w800dp-h360dp-land-mdpi")
-    fun landscapeAutoMatches66() = checkAuto("landscape")
+    fun landscapeAutoMatchesTheDecisionTable() = checkAuto("landscape")
 
     @Test fun portraitChoicesStayFixed() = checkChoices("portrait")
 

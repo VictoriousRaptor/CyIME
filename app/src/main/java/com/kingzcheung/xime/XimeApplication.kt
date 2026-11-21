@@ -67,9 +67,21 @@ class XimeApplication : Application(), ImageLoaderFactory {
         val processName = getProcessName()
         if (processName != packageName) return
         SettingsPreferences.initializeIncognitoForVersion(this, BuildConfig.VERSION_CODE)
+        // 键盘和设置页都收起后把用完的 Java 堆还给系统（见 HeapReclaim）。
+        registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: android.app.Activity) = com.kingzcheung.xime.service.HeapReclaim.onActivityStarted()
+            override fun onActivityStopped(activity: android.app.Activity) = com.kingzcheung.xime.service.HeapReclaim.onActivityStopped()
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) = Unit
+            override fun onActivityResumed(activity: android.app.Activity) = Unit
+            override fun onActivityPaused(activity: android.app.Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(activity: android.app.Activity) = Unit
+        })
         // 先于任何下载、导入和词库准备列出上次中断的残留，后台删除。
         com.kingzcheung.xime.settings.StorageHousekeeping.sweepAtStartup(this, applicationScope)
         com.kingzcheung.xime.model.DeviceDefaults.initialize(this)
+        // 网上模型目录存在本机的那份（没联网读过时没有，不花时间）：先于词库准备、自动更新认出已换上的新版模型。
+        runCatching { com.kingzcheung.xime.model.ModelManager.loadCachedRemote(this) }
         com.kingzcheung.xime.settings.LanguagePreferences.initialize(this)
         com.kingzcheung.xime.update.AppUpdater.init(this)
         com.kingzcheung.xime.ui.theme.VisualStyles.current = SettingsPreferences.getVisualStyle(this)
@@ -127,11 +139,8 @@ class XimeApplication : Application(), ImageLoaderFactory {
             // 日语也是插件（11-11）：开着日语的老用户升级时自动装上，轻量版缺的引擎马上补下载。
             com.kingzcheung.xime.settings.JapanesePlugin.migrateOnce(this@XimeApplication)
         }
-        // 轻量版不带语音引擎（1.16）：下过语音模型的老用户升级后马上补下引擎。
+        // 轻量版不带生僻字手写模板（1.16）：下过手写模型的老用户升级后马上补下。
         applicationScope.launch {
-            runCatching { com.kingzcheung.xime.speech.SpeechEnginePack.migrateOnce(this@XimeApplication) }
-                .onFailure { FileLogger.e(TAG, "语音引擎补下载失败", it) }
-            // 生僻字手写模板同理（1.16）：下过手写模型的老用户升级后马上补下。
             runCatching { com.kingzcheung.xime.handwriting.HandwritingRarePack.migrateOnce(this@XimeApplication) }
                 .onFailure { FileLogger.e(TAG, "生僻字手写模板补下载失败", it) }
         }

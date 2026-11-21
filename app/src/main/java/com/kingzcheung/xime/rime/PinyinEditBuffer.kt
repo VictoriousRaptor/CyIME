@@ -74,6 +74,15 @@ internal object PinyinEditBuffer {
     fun normalized(text: String, keepCase: Boolean): String = if (!keepCase) normalized(text)
         else text.replace(' ', '\'').filter { it in 'a'..'z' || it in 'A'..'Z' || it == '\'' }
 
+    /** 双拼的分号是韵母键（微软双拼 ; = ing），编辑时和字母一样留着（#365：p;vg 改不了前面的 p）。 */
+    fun normalized(text: String, keepCase: Boolean, keepSemicolon: Boolean): String =
+        if (!keepSemicolon) normalized(text, keepCase)
+        else text.split(';').joinToString(";") { normalized(it, keepCase) }
+
+    fun keepsSemicolon(schema: String): Boolean =
+        com.kingzcheung.xime.settings.InputProfiles.describe(schema).scheme ==
+            com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+
     fun keepsCase(schema: String): Boolean =
         com.kingzcheung.xime.settings.InputProfiles.describe(schema).capabilities.caseSensitiveCode
 

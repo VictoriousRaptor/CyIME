@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.keyboard
 import com.kingzcheung.xime.ui.theme.KeyShapes
 import com.kingzcheung.xime.ui.theme.VisualStyles
 import com.kingzcheung.xime.ui.theme.visualMaterial
+import com.kingzcheung.xime.ui.theme.liquidGlassCap
 
 import android.annotation.SuppressLint
 import android.widget.Toast
@@ -436,8 +437,10 @@ fun KeyboardLayout(
     // 角标照常按两个角标提示开关显示，滑行不改它（用户 10-31：不能改他的习惯）。
     val glidePrefs = LocalKeyboardInputPreferences.current
     val glideProfile = uiState.inputProfile
-    val chineseGlide = !isAsciiMode && glidePrefs.chineseGlideTyping &&
-        com.kingzcheung.xime.glide.chineseGlideSupported(glideProfile, uiState.currentSchemaId)
+    // 导入的自定义编码方案在「滑行输入」里给它选了全拼或某套双拼时也滑行（#303）。
+    val chineseGlideEncoding = if (isAsciiMode || !glidePrefs.chineseGlideTyping) null else
+        com.kingzcheung.xime.glide.chineseGlideEncoding(glideProfile, uiState.currentSchemaId, glidePrefs.externalGlideEncodings)
+    val chineseGlide = chineseGlideEncoding != null
     val glideEnabled = (isAsciiMode && glidePrefs.glideTyping && callbacks.onGlideWord != null || chineseGlide && callbacks.onGlideCode != null) &&
         glidePrefs.cursorGesture != CursorGestureMode.KEYBOARD && !(isVoiceMode && !isVoiceSticky)
     val glideTrail = remember { GlideTrail() }
@@ -457,8 +460,7 @@ fun KeyboardLayout(
         glidePreview.points = points
         if (glidePreview.job?.isActive == true) { glidePreview.moved = true; return@progress }
         val chinese = chineseGlide
-        val doublePinyin = if (chinese && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
-            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
+        val doublePinyin = if (chinese) chineseGlideEncoding?.doublePinyin else null
         val english = glidePreview.english
         val left = glidePreview.left
         val shift = viewModel.shiftMode.value
@@ -514,8 +516,7 @@ fun KeyboardLayout(
         }
         val shift = viewModel.shiftMode.value
         // 中文：双拼按当前方案换码，全拼为空。
-        val doublePinyin = if (chineseGlide && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
-            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
+        val doublePinyin = chineseGlideEncoding?.doublePinyin
         val chinese = chineseGlide
         // 中文按前文选编码（组合为空时光标前已上屏的字，和九键组句同一个来源）；在主线程读，识别在后台。
         // 这一笔开过实时预览就用预览开头那份：这时光标前已经有预览写进去的组合文字。
@@ -912,6 +913,9 @@ fun KeyboardLayout(
                                 shadowShapeRadius = shadowShapeRadius,
                                 composingSplit = shiftComposingSplit,
                                 composingSplitLabel = if (shiftSplit) "分词" else SYLLABLE_SEPARATOR,
+                                splitRedundant = if (shiftSplit && candidateState != null) {
+                                    { candidateState.value.inputText.endsWith(SYLLABLE_SEPARATOR) }
+                                } else null,
                                 tapKey = CHOONPU_INPUT.takeIf { choonpuOnShift },
                                 tapLabel = CHOONPU_KEY.takeIf { choonpuOnShift },
                             )
@@ -1892,6 +1896,8 @@ internal fun ShiftCapsKeyButton(
     composingSplit: (() -> Boolean)? = null,
     /** 中文打拼音时写「分词」；英文等打单词时写 '（打的就是撇号）。 */
     composingSplitLabel: String = "分词",
+    /** 返回 true 时点「分词」不再送 '（拼音末尾已经是分词符，#464）。 */
+    splitRedundant: (() -> Boolean)? = null,
     /**
      * 点按送出的键（日语长音键「代替 Shift」：ー）；非 null 时键面写 [tapLabel]，按住满 [SHIFT_TAP_KEY_HOLD_MS] 才是按住 Shift，
      * 松手前没打别的键就照 Shift 的点按切换大小写（[shiftTapKeyLongPressAction]）。null 为普通 Shift。
@@ -1906,6 +1912,7 @@ internal fun ShiftCapsKeyButton(
     // 在这里读「是否在打拼音」，变化时只重组 Shift 键。
     val splitLabel = composingSplit?.invoke() == true
     val currentSplit by rememberUpdatedState(composingSplit)
+    val currentSplitRedundant by rememberUpdatedState(splitRedundant)
     val suppressCursorMove = LocalSuppressCursorMove.current
     val currentPress by rememberUpdatedState(onKeyPressDown)
     val currentKey by rememberUpdatedState(onKeyPress)
@@ -1934,6 +1941,10 @@ internal fun ShiftCapsKeyButton(
     val keyClipShape = remember(keyCornerRadius, honeycombEdge) {
         honeycombEdge?.let(::HalfHexagonShape) ?: RoundedCornerShape(keyCornerRadius)
     }
+    // 液态玻璃：和字母键（keyGlow）同一条件，开着时 Shift 键帽也画玻璃亮边，不再只画视觉样式（11-19 用户「Shift 键还是没有液态玻璃」）。
+    // 以前 Shift 不经过 keyGlow，只改过底色，玻璃边从来没画上。蜂窝布局照旧不画。
+    val liquidCap = frostedGlass.enabled && honeycombEdge == null && !LocalHoneycombKeys.current &&
+        com.kingzcheung.xime.ui.theme.LiquidGlass.enabled(androidx.compose.ui.platform.LocalContext.current)
 
     fun darkenColor(color: Color, factor: Float = 0.15f): Color {
         return Color(
@@ -1969,7 +1980,10 @@ internal fun ShiftCapsKeyButton(
                     if (viewModel.shiftMode.value != ShiftMode.SINGLE) lastTap = Long.MIN_VALUE
                     // 点按另有用途时（长音键）不一按下就亮 Shift：按满时限才算按住，点按时整块键帽不闪大写。
                     val tapOutput = currentTapKey
-                    var holding = tapOutput == null
+                    // 键面已是「分词」（打拼音中）：这一按只管分词，不按住 Shift、不拖出大写，键盘不闪大写，
+                    // 也不会按住打出大写字母把拼音打断（#464）。
+                    val splitTap = tapOutput == null && currentSplit?.invoke() == true
+                    var holding = tapOutput == null && !splitTap
                     if (holding) viewModel.beginShiftHold()
                     var released = false
                     var dragged = false
@@ -1977,7 +1991,7 @@ internal fun ShiftCapsKeyButton(
                     try {
                         while (true) {
                             // 拖出去以后不再计时（交给滑到字母上的大写），只等松手。
-                            val event = if (holding || dragged) awaitPointerEvent()
+                            val event = if (holding || dragged || splitTap) awaitPointerEvent()
                                 else withTimeoutOrNull((down.uptimeMillis + SHIFT_TAP_KEY_HOLD_MS - upTime).coerceAtLeast(1L)) { awaitPointerEvent() }
                             if (event == null) {
                                 viewModel.beginShiftHold()
@@ -1990,7 +2004,7 @@ internal fun ShiftCapsKeyButton(
                             val pointer = bounds.topLeft + change.position
                             dragged = dragged || !bounds.contains(pointer) ||
                                 (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                            val target = if (dragged) targets?.move(bounds, pointer) else null
+                            val target = if (dragged && !splitTap) targets?.move(bounds, pointer) else null
                             change.consume()
                             if (!change.pressed) {
                                 released = true
@@ -2016,6 +2030,11 @@ internal fun ShiftCapsKeyButton(
                                 else currentKey(shiftTapKeyLongPressAction(viewModel.shiftMode.value))
                             }
                             lastTap = Long.MIN_VALUE
+                        } else if (splitTap) {
+                            // 只有短按插入分词；长按、拖走无效果；末尾已经是分词符就不再连着加。
+                            if (released && !dragged && upTime - down.uptimeMillis < 350L &&
+                                currentSplitRedundant?.invoke() != true) currentKey(SYLLABLE_SEPARATOR)
+                            lastTap = Long.MIN_VALUE
                         } else if (released && !dragged && !used && upTime - down.uptimeMillis < 350L) {
                             // 打拼音时点按插入分词；不算进双击，连点两下不会锁成大写。
                             if (currentSplit?.invoke() == true) {
@@ -2035,9 +2054,10 @@ internal fun ShiftCapsKeyButton(
             .padding(scaledKeyVisualPadding())
             // 键缝动效：Shift 自己按下不画线，只登记位置，大写出现时从它扩开。
             .then(keyGapLightSource(GapLightKind.NONE, caseAnchor = true))
-            .then(if (honeycombEdge != null) Modifier.honeycombCap() else shadowModifier)
-            .clip(keyClipShape)
-            .background(colors.background).visualMaterial(VisualStyles.current, keyCornerRadius, com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED),
+            .then(if (liquidCap) Modifier.liquidGlassCap(shadowModifier.clip(keyClipShape).background(colors.background), keyCornerRadius)
+                else (if (honeycombEdge != null) Modifier.honeycombCap() else shadowModifier)
+                    .clip(keyClipShape)
+                    .background(colors.background).visualMaterial(VisualStyles.current, keyCornerRadius, com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED)),
         contentAlignment = Alignment.Center
     ) {
         // 空心箭头＝小写，实心＝下一个字母大写，实心加底横线＝大写锁定。
@@ -2285,7 +2305,11 @@ internal fun commitLongPressChoice(label: String, onCommitText: ((String) -> Uni
     // 韩语长按出的 ㄲ 同样交给组字。大写的照旧直接上屏。
     val letter = label.length == 1 && (label[0] in 'a'..'z' ||
         !label[0].isUpperCase() && label[0] in accentLetters)
-    if (letter) onKeyPress(label) else (onCommitText ?: onKeyPress)(label)
+    if (letter) {
+        // 特意选了小写：句首也不自动大写（#465）。
+        com.kingzcheung.xime.service.ExplicitLowercase.mark(label)
+        onKeyPress(label)
+    } else (onCommitText ?: onKeyPress)(label)
 }
 
 /**

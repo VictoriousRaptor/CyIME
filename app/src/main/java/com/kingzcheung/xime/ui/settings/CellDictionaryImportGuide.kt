@@ -47,25 +47,23 @@ internal fun CellDictionaryImportGuide(onDismiss: () -> Unit, onImport: () -> Un
             GuideHeading("支持的格式")
             GuideFormat("搜狗细胞词库(.scel)", "搜狗词库网站下载的文件，直接导入。")
             GuideFormat("文本词库(.txt)",
-                "每行一个词。词和拼音用空格、Tab 或逗号隔开，谁在前都行；拼音可以连写，也可以用空格或 ' 隔开，带声调也行。" +
-                    "搜狗、QQ、百度(电脑版和手机版)输入法导出的文本，和 Rime 用户词库快照，一般可以直接导入。")
+                "每行一个词，词和拼音用空格、Tab 或逗号隔开。各输入法导出的文本一般可以直接导入。")
             GuideExample("你好 ni hao\nnihao 你好\n'shang'hai 上海\n计算机\tji suan ji\t100\nTeam Spirit")
-            GuideText("最后的数字(词频)不读，所有词同一个权重；没有汉字的一行当作英文词，所有键盘的英文候选里都能打出来；" +
-                "# 开头的行跳过。文件编码 UTF-8、UTF-16、GBK 都可以。")
-            GuideFormat("Rime 词典(.dict.yaml)", "只读文件头「...」下面的词条，每行「词⇥拼音⇥权重」，权重同样不读。")
-            GuideFormat("Gboard 个人词典(.zip)", "Gboard 导出的压缩包直接导入，读里面的 dictionary.txt。")
+            GuideText("没有汉字的行当作英文词，# 开头的行跳过。")
+            GuideFormat("笔画词库(.txt)", "每行「词 笔画编码」，编码只用 h s p n z(横竖撇点折)，每字首笔、整串笔画或用 ' 隔开都行。" +
+                "这些词只给笔画输入的分词打词用，拼音打不出来。")
+            GuideExample("骆驼 zz\n猫娘 pzpshhsszhsh'zphnzhhzpn")
+            GuideFormat("Rime 词典(.dict.yaml)", "每行「词⇥拼音⇥权重」。")
+            GuideFormat("Gboard 个人词典(.zip)", "Gboard 导出的压缩包直接导入。")
             GuideFormat("微软拼音(.dctx)", "微软拼音导出的词库文件，声调去掉后导入。")
-            GuideText("搜狗的 .bin 备份和微软拼音的 .dat 自学习词库是它们自己的格式，读不了：在原来的输入法里导出成文本再导入，" +
-                "或者用词库转换工具转成搜狗文本。")
+            GuideText("搜狗 .bin 和微软拼音 .dat 读不了，请先在原输入法里导出成文本。")
             GuideFormat("JSON(.json)", "CyIME 自己的格式，拼音按字用空格隔开：")
             GuideExample("{\"format\": \"cyime.dictionary.v1\", \"name\": \"我的词库\",\n" +
                 " \"language\": \"zh\", \"scheme\": \"pinyin\",\n" +
                 " \"entries\": [{\"word\": \"你好\", \"code\": \"ni hao\"}]}")
 
             GuideHeading("限制")
-            GuideText("文本和 Rime 词典最大 128 MB、200 万个词，搜狗词库和 JSON 最大 16 MB、25 万个词。" +
-                "中文词要 2 到 32 个字，单字和没有拼音的行会跳过，导入后会说跳过了几行。" +
-                "只认全拼拼音，五笔等形码词库不能从这里导入。")
+            GuideText("文本和 Rime 词典最多 200 万个词，搜狗词库和 JSON 最多 25 万个词。单字会跳过；形码只认笔画，五笔等形码词库不能从这里导入。")
 
             Button(onClick = { onDismiss(); onImport() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 .heightIn(min = 48.dp)) { Text("选择文件导入") }

@@ -74,7 +74,10 @@ class CellDictionaryViewModel(application: Application) : AndroidViewModel(appli
             .use(store::installFile)
         store.select(entry.id, true)
         val skipped = if (entry.skipped > 0) "，跳过 ${entry.skipped} 行（单字或没有拼音）" else ""
-        "已导入「${entry.name}」${entry.count + entry.english} 个词$skipped，点「应用更改」后生效"
+        val total = entry.count + entry.english + entry.stroke
+        // 笔画词库的词（「词 笔画编码」）只给笔画输入用，拼音打不出来，说清楚（11-19）。
+        if (entry.stroke > 0) "已导入「${entry.name}」$total 个词$skipped，其中 ${entry.stroke} 个笔画编码的词只给笔画输入用，点「应用更改」后生效"
+        else "已导入「${entry.name}」$total 个词$skipped，点「应用更改」后生效"
     }
 
     /** 导出词库：[source] 为 null 时是当前方案学到的词，否则是这个导入的词库；写进用户选好的 [uri]。 */

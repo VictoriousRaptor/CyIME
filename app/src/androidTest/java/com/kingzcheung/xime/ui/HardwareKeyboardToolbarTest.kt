@@ -315,16 +315,19 @@ class HardwareKeyboardToolbarTest {
         rule.runOnIdle { assertEquals(1, keyboard); assertEquals(1, clipboard) }
     }
 
-    // 用户 11-13：接物理键盘打字时底部条图标太多，候选只放得下四五个。打字时表情、剪贴板收进「更多」。
+    // 用户 11-13：接物理键盘打字时底部条图标太多，候选只放得下四五个。
+    // 用户 11-20：打字时右侧按钮整排收成细边，条子宽度不变；点细边放出来，「更多」里是表情、剪贴板。
     @Test fun composingBottomStripGivesTheIconRoomToCandidates() {
         show(width = 800, height = 600, docking = true, composing = true)
         rule.onNodeWithTag("hardware-keyboard-toolbar").assertWidthIsEqualTo(720.dp)
-        rule.onNodeWithTag("hardware-toolbar-emoji").assertDoesNotExist()
-        rule.onNodeWithTag("hardware-toolbar-clipboard").assertDoesNotExist()
+        for (tag in listOf("hardware-toolbar-emoji", "hardware-toolbar-clipboard", "hardware-toolbar-keyboard",
+            "hardware-toolbar-language", "hardware-toolbar-more")) rule.onNodeWithTag(tag).assertDoesNotExist()
+        val candidates = rule.onNodeWithTag("hardware-docked-candidates").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("candidates take the icons' room: $candidates", candidates.width >= 720f - 8f - 16f - .5f)
+        rule.onNodeWithTag("hardware-toolbar-tools-edge").assertIsDisplayed().performClick()
+        rule.onNodeWithTag("hardware-keyboard-toolbar").assertWidthIsEqualTo(720.dp)
         rule.onNodeWithTag("hardware-toolbar-keyboard").assertIsDisplayed()
         rule.onNodeWithTag("hardware-toolbar-language").assertIsDisplayed()
-        val candidates = rule.onNodeWithTag("hardware-docked-candidates").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue("candidates take the icons' room: $candidates", candidates.width >= 720f - 8f - 3 * 48f - .5f)
         rule.onNodeWithTag("hardware-toolbar-more").assertIsDisplayed().performClick()
         rule.onNodeWithTag("hardware-toolbar-clipboard").assertIsDisplayed().performClick()
         rule.runOnIdle { assertEquals(1, clipboard) }

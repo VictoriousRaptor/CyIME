@@ -13,10 +13,31 @@ import kotlinx.coroutines.runBlocking
  * 模型加载与推理全部在 [com.kingzcheung.xime.service.AsrInferenceService]（:asr 进程）中完成，
  * 主进程仅负责音频采集与结果回调，不占用输入法进程内存。
  */
-class OfflineAsrBackend(private val context: Context) : AsrBackend {
+class OfflineAsrBackend(
+    private val context: Context,
+    private val unbindTimer: IdleUnbindTimer = IdleUnbindTimer.Main,
+) : AsrBackend {
 
     companion object {
         private const val TAG = "OfflineAsrBackend"
+        /** 「空闲卸载」时间到了服务端先卸模型；再等这么久才解绑，免得和服务端的计时抢。 */
+        internal const val UNBIND_AFTER_RELEASE_MS = 30_000L
+
+        /** 空闲多久解绑 :asr；设成常驻（0 分钟）返回 null，一直绑着。 */
+        internal fun idleUnbindDelayMs(engineIdleMinutes: Int): Long? =
+            if (engineIdleMinutes <= 0) null else engineIdleMinutes * 60_000L + UNBIND_AFTER_RELEASE_MS
+    }
+
+    /** 解绑计时：正式运行挂在主线程，测试换成手动的。 */
+    interface IdleUnbindTimer {
+        fun schedule(delayMs: Long, task: Runnable)
+        fun cancel(task: Runnable)
+
+        object Main : IdleUnbindTimer {
+            private val handler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+            override fun schedule(delayMs: Long, task: Runnable) { handler.removeCallbacks(task); handler.postDelayed(task, delayMs) }
+            override fun cancel(task: Runnable) { handler.removeCallbacks(task) }
+        }
     }
 
     override val name: String get() = "本地离线语音"
@@ -28,6 +49,29 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
     @Volatile private var retired = false
     @Volatile private var activeMode: String? = null
     private val sessionGeneration = java.util.concurrent.atomic.AtomicLong()
+
+    /**
+     * 用过一次语音后输入法一直绑着 :asr，模型按「空闲卸载」卸掉了，进程和服务还挂在后台（11-20 用户反馈：
+     * 设了 5 分钟卸载，后台一直有语音进程）。空闲到卸载时间后再过 30 秒就解绑，服务随之结束，
+     * 系统可以收回整个进程；下次按话筒 [start] 会重新绑定（模型那时本来也要重新加载）。设成常驻时不解绑。
+     */
+    @Volatile private var sessionActive = false
+    private val idleUnbind = Runnable { unbindIfIdle() }
+
+    private fun scheduleIdleUnbind() {
+        if (sessionActive || retired) return
+        val delay = idleUnbindDelayMs(SettingsPreferences.getSttEngineIdleMinutes(context)) ?: return
+        runCatching { unbindTimer.schedule(delay, idleUnbind) }
+    }
+
+    private fun cancelIdleUnbind() { runCatching { unbindTimer.cancel(idleUnbind) } }
+
+    @Synchronized
+    private fun unbindIfIdle() {
+        if (sessionActive || retired) return
+        FileLogger.w(TAG, "voice idle past unload time: unbinding :asr")
+        client.unbind()
+    }
 
     private var resultCallback: ((String) -> Unit)? = null
     private var partialResultCallback: ((String) -> Unit)? = null
@@ -82,7 +126,7 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
             syncKeepAlive()
             // AsrSupport may hand the manager an already-warmed backend. Re-registering it
             // must not start/stop another session or replace its language-specific model.
-            if (initialized) return true
+            if (initialized) { scheduleIdleUnbind(); return true }
             initialized = true
             // 预热模型：绑定后立即创建模型句柄并驻留，避免首次语音时
             // 1s 模型加载导致开头音频（如"你觉得"）在录音缓冲中被丢弃
@@ -96,6 +140,7 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
                 FileLogger.w(TAG, "model warmup skipped: ${e.message}")
             }
             FileLogger.i(TAG, "initialize result=true")
+            scheduleIdleUnbind()
             true
         } catch (e: Exception) {
             FileLogger.e(TAG, "initialize failed", e)
@@ -109,7 +154,9 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
     override fun start(language: InputLanguage): Boolean {
         if (!initialized || retired) return false
         sessionGeneration.incrementAndGet()
-        return try {
+        cancelIdleUnbind()
+        sessionActive = true
+        val started = try {
             val modelManager = AsrModelManager(context)
             val selection = modelManager.selectionForLanguage(language)
             activeMode = selection.mode
@@ -138,6 +185,8 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
             errorCallback?.invoke(e.message ?: "离线语音启动失败")
             false
         }
+        if (!started) { sessionActive = false; scheduleIdleUnbind() }
+        return started
     }
 
     override fun processAudioChunk(buffer: ByteArray) {
@@ -164,6 +213,9 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
         } catch (e: Exception) {
             FileLogger.e(TAG, "stop failed", e)
             throw e
+        } finally {
+            // 这一次说完了；期间又开始了新的一次（代数变了）就不动，免得在说话时解绑。
+            if (token == sessionGeneration.get()) { sessionActive = false; scheduleIdleUnbind() }
         }
         if (token == sessionGeneration.get()) {
             resultCallback?.invoke(text)
@@ -179,6 +231,8 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
         if (initialized) {
             client.cancelAsr()
         }
+        sessionActive = false
+        scheduleIdleUnbind()
     }
 
     override fun release() {
@@ -193,6 +247,7 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
     fun releaseModel() {
         retired = true
         initialized = false
+        cancelIdleUnbind()
         try {
             runBlocking { client.releaseAsr() }
         } catch (e: Exception) {
@@ -219,5 +274,8 @@ class OfflineAsrBackend(private val context: Context) : AsrBackend {
             }
         } catch (_: Exception) {
         }
+        // 卸载时间改了：按新时间重新计；改成常驻就不再解绑。
+        if (idleUnbindDelayMs(SettingsPreferences.getSttEngineIdleMinutes(context)) == null) cancelIdleUnbind()
+        else scheduleIdleUnbind()
     }
 }

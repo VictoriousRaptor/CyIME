@@ -80,12 +80,12 @@ internal fun VerificationCodeSettingsCard(enabled: Boolean, denied: Boolean,
     SettingsSection(title = "验证码", content = {
         Column {
             SettingsToggleItem(Icons.TwoTone.Sms, "新短信验证码自动复制",
-                "需授权接收短信。新短信到了只把验证码数字复制到剪贴板，不读取历史短信，不加入历史，10 分钟后自动删除。",
+                "只复制新短信里的验证码，不读历史短信、不进剪贴板历史，10 分钟后删除",
                 enabled, onToggle)
-            if (denied) Text("未获得短信权限。请在系统设置 → 应用 → CyIME → 权限中允许接收短信，然后返回此页。如果没有短信权限选项，可以手动复制验证码数字。",
+            if (denied) Text("未获得短信权限。请在系统设置 → 应用 → CyIME → 权限里允许接收短信，再回到这里。",
                 modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
             SettingsToggleItem(Icons.TwoTone.Devices, "验证码发到其他设备",
-                "只发给已配对的电脑、手机、平板，不进历史，3 分钟后自动清除",
+                "只发给已配对的设备，不进历史，3 分钟后清除",
                 sendToDevices && sendLock == null, onSendToDevices, lockMessage = sendLock)
         }
     })

@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.handwriting.EnglishWordRecognizer
@@ -63,6 +64,21 @@ import kotlinx.coroutines.withContext
 
 /** 公式预览的上边：让开画板顶部的语言胶囊和公式按钮（按钮 8dp 外边距 + 约 32dp 高）。 */
 private val FORMULA_PREVIEW_TOP = 44.dp
+
+/** 画板矮于这个高度（横屏、调低的键盘）时，预览挪到公式按钮那一行，不压在写字的地方。 */
+internal val FORMULA_PREVIEW_COMPACT_BELOW = 170.dp
+
+/** 公式预览在画板里的位置：上边、高度、右边让出的宽度。 */
+internal data class FormulaPreviewBand(val top: Dp, val height: Dp, val end: Dp)
+
+/**
+ * 竖屏画板高，预览放在按钮那一行下面（44dp 起、52dp 高）。横屏画板只有 130dp 上下，
+ * 44–96dp 正好是中间三分之一，预览和笔迹叠在一起（B 站 11-18：横屏公式模式被挡住三分之一）；
+ * 这时把预览缩到按钮那一行：和「公式」按钮同高、右边让开按钮，画板下面整块都留给写字。
+ */
+internal fun formulaPreviewBand(canvasHeight: Dp): FormulaPreviewBand =
+    if (canvasHeight < FORMULA_PREVIEW_COMPACT_BELOW) FormulaPreviewBand(top = 6.dp, height = 36.dp, end = 88.dp)
+    else FormulaPreviewBand(top = FORMULA_PREVIEW_TOP, height = 52.dp, end = 16.dp)
 
 /** 并排书写（日语、英文）一次最多切出的字数：一个单词、一小句。 */
 private const val SIDE_BY_SIDE_MAX_CHARS = 12
@@ -280,7 +296,14 @@ fun HandwritingKeyboardLayout(
                                 letterCost = OverlappedHandwritingRecognizer.MODEL_LETTER_COST)).recognize(
                             points, gaps,
                             // 作废的识别在下一段推理前就停（见上），不会跑完整个切分再放锁
-                            predictFn = { seg, topK -> ensureActive(); HandwritingEngine.predict(seg, topK, recognitionLanguage) },
+                            predictFn = { seg, topK ->
+                                ensureActive()
+                                val candidates = HandwritingEngine.predict(seg, topK, recognitionLanguage)
+                                // 中文：日文汉字、韩文汉字、粤语字按各自的开关（默认关时不出，11-20）
+                                if (recognitionLanguage == InputLanguage.CHINESE)
+                                    com.kingzcheung.xime.settings.CharacterSwitchLists.withoutHidden(context, candidates) { it.char }
+                                else candidates
+                            },
                         ).segments, startsWord)
                     }
                 }
@@ -327,12 +350,13 @@ fun HandwritingKeyboardLayout(
         }
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
             // 公式预览只是叠在画板顶部的显示内容，放在画布下层：整块区域都能落笔，笔迹画在预览之上。
             // 放在左上语言胶囊和右上公式按钮那一行下面：「英文手写 · 边写边学」这类长提示比原来让出的 96dp 宽，
-            // 会盖住预览（GitHub #66 #67）。
+            // 会盖住预览（GitHub #66 #67）。画板矮时（横屏）挪到按钮那一行，见 formulaPreviewBand。
+            val previewBand = formulaPreviewBand(maxHeight)
             if (formulaActive) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .padding(top = FORMULA_PREVIEW_TOP, start = 16.dp, end = 16.dp).height(52.dp)
+                .padding(top = previewBand.top, start = 16.dp, end = previewBand.end).height(previewBand.height)
                 .testTag("handwriting-formula-preview"), contentAlignment = Alignment.Center) {
                 if (session.hasInk && formulaPreview.isNotEmpty())
                     com.kingzcheung.xime.ui.settings.KatexView(formulaPreview, Modifier.fillMaxSize(), color = keyTextColor.copy(alpha = 0.7f))

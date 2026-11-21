@@ -771,6 +771,10 @@ internal fun ClipboardBoardView(
                 add(LongPressMenuEntry(Icons.Default.PushPin, if (card.key in pins) "取消固定" else "固定") {
                     onPinsChange(if (card.key in pins) pins - card.key else pins + card.key)
                 })
+                // 删除放在第二个（#414：最常用，放最底下要滑才看得到；点了还有确认）。
+                add(LongPressMenuEntry(Icons.Default.DeleteOutline, "删除", colors.error) {
+                    deleteAnchor = anchor.position; deleting = listOf(card)
+                })
                 if (groups.groups.isNotEmpty() || onManageGroups != null) {
                     add(LongPressMenuEntry(Icons.Default.Folder, groups.groupOf(card.key)?.let { "分组：${it.name}" } ?: "分组",
                         tag = "clipboard-item-group") { menuFocus = 0; groupMenu = anchor })
@@ -797,9 +801,6 @@ internal fun ClipboardBoardView(
                 }
                 add(LongPressMenuEntry(Icons.Default.DoneAll, "多选") {
                     selecting = true; selected = setOf(card.key)
-                })
-                add(LongPressMenuEntry(Icons.Default.DeleteOutline, "删除", colors.error) {
-                    deleteAnchor = anchor.position; deleting = listOf(card)
                 })
             }
             keyboardMenuEntries[0] = actions
@@ -863,8 +864,9 @@ internal fun ClipboardBoardView(
                 })
                 add(CompactActionMenuEntry(Icons.Default.Close, "关闭菜单", tag = "clipboard-close-menu") {})
             }
+            // 「…」菜单固定在按钮下方靠右（#414）：不再绕开当时看得到的记录找空位，记录一变位置就跟着变。
             CompactActionMenu(moreAnchor.bounds, actions, onDismiss = { menu = false },
-                occupiedBounds = moreAnchor.occupied, preferSide = false, tag = "clipboard-more-menu",
+                occupiedBounds = emptyList(), preferSide = false, tag = "clipboard-more-menu",
                 surfaceTag = "clipboard-board-action-card")
         }
         deleting?.let { records ->
@@ -984,9 +986,12 @@ private fun ClipboardRecordCard(
                     ImageRequest.Builder(context).data(card.item.uri)
                         .size(widthPx, heightPx.coerceAtLeast(1)).build()
                 }
-                // 「完整」never crops: a picture taller than the board is shown smaller, whole.
-                val whole = previewHeight == null && imageHeight == ClipboardImageHeight.FULL
-                AsyncImage(thumbnail, card.item.label, contentScale = if (whole) ContentScale.Fit else ContentScale.Crop,
+                // 「完整」fills the card's width like the others (user 11-18: a tall screenshot shown whole left wide
+                // empty strips on both sides). The card already follows the picture's shape, so only a picture taller
+                // than the board is cut, and it keeps its top (a screenshot's top is what tells it apart).
+                val keepTop = previewHeight == null && imageHeight == ClipboardImageHeight.FULL
+                AsyncImage(thumbnail, card.item.label, contentScale = ContentScale.Crop,
+                    alignment = if (keepTop) Alignment.TopCenter else Alignment.Center,
                     modifier = if (previewHeight == null) Modifier.fillMaxWidth().height(cardHeight)
                     else Modifier.fillMaxSize())
                 Canvas(Modifier.matchParentSize().testTag("clipboard-image-hatch:${card.key}")) {

@@ -395,6 +395,18 @@ private fun UiNodeEditor(
             )
         }
 
+        UiNodeType.ENTRIES -> PluginEntryListEditor(
+            label = field.label ?: "",
+            helpText = field.helpText,
+            placeholder = field.placeholder,
+            initial = value,
+            defaultValue = field.defaultValue,
+            onChange = {
+                value = it
+                persist()
+            },
+        )
+
         UiNodeType.TEXT,
         UiNodeType.NUMBER -> {
             OutlinedTextField(

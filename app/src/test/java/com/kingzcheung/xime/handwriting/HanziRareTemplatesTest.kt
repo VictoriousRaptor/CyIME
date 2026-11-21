@@ -76,7 +76,16 @@ class HanziRareTemplatesTest {
         val labels = JSONObject(meta).getString("labels")
         // 通用规范汉字表里、内置模型没有的字；扩展A；只能手写的部件拼字
         "犇垚燚叕圐圙婍䴓瀺槻".forEach { assertTrue(it.toString(), labels.contains(it)) }
-        // 模型字表里有的字、表外的繁体写法不在里面（繁体照旧出简体）
-        "的中說國".forEach { assertFalse(it.toString(), labels.contains(it)) }
+        // 扩展 B 以后的字；繁体写法 11-18 起也有模板（d42686012）；模型字表里的简体字仍不在里面
+        for (ch in listOf("𬭊", "𠙶", "𫫇", "說", "國")) assertTrue(ch, labels.contains(ch))
+        "的中".forEach { assertFalse(it.toString(), labels.contains(it)) }
+    }
+
+    /** 回归（11-19）：1.15.100 按 UTF-16 下标取字，扩展 B 的字只取到半个代理对。 */
+    @Test fun supplementaryLabelsDoNotShiftFollowingTemplates() {
+        val (meta, bin) = build("𬭊國", listOf(0 to unit(3 to 1f), 1 to unit(4 to 1f)), n = 1)
+        val templates = HanziRareTemplates.decode(meta, bin, null)!!
+        assertEquals("𬭊", templates.match(listOf(3 to 1f), 1, .9f).single().first)
+        assertEquals("國", templates.match(listOf(4 to 1f), 1, .9f).single().first)
     }
 }

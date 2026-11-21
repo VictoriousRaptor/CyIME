@@ -2,6 +2,9 @@ package com.kingzcheung.xime.ui.keyboard
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -17,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -38,6 +42,20 @@ import androidx.compose.ui.window.PopupProperties
 import com.kingzcheung.xime.rime.PinyinEditSession
 import com.kingzcheung.xime.rime.PinyinEditDisplay
 
+/**
+ * 点开拼音编辑时拼音原来在哪：底色块在键盘窗口里的位置（像素）、底色、字号（sp）。
+ * 编辑条从这里渐渐长成原来的样子（用户 11-21：小签点开要逐渐变大变长；气泡只要逐渐变长）。
+ */
+internal data class PreeditOrigin(val bounds: IntRect, val color: Color, val fontSp: Float)
+
+/** 气泡、小签点开编辑前写进来，编辑条打开时读一次；键盘视图提供，没有时编辑条直接出现。 */
+internal val LocalPreeditOrigin = compositionLocalOf<MutableState<PreeditOrigin?>?> { null }
+
+/** 编辑条从气泡、小签处长成原样的时长。 */
+internal const val PREEDIT_GROW_MS = 180
+
+private fun lerpPx(start: Int, stop: Int, fraction: Float): Int = start + ((stop - start) * fraction).toInt()
+
 /** A non-focusable editing strip above the IME: no replacement keyboard or extra row of keys. */
 @Composable
 internal fun PreeditEditorBar(
@@ -51,6 +69,8 @@ internal fun PreeditEditorBar(
     preedit: String = session.text,
     inline: Boolean = false,
     onCaretBounds: ((com.kingzcheung.xime.service.HardwareCursorAnchor?) -> Unit)? = null,
+    /** 从哪儿长出来（见 [PreeditOrigin]）；null 时直接是原样。 */
+    openFrom: PreeditOrigin? = null,
 ) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = onClose)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -68,6 +88,12 @@ internal fun PreeditEditorBar(
     }
     val density = LocalDensity.current
     val gap = with(density) { 2.dp.roundToPx() }
+    // 打开这一下从哪儿长出来：只认打开时的那个位置，之后小签、气泡再动也不跟。
+    val origin = remember { openFrom.takeIf { !inline } }
+    val grow = remember { Animatable(if (origin == null) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (grow.value < 1f) grow.animateTo(1f, tween(PREEDIT_GROW_MS, easing = FastOutSlowInEasing))
+    }
     // 浮在应用上时和拼音气泡同一个底色、同一个不透明度，开玻璃时下面同样垫实时模糊（用户 11-16：
     // 气泡是实底、一点拼音编辑条就变透，不统一）。放在键盘内（inline）时仍是原来的键帽色淡底。
     val floatingColor = if (inline) null else floatingPreeditColor(
@@ -76,15 +102,21 @@ internal fun PreeditEditorBar(
     val iconColor = floatingColor?.let { codeColor } ?: textColor
     val halo = remember(codeColor, floatingColor) { floatingPreeditHalo(codeColor, floatingColor) }
     val editorBounds = remember { mutableStateOf<IntRect?>(null) }
-    val position = remember(gap) { object : PopupPositionProvider {
+    val position = remember(gap, origin) { object : PopupPositionProvider {
         override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
-            layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = IntOffset(
-            anchorBounds.left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-            (anchorBounds.top - popupContentSize.height - gap).coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)))
+            layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+            // 长大途中：左边、底边从原来那块的位置挪到原样的位置（大小每帧在变，弹窗每帧都会重新算位置）。
+            val t = grow.value
+            val left = origin?.let { lerpPx(it.bounds.left, anchorBounds.left, t) } ?: anchorBounds.left
+            val bottom = origin?.let { lerpPx(it.bounds.bottom, anchorBounds.top - gap, t) } ?: (anchorBounds.top - gap)
+            return IntOffset(
+            left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+            (bottom - popupContentSize.height).coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)))
             .also { offset ->
                 val bounds = IntRect(offset, popupContentSize)
                 if (editorBounds.value != bounds) editorBounds.value = bounds
             }
+        }
     } }
     val content: @Composable (Dp) -> Unit = { width ->
             val caretBoundsModifier = if (onCaretBounds == null) Modifier else {
@@ -111,17 +143,25 @@ internal fun PreeditEditorBar(
             }
             // 浮着时拼音和关闭键合成一整块底（和气泡一样一块），模糊也只垫这一块；放在键盘内时照旧两块。
             // 光晕的图层要在浮窗自己的组合里建，不能从外面带进来。
-            val rowSurface = if (floatingColor == null) Modifier
-                else Modifier.clip(RoundedCornerShape(4.dp)).background(floatingColor).glassTextHalo(halo)
-            Row(Modifier.width(width).height(44.dp).testTag("preedit-editor")
-                .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            // 长大途中：整行从原来那块的大小长到原样，内边距从 0 长到原样，底色、字号也跟着过渡；t=0 时整行就是原来那块。
+            val t = if (origin == null) 1f else grow.value
+            val startWidth = origin?.let { with(density) { it.bounds.width.toDp() } } ?: width
+            val startHeight = origin?.let { with(density) { it.bounds.height.toDp() } } ?: 44.dp
+            val surfaceColor = floatingColor?.let { target ->
+                origin?.let { androidx.compose.ui.graphics.lerp(it.color, target, t) } ?: target }
+            val rowSurface = if (surfaceColor == null) Modifier
+                else Modifier.clip(RoundedCornerShape(4.dp)).background(surfaceColor).glassTextHalo(halo)
+            val placed = editorBounds.value.takeIf { !inline }
+            Row(Modifier.width(lerp(startWidth, width, t)).height(lerp(startHeight, 44.dp, t)).testTag("preedit-editor")
+                .then(if (placed != null) Modifier.semantics { this[PreeditPopupBoundsKey] = placed } else Modifier)
+                .padding(start = 8.dp * t, end = 4.dp * t, top = 6.dp * t, bottom = 6.dp * t),
                 verticalAlignment = Alignment.CenterVertically) {
               Row(Modifier.weight(1f).then(rowSurface), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).then(if (floatingColor == null) Modifier.preeditSurface(keyColor)
                         else Modifier.heightIn(min = PreeditStyle.SurfaceHeight).padding(horizontal = 8.dp))
                     .testTag("preedit-editor-surface"),
                     contentAlignment = Alignment.CenterStart) {
-                    Text(code, color = codeColor, fontSize = PreeditStyle.FontSize, maxLines = 1, softWrap = false,
+                    Text(code, color = codeColor, fontSize = origin?.let { (it.fontSp + (PreeditStyle.FontSize.value - it.fontSp) * t).sp } ?: PreeditStyle.FontSize, maxLines = 1, softWrap = false,
                         onTextLayout = { layout = it }, modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)
                             .testTag("preedit-editor-code")
                             .then(caretBoundsModifier)
@@ -148,7 +188,7 @@ internal fun PreeditEditorBar(
                                 }
                             })
                 }
-                Box(Modifier.padding(start = 4.dp).size(32.dp).clip(RoundedCornerShape(4.dp))
+                Box(Modifier.alpha(t).padding(start = 4.dp).size(32.dp).clip(RoundedCornerShape(4.dp))
                     .then(if (floatingColor == null) Modifier.background(keyColor.copy(alpha = 0.62f)) else Modifier)
                     .clickable(onClick = onClose).testTag("preedit-editor-close"), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Close, "关闭拼音编辑", tint = iconColor, modifier = Modifier.size(24.dp))
@@ -163,9 +203,11 @@ internal fun PreeditEditorBar(
             val glass = LocalKeyboardInputPreferences.current.frostedGlass.normalized()
             if (floatingPreeditBlurBehind(glass)) {
                 // 底色块＝整行去掉内边距（左 8、右 4、上下各 6dp），圆角 4dp，和上面 rowSurface 一致。
-                val start = with(density) { 8.dp.roundToPx() }
-                val end = with(density) { 4.dp.roundToPx() }
-                val vertical = with(density) { 6.dp.roundToPx() }
+                // 长大途中内边距跟着从 0 长到原样。
+                val t = if (origin == null) 1f else grow.value
+                val start = with(density) { (8.dp * t).roundToPx() }
+                val end = with(density) { (4.dp * t).roundToPx() }
+                val vertical = with(density) { (6.dp * t).roundToPx() }
                 PreeditBubbleBlur(editorBounds.value?.let {
                     IntRect(it.left + start, it.top + vertical, it.right - end, it.bottom - vertical)
                 }, glass.blurRadiusDp, with(density) { 4.dp.toPx() })

@@ -72,3 +72,40 @@ internal class DoublePinyinCaretMap private constructor(
         }
     }
 }
+
+/**
+ * 双拼编辑栏里是双拼键（woxlvidc…），一个音节两个键。点在一个音节的两个键中间时，光标落到音节分界：
+ * 不然选了光标前的词，后面的键从半个音节开始重新切分，拼音条变成乱码（11-19 小鹤双拼：点中间选词，后面的拼音没了）。
+ * [reading] 是引擎的读音（显示全拼时 wo'xiang，不显示时 wo xl），对得上的音节才算分界；光标后原样回显的键按两个一组。
+ * 读音对不上的地方不动光标。[direction] 0 取最近的分界（一样近取后面），1 往后，-1 往前。
+ */
+internal fun snapDoublePinyinCaret(raw: String, reading: String, scheme: DoublePinyinScheme?, caret: Int, direction: Int = 0): Int {
+    val boundaries = sortedSetOf(0)
+    var r = 0
+    fun skipSeparators() { while (r < raw.length && raw[r] == '\'') { boundaries += r; r++; boundaries += r } }
+    skipSeparators()
+    for (syllable in reading.lowercase().replace('ü', 'v').split(' ', '\'').filter { it.isNotEmpty() }) {
+        val code = scheme?.code(syllable)
+        when {
+            code != null && raw.startsWith(code, r) -> r += code.length
+            raw.startsWith(syllable, r) -> {
+                // 原样回显的一串键（光标后面的部分）：两个键一个音节。
+                for (i in 2 until syllable.length step 2) boundaries += r + i
+                r += syllable.length
+            }
+            else -> break
+        }
+        boundaries += r
+        skipSeparators()
+    }
+    val position = caret.coerceIn(0, raw.length)
+    if (position in boundaries || position > boundaries.last()) return position
+    val before = boundaries.floor(position) ?: 0
+    val after = boundaries.ceiling(position) ?: return position
+    return when {
+        direction > 0 -> after
+        direction < 0 -> before
+        position - before < after - position -> before
+        else -> after
+    }
+}

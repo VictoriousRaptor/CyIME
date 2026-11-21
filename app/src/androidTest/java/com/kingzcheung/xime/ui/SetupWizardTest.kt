@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.kingzcheung.xime.rime.PreparationProgress
+import com.kingzcheung.xime.ui.settings.PreparationStall
 import com.kingzcheung.xime.ui.settings.SetupStatus
 import com.kingzcheung.xime.ui.settings.SetupWizardContent
 import org.junit.Assert.*
@@ -64,5 +66,25 @@ class SetupWizardTest {
         rule.onNodeWithText("仍用输入法选择框").performScrollTo().performClick()
         assertEquals(1, settings)
         assertEquals(1, picker)
+    }
+    /** 11-20：准备时显示第几步、在写哪个文件；超时后说停在哪、给日志和下一步，能导出日志。 */
+    @Test fun preparationShowsTheStepAndATimeoutNotice() {
+        var exports = 0
+        val stall = mutableStateOf<PreparationStall?>(null)
+        rule.setContent { MaterialTheme {
+            SetupWizardContent(SetupStatus(), {}, {}, {}, {}, {},
+                progress = PreparationProgress.State(PreparationProgress.Step.COMPILE, "正在写 rime_ice.table.bin（38 MB）", done = 1, total = 3),
+                stepElapsedMs = 42_000L, stall = stall.value, onExportLog = { exports++ })
+        } }
+        rule.onNodeWithText("第 3/3 步：编译词库（42 秒）").assertExists()
+        rule.onNodeWithText("已编译词典 1/3").assertExists()
+        rule.onNodeWithText("正在写 rime_ice.table.bin（38 MB）").assertExists()
+        rule.onNodeWithText("导出日志").assertDoesNotExist()
+        rule.runOnIdle { stall.value = PreparationStall(200, "编译词库", listOf("23:10:00 [W] RimeConfigHelper: full deploy"),
+            listOf("别切到别的应用")) }
+        rule.onNodeWithText("超时了：已经 3 分钟没有新进展").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("停在：编译词库").assertExists()
+        rule.onNodeWithText("导出日志").performScrollTo().performClick()
+        assertEquals(1, exports)
     }
 }

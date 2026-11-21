@@ -48,6 +48,8 @@ struct T9ScriptOptions {
   size_t t9_display_sentences_ = 0;
   double t9_spelling_penalty_ = 5.0;
   double t9_word_penalty_ = 8.0;
+  // t9/tail_completion_weight (ln units, 0 = off): words ending in a syllable the last typed digits only begin.
+  double t9_tail_completion_weight_ = 0;
   size_t t9_whole_input_phrases_ = 0;
   bool t9_prefer_user_entries_ = false;
   double t9_correction_penalty_ = -4.605170185988091;  // log(0.01): Rime's corrected-syllable credibility

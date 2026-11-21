@@ -132,4 +132,29 @@ class ClipboardBoardContentTest {
         assertEquals(4, clipboardRecentImageCount(7))
         assertEquals(0, clipboardRecentImageCount(0))
     }
+
+    /** 用户 11-19：连拍几张照片，截图不能被全挤掉；4 张时 3 张照片 + 1 张截图。 */
+    @Test fun eachPictureSourceKeepsItsNewestOne() {
+        fun shot(n: Int) = ClipboardImage("content://media/external/images/media/$n", "image/png", n.toLong(),
+            ScreenshotImageSource.SCREENSHOT_LABEL)
+        fun photo(n: Int) = ClipboardImage("content://media/external/images/media/$n", "image/jpeg", n.toLong(),
+            ScreenshotImageSource.PHOTO_LABEL)
+        fun copied(n: Int) = ClipboardImage("content://cyime/clip/$n", "image/png", n.toLong(), source = "x", sha256 = "h$n")
+        fun shown(images: List<ClipboardImage>, count: Int) = withRecentImageCount(
+            clipboardCards(emptyList(), images, ClipboardFilter.ALL, emptySet()), emptySet(), count)
+            .map { (it as ClipboardCard.Image).item.timestamp.toInt() }
+
+        // Screenshots 1..3, then a burst of photos 10..15: the newest screenshot stays, photos fill the rest.
+        val burst = (1..3).map { shot(it) } + (10..15).map { photo(it) }
+        assertEquals(listOf(15, 14, 13, 3), shown(burst, 4))
+        assertEquals(listOf(15, 3), shown(burst, 2))
+        // A copied picture is never pushed out either; with two places the copy and the screenshot win.
+        val all = burst + copied(5)
+        assertEquals(listOf(15, 14, 5, 3), shown(all, 4))
+        assertEquals(listOf(5, 3), shown(all, 2))
+        // Only one source: simply the newest ones, as before.
+        assertEquals(listOf(15, 14, 13, 12), shown((10..15).map { photo(it) }, 4))
+        // A pasted screenshot copied into history counts as copied, not as a screenshot.
+        assertEquals(ClipboardImageKind.COPIED, shot(1).copy(source = "content://media/external/images/media/1", sha256 = "h").kind)
+    }
 }

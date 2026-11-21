@@ -105,4 +105,17 @@ class PinyinEditBufferTest {
         assertNull(PinyinEditSession(1, "rime_ice", "ulpb", "", "", "ulpb", 4, false).editOffset("shuang'pin", 6))
         assertNull(session.editOffset("ni'hao", 2))
     }
+
+    @Test fun microsoftDoublePinyinSemicolonStaysInTheEditableCode() {
+        // #365: 微软双拼 p;vg（凭证）里的分号被当成不认识的字符，前面的 p 改不了。
+        assertEquals("p;vg", PinyinEditBuffer.normalized("p;vg", false, true))
+        assertEquals("p;'vg", PinyinEditBuffer.normalized("p; vg", false, true))
+        assertEquals("pvg", PinyinEditBuffer.normalized("p;vg", false, false))
+        assertTrue(PinyinEditBuffer.keepsSemicolon("double_pinyin_mspy"))
+        assertFalse(PinyinEditBuffer.keepsSemicolon("rime_ice"))
+        // 编码里的分号也能对上输入框里显示的全拼，点 ping 后面落在 p; 后面。
+        val session = PinyinEditSession(1, "double_pinyin_mspy", "p;vg", "", "", "p;vg", 4, false)
+        assertEquals(2, session.editOffset("ping'zheng", 4))
+        assertEquals(0, session.editOffset("ping'zheng", 0))
+    }
 }

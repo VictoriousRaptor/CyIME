@@ -185,7 +185,8 @@ class HardwareCandidateNavigationTest {
         val navigation = HardwareCandidateNavigation()
         val source = snapshot(composition.copy(candidates = (0..15).map { "词$it" }, hasNextPage = true, hasPrevPage = true))
         repeat(20) { navigation.decide(HardwareCandidateKey.RIGHT, source, true) }
-        assertEquals(9, navigation.selectedIndex(source))
+        // 16 个候选按放得下的个数平均分组（b9617b55）：8、8 两组，高亮最多走到第 8 个。
+        assertEquals(7, navigation.selectedIndex(source))
         assertEquals(HardwareCandidateDecision.Page(1, wholeWindow = true),
             navigation.decide(HardwareCandidateKey.RIGHT, source, true, pageAtBoundary = true))
         assertEquals(HardwareCandidateDecision.Page(-1), navigation.decide(HardwareCandidateKey.LEFT, source, true, pageAtBoundary = true))
@@ -385,7 +386,27 @@ class HardwareCandidateNavigationTest {
     private val twentyCandidates = CandidateState(inputText = "shi", isComposing = true,
         candidates = (1..20).map { "候选$it" }, hasNextPage = true, engineRevision = 7L)
 
-    // 有意与 Windows 不同：空格不跟随工具栏高亮，上屏后的联想永远不被空格选中（见 physicalCandidateDecision）。
+    // 11-18 用户反馈：Tab 移到第三个，空格上屏的还是第一个。组词时空格上屏高亮的那个；联想照旧不被空格选中。
+    @Test fun physicalSpaceCommitsTheCandidateTabHighlighted() {
+        val navigation = HardwareCandidateNavigation()
+        val source = HardwareCandidateSnapshot(1, pinyin26, composition, false)
+        assertEquals(HardwareCandidateDecision.Highlight(1),
+            navigation.decide(HardwareCandidateKey.RIGHT, source, true, pageAtBoundary = true))
+        assertEquals(HardwareCandidateDecision.Highlight(2),
+            navigation.decide(HardwareCandidateKey.RIGHT, source, true, pageAtBoundary = true))
+        assertEquals(HardwareCandidateDecision.Confirm(2, false), physicalCandidateDecision(HardwareCandidateKey.SPACE,
+            source, true, highlighted = navigation.selectedIndex(source)))
+        // 一个新的组字（下一个字母）不带着旧高亮。
+        val next = HardwareCandidateSnapshot(1, pinyin26, composition.copy(engineRevision = composition.engineRevision + 1), false)
+        assertEquals(null, navigation.selectedIndex(next))
+        assertEquals(HardwareCandidateDecision.Confirm(0, false), physicalCandidateDecision(HardwareCandidateKey.SPACE,
+            next, true, highlighted = navigation.selectedIndex(next)))
+        // 高亮超出这一组（数据变了）时退回默认候选。
+        assertEquals(HardwareCandidateDecision.Confirm(0, false), physicalCandidateDecision(HardwareCandidateKey.SPACE,
+            source, true, highlighted = 99))
+    }
+
+    // 有意与 Windows 不同：上屏后的联想永远不被空格选中（见 physicalCandidateDecision）。
     @Test fun physicalSpaceKeepsTheDefaultCandidateAndNeverPicksSuggestions() {
         val source = HardwareCandidateSnapshot(1, pinyin26, composition, false)
         assertEquals(HardwareCandidateDecision.Confirm(0, false),
@@ -466,15 +487,18 @@ class HardwareCandidateNavigationTest {
     }
 
     // 用户 11-16：平板接蓝牙键盘输 yi，一行放得下 9 个，原来按 9、9、2 分组，第三组空一大片，每页循环。
+    // 11-19：第一组放满（不再先画满再缩，宽度不跳），最后两组平分。
     @Test fun aPageThatDoesNotDivideEvenlyIsSplitIntoEvenGroups() {
-        assertEquals(listOf(7, 7, 6), generateSequence(20) { it - hardwareWindowSize(it, 9) }
+        assertEquals(listOf(9, 6, 5), generateSequence(20) { it - hardwareWindowSize(it, 9) }
             .takeWhile { it > 0 }.map { hardwareWindowSize(it, 9) }.toList())
         assertEquals(10, hardwareWindowSize(20, 10))
         assertEquals(5, hardwareWindowSize(5, 9))
+        assertEquals(listOf(8, 8), generateSequence(16) { it - hardwareWindowSize(it, 10) }
+            .takeWhile { it > 0 }.map { hardwareWindowSize(it, 10) }.toList())
         val navigation = HardwareCandidateNavigation()
         navigation.reportShown(twentyCandidates.candidates.take(10), 9)
         val first = HardwareCandidateSnapshot(1, pinyin26, twentyCandidates, false, windowStep = navigation.step(twentyCandidates))
-        assertEquals((1..7).map { "候选$it" }, first.words)
+        assertEquals((1..9).map { "候选$it" }, first.words)
         val sizes = mutableListOf(first.words.size)
         while (navigation.moveWindow(twentyCandidates, 1)) {
             val start = navigation.windowStart(twentyCandidates)
@@ -483,7 +507,7 @@ class HardwareCandidateNavigationTest {
             sizes += shown.words.size
             navigation.reportShown(shown.words, shown.words.size)
         }
-        assertEquals(listOf(7, 7, 6), sizes)
+        assertEquals(listOf(9, 6, 5), sizes)
     }
 
     @Test fun anUnmeasuredRowKeepsTheNumberedTen() {

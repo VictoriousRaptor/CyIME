@@ -54,8 +54,7 @@ internal fun DoublePinyinAuxCodeSetting(keyboardPrefs: KeyboardInputPreferences)
         ?.takeIf { selected == null }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("double-pinyin-aux-code")) {
         Text("辅助码", style = MaterialTheme.typography.bodyLarge)
-        Text("双拼 26 键打完拼音，点左下角的「辅」（打字时 Shift 键变成它；实体键盘按 `），再打第一个字的形码，" +
-            "候选只留第一个字对得上的：小鹤双拼打 hc，点「辅」再打 nz，只剩“好”和“好”开头的词。不点「辅」时和关着一样。改完要几秒重新部署",
+        Text("打完拼音后点「辅」再打字形编码，筛选候选",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (lock != null) SettingsLockNote(lock.message)
         Column(Modifier.selectableGroup()) {

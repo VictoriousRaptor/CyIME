@@ -310,6 +310,8 @@ internal fun FloatingKeyboardContainer(
         val dragging = isDragging
         // 固定键盘上拉刚变成悬浮：卡片跟着那根手指走（只在摆放阶段读手指位置，不重组键盘）。
         val undockFollow = LocalKeyboardUndockFollow.current?.takeIf { !geometryLocked && previewRect == null && rotatedRect == null }
+        // 拖着走、拖角调大小、上拉变悬浮跟手指时，窗口按屏幕最高刷新率画（用户 11-19）。
+        HighRefreshWhile(isDragging || cornerRect != null || undockFollow != null)
         val followBounds = floatingViewportBounds(maxWidth.value * density.density, maxHeight.value * density.density,
             minOffsetY.coerceAtLeast(0) * density.density)
         fun followShiftPx(): Offset {
@@ -318,9 +320,10 @@ internal fun FloatingKeyboardContainer(
                 UNDOCK_FOLLOW_GRAB_DP * density.density, followBounds)
             return Offset(target.left - normalRect.left, target.top - normalRect.top)
         }
+        // 拖动中按像素跟手指走，不再先取整到整 dp：原来每过一整 dp（约 3 像素）卡片才挪一下，
+        // 慢慢拖时一秒只动几十下，看着像掉帧（用户 11-19）。松手时后台照旧取整到 dp 保存，最多差半个 dp。
         fun liveShiftPx(): Offset = if (dragging)
-            Offset((dragX.roundToInt() - dragStartX.roundToInt()) * density.density,
-                -(dragY.roundToInt() - dragStartY.roundToInt()) * density.density)
+            Offset((dragX - dragStartX) * density.density, -(dragY - dragStartY) * density.density)
             else followShiftPx()
         if (undockFollow != null) {
             // 松手：和拖底部拖动条一样，把整段位移一次交给后台限位、保存，再亮一下四角。
@@ -420,10 +423,15 @@ internal fun FloatingKeyboardContainer(
                 }
                 Spacer(Modifier.height(footerDp.dp))
             }
-            // Paint from the bottom row's visible cap edge. Its inset still receives key touches.
+            // 底色只铺键区下面那段（拖动条）：键区自己的背景已经铺到最下一排的键帽下沿和底部留白，
+            // 再从键帽下沿起叠一层，玻璃、半透明底色时两层叠出一条更亮的横条（11-19 悬浮键盘开玻璃效果）。
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .height(footerDp.dp.coerceAtMost(cardTotalHeight))
+                .testTag("floating-footer-background").keyboardPanelBackground(backgroundColor))
+            // 拖动区从最下一排的键帽下沿算起，小横条在这一段里居中；键帽下沿以下仍接按键触摸。
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height((dragAreaHeight + capInset.floatValue.dp).coerceAtMost(cardTotalHeight))
-                .testTag("floating-footer").keyboardPanelBackground(backgroundColor), contentAlignment = Alignment.Center) {
+                .testTag("floating-footer"), contentAlignment = Alignment.Center) {
                 if (!hideDragBar) FloatingFooterIndicator(geometryLocked, dragIndicatorColor, footerDp.toFloat(), lockNudge)
             }
             if (!hideDragBar && previewRect == null) DragBar(

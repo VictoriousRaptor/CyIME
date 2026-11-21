@@ -136,6 +136,8 @@ internal fun DraggableFloatingBar(
         val currentDisplayed by rememberUpdatedState(displayed)
         val moving = dragging != null || animated != Offset(resting.x, resting.y)
         LaunchedEffect(moving) { currentMovingChange(moving) }
+        // 拖动和松手归位期间按屏幕最高刷新率跟手（用户 11-19）。
+        HighRefreshWhile(moving)
         // 拖动中松手会停到哪：只在目标变了时重组，不是每帧。
         val dropTarget by remember(geometry, position, dockAtEdge, sideDock, dockPushPx) {
             derivedStateOf {

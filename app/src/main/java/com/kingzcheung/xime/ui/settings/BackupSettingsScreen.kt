@@ -101,7 +101,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { pendingImport = null },
             title = { Text("从备份恢复") },
-            text = { Text("备份中的设置会覆盖当前对应的设置；若备份含个人词库，也会覆盖当前词库。剪贴板记录合并进来，已有的不重复。恢复后输入方案会重新部署。") },
+            text = { Text("备份里的设置和词库会覆盖现在的，剪贴板记录会合并。") },
             confirmButton = {
                 TextButton(onClick = {
                     pendingImport = null
@@ -155,7 +155,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Person,
                         title = "包含个人词库与学习数据",
-                        subtitle = "自造词、调频记录、自定义短语和个人词库；属于隐私数据，体积也较大",
+                        subtitle = "自造词、词频和个人词库，属于隐私数据",
                         checked = includePersonal,
                         onCheckedChange = { includePersonal = it; BackupChoices.setIncludePersonal(context, it) }
                     )
@@ -167,8 +167,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                         onCheckedChange = { includeClipboardHistory = it; BackupChoices.setIncludeClipboardHistory(context, it) }
                     )
                     Text(
-                        text = "始终包含：全部设置项、工具栏与菜单排列、主题与背景图、键盘布局与尺寸、自定义布局和方案定制、" +
-                            "剪贴板里固定和分组的记录。不含插件、下载的模型、补充词库、剪贴板图片和记下的密码。",
+                        text = "总会备份设置、主题、布局和固定的剪贴板记录；不含插件、模型、剪贴板图片和密码。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
@@ -216,7 +215,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                             }
                         }
                         Text(
-                            text = "备份文件只保存到你选择的位置，不会上传到任何地方。",
+                            text = "备份只存到你选的位置，不会上传。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )

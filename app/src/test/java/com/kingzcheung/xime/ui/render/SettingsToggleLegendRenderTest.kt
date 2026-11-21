@@ -133,7 +133,10 @@ class SettingsToggleLegendRenderTest {
         ShiftSyllableSplitLegend(on)
         SemicolonOnShiftLegend(on)
         DoublePinyinAbbreviationLegend(on)
-        CandidateExtraLegend("rare-characters-legend", "gui", listOf("鬼", "贵", "归"), "槻", on, skipped = true)
+        CandidateExtraLegend("rare-characters-legend", "chan", listOf("缠", "馋", "产"), "瀺", on, skipped = true)
+        CandidateExtraLegend("japanese-kanji-legend", "ze", listOf("泽", "则", "责"), "沢", on, skipped = true)
+        CandidateExtraLegend("korean-hanja-legend", "jia", listOf("家", "加", "假"), "乫", on, skipped = true)
+        CandidateExtraLegend("cantonese-characters-legend", "qu", listOf("去", "区", "取"), "佢", on, skipped = true)
         CandidateExtraLegend("datetime-candidates-legend", "shijian", listOf("时间"), "15:35", on)
         CandidateExtraLegend("candidate-emoji-legend", "kaixin", listOf("开心"), "😄", on)
         CandidateExtraLegend("symbol-names-legend", "jiahao", listOf("加号"), "+", on)
@@ -149,7 +152,7 @@ class SettingsToggleLegendRenderTest {
     @Test fun legendsShowTheAddedItemOnlyWhenTheirSwitchIsOn() {
         val on = mutableStateOf(false)
         rule.setContent { XimeTheme(darkTheme = false) { AllLegends(on.value) } }
-        val added = listOf("槻", "15:35", "😄", "+", "π", "微信支付", "qq.com", "分词", "␣")
+        val added = listOf("瀺", "沢", "乫", "佢", "15:35", "😄", "+", "π", "微信支付", "qq.com", "分词", "␣")
         fun count(text: String) = rule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().size
         fun dividers() = rule.onAllNodesWithTag("candidate-spacing-legend-divider", useUnmergedTree = true)
             .fetchSemanticsNodes().size

@@ -194,9 +194,14 @@ internal fun KeyboardSettingsScaffold(
     val visible = preview && selected && KeyboardPanelLaunch.previewVisible
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     var trialOwnsIme by remember { mutableStateOf(false) }
+    var previewOwnsIme by remember { mutableStateOf(false) }
     LaunchedEffect(typing, imeBottom) {
         if (typing) trialOwnsIme = true
         else if (imeBottom == 0) trialOwnsIme = false
+    }
+    LaunchedEffect(visible, imeBottom) {
+        if (visible) previewOwnsIme = true
+        else if (imeBottom == 0) previewOwnsIme = false
     }
     Box(modifier) {
     Scaffold(modifier = Modifier.fillMaxSize(), containerColor = MaterialTheme.colorScheme.surface, topBar = {
@@ -210,15 +215,15 @@ internal fun KeyboardSettingsScaffold(
         // 预览键盘显示时页面不再整体顶到键盘上方（原来两侧镂空处只剩一块纯色底，11-01 平板截图）：
         // 列表铺到键盘后面，末尾留出键盘那段。真实输入框弹出的键盘照旧把页面顶上去。
         val density = LocalDensity.current
-        val keyboardInset = if (visible) with(density) {
+        val keyboardInset = if (visible || previewOwnsIme) with(density) {
             (WindowInsets.ime.getBottom(this).toDp() - padding.calculateBottomPadding()).coerceAtLeast(0.dp)
         } else 0.dp
         // 「显示键盘」做成悬浮按钮（11-03「两边不能站满 应该做成浮动按钮」）：列表铺到页面底边，两侧露出设置；
         // 列表末尾空出按钮的高度，滚到底最后一项在按钮上方。
-        val floatingButton = preview && !visible
-        val listEndInset = keyboardInset + if (floatingButton) SHOW_KEYBOARD_BUTTON_SPACE else 0.dp
+        val floatingButton = preview && !visible && !previewOwnsIme
+        val listEndInset = if (preview) maxOf(keyboardInset, SHOW_KEYBOARD_BUTTON_SPACE) else keyboardInset
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
-            .then(if (preview && !visible && !typing && !trialOwnsIme) Modifier.imePadding() else Modifier)) {
+            .then(if (preview && !visible && !previewOwnsIme && !typing && !trialOwnsIme) Modifier.imePadding() else Modifier)) {
             Box(Modifier.fillMaxWidth().weight(1f)) {
               CompositionLocalProvider(LocalKeyboardPreviewInset provides listEndInset, LocalTypingTrialOpen provides typing) {
                 if (editPanel == null) content(Modifier.fillMaxSize())
@@ -273,12 +278,12 @@ private fun TypingTrialOverlay(onReady: () -> Unit, onClose: () -> Unit) {
     val imm = remember(context) { context.getSystemService(InputMethodManager::class.java) }
     var field by remember { mutableStateOf<EditText?>(null) }
     val close: () -> Unit = {
-        field?.let { imm?.hideSoftInputFromWindow(it.windowToken, 0) }
+        field?.let { imm?.hideSoftInputFromWindow(it.windowToken, 0); it.clearFocus() }
         onClose()
     }
     val currentOnClose by rememberUpdatedState(onClose)
     DisposableEffect(Unit) {
-        val dismiss = { currentOnClose() }
+        val dismiss = { field?.clearFocus(); currentOnClose() }
         KeyboardPanelLaunch.closeTypingTrial = dismiss
         onDispose { if (KeyboardPanelLaunch.closeTypingTrial === dismiss) KeyboardPanelLaunch.closeTypingTrial = null }
     }
@@ -291,8 +296,13 @@ private fun TypingTrialOverlay(onReady: () -> Unit, onClose: () -> Unit) {
     val imeTarget = WindowInsets.imeAnimationTarget.getBottom(density)
     var imeShown by remember { mutableStateOf(false) }
     LaunchedEffect(imeVisible, imeSource, imeTarget) {
-        if (imeVisible) imeShown = true
-        if (imeShown && ((!imeVisible) || (imeSource > 0 && imeTarget == 0))) onClose()
+        // A newly opened trial can overlap the previous IME hide animation.
+        // Do not treat that old animation as this trial being dismissed.
+        if (imeVisible && imeTarget > 0) imeShown = true
+        if (imeShown && ((!imeVisible) || (imeSource > 0 && imeTarget == 0))) {
+            field?.clearFocus()
+            onClose()
+        }
     }
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     Box(Modifier.fillMaxSize().testTag("typing-trial")

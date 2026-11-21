@@ -29,15 +29,15 @@ class FloatingDockGestureTest {
         assertTrue(floatingDockOnRelease(gesture.progress, gesture.armed, true))
     }
 
-    /** 他 10-23 定的 0.75 秒：比 0.5 秒不容易误贴，又不像 1 秒那么慢。 */
-    @Test fun dockingWaitsThreeQuartersOfASecondOnTheEdge() {
-        assertEquals(750L, FLOATING_DOCK_DURATION_MILLIS)
+    /** 他 11-20 定的 0.4 秒（原 10-23 的 0.75 秒嫌长，0.15 秒太快）；到底后再往下顶才开始计时。 */
+    @Test fun dockingWaitsFourTenthsOfASecondOnTheEdge() {
+        assertEquals(400L, FLOATING_DOCK_DURATION_MILLIS)
         val gesture = FloatingDockGesture()
         gesture.move(0f, 12f, true)
         val first = gesture.epoch
-        gesture.advanceHold(299, first)
+        gesture.advanceHold(150, first)
         assertTrue(gesture.progress < 1f)
-        gesture.advanceHold(700, first)
+        gesture.advanceHold(390, first)
         assertTrue(gesture.progress < 1f)
         // 卡片离开底边贴边区：作废；回来要重新往下顶、重新计时。
         gesture.move(0f, 0f, false)
@@ -45,7 +45,7 @@ class FloatingDockGestureTest {
         gesture.move(0f, 12f, true)
         gesture.advanceHold(900, first)
         assertEquals(0f, gesture.progress, 0f)
-        gesture.advanceHold(750, gesture.epoch)
+        gesture.advanceHold(400, gesture.epoch)
         assertEquals(1f, gesture.progress, 0f)
         gesture.cancel()
         assertFalse(gesture.armed)

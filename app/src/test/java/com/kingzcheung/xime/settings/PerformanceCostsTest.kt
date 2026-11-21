@@ -123,17 +123,17 @@ class PerformanceCostsTest {
     @Test fun neverReleaseWarningSaysHowMuchAndWhatHappensWhenMemoryRunsOut() {
         val withVoice = device.copy(voiceResident = PerformanceCosts.Cost(memoryMb = 605.0))
         val same = PerformanceCosts.voiceResidentWarning(PerformanceCosts.Source(withVoice, local = false, sameModel = true))
-        assertTrue(same, same.startsWith("语音模型会一直占着 605 MB 内存，"))
-        assertTrue(same.contains("系统内存紧张时会自动卸掉语音模型"))
+        assertTrue(same, same.startsWith("语音模型会一直占着 605 MB 内存。"))
+        assertTrue(same.contains("内存紧张时系统会自动卸掉"))
         assertTrue(same.contains("打字不受影响"))
         // 用户 11-03：说明一律英文括号。
         assertFalse(same.contains('（') || same.contains('）'))
         val other = PerformanceCosts.voiceResidentWarning(PerformanceCosts.Source(withVoice, local = false, sameModel = false))
-        assertTrue(other, other.startsWith("语音模型会一直占着 605 MB 内存(Galaxy Tab S8+ 实测)，"))
+        assertTrue(other, other.startsWith("语音模型会一直占着 605 MB 内存(Galaxy Tab S8+ 实测)。"))
         // 表里没有这项或读不到表：不写数，提醒照样有。
-        assertTrue(PerformanceCosts.voiceResidentWarning(null).startsWith("语音模型会一直占着内存，"))
+        assertTrue(PerformanceCosts.voiceResidentWarning(null).startsWith("语音模型会一直占着内存。"))
         assertTrue(PerformanceCosts.voiceResidentWarning(PerformanceCosts.Source(device, local = false, sameModel = true))
-            .startsWith("语音模型会一直占着内存，"))
+            .startsWith("语音模型会一直占着内存。"))
     }
 
     @Test fun negligibleCostsShowNoLineAndNoAbout() {

@@ -1,0 +1,30 @@
+package com.kingzcheung.xime.ui
+
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+
+/**
+ * 候选栏没有展开按钮了（用户 11-20）：在候选上横着拉过门槛松手才展开。
+ * [leftward] 为 true 是手指往左拉，false 往右。候选栏上往右拉展开、展开着往左拉收回（用户 11-21），默认往右。
+ */
+internal fun SemanticsNodeInteraction.pullAcross(leftward: Boolean = false, fraction: Float = 0.8f): SemanticsNodeInteraction =
+    performTouchInput {
+        val margin = (1f - fraction) / 2f
+        val a = Offset(width * (1f - margin), centerY)
+        val b = Offset(width * margin, centerY)
+        swipe(if (leftward) a else b, if (leftward) b else a, durationMillis = 300)
+    }
+
+/** 在候选栏上往右拉开展开页。 */
+internal fun SemanticsNodeInteractionsProvider.pullOpenCandidates(useUnmergedTree: Boolean = false) {
+    onNodeWithTag("candidate-pull-expand", useUnmergedTree).pullAcross()
+}
+
+/** 在展开页的候选区横着划，收回展开页。 */
+internal fun SemanticsNodeInteractionsProvider.swipeCloseCandidates() {
+    onNodeWithTag("expanded-candidates", useUnmergedTree = true).pullAcross(leftward = true)
+}

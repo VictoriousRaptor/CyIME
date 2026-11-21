@@ -27,26 +27,31 @@ object TxtCellDictionary {
     const val MAX_BYTES = 128 * 1024 * 1024
     const val MAX_ENTRIES = 2_000_000
 
-    data class Summary(val count: Int, val skipped: Int, val english: List<String>)
+    /** [stroke]：笔画词库的词（「词 笔画编码」，没有拼音），只给笔画方案用（[StrokeCellDictionary]）。 */
+    data class Summary(val count: Int, val skipped: Int, val english: List<String>, val stroke: Int = 0)
 
     fun parse(bytes: ByteArray): ScelDictionary.Parsed {
         require(bytes.size <= MAX_BYTES) { "词库超过 128 MB，请拆分后导入" }
         val entries = ArrayList<DictEntry>()
         val summary = read({ bytes.inputStream() }) { entries += it }
+        // 这条路不存笔画词（只有 installFile 存），只有笔画编码时照旧报没读到词，不装一个空词库。
+        require(entries.isNotEmpty() || summary.english.isNotEmpty()) { "没有读到带拼音的词条（每行“词 拼音”或“拼音 词”）" }
         return ScelDictionary.Parsed("", entries, summary.skipped, summary.english)
     }
 
     /**
      * Streams the file twice (encoding and Rime header check, then the words). [sink] gets each word and pinyin
      * once, in file order. Duplicates are found by a 64-bit key, so 1.5 million words take 16 MB, not a map of all.
+     * A line with no pinyin but a stroke code (`猫娘 pz`, h s p n z) goes to [stroke] once instead of being skipped.
      */
-    fun read(open: () -> InputStream, sink: (DictEntry) -> Unit): Summary {
+    fun read(open: () -> InputStream, stroke: (String) -> Unit = {}, sink: (DictEntry) -> Unit): Summary {
         val (charset, bom) = charset(open)
         // A Rime .dict.yaml: only the entries after its header, the first "..." line after line one.
         var header = -1
         lines(open, charset, bom) { index, line -> if (header < 0 && index > 0 && line == "...") header = index }
         val seen = LongSet()
         val english = LinkedHashSet<String>()
+        val strokeSeen = LongSet()
         var skipped = 0
         lines(open, charset, bom) { index, raw ->
             if (index <= header) return@lines
@@ -55,12 +60,18 @@ object TxtCellDictionary {
             val latin = englishWord(line)
             if (latin != null) { english += latin; return@lines }
             val entry = parseLine(line)
-            if (entry == null) { skipped++; return@lines }
+            if (entry == null) {
+                val strokeWord = strokeWord(line)
+                if (strokeWord == null) skipped++ else if (strokeSeen.add(key(strokeWord, "\u0001"))) stroke(strokeWord)
+                return@lines
+            }
             if (seen.add(key(entry.word, entry.code))) sink(entry)
-            require(seen.size + english.size <= MAX_ENTRIES) { "词库超过 200 万条词语，请拆分后导入" }
+            require(seen.size + english.size + strokeSeen.size <= MAX_ENTRIES) { "词库超过 200 万条词语，请拆分后导入" }
         }
-        require(seen.size > 0 || english.isNotEmpty()) { "没有读到带拼音的词条（每行“词 拼音”或“拼音 词”）" }
-        return Summary(seen.size, skipped, english.toList())
+        require(seen.size > 0 || english.isNotEmpty() || strokeSeen.size > 0) {
+            "没有读到带拼音或笔画编码的词条（每行“词 拼音”“拼音 词”或“词 笔画编码”）"
+        }
+        return Summary(seen.size, skipped, english.toList(), strokeSeen.size)
     }
 
     private val latin = Regex("[A-Za-z0-9][A-Za-z0-9 '._&+-]{0,62}")
@@ -85,6 +96,20 @@ object TxtCellDictionary {
         if (pinyin.isEmpty() || !letters.matches(pinyin)) return null
         val code = syllables(pinyin, text.length) ?: return null
         return DictEntry(text, code, 100)
+    }
+
+    private val strokeCode = Regex("[hspnz']+")
+
+    /**
+     * 笔画词库的一行（11-19 贡献者）：词后面（或前面）跟 h s p n z 笔画编码，每字首笔（`猫娘 pz`）、整串笔画或用 ' 隔开都行，
+     * 词频数字不读。拼音读不出来时才这样认。返回词，不是笔画行返回 null。编码不留：用的时候按笔画码表现算（[StrokeCellDictionary]）。
+     */
+    internal fun strokeWord(line: String): String? {
+        val fields = line.split('\t', ' ', ',', '，').filter { it.isNotEmpty() }
+        val text = fields.firstOrNull { word.matches(it) } ?: return null
+        val codes = fields.filter { it != text && it.any(Char::isLetter) }
+        if (codes.isEmpty() || !codes.all { strokeCode.matches(it.lowercase()) }) return null
+        return text
     }
 
     /** Space-separated syllables, one per character, or null when the pinyin does not spell them. */

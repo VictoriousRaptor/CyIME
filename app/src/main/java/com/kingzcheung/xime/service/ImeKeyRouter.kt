@@ -62,7 +62,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
     private fun chineseCodeSyllables(code: String, result: com.kingzcheung.xime.rime.RimeProcessResult?,
         allowIncomplete: Boolean = false): List<String>? {
-        val isDouble = service.uiState.value.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+        val ui = service.uiState.value
+        // 导入方案按用户给它选的编码算（#303）：选了双拼就按两码一字切。
+        val isDouble = ui.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN ||
+            ui.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.EXTERNAL &&
+            com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(SettingsPreferences.getPrefsPublic(service)
+                .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null))[ui.currentSchemaId]
+                .let { it != null && it != com.kingzcheung.xime.glide.ExternalGlideEncodings.PINYIN }
         return runCatching {
             com.kingzcheung.xime.glide.chineseCodeSyllables(code, isDouble,
                 listOf(result?.candidates?.firstOrNull()?.comment.orEmpty(), result?.preeditText.orEmpty()),
@@ -415,6 +421,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val state = service.candidateState.value
         return state.isComposing || state.inputText.isNotEmpty() || state.preeditText.isNotEmpty() ||
             service.t9PartialSegments.isNotEmpty()
+    }
+
+    /** 注音（大千）中文输入：实体键盘上 , . / ; - 和数字行是注音键，标点在 Shift 上。 */
+    internal fun zhuyinHardwareActive(): Boolean = service.uiState.value.let {
+        !it.isAsciiMode && it.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN
     }
 
     internal fun handleHardwareCandidateKey(keyCode: Int, event: KeyEvent): Boolean {
@@ -993,6 +1004,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
         holder.clear()
         commitPreparedText(text, t9 = true)
+        // 记住这条线点的是这个词，下次划同一条线先出它（#214）；无痕模式和密码框不记。
+        if (!com.kingzcheung.xime.settings.IncognitoState.active && !service.isSecretEditor())
+            service.serviceScope.launch(Dispatchers.IO) {
+                runCatching { com.kingzcheung.xime.glide.GlideLexicon.rememberT9Choice(service, digits, text) }
+            }
     }
 
     /**
@@ -1294,6 +1310,16 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     hardwareNavigation.releasePress(if (hardwareEvent.isShiftPressed) HardwareCandidateKey.LEFT else HardwareCandidateKey.RIGHT)
                     return@command
                 }
+                if (hardwareEvent.keyCode in listOf(KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER) &&
+                    zhuyinHardwareActive() && !hardwareEvent.isShiftPressed && !hardwareEvent.isCtrlPressed &&
+                    !hardwareEvent.isAltPressed && !hardwareEvent.isMetaPressed &&
+                    service.rimeEngine.readQueuedComposition()?.input?.isNotEmpty() == true) {
+                    // 注音（大千）打字中按回车：上屏转好的字，和空格选词同一条（Rime 注音、微软注音都这样）；
+                    // 以前回车上屏的是注音符号本身（注音用户 11-20：ㄅㄨˋㄓˉㄉㄠˋ… 回车发不出去）。没在打字时回车照旧发送、换行。
+                    processHardwareCandidateKey(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE))
+                    hardwareNavigation.releasePress(HardwareCandidateKey.SPACE)
+                    return@command
+                }
                 if (processHardwareCandidateKey(hardwareEvent)) return@command
                 if (hardwareCandidateDigitIndex(hardwareEvent.keyCode, hardwareEvent.isShiftPressed) != null) {
                     // DefaultInput here means no numbered candidate owns this digit.
@@ -1301,6 +1327,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     commitHardwareLiteral(key)
                     return@command
                 }
+                // 注音（大千）的标点按 Shift 打，交给方案的标点表（同 Rime 注音）：打字中先上屏转好的字再接标点
+                // （ㄅㄨˋㄓˉㄉㄠˋ + Shift+, = 不知道，），不把注音符号原样上屏；没在打字时直接出标点（注音用户 11-20：打不出标点）。
+                if (zhuyinHardwareActive() && isZhuyinHardwarePunctuation(key, hardwareEvent.keyCode, hardwareEvent.isShiftPressed,
+                        hardwareEvent.isCtrlPressed, hardwareEvent.isAltPressed, hardwareEvent.isMetaPressed) &&
+                    routeZhuyinPunctuation(key)) return@command
                 if (hardwareSymbolIsLiteral(key, hardwareEvent.isShiftPressed,
                         numpad = hardwareEvent.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_EQUALS,
                         chinesePunctuation = !service.uiState.value.isAsciiMode &&
@@ -1361,7 +1392,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     // Japanese 英数 follows 全角／半角, so full-width letters can be typed directly.
                     val fullWidthLetter = service.textCommit.isJapaneseProfile() && service.textCommit.isFullWidthPunctuation()
                     // 西、德、法、意、俄语键盘和英文同一个「首字母大写」开关（以前只有英文会自动大写）；韩文没有大小写。
-                    val autoCaps = hardwareEvent == null && !isShifted && capitalizeEnglishHere()
+                    val autoCaps = hardwareEvent == null && !isShifted && !ExplicitLowercase.consume(key) && capitalizeEnglishHere()
                     // 越南语 Telex：这个字母给光标前的词加声调或变音（vieet → viêt），换掉光标前的词；只是追加字母时照常往下走。
                     if (letterLanguage == com.kingzcheung.xime.settings.LetterLanguage.VIETNAMESE && !afterGlide && !fullWidthLetter) {
                         val typed = if (isShifted || autoCaps) key.uppercase().takeIf { it.length == 1 } ?: key else key.lowercase()
@@ -1989,9 +2020,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             val wordsFirstLetter = isLetter && !mergedKey && typesEnglishWords(state.inputProfile, state.isAsciiMode) &&
                                 service.rimeEngine.readQueuedComposition()?.input.isNullOrEmpty()
                             val wordsSentenceCap = wordsFirstLetter && hardwareEvent == null && !isShifted &&
+                                !ExplicitLowercase.consume(key) &&
                                 SettingsPreferences.getPrefsPublic(service).getBoolean(ENGLISH_SENTENCE_CAPS, false) &&
                                 withEditor { capitalizeEnglishHere() }
-                            if (wordsFirstLetter) wordsAutoCapped = wordsSentenceCap
+                            if (wordsFirstLetter) {
+                                // 告诉 cyime_english_words.lua 这次首字母是自动大写的：首选后给小写的，选过小写的记住（#465）。
+                                service.rimeEngine.setOption("_cyime_autocap", wordsSentenceCap)
+                                wordsAutoCapped = wordsSentenceCap
+                            }
                             val result = if (capitalsInRime || wordsSentenceCap) service.rimeEngine.processQueuedKeyAndGetResult(char.uppercase()[0].code, 0)
                                 else service.rimeEngine.processQueuedKeyAndGetResult(keyCode, mask)
                             if (result.processed) {
@@ -2208,8 +2244,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
         val decision = if (pageAtBoundary || composingArrow) hardwareNavigation.decide(key, snapshot, engineHasInput,
             pageAtBoundary = true, digitIndex = digitIndex)
-        // 空格不读工具栏高亮，原因见 physicalCandidateDecision 的说明。
-        else physicalCandidateDecision(key, snapshot, engineHasInput, digitIndex)
+        // 空格上屏 Tab/方向键移到的高亮（只在组词时；联想不读高亮），见 physicalCandidateDecision 的说明。
+        else physicalCandidateDecision(key, snapshot, engineHasInput, digitIndex,
+            highlighted = if (key == HardwareCandidateKey.SPACE && !snapshot.presentation.association)
+                hardwareNavigation.selectedIndex(snapshot) else null)
         if (com.kingzcheung.xime.BuildConfig.DEBUG) {
             Log.d("HardwareNavigation", "key=$key decision=$decision engineInput=$engineHasInput " +
                 "words=${snapshot.words.size} compact=${service.uiState.value.isCompact} " +
@@ -2381,6 +2419,15 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val input = service.rimeEngine.readQueuedComposition()?.input.orEmpty()
         if (ZhuyinKeys.isTone(code) && !ZhuyinKeys.takesTone(input)) return false
         val result = service.rimeEngine.processQueuedKeyAndGetResult(code.code, 0)
+        if (!result.processed) return false
+        if (result.committedText.isNotEmpty()) withEditor { service.commitText(result.committedText) }
+        sendTransformedResult(result)
+        return true
+    }
+
+    /** 注音实体键盘的 Shift 标点交给 Rime 的标点表（见 [isZhuyinHardwarePunctuation]）；Rime 不收时返回 false 照原来的路走。 */
+    private suspend fun routeZhuyinPunctuation(key: String): Boolean {
+        val result = service.rimeEngine.processQueuedKeyAndGetResult(key[0].code, 0)
         if (!result.processed) return false
         if (result.committedText.isNotEmpty()) withEditor { service.commitText(result.committedText) }
         sendTransformedResult(result)
@@ -3350,7 +3397,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         postRimeJob("reselect") { reselectSentenceWordAsync(words, target, snapshot) }
     }
 
-    private suspend fun reselectSentenceWordAsync(words: List<String>, target: Int, snapshot: CandidateState) {
+    /**
+     * 九键首选上拖选了第 [start] 到 [end] 个字：从拖选开头所在的词起重选，光标放到拖选最后一个字后面
+     * （见 [com.kingzcheung.xime.rime.t9DragReselect]）。首选已经变了时不做。
+     */
+    internal fun reselectSentenceRange(sentence: String, start: Int, end: Int) {
+        val snapshot = service.candidateState.value
+        if (snapshot.candidates.firstOrNull() != sentence) return
+        postRimeJob("reselect") {
+            val words = service.rimeEngine.firstSentenceWords(sentence) ?: listOf(sentence)
+            val reading = service.rimeEngine.candidateReading(sentence).orEmpty()
+            val (target, keys) = com.kingzcheung.xime.rime.t9DragReselect(words, reading, start, end) ?: return@postRimeJob
+            reselectSentenceWordAsync(words, target, snapshot, keys)
+        }
+    }
+
+    private suspend fun reselectSentenceWordAsync(words: List<String>, target: Int, snapshot: CandidateState, t9Keys: Int = -1) {
         if (usesDirectFieldInput || hasPendingCandidateCommit) return
         if (!snapshot.hasSameSelectionSource(service.candidateState.value) ||
             !service.rimeEngine.isCandidateRevisionCurrent(snapshot.engineRevision)) return
@@ -3383,7 +3445,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
         val doublePinyin = com.kingzcheung.xime.settings.InputProfiles.describe(schema).scheme ==
             com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
-        val result = service.rimeEngine.placeT9CaretAfterWord(words[target], doublePinyin)
+        val result = if (t9Keys > 0) service.rimeEngine.placeT9CaretAfterKeys(t9Keys, doublePinyin)
+            else service.rimeEngine.placeT9CaretAfterWord(words[target], doublePinyin)
         withEditor {
             service.keyboardCallbacks?.onT9RefreshAfterPreeditEdit?.invoke()
             if (result != null) service.sessionController.updateUIWithResult(result)

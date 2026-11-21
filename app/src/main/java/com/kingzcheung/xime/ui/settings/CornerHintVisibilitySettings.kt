@@ -32,7 +32,7 @@ internal fun CornerHintVisibilitySettings(modifier: Modifier = Modifier) {
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(title, style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
-                    Text(if (symbolsOn) description else "「上下滑输入符号」关着，符号角标不显示",
+                    Text(if (symbolsOn) description else "「上下滑输入符号」关着",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
                 }

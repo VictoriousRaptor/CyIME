@@ -41,7 +41,7 @@
     <string name="item_prediction_title">スマート予測</string>
     <string name="item_prediction_summary">基本の予測、個人学習、オプションのモデル強化</string>
     <string name="item_speech_title">音声入力</string>
-    <string name="item_speech_summary">端末認識・オンライン・字幕</string>
+    <string name="item_speech_summary">音声モデル・オンライン・句読点・訂正</string>
     <string name="item_handwriting_title">手書き</string>
     <string name="item_handwriting_summary">一時停止で認識、数式マーク、手書きモデル</string>
     <string name="section_system">システム</string>

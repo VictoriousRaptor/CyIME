@@ -530,12 +530,24 @@ bool T9Processor::SelectCandidate(const std::string& candidate_pinyin,
     // 识别候选是否为 T9 用户词：其 input_digits 与当前 unassigned 完全一致，
     // 右选应全量消费（避免音节对齐不匹配导致 partial commit）。
     bool is_t9_user = false;
+    size_t candidate_end = 0;
     int rime_consumed =
         QueryRimeConsumedDigits(candidate_pinyin, candidate_text, &captured,
-                                &is_t9_user);
-    // 左选场景时 RIME input 含左选拼音前缀，需加 consumed_count 得到总消费位数。
+                                &is_t9_user, &candidate_end);
     if (rime_consumed >= 0 && !input_buffer_.selections.empty()) {
-        rime_consumed += input_buffer_.consumed_count;
+        // 双拼九键：选中段在 RIME input 里是双拼键位（一个字母一个键），按段换算成键数，
+        // 只选了前半段的候选（选 gua、hao 后选「挂」）不能算成全消费。对不上时照旧。
+        const int keys = double_pinyin_
+            ? T9RightCommitHandler::DoublePinyinConsumedKeys(
+                  input_buffer_, engine_->context()->input(), candidate_end)
+            : -1;
+        ctx.double_pinyin = keys >= 0;
+        if (keys >= 0) {
+            rime_consumed = keys;
+        } else {
+            // 左选场景时 RIME input 含左选拼音前缀，需加 consumed_count 得到总消费位数。
+            rime_consumed += input_buffer_.consumed_count;
+        }
     }
     T9LOG(">> SelectCandidate: rimeConsumedDigits=%d (consumed=%d, isT9User=%d, hasSels=%d)",
           rime_consumed, input_buffer_.consumed_count, is_t9_user ? 1 : 0,

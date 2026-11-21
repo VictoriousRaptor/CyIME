@@ -135,12 +135,12 @@ fun ClipboardSyncSettingsContent(
             WindowsDevicesPanel()
             androidx.compose.material3.TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起手动连接与其他服务" else "备用：手动连接与其他服务") }
             if (advanced) {
-            Text("连接 Windows 优先使用上方的“扫码连接电脑”。下方手动填写仅供旧版兼容或其他同步服务使用。",
+            Text("连电脑请用上面的“扫码连接电脑”，下面用于其他同步服务。",
                 style = MaterialTheme.typography.bodyMedium)
             SettingsSection(title = "同步服务", content = {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     if (clipboardPlugins.isEmpty()) {
-                        Text("正在准备内置同步服务；若持续未出现，请重新打开应用并在插件管理中检查状态。")
+                        Text("正在准备同步服务…")
                     }
                     clipboardPlugins.forEach { plugin ->
                         val isActive = plugin.id == selectedPluginId
@@ -187,7 +187,7 @@ fun ClipboardSyncSettingsContent(
                 SettingsToggleItem(
                     icon = Icons.TwoTone.Sync,
                     title = "启用所选兼容服务",
-                    subtitle = "先选择服务并完成配置，再开启双向同步。开启后会向该服务传输剪贴板文本。",
+                    subtitle = "开启后剪贴板文字会发送到所选服务",
                     checked = enabled,
                     onCheckedChange = { checked ->
                         if (checked && activePlugin == null) {
@@ -269,7 +269,7 @@ internal fun ClipboardExportSetting() {
         SettingsToggleItem(
             icon = Icons.TwoTone.PushPin,
             title = "包含固定内容",
-            subtitle = "固定内容常是地址、账号等，导出的文件请自己妥善保管",
+            subtitle = "导出时也包含固定的记录",
             checked = includePinned,
             onCheckedChange = { includePinned = it },
         )
@@ -327,7 +327,7 @@ internal fun ClipboardImportSetting() {
     SettingsSection(title = "导入剪贴板", content = {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("从导出的文件导入", style = MaterialTheme.typography.titleSmall)
-            Text("选上面导出的 TXT、Markdown 或 JSON 文件，已有的记录不会重复。JSON 和 Markdown 保留固定内容、编码和分组；TXT 只有文字，导入成历史记录",
+            Text("选导出的 TXT、Markdown 或 JSON 文件，已有的不会重复",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = {
                 launcher.launch(arrayOf("text/*", "application/json", "application/octet-stream"))

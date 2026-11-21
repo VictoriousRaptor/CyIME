@@ -210,7 +210,7 @@ fun CellDictionarySettingsPanel(
             item(key = "import-hint") {
                 Row(Modifier.fillMaxWidth().clickable { showGuide = true }.padding(start = 4.dp)
                     .testTag("cell-dictionary-import-hint"), verticalAlignment = Alignment.CenterVertically) {
-                    Text("可导入搜狗、QQ、百度、Gboard、微软拼音、Rime 等词库", style = MaterialTheme.typography.bodySmall,
+                    Text("支持搜狗、QQ、百度、Gboard、微软拼音、Rime 等格式", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     TextButton(onClick = { showGuide = true }) { Text("格式与示例") }
                 }
@@ -263,8 +263,8 @@ private fun DictionaryRow(
     val installed = item.installed
     val detail = when {
         installed == null -> "${words(item.offer?.entryCount ?: 0)} · 最多慢 ${CellDictionaryCost.format(cost)} · 需下载"
-        selected != applied -> "${words(installed.count + installed.english)} · 最多慢 ${CellDictionaryCost.format(cost)} · 应用后生效"
-        else -> "${words(installed.count + installed.english)} · 最多慢 ${CellDictionaryCost.format(cost)}"
+        selected != applied -> "${words(installed.count + installed.english + installed.stroke)} · 最多慢 ${CellDictionaryCost.format(cost)} · 应用后生效"
+        else -> "${words(installed.count + installed.english + installed.stroke)} · 最多慢 ${CellDictionaryCost.format(cost)}"
     }
     val level = CellDictionaryCost.level(cost)
     // Delete only what is not in use: switch it off and apply first.

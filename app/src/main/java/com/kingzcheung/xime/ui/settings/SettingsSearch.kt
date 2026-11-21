@@ -158,6 +158,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("语言键切换方式", languages, "languages", "语言键 切换语言 中英切换 循环切换 指定语言 英文 地球键 点按语言键"),
         SettingsSearchEntry("繁体输出", chinesePath, chinese, "繁体 繁體 正体 简繁 简繁切换 简体 台湾 转换 注音简体 注音繁体 注音转简体 大千 ㄅㄆㄇ"),
         SettingsSearchEntry("生僻字", chinesePath, chinese, "生僻字 罕用字 缺字 打不出 大字表 扩展字 字库 冷僻字"),
+        SettingsSearchEntry("日文汉字", chinesePath, chinese, "日文汉字 日语汉字 日本汉字 日本字 新字体 和制汉字 国字 日本人名 日本地名 打不出 字库"),
+        SettingsSearchEntry("韩文汉字", chinesePath, chinese, "韩文汉字 韩语汉字 韩国汉字 韩国字 朝鲜汉字 国字 打不出 字库"),
+        SettingsSearchEntry("粤语字", chinesePath, chinese, "粤语字 粤语 广东话 白话 香港字 佢 嘅 咗 打不出 字库"),
         SettingsSearchEntry("时间日期候选", chinesePath, chinese, "时间 日期 星期 今天 几点 当前时间 当前日期 年月日 联想 候选 ts 时间戳 unix"),
         SettingsSearchEntry("网址、邮箱框自动切英文", englishPath, english, "网址 邮箱 链接 地址栏 url email 自动英文 自动切英文 切成英文 变英文 中文 换软件 输入框"),
         SettingsSearchEntry("选词后自动加空格", englishPath, english, "英文 英语 空格 自动空格 自动加空格 补全 标点 iOS 苹果 西班牙语"),
@@ -166,8 +169,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("候选里显示表情", chinesePath, chinese, "表情 emoji 联想表情 候选表情 开心 爱心 笑脸"),
         SettingsSearchEntry("打符号名出符号", chinesePath, chinese, "符号 符号名 加号 减号 等号 问号 括号 引号 百分号 标点 打字出符号 数学符号"),
         SettingsSearchEntry("希腊字母", chinesePath, chinese, "希腊 希腊字母 西塔 派 圆周率 阿尔法 贝塔 伽马 德尔塔 兰姆达 西格玛 欧米伽 xita pi alpha theta 数学符号 物理符号"),
-        page("中文输入", languages, chinese, "中文 拼音 繁体 生僻字 时间日期 表情 符号名 希腊字母 纠错 模糊音 候选"),
+        page("中文输入", languages, chinese, "中文 拼音 繁体 生僻字 日文汉字 韩文汉字 粤语字 时间日期 表情 符号名 希腊字母 纠错 模糊音 候选"),
         page("英文输入", languages, english, "英文 英语 网址 邮箱 自动空格 空格 邮箱后缀 西班牙语"),
+        SettingsSearchEntry("导入方案", languages, "languages", "导入 导入方案 rime 方案文件 压缩包 zip yaml 外部方案 第三方方案 自定义方案 万象 雾凇 白霜 怎么导入 导入在哪"),
         page("已安装的方案", languages, SettingsRoutes.Schema, "下载 导入 启停 方案 部署 输入资源 排序 方案资源 启用14键 中文14键"),
         page("双拼方案", languages, SettingsRoutes.DoublePinyin, "双拼 自定义双拼 首道双拼 小鹤双拼 自然码 智能ABC 拼音加加 微软双拼 分号 九键双拼 14键双拼 键位 韵母 零声母 新建 编辑 小鹤14 小鹤14键 双拼14键"),
         SettingsSearchEntry("双拼键位提示", theme, SettingsRoutes.Theme, "双拼 键位 提示 键位图 记不住 韵母 声母 显示 键盘上 主题 双拼主题 小鹤 自然码 角标 一起显示 和角标一起显示", section = "角标与气泡"),
@@ -201,6 +205,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字"),
         page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 单手模式 位置 旋转"),
         page("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 底部短横条 底部小锁 长按 宽高 四角"),
+        SettingsSearchEntry("底部诊断", layouts, layoutPage("bottom_gap"), "诊断 机型 导航方式 反馈 底部 被挡 有缝 复制"),
         SettingsSearchEntry("底部位置", layouts, layoutPage("bottom_gap"), "手势导航时键盘贴底 贴到最底 留出导航按钮 切换输入法按钮 收起键盘按钮 键盘底部留白 下边距 底部空白 贴到底 手势导航栏 忽略窗口边衬区 忽略系统窗口边衬区 边衬区 insets 全面屏手势 底部高度"),
         page("底部留白校准", layouts, layoutPage("bottom_gap"), "底部空白 多一行 全面屏手势 导航栏 挡住 按键重叠 底边拖不动 调低 抬高 恢复系统建议"),
         page("工具栏与菜单排列", layouts, SettingsRoutes.ToolbarArrange, "工具栏 菜单 排列 顺序 入口 图标 按钮 自定义工具栏"),
@@ -250,6 +255,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("底部留白滑动移动光标", gestures, gesturePage, "光标 移动 滑动 底部 留白 抬高 键盘下面 空白 选择 扩选", section = "光标与空格"),
         SettingsSearchEntry("光标放大镜", gestures, gesturePage, "长按 空格 滑动 底部 留白 键盘 面板 光标 放大镜 胶囊 当前行 文字预览 开关 关闭", section = "光标与空格"),
         SettingsSearchEntry("放大镜宽度", gestures, gesturePage, "光标 放大镜 胶囊 宽度 大小 滑条 调节", section = "光标与空格"),
+        SettingsSearchEntry("按键区挡住屏幕边缘手势", gestures, gesturePage, "边缘 侧滑 返回 手势 防误触 误触 丢字 吞字 侧边栏 分屏 荣耀 华为 贴边 a键", section = "屏幕边缘"),
         SettingsSearchEntry("长按空格多久开始", gestures, gesturePage, "长按空格 时长 秒 延迟 移动光标 连续输入空格 开关语音 说话", section = "时长与距离"),
         SettingsSearchEntry("从中间滑到边缘走几行", gestures, gesturePage, "光标 一行 行数 灵敏 灵敏度 速度 平板 大屏 滑到边缘", section = "时长与距离"),
         SettingsSearchEntry("光标每移动一字所需距离", gestures, gesturePage, "光标 距离 灵敏 灵敏度 速度 dp 毫米", section = "时长与距离"),
@@ -261,6 +267,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("单独轻按 Shift", hardware, SettingsRoutes.HardwareKeyboard, "shift 中英切换 快捷键 语言切换"),
         SettingsSearchEntry("工具快捷键", hardware, SettingsRoutes.HardwareKeyboard, "快捷键 ctrl alt 标点 剪贴板 语音 alt+v alt+h 关闭快捷键 快捷键冲突"),
         SettingsSearchEntry("候选翻页", hardware, SettingsRoutes.HardwareKeyboard, "翻页 上一页 下一页 减号 等号 中括号 逗号 句号"),
+        SettingsSearchEntry("浮窗位置", hardware, SettingsRoutes.HardwareKeyboard, "固定 顶部 底部 左侧 右侧 上下左右 乱飘 乱跑 挡住输入框 遮挡 浮窗 浮条 工具条 位置 注音"),
         SettingsSearchEntry("候选跟随光标", hardware, SettingsRoutes.HardwareKeyboard, "候选 跟随 光标 浮窗 浮条 位置"),
         SettingsSearchEntry("联想也显示在候选窗", hardware, SettingsRoutes.HardwareKeyboard, "联想 候选 位置 浮窗 工具条 跳 换位置 便携键盘 蓝牙键盘"),
         SettingsSearchEntry("自动避开输入区域", hardware, SettingsRoutes.HardwareKeyboard, "避让 遮挡 输入框 浮窗 浮条"),
@@ -310,7 +317,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("编码显示", candidates, candidatePage, "预编辑 输入框 候选栏 编码位置 拼音显示 拼音框 拼音浮框 拼音气泡"),
         SettingsSearchEntry("双拼编码显示全拼", candidates, candidatePage, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "拼音显示"),
         SettingsSearchEntry("显示拼音编辑栏", candidates, candidatePage, "关闭 隐藏 顶部 拼音浮条 编码"),
-        SettingsSearchEntry("拼音放在键盘内", candidates, candidatePage, "候选栏内部 拼音 编辑 遮挡 底栏"),
+        SettingsSearchEntry("拼音位置", candidates, candidatePage, "拼音放在键盘内 候选上方 紧贴 小签 气泡 浮在上方 贴边 方块 顶上一行 微信 拼音 编辑 遮挡 底栏 抢戏"),
+        SettingsSearchEntry("拼音靠哪边", candidates, candidatePage, "拼音 小签 气泡 方块 靠左 居中 靠右 左边 中间 右边 位置 光标"),
+        SettingsSearchEntry("拼音显示声调", candidates, candidatePage, "声调 标调 调号 读音 四声 注音 拼音"),
         SettingsSearchEntry("拼音气泡不透明度", candidates, candidatePage, "拼音 气泡 透明度 不透明度 透明 看不清 实底 浮条"),
         SettingsSearchEntry("每页候选词数", candidates, candidatePage, "候选数量 分页 每页 个数"),
         // 外观 › 按键效果
@@ -343,16 +352,16 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("无痕模式", prediction, SettingsRoutes.SmartPrediction, "无痕 隐私 不学习 不记录 剪贴板 私密 密码"),
         SettingsSearchEntry("删掉刚打的词不学习", prediction, SettingsRoutes.SmartPrediction, "自学习 学习 误触 怪词 删除 退格 删掉 不记 词库 调频", section = "无痕"),
         SettingsSearchEntry("锁定词序", prediction, SettingsRoutes.SmartPrediction, "锁定词权 词权 词频 调频 固定 顺序 盲打 专业 不学习 候选顺序", section = "无痕"),
+        SettingsSearchEntry("显示自造词角标", prediction, SettingsRoutes.SmartPrediction, "自造词 编辑 角标 铅笔 图标 学到的词 用户词 隐藏", section = "无痕"),
         SettingsSearchEntry("用户学习数据", prediction, SettingsRoutes.SmartPrediction, "学习 记忆 个人语料 导出 导入 保存 统计 学习文件"),
         // 智能 › 语音转文本
-        SettingsSearchEntry("本地识别", speech, SettingsRoutes.SpeechToText, "本地 离线 模型 识别方式 在线 无需网络"),
         SettingsSearchEntry("屏蔽外放音", speech, SettingsRoutes.SpeechToText, "屏蔽 外放 压低音量 暂停播放 不屏蔽 静音 音乐 视频 媒体 声音 其他声音 音频焦点 录音 语音", section = "语音输入"),
-        SettingsSearchEntry("开车连续语音", speech, SettingsRoutes.SpeechToText, "开车 驾驶 免手 连续 自动 接着听 悬浮条 浮窗 发送 语音", section = "语音输入"),
+        SettingsSearchEntry("连续语音", speech, SettingsRoutes.SpeechToText, "连续语音 开车连续语音 开车 驾驶 免手 连续 自动 接着听 悬浮条 浮窗 发送 语音", section = "语音输入"),
         SettingsSearchEntry("隔空输入", speech, SettingsRoutes.SpeechToText, "隔空输入 电脑 Windows 发到电脑 手机说话 电脑打字 远程 光标 微信", section = "语音输入"),
         SettingsSearchEntry("保存语音调优录音", speech, SettingsRoutes.SpeechToText, "录音 保存 调优 回放 分析", section = "本地识别"),
         SettingsSearchEntry("X-ASR", speech, SettingsRoutes.SpeechToText, "X-ASR XASR 中文 定稿 整句 准确 错字 模型 下载 语音", anchor = "整句定稿", section = "中文语音"),
         SettingsSearchEntry("整句定稿", speech, SettingsRoutes.SpeechToText, "整句 定稿 校正 二次校正 不校正 说完后 断句 分段 准确 SenseVoice X-ASR 说完", section = "中文语音"),
-        SettingsSearchEntry("语音模型", speech, SettingsRoutes.SpeechToText, "语音模型 说话时 主模型 边说边出字 Paraformer SenseVoice Zipformer 日语 英文 二次校正 SenseVoice 校正 换模型", anchor = null, section = "中文语音"),
+        SettingsSearchEntry("语音模型", speech, SettingsRoutes.SpeechToText, "语音模型 说话时 主模型 边说边出字 Paraformer SenseVoice Zipformer 日语 英文 二次校正 SenseVoice 校正 换模型 本地识别 本地 离线 无需网络", anchor = null, section = "中文语音"),
         SettingsSearchEntry("自动加标点", speech, SettingsRoutes.SpeechToText, "标点 逗号 句号 问号 感叹号 顿号 分号 自动标点 去掉标点 不加标点 部分标点 只要逗号 不要句号 末尾标点 句末标点 最后不带标点 空格 在线接口 语音", section = "语音标点"),
         SettingsSearchEntry("停顿处加空格", speech, SettingsRoutes.SpeechToText, "空格 不加空格 去掉空格 没有空格 不要空格 停顿 断句 中文空格 语音", section = "语音标点"),
         SettingsSearchEntry("数字转阿拉伯数字", speech, SettingsRoutes.SpeechToText, "数字 阿拉伯数字 中文数字 大写数字 小写数字 ITN 金额 年份 电话 百分比 小数 时间 语音", section = "数字"),
@@ -383,6 +392,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("验证码发到其他设备", clipboard, SettingsRoutes.ClipboardPanel, "验证码 短信 电脑 平板 同步 发送 code"),
         SettingsSearchEntry("记录密码等敏感内容", clipboard, SettingsRoutes.ClipboardPanel, "密码 敏感 银行卡 密码管理器 剪贴板 password"),
         SettingsSearchEntry("上屏后自动关闭剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
+        SettingsSearchEntry("候选栏显示刚复制的内容", clipboard, SettingsRoutes.ClipboardPanel,
+            "剪贴板 候选栏 最新复制 刚复制 最近复制 自动显示 弹出 不显示 隐私 关掉"),
         SettingsSearchEntry("卡片显示行数", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 卡片 行数 几行 显示 记录 折叠 最多显示 剪贴板卡片最多显示 卡片最多显示"),
         SettingsSearchEntry("图片高度", clipboard, SettingsRoutes.ClipboardPanel,
@@ -817,13 +828,8 @@ internal fun TypingTrialKeepsPosition(state: LazyListState) {
         }
         val (index, offset) = saved ?: return@LaunchedEffect
         saved = null
-        val start = withFrameNanos { it }
-        var now = start
-        while (now - start < TYPING_TRIAL_RESTORE_MS * 1_000_000) {
-            if (state.firstVisibleItemIndex != index || state.firstVisibleItemScrollOffset != offset) {
-                state.scrollToItem(index, offset)
-            }
-            now = withFrameNanos { it }
+        if (state.firstVisibleItemIndex != index || state.firstVisibleItemScrollOffset != offset) {
+            state.scrollToItem(index, offset)
         }
     }
 }

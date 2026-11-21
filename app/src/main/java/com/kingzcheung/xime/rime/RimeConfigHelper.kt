@@ -75,14 +75,19 @@ object RimeConfigHelper {
         if (readyInProcess(context)) return@withLock true
         preparedInProcess = false
         // 每步用时进共享日志：用户报「键盘加载半分钟」时一眼看出慢在拷资源、起引擎还是重新编译。
+        // 每一步也报给 PreparationProgress，设置向导显示第几步、在做什么（11-20 用户卡在「正在准备词库」不知道在干什么）。
         val t0 = android.os.SystemClock.elapsedRealtime()
+        PreparationProgress.enter(PreparationProgress.Step.COPY)
         val (user, shared) = initializeRimeDataAsync(context)
         val t1 = android.os.SystemClock.elapsedRealtime()
+        PreparationProgress.enter(PreparationProgress.Step.ENGINE)
         RimeEngine.getInstance().initialize(user, shared)
         val t2 = android.os.SystemClock.elapsedRealtime()
+        PreparationProgress.enter(PreparationProgress.Step.COMPILE, "正在检查哪些词库要重新编译")
         val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context)) ||
             (addBuiltinWhenNothingCompiles(context) && ensureDeployment(context))
         FileLogger.w(TAG, "prepareEngine: data=${t1 - t0}ms init=${t2 - t1}ms deploy=${android.os.SystemClock.elapsedRealtime() - t2}ms usable=$usable")
+        if (usable) PreparationProgress.enter(PreparationProgress.Step.DONE)
         preparedInProcess = usable
         usable
     }
@@ -251,6 +256,8 @@ object RimeConfigHelper {
     internal fun isAppSchema(context: Context, id: String): Boolean =
         id in com.kingzcheung.xime.settings.ChineseSchemas.ids || id in com.kingzcheung.xime.settings.CyimeInputDefaults.recommended ||
             com.kingzcheung.xime.settings.DoublePinyinSchemes.isGenerated(id) ||
+            // 双拼停顿纠错索引（cyime_pause_*）等依赖方案也是 CyIME 生成的，不列进「导入方案的语言」。
+            com.kingzcheung.xime.settings.CyimeInputDefaults.isDependency(id) ||
             com.kingzcheung.xime.settings.CustomKeyboardLayouts.isCustom(id) || bundledSchemaIds(context).contains(id)
 
     @Volatile private var bundledSchemaIdsCache: Set<String>? = null
@@ -327,7 +334,9 @@ object RimeConfigHelper {
         // Readers must not persist a legacy/empty schema list or consume migration flags then.
         val installing = File(rimeDir, SchemaManager.ASSET_INSTALL_MARKER)
         installing.writeText("installing")
+        PreparationProgress.touch("检查安装包里的方案文件")
         copyAssetsToRimeDir(context, rimeDir)
+        PreparationProgress.touch("核对内置词库和模型")
         val bundledStartedAt = android.os.SystemClock.elapsedRealtime()
         val bundledChanged = com.kingzcheung.xime.settings.BundledRimeSync.install(
             rimeDir, File(context.filesDir, "rime-upgrade-backups"),
@@ -338,6 +347,7 @@ object RimeConfigHelper {
         if (bundledChanged) FileLogger.w(TAG, "Bundled assets updated in ${android.os.SystemClock.elapsedRealtime() - bundledStartedAt}ms")
         // 日语词典装不上只影响日语转换，不能连累其它输入方案启动。
         // 词典和引擎在安装包里或是「日语」插件下载的（JapanesePack）；告诉日语翻译器下载的引擎在哪。
+        PreparationProgress.touch("安装日语词典")
         try {
             com.kingzcheung.xime.settings.JapanesePack.exportLibraryPath(context)
             com.kingzcheung.xime.settings.JapanesePack.installDictionary(context)
@@ -346,6 +356,7 @@ object RimeConfigHelper {
         }
         // Optional downloads become available at the normal engine initialization boundary.
         // Never restart or replay an active editor merely because a model download finished.
+        PreparationProgress.touch("安装候选模型")
         com.kingzcheung.xime.model.CandidateModelAssets.installAvailable(context)
         com.kingzcheung.xime.model.CandidateModelAssets.dropSupersededDownloads(context)
         com.kingzcheung.xime.settings.ChineseSchemas.installOptionalLayoutSchemas(context, rimeDir)
@@ -357,6 +368,7 @@ object RimeConfigHelper {
         // F1: assets 会用内置 default.yaml 覆盖，这里把启用方案重新写回 schema_list
         SchemaManager.applyEnabledSchemasToDefaultYaml(context)
         // 为所有启用方案打个人词库补丁
+        PreparationProgress.touch("写入方案设置和个人词库补丁")
         PersonalDictManager.ensureSchemaPacks(context)
         // 模糊音等拼写补丁：新建的布局、随版本更新的方案规则都按当前开关重写一遍，没变不写。
         try {
@@ -372,6 +384,7 @@ object RimeConfigHelper {
         }
         // 分类词库合不进某个方案（比如方案自定义文件写法不支持）时，prepare 一个文件都不写、原样保留上次的配置；
         // 这是配置问题，重试也不会好，不能因此卡住整个键盘。「导入的词库」页点「应用更改」时仍会显示原因。
+        PreparationProgress.touch("合并分类词库")
         if (restoreCellDictionaries) try {
             com.kingzcheung.xime.settings.CellDictionaryManager.prepare(context)
         } catch (e: Exception) {
@@ -418,6 +431,10 @@ object RimeConfigHelper {
                 " damaged=${damaged.size} hashMs=$hashMs changedSince=${changedSinceHash(context)}")
             val buildExists = buildDir.exists() && buildDir.listFiles()?.isNotEmpty() == true
             val engine = RimeEngine.getInstance()
+            // librime 不报进度：看 build 目录里正在写哪个文件、启用方案的词典写完了几个，报给设置向导。
+            val stopWatching = PreparationProgress.watchBuild(buildDir,
+                PreparationProgress.enabledDictionaries(File(context.filesDir, "rime"), SchemaManager.getEnabledSchemas(context)))
+            try {
             var deployed: Boolean
             // 编译出的方案列表少了启用的方案：librime 按秒级修改时间判断 default.yaml 要不要重编，
             // 列表旧了它可能一直认为不用编（11-15 首道双拼一直「不在部署结果的方案列表里」）。删掉编译出的列表再部署。
@@ -458,6 +475,7 @@ object RimeConfigHelper {
             }
             SettingsPreferences.setDeploymentDone(context, false)
             return false
+            } finally { stopWatching() }
         }
     }
 
@@ -1012,6 +1030,7 @@ object RimeConfigHelper {
             }
 
             targetFile.parentFile?.mkdirs()
+            PreparationProgress.touch("复制 $assetPath")
             context.assets.open(assetPath).use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)

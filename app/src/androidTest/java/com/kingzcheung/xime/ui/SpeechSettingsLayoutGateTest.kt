@@ -80,7 +80,7 @@ class SpeechSettingsLayoutGateTest {
         for (v in viewports) {
             rule.runOnIdle { viewport.value = v }
             rule.assertGeometry("speech-settings-host", "本地语音设置 $v")
-            rule.onNodeWithText("本地识别").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("中文语音").performScrollTo().assertIsDisplayed()
             val lastModel = rule.onNodeWithTag("speech-correction").performScrollTo()
                 .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             val host = rule.onNodeWithTag("speech-settings-host").fetchSemanticsNode().boundsInRoot

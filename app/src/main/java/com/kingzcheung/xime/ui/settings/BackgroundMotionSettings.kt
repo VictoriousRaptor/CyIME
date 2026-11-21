@@ -81,7 +81,7 @@ internal fun ColumnScope.BackgroundMotionSettingsItems() {
     val context = LocalContext.current
     val settings = rememberBackgroundMotionSettings()
     SettingsToggleItem(icon = Icons.TwoTone.Animation, title = "动态背景",
-        subtitle = "图片背景缓慢移动，游戏、省电和关闭动画时不动",
+        subtitle = "背景图片缓慢移动，省电时停止",
         checked = settings.enabled,
         onCheckedChange = { BackgroundMotionPreferences.setEnabled(context, it) },
         costItem = PerformanceCosts.Item.BACKGROUND_MOTION)

@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
@@ -89,6 +90,8 @@ import com.kingzcheung.xime.ui.menubar.dragOrderItem
 fun SchemaSettingsContent(
     onBack: () -> Unit,
     onNavigateToRimeFileBrowser: () -> Unit = {},
+    /** 从「语言与方案 › 导入方案」进来：打开页面就接着选文件（用户 11-19：找不到怎么导入）。 */
+    startImport: Boolean = false,
 ) {
     val context = LocalContext.current
     val viewModel: SchemaSettingsViewModel = viewModel()
@@ -156,14 +159,21 @@ fun SchemaSettingsContent(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "导入后直接安装并打开其中的主方案，出现在「已启用的输入组合」里，自动应用，稍等就能在键盘上用。" +
-                            "和已有文件同名时会先问你，确认后备份再替换，卸载时恢复。",
+                        "导入后自动安装启用，同名文件会先问你。",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     SettingsJumpText(
-                        "五笔等常用方案在「扩展 › 方案」可以直接获取。也可以在手机的文件管理里把文件「分享」给 CyIME 导入。",
+                        "五笔等常用方案在「扩展 › 方案」里获取。",
                         jumps = listOf("扩展 › 方案"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    // 11-18 实测（公开短信 2000 句）：自带拼音装上词组模型后，26 键和双拼首选与万象（带它的语法模型）打平，
+                    // 九键、生僻词明显更准；雾凇原版、白霜、朙月都不如自带。别让人为了准确率去导入。
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "自带拼音装上词组模型后，首选和万象一样准，九键和生僻词更准；雾凇、白霜都不如自带。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -201,6 +211,14 @@ fun SchemaSettingsContent(
         } else {
             pendingImportAction = action
             showImportWarning = true
+        }
+    }
+    // 只在刚进来时开一次；选完文件回到这页、转屏都不再弹。
+    var startImportHandled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(startImport) {
+        if (startImport && !startImportHandled) {
+            startImportHandled = true
+            requireImportWarning { importLauncher.launch(arrayOf("*/*")) }
         }
     }
 
@@ -283,9 +301,13 @@ fun SchemaSettingsContent(
                 orderedInstalledModeIds(context, uiState.allSchemas)
             }
             val enabledIds = uiState.enabledSchemas.toSet()
+            // 按语言分组，语言的先后和「语言与方案」一样（中文、英文、日语…）；同一语言里照旧按拖动的顺序。
+            val languageRank = remember(modeOrderRevision) { InputModes.languageRank(context) }
+            fun rankOf(id: String) = languageRank(if (id == InputModes.ENGLISH) InputLanguage.ENGLISH
+                else schemaById[id]?.toSchemaInfo()?.profile?.language ?: InputLanguage.UNSPECIFIED)
             val savedEnabledIds = fullOrder.filter { id ->
                 (id == InputModes.ENGLISH && englishEnabled) || (id in enabledIds && id in schemaById)
-            }
+            }.sortedBy(::rankOf)
             val dragOrder = rememberDragOrder(savedEnabledIds) { reordered ->
                 if (reorderEnabledModes(context, uiState.allSchemas, enabledIds, englishEnabled, reordered)) modeOrderRevision++
             }
@@ -359,7 +381,7 @@ fun SchemaSettingsContent(
                 }
 
                 item {
-                    SettingsNote("长按可排序；语言和默认组合在「语言与方案」选择。",
+                    SettingsNote("长按可在同一语言里排序；语言的先后和默认组合在「语言与方案」里改。",
                         Modifier.padding(top = 4.dp), jumps = listOf("语言与方案"))
                     SettingsNote("安装、启停方案后自动应用，不用再部署。")
                     Spacer(modifier = Modifier.height(8.dp))
@@ -367,7 +389,7 @@ fun SchemaSettingsContent(
 
                 // 关着的方案：常用的（14 键、双拼）一直列出；其余收在「其他已安装方案（高级）」里，折叠行写明有几个、带展开箭头。
                 // 以前按收起后的列表判断，收起时写「没有其他可用方案」，点开却是一长串（用户 10-31）。
-                val disabledAll = visibleSchemas.filter { it.schemaId !in uiState.enabledSchemas }
+                val disabledAll = visibleSchemas.filter { it.schemaId !in uiState.enabledSchemas }.sortedBy { rankOf(it.schemaId) }
                 val listedOff = disabledAll.filter { it.schemaId in com.kingzcheung.xime.settings.CyimeInputDefaults.listedWhenOff }
                 val extraOff = disabledAll.filterNot { it.schemaId in com.kingzcheung.xime.settings.CyimeInputDefaults.listedWhenOff }
 

@@ -6,7 +6,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * 「打符号名出符号」（默认关）：打「加号」在词后面多出 +。九键、14 键方案直接带 simplifier@cyime_symbols，
+ * 「打符号名出符号」（11-18 起默认开）：打「加号」在词后面多出 +。九键、14 键方案直接带 simplifier@cyime_symbols，
  * 26 键雾凇和双拼由 tasks-chinese.gradle.kts 插入；四种键盘共用 opencc/cyime_symbols.json 一张表。
  */
 class SymbolNameSchemaTest {
@@ -45,5 +45,18 @@ class SymbolNameSchemaTest {
         assertEquals(listOf("？", "?"), byName["问号"])
         assertEquals(listOf("（）", "()"), byName["括号"])
         assertEquals(listOf("%"), byName["百分号"])
+        // 11-18 补齐的一类「非中文常用符号」：温度、角度、上下标、数学、分数、单位、希腊字母中文名。
+        assertEquals(listOf("℃"), byName["摄氏度"])
+        assertEquals(listOf("°"), byName["度"])
+        assertEquals(listOf("²"), byName["平方"])
+        assertEquals(listOf("³"), byName["立方"])
+        assertTrue(byName.getValue("上标").containsAll(listOf("¹", "²", "³", "ⁿ")))
+        assertTrue(byName.getValue("下标").containsAll(listOf("₁", "₂", "₃")))
+        assertEquals(listOf("∑"), byName["求和"])
+        assertEquals(listOf("½"), byName["二分之一"])
+        assertEquals(listOf("θ", "Θ"), byName["西塔"])
+        assertEquals(listOf("α", "Α"), byName["阿尔法"])
+        // 希腊字母只收多字中文名：派、缪、纽这类单字是常打的字，交给希腊字母开关（拼音名）去管。
+        assertTrue(listOf("派", "缪", "纽", "肉").none { it in byName })
     }
 }

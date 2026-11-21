@@ -72,7 +72,7 @@ internal class WindowsNearbyPairing(
             } catch (e: Exception) {
                 if (attempt === current) {
                     clear(current)
-                    status(e.message ?: "无法连接电脑")
+                    status(failureMessage(e))
                 }
             }
         }
@@ -93,6 +93,17 @@ internal class WindowsNearbyPairing(
         attempt?.let { clear(it) }
         job?.cancel()
         job = null
+    }
+
+    companion object {
+        /**
+         * 搜得到电脑、连不上（#500）：发现靠电脑往外发的广播，连接是手机连进电脑，电脑的网络是「公用网络」时
+         * Windows 防火墙只挡后者，手机原来只显示 OkHttp 的英文超时。证书不对（SSLException）照旧说原因。
+         */
+        const val UNREACHABLE = "连不上这台电脑，多半是电脑的防火墙挡住了手机：请在电脑上把当前网络设为「专用网络」，再重试"
+
+        fun failureMessage(e: Exception, fallback: String = "无法连接电脑"): String =
+            if (e is java.io.IOException && e !is javax.net.ssl.SSLException) UNREACHABLE else e.message ?: fallback
     }
 
     private fun clear(current: Attempt) {

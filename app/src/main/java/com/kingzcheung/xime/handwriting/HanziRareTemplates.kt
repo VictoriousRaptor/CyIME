@@ -14,7 +14,7 @@ import kotlin.math.sqrt
  * 首位类落在查询前 [BUCKET_TOP] 类里的模板（平均约 400 个），不逐个比四万多个。
  */
 internal class HanziRareTemplates private constructor(
-    private val labels: String,
+    private val labels: IntArray,
     private val labelOf: IntArray,
     private val cls: ShortArray,
     private val vals: ByteArray,
@@ -52,7 +52,7 @@ internal class HanziRareTemplates private constructor(
                 if (s >= minSimilarity && s > (best[label] ?: -1f)) best[label] = s
             }
         }
-        return best.entries.sortedByDescending { it.value }.take(limit).map { labels[it.key].toString() to it.value }
+        return best.entries.sortedByDescending { it.value }.take(limit).map { String(Character.toChars(labels[it.key])) to it.value }
     }
 
     companion object {
@@ -77,7 +77,7 @@ internal class HanziRareTemplates private constructor(
             if (modelSha != null && !modelMatches(o, modelSha)) return null
             val n = o.getInt("n")
             val count = o.getInt("count")
-            val labels = o.getString("labels")
+            val labels = o.getString("labels").codePoints().toArray()
             val record = 2 + n * 3
             if (n <= 0 || count <= 0 || bin.size != count * record) return null
             val buf = ByteBuffer.wrap(bin).order(ByteOrder.LITTLE_ENDIAN)
@@ -87,7 +87,7 @@ internal class HanziRareTemplates private constructor(
             var maxClass = 0
             for (t in 0 until count) {
                 labelOf[t] = buf.short.toInt() and 0xffff
-                if (labelOf[t] >= labels.length) return null
+                if (labelOf[t] >= labels.size) return null
                 for (k in 0 until n) {
                     cls[t * n + k] = buf.short
                     vals[t * n + k] = buf.get()

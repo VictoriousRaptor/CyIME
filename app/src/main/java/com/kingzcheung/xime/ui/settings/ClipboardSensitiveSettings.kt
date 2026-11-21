@@ -44,7 +44,7 @@ internal fun ClipboardSensitiveSetting() {
 internal fun ClipboardSensitiveSettingCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     SettingsSection(title = "敏感内容", content = {
         SettingsToggleItem(Icons.TwoTone.Lock, "记录密码等敏感内容",
-            "密码管理器和密码框里复制的内容也记进剪贴板，显示成圆点，1 小时后自动删除，不同步、不导出。无痕开着时不记。圆点的记录长按选「不是密码」恢复成普通记录。",
+            "复制的密码也记下来，显示成圆点，1 小时后自动删除",
             enabled, onToggle)
     })
 }

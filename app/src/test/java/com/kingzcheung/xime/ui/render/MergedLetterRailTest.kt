@@ -97,7 +97,7 @@ class MergedLetterRailTest {
             }
             rule.onNodeWithTag("qwerty-key:as", true).performTouchInput { click(center) }
             assertEquals("as", keys.last())
-            rule.onNodeWithTag("candidate-expansion").performClick()
+            rule.pullOpenCandidates()
             val rail = hasAnyAncestor(hasTestTag("expanded-pinyin-options"))
             rule.onNode(hasText("？") and rail, true).assertDoesNotExist()
             rule.runOnIdle { hold = false; requireNotNull(deliver).invoke() }

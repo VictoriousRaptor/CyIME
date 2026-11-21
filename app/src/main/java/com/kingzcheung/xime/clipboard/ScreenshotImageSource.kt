@@ -14,6 +14,7 @@ internal object ScreenshotImageSource {
      */
     const val RECENT_PHOTO_LIMIT = 12
     const val PHOTO_LABEL = "照片"
+    const val SCREENSHOT_LABEL = "截图"
 
     /** Screenshots first (they keep their label and paste hint), then the recent photos not already among them. */
     fun withRecentPhotos(screenshots: List<ClipboardImage>, photos: List<ClipboardImage>): List<ClipboardImage> {

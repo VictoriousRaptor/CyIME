@@ -34,163 +34,210 @@ class FixedKeyboardBottomInsetTest {
     }
     private fun mode(value: Int) = Settings.Secure.putInt(activity.contentResolver, "navigation_mode", value)
 
-    /** 下面多数用例测「贴底」关着时的系统建议和校准；贴底默认开另有用例。 */
-    // 这些是 1.15.66 的用例：「底部位置」固定在自动档（66 的算法），再按用例开关贴底。
-    @Before fun edgeOff() {
+    // 「底部位置」默认自动；每个用例自己设导航方式和厂商。
+    @Before fun auto() {
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.AUTO)
+    }
+
+    @Test fun oldEdgeOffUsersStartOnKeepButtonsAndTheSwitchNoLongerChangesTheAlgorithm() {
+        val prefs = SettingsPreferences.getPrefsPublic(activity)
+        prefs.edit().remove(SettingsPreferences.KEY_KEYBOARD_BOTTOM_POSITION).putBoolean(SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD, false).commit()
+        assertEquals(SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS, SettingsPreferences.keyboardBottomPosition(activity))
+        prefs.edit().remove(SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD).commit()
+        assertEquals(SettingsPreferences.KeyboardBottomPosition.AUTO, SettingsPreferences.keyboardBottomPosition(activity))
+        // 自动档里旧开关不再参与：手势导航贴到底，开关是什么都一样。
+        ShadowBuild.setManufacturer("OPPO")
+        mode(2)
         SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.AUTO)
         SettingsPreferences.setEdgeToEdgeKeyboard(activity, false)
+        assertEquals(0, measure())
+        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
+        assertEquals(0, measure())
     }
 
-    @Test fun edgeIsOnByDefaultAndItsLoweringIsSeparateFromTheOldCalibration() {
+    /** 盘点冲突 2：调低只存一套，切「底部位置」时数值不变；升级前停在「留出导航按钮」的旧调低值接着用。 */
+    @Test fun loweringIsOneSetAcrossPositions() {
         ShadowBuild.setManufacturer("OPPO")
-        SettingsPreferences.getPrefsPublic(activity).edit().remove(SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD).commit()
-        // 老用户按系统建议调低过 20 dp（三键导航时那时的下限挡着，实际没压到按钮）。
-        SettingsPreferences.getPrefsPublic(activity).edit()
-            .putInt(SettingsPreferences.KEY_KEYBOARD_BOTTOM_LOWERING_DP, 20).commit()
-        assertEquals(true, SettingsPreferences.edgeToEdgeKeyboard(activity))
-        assertEquals(0, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
-        mode(2)
-        assertEquals(0, measure())
-        // 三键导航：贴底默认开也不动，老的调低值不会搬过来压住按钮。
         mode(0)
-        assertEquals(48, measure(controls = 48))
-        // 识别不出手势导航时，贴底下还能自己调低，一直到 0。
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS)
         SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -30)
         assertEquals(18, measure(controls = 48))
-        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -80)
-        assertEquals(0, measure(controls = 48))
-        // 关掉贴底回到原来的校准值和下限。
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, false)
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.AUTO)
+        assertEquals(-30, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
+        assertEquals(18, measure(controls = 48))
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS)
+        assertEquals(-30, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
+
+        val prefs = SettingsPreferences.getPrefsPublic(activity)
+        prefs.edit().clear().putString(SettingsPreferences.KEY_KEYBOARD_BOTTOM_POSITION, "KEEP_BUTTONS")
+            .putInt(SettingsPreferences.KEY_KEYBOARD_BOTTOM_LOWERING_DP, 20).commit()
         assertEquals(-20, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
-        assertEquals(48, measure(controls = 48))
-        // 「恢复默认」回到自动档（66 的贴底）、留白清零（11-08 加「底部位置」后）。
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
-        SettingsPreferences.resetKeyboardBottomCalibration(activity)
-        assertEquals(true, SettingsPreferences.edgeToEdgeKeyboard(activity))
-        assertEquals(SettingsPreferences.KeyboardBottomPosition.AUTO, SettingsPreferences.keyboardBottomPosition(activity))
+        // 自动档的老用户：旧键是贴底默认开之前按系统建议调的，不搬过来。
+        prefs.edit().putString(SettingsPreferences.KEY_KEYBOARD_BOTTOM_POSITION, "AUTO").commit()
         assertEquals(0, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
+        // 写过新键之后只认新键。
+        prefs.edit().putString(SettingsPreferences.KEY_KEYBOARD_BOTTOM_POSITION, "KEEP_BUTTONS").commit()
+        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -6)
+        assertEquals(-6, SettingsPreferences.getKeyboardBottomAdjustmentDp(activity))
     }
 
-    @Test fun aManualCorrectionCanReachZeroButNeverPassSystemButtonsOrACutout() {
+    @Test fun aManualCorrectionCanReachZeroAndRaisingIsStoredApart() {
         ShadowBuild.setManufacturer("OPPO")
-        mode(2)
-        assertEquals(48, measure())
+        mode(0)
+        assertEquals(48, measure(controls = 48))
         SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -12)
-        assertEquals(36, measure())
+        assertEquals(36, measure(controls = 48))
         assertEquals(0, SettingsPreferences.getKeyboardBottomPaddingDp(activity))
         SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -48)
-        assertEquals(0, measure())
-        assertEquals(20, measure(controls = 20))
-        assertEquals(16, measure(cutout = 16))
-        mode(0)
-        assertEquals(48, measure())
-        mode(2)
-        assertEquals(0, measure())
-        SettingsPreferences.setKeyboardBottomPaddingDp(activity, 0)
-        assertEquals(48, measure())
+        assertEquals(0, measure(controls = 48))
         SettingsPreferences.setKeyboardBottomPaddingDp(activity, 17)
-        assertEquals(48, measure())
+        assertEquals(48, measure(controls = 48))
         assertEquals(17, SettingsPreferences.getKeyboardBottomPaddingDp(activity))
     }
 
-    @Test fun floatingHandleUsesTheMandatoryGestureAreaWhileAnUnsetPositionUsesTheEstimate() {
+    /** 决策表在固定键盘上的结果（OPPO：navigation_mode 写得不可靠，只看它的厂商开关和 inset）。 */
+    @Test fun autoFollowsTheDecisionTable() {
         ShadowBuild.setManufacturer("OPPO")
+        // 4 navigation_mode=2：贴到底，只躲屏幕缺口；系统报的可点区域（常是整条按钮框）不留位（11-03）。
         mode(2)
-        val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
-        val normal = extractBottomInset(insets, activity.window)
-        val floor = fixedKeyboardMinimumInsetPx(insets, activity.window, normal)
-        assertEquals(0, floor)
-        assertEquals(18, floatingMinimumInsetPx(activity.window, insets, floor))
-        assertEquals(48, SettingsPreferences.getFloatingOffsetY(activity, defaultDp = normal))
-        SettingsPreferences.setFloatingOffsetY(activity, 18)
-        assertEquals(18, SettingsPreferences.getFloatingOffsetY(activity, defaultDp = normal))
-    }
-
-    @Test fun anUnknownNavigationModeCanUseAnExplicitSystemGestureReport() {
-        ShadowBuild.setManufacturer("unknown")
-        Settings.Secure.putString(activity.contentResolver, "navigation_mode", null)
-        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -48)
-        val reported = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
-        assertEquals(0, fixedKeyboardBottomInsetPx(reported, activity.window, 48))
-        assertEquals(48, measure())
-    }
-
-    @Test fun onlyAnOptedInButtonFreeGesturePhoneCanDropTheReserve() {
-        ShadowBuild.setManufacturer("OPPO")
-        mode(2)
-        assertEquals(48, measure())
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
         assertEquals(0, measure())
         assertEquals(16, measure(cutout = 16))
-        // 贴底即忽略系统给的底部边衬区：手势导航时系统报的可点区域（常是整条按钮框）不再留位（11-03）。
-        assertEquals(0, measure(controls = 20))
         assertEquals(0, measure(controls = 48))
         assertEquals(16, measure(controls = 48, cutout = 16))
         mode(0)
-        // 三键导航的样子（整条都是强制手势区）：留着。
-        assertEquals(48, measure(mandatory = 48))
-        // navigation_mode 写 0，但底下没有能按的东西（11-08「别让我看到底下有缝」）：贴到底。
+        // 5 可点区域占满：三键。
+        assertEquals(48, measure(controls = 48))
+        // 6 navigation_mode 写 0，但底下没有能按的东西（11-08「别让我看到底下有缝」）：贴到底。
         assertEquals(0, measure())
+        assertEquals(0, measure(mandatory = 18))
         assertEquals(16, measure(cutout = 16))
+        // 7 整条都是强制手势区、可点区域没报：说不清，整条留着。
+        assertEquals(48, measure(mandatory = 48))
+        // 4 厂商开关开着：手势。
         Settings.Secure.putInt(activity.contentResolver, "hide_navigationbar_enable", 1)
         assertEquals(0, measure(mandatory = 48))
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, false)
+        // 3 厂商开关关着：三键，inset 什么都没报也整条留。
+        Settings.Secure.putInt(activity.contentResolver, "hide_navigationbar_enable", 0)
+        assertEquals(48, measure())
+        // 开关矛盾（mode=2 而厂商开关关）：看 inset。
+        mode(2)
+        assertEquals(0, measure())
+        assertEquals(48, measure(controls = 48))
+    }
+
+    /** 11-19 三星三键被挡：他的手机和平板实测 navigation_mode=0、navigation_bar_gesture_while_hidden=0。 */
+    @Test fun samsungThreeButtonKeepsTheWholeBarEvenWhenTheInsetsReportNothing() {
+        ShadowBuild.setManufacturer("samsung")
+        mode(0)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 0)
+        assertEquals(48, measure())
+        assertEquals(48, measure(mandatory = 18))
+        // 开关没读到，三星的 navigation_mode=0 也算三键。
+        Settings.Global.putString(activity.contentResolver, "navigation_bar_gesture_while_hidden", null)
+        assertEquals(48, measure())
+        // 三星手势：贴到底。
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        assertEquals(0, measure())
+    }
+
+    /**
+     * 11-21 三星用户截图：系统那条「⌄ 收起键盘」盖住了最下一排。那层在键盘窗口外面，键盘盖不住它（盘点冲突 4 当时想反了）：
+     * 自动档竖屏给它留位，悬浮键盘照旧避开。
+     */
+    @Test fun samsungHideButtonKeepsItsBarInAutoAndFloatingAvoidsIt() {
+        ShadowBuild.setManufacturer("samsung")
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_hint", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
+        assertEquals(48, measure())
+        // 关了「显示隐藏键盘按钮」：照旧贴到底。
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 0)
+        assertEquals(0, measure())
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
+        val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48)).build()
+        val normal = extractBottomInset(insets, activity.window)
+        assertEquals(48, normal)
+        assertEquals(48, floatingMinimumInsetPx(activity.window, insets, normal))
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS)
         assertEquals(48, measure())
     }
 
-    @Test fun aGestureSizedSystemNavBarCountsAsGestureNavigation() {
-        // 手势条 16dp、给输入法 48dp：手势导航。
-        assertEquals(true, navBarResourceShowsGestureBar(resourcePx = 42, insetPx = 126, density = 2.625f))
-        // 三键：资源和 inset 一样高。
-        assertEquals(false, navBarResourceShowsGestureBar(resourcePx = 126, insetPx = 126, density = 2.625f))
-        // 资源已是手势条，但 inset 也只有这么高：没有多出来的，不算。
-        assertEquals(false, navBarResourceShowsGestureBar(resourcePx = 42, insetPx = 42, density = 2.625f))
-        // 读不到资源。
-        assertEquals(false, navBarResourceShowsGestureBar(resourcePx = 0, insetPx = 126, density = 2.625f))
+    /** 三星说明里「显示隐藏键盘按钮」只在竖屏显示：横屏照旧贴到底。 */
+    @Test @Config(qualifiers = "sw360dp-w800dp-h360dp-land-mdpi")
+    fun samsungHideButtonDoesNotKeepTheBarInLandscape() {
+        ShadowBuild.setManufacturer("samsung")
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_hint", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
+        assertEquals(0, measure())
     }
 
-    @Test fun theKeyboardReadsGestureNavigationFromTheInsetsItself() {
-        // 平板实测（三键导航）：nav、mandatory、tappable 都是 90，不是手势。
-        assertEquals(false, insetsShowGestureNavigation(navPx = 90, mandatoryPx = 90, tappablePx = 90, density = 1.875f))
-        // 手势导航：48dp 按钮框里强制手势区只有手势条那段，可点区域没占满。
-        assertEquals(true, insetsShowGestureNavigation(navPx = 126, mandatoryPx = 63, tappablePx = 0, density = 2.625f))
-        // 可点区域占满整条：那条里有按钮，不算。
-        assertEquals(false, insetsShowGestureNavigation(navPx = 126, mandatoryPx = 63, tappablePx = 126, density = 2.625f))
-        // 没报手势区、或手势区比 32dp 还高，都不猜。
-        assertEquals(false, insetsShowGestureNavigation(navPx = 126, mandatoryPx = 0, tappablePx = 0, density = 2.625f))
-        assertEquals(false, insetsShowGestureNavigation(navPx = 160, mandatoryPx = 100, tappablePx = 0, density = 2.625f))
-    }
-
-    @Test fun edgeDropsTheEmptyFrameWhenOnlyTheInsetsShowGestureNavigation() {
-        // 厂商不认识、navigation_mode 还写 0：贴底时按 inset 自己认出手势导航，底下那条去掉。
-        ShadowBuild.setManufacturer("unknown")
+    /**
+     * 他的 S23 Ultra（One UI 8.5、Android 16）11-21 实测，换算成 dp（密度 2.625）：
+     * 手势 +「显示隐藏键盘按钮」：导航栏 39px=15dp，可点区域、手势区 126px=48dp，那条里有切换键盘和 ⌄；三键：三项都是 48dp。
+     * 两种都要留出整条 48dp，不管系统开关写的是什么。
+     */
+    @Test fun samsungOneUi85MeasuredReadingsKeepTheButtons() {
+        ShadowBuild.setManufacturer("samsung")
+        fun measureBars(nav: Int, tappable: Int, mandatory: Int): Int {
+            val insets = WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, nav))
+                .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, tappable))
+                .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, mandatory)).build()
+            return fixedKeyboardBottomInsetPx(insets, activity.window, extractBottomInset(insets, activity.window))
+        }
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 0)
+        for ((navigationMode, whileHidden) in listOf(2 to 1, 0 to 0)) {
+            mode(navigationMode)
+            Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", whileHidden)
+            assertEquals("mode=$navigationMode", 48, measureBars(nav = 15, tappable = 48, mandatory = 48))
+        }
         mode(0)
-        val reported = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
-        assertEquals(0, fixedKeyboardBottomInsetPx(reported, activity.window, 48))
-        // 三键导航（手势区和导航栏一样高、按钮占满）照旧整条留着。
-        val buttons = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, 48)).build()
-        assertEquals(48, fixedKeyboardBottomInsetPx(buttons, activity.window, 48))
-        // 贴底关着不猜。
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, false)
-        assertEquals(48, fixedKeyboardBottomInsetPx(reported, activity.window, 48))
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 0)
+        assertEquals(48, measureBars(nav = 48, tappable = 48, mandatory = 48))
+        // 手势、没报可点区域（没有按钮）：贴到底。
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        assertEquals(0, measureBars(nav = 15, tappable = 0, mandatory = 32))
     }
 
-    @Test fun nothingToPressMeansNoButtonsAndNotAThreeButtonBar() {
-        // 手势条 16dp，什么都没报成可点：贴到底。
-        assertEquals(true, nothingToPressAtBottom(tappablePx = 0, navButtonsPx = 0, navPx = 42, mandatoryPx = 42, density = 2.625f))
-        // 48dp 框里只报了手势条那段强制手势区：贴到底。
-        assertEquals(true, nothingToPressAtBottom(tappablePx = 0, navButtonsPx = 0, navPx = 126, mandatoryPx = 63, density = 2.625f))
-        // 系统报了可点区域，或本窗口里画了返回/切换输入法按钮：留着。
-        assertEquals(false, nothingToPressAtBottom(tappablePx = 126, navButtonsPx = 0, navPx = 126, mandatoryPx = 63, density = 2.625f))
-        assertEquals(false, nothingToPressAtBottom(tappablePx = 0, navButtonsPx = 126, navPx = 126, mandatoryPx = 63, density = 2.625f))
-        // 整条 48dp 都是强制手势区：三键导航的样子，可点区域没报也留着。
-        assertEquals(false, nothingToPressAtBottom(tappablePx = 0, navButtonsPx = 0, navPx = 126, mandatoryPx = 126, density = 2.625f))
+    @Test fun floatingKeyboardAvoidsReportedButtonsAndTheGestureZone() {
+        ShadowBuild.setManufacturer("OPPO")
+        mode(2)
+        val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
+            .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, 30))
+            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
+        val normal = extractBottomInset(insets, activity.window)
+        assertEquals(0, fixedKeyboardMinimumInsetPx(insets, activity.window, normal))
+        assertEquals(30, floatingMinimumInsetPx(activity.window, insets, normal))
+        val zoneOnly = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
+            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
+        assertEquals(18, floatingMinimumInsetPx(activity.window, zoneOnly, 48))
+        assertEquals(48, SettingsPreferences.getFloatingOffsetY(activity, defaultDp = 48))
+        // 手势区没报：按 32dp 留，拖条整段都能拖。
+        assertEquals(32, floatingMinimumInsetPx(activity.window,
+            WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48)).build(), 48))
+        // 三键：整条。
+        mode(0)
+        val buttons = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
+            .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, 48))
+            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 48)).build()
+        assertEquals(48, floatingMinimumInsetPx(activity.window, buttons, 48))
+    }
+
+    @Test fun diagnosticLineNamesTheStepAndTheReadings() {
+        ShadowBuild.setManufacturer("samsung")
+        mode(0)
+        val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48)).build()
+        val line = bottomNavDiagnostic(activity, readBottomNav(insets, activity, activity.window),
+            SettingsPreferences.KeyboardBottomPosition.AUTO, -4, 44)
+        for (part in listOf("Android ", "CyIME ", "navigation_mode=0", "导航栏 48", "第2步 三键", "底部位置 自动 调整 -4 dp", "留 44 dp"))
+            org.junit.Assert.assertTrue("$part 不在 $line", part in line)
+        SettingsPreferences.setKeyboardBottomDiagnostic(activity, line)
+        assertEquals(line, SettingsPreferences.getKeyboardBottomDiagnostic(activity))
     }
 
     @Test fun windowGapIgnoresOnePixelRounding() {
@@ -198,32 +245,6 @@ class FixedKeyboardBottomInsetTest {
         assertEquals(0, imeWindowBottomGapPx(screenBottomPx = 1752, windowBottomPx = 1751))
         assertEquals(90, imeWindowBottomGapPx(screenBottomPx = 1752, windowBottomPx = 1662))
         assertEquals(0, imeWindowBottomGapPx(screenBottomPx = 1752, windowBottomPx = 1800))
-    }
-
-    @Test fun samsungHideButtonKeepsRoomUnlessEdgeIsOn() {
-        ShadowBuild.setManufacturer("samsung")
-        mode(2)
-        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_hint", 1)
-        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
-        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -48)
-        assertEquals(48, measure())
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
-        assertEquals(0, measure())
-        mode(0)
-        assertEquals(48, measure(controls = 48))
-    }
-
-    @Test fun floatingKeyboardIgnoresEdgeAndStillAvoidsReportedButtons() {
-        ShadowBuild.setManufacturer("OPPO")
-        mode(2)
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
-        val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48))
-            .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, 30))
-            .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
-        val normal = extractBottomInset(insets, activity.window)
-        assertEquals(0, fixedKeyboardMinimumInsetPx(insets, activity.window, normal))
-        assertEquals(30, floatingMinimumInsetPx(activity.window, insets,
-            fixedKeyboardMinimumInsetPx(insets, activity.window, normal, edge = false)))
     }
 
     @Test fun visibleAndroidNavigationFrameProtectsItsRealTopOnAGesturePhone() {
@@ -238,9 +259,9 @@ class FixedKeyboardBottomInsetTest {
         val exact = android.view.View.MeasureSpec.EXACTLY
         decor.measure(android.view.View.MeasureSpec.makeMeasureSpec(360, exact), android.view.View.MeasureSpec.makeMeasureSpec(800, exact))
         decor.layout(0, 0, 360, 800)
-        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -48)
+        // 第 3 步：系统按钮条 18 + 4 = 22，可点区域不再另算。
         assertEquals(22, measure())
-        assertEquals(32, measure(controls = 32))
+        assertEquals(22, measure(controls = 32))
         frame.visibility = android.view.View.GONE
         assertEquals(0, measure())
         val host = android.view.View(activity)
@@ -252,6 +273,7 @@ class FixedKeyboardBottomInsetTest {
         frame.visibility = android.view.View.VISIBLE
         decor.viewTreeObserver.dispatchOnPreDraw()
         assertEquals(listOf(0, 22), observed)
+        // 三星 navigation_mode=0 明说三键：第 2 步先于按钮条，整条三键留着，不能只留 22 把三键挡住。
         mode(0)
         assertEquals(48, measure())
     }
@@ -299,25 +321,21 @@ class FixedKeyboardBottomInsetTest {
     @Test @Config(qualifiers = "sw800dp-w800dp-h1200dp")
     fun tabletKeepsTheTaskbarEvenIfTheWindowReportsNoButtons() {
         mode(2)
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
         assertEquals(48, measure())
     }
 
     @Test @Config(qualifiers = "sw800dp-w800dp-h1200dp")
-    fun aGestureOnlyTabletWithoutABottomTaskbarCanLowerItsKeyboard() {
+    fun aGestureOnlyTabletWithoutABottomTaskbarSitsAtTheBottom() {
         mode(2)
         val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, 18)).build()
-        assertEquals(18, fixedKeyboardBottomInsetPx(insets, activity.window, 18))
-        SettingsPreferences.setKeyboardBottomAdjustmentDp(activity, -18)
         assertEquals(0, fixedKeyboardBottomInsetPx(insets, activity.window, 18))
-        assertEquals(18, floatingMinimumInsetPx(activity.window, insets, 0))
+        assertEquals(18, floatingMinimumInsetPx(activity.window, insets, 18))
     }
 
     @Test @Config(sdk = [29])
     @Suppress("DEPRECATION")
     fun android10UsesItsLegacyTappableElementInsets() {
         mode(2)
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, true)
         fun measureQ(tappable: Int): Int {
             val insets = WindowInsets.Builder().setSystemWindowInsets(Insets.of(0, 0, 0, 48))
                 .setTappableElementInsets(Insets.of(0, 0, 0, tappable)).build()
@@ -325,7 +343,7 @@ class FixedKeyboardBottomInsetTest {
         }
         assertEquals(0, measureQ(48))
         assertEquals(0, measureQ(0))
-        SettingsPreferences.setEdgeToEdgeKeyboard(activity, false)
+        SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS)
         assertEquals(48, measureQ(48))
     }
 }

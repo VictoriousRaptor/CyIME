@@ -46,7 +46,7 @@
     <string name="item_prediction_title">智能联想</string>
     <string name="item_prediction_summary">基础联想、个人学习与可选模型增强</string>
     <string name="item_speech_title">语音转文本</string>
-    <string name="item_speech_summary">本地识别、在线语音、字幕</string>
+    <string name="item_speech_summary">语音模型、在线语音、标点、纠错</string>
     <string name="item_handwriting_title">手写</string>
     <string name="item_handwriting_summary">停顿识别、公式标记、手写模型</string>
     <string name="section_system">系统</string>

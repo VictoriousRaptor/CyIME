@@ -116,6 +116,12 @@ size_t T9SentenceBytes(const Sentence& sentence) {
 }
 }  // namespace
 
+// Tail pass (t9/tail_completion_weight): words looked at for each start, and lines extended from each start.
+constexpr size_t kTailWordsPerStart = 4;
+constexpr size_t kTailLinesPerStart = 8;
+// A completed word from the first key needs this many syllables: 一段时间 for yi duan shi jia, not 时间 for 史嘉.
+constexpr size_t kTailFirstWordSyllables = 3;
+
 bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_numeric_input)(const string&),
                    Dictionary* dict, UserDictionary* user_dict, deque<an<Sentence>>* sentences) {
   const auto& syllables = q.syllables;
@@ -498,13 +504,20 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     if (a->text != b->text) return a->text < b->text;
     return a->code < b->code;
   };
-  for (const auto& start : graph) {
+  map<SyllableId, std::pair<size_t, size_t>> tail_syllables;  // completion syllable → digits typed, digits still to type
+  // Extends the lines of states by the words of a graph into out (the main pass: out is states itself).
+  // tail: words ending in a syllable the last digits only begin (see the tail pass below), from at most
+  // tail_lines lines of each start.
+  auto extend = [&](const WordGraph& words, map<size_t, vector<an<T9Line>>>& out, bool tail, size_t tail_lines) {
+  for (const auto& start : words) {
     const auto found = states.find(start.first);
     if (found == states.end()) continue;
     for (const auto& end : start.second) {
       if (end.first <= start.first || static_cast<size_t>(end.first) > total || static_cast<size_t>(end.first) <= stable) continue;
-      auto& target = states[end.first];
+      auto& target = out[end.first];
+      size_t used = 0;
       for (const auto& previous : found->second) {
+        if (tail && used++ >= tail_lines) break;
         for (const auto& entry : end.second) {
           if (entry->IsPredictiveMatch()) continue;
           T9_WORK_COUNT(beam_evaluations);
@@ -577,9 +590,15 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
           // word as if it had been typed, so charge it t9/correction_penalty (nine-key has no corrector).
           if (q.enable_correction && q.IsCorrection(entry->code, end.first, start.first))
             score += o.t9_correction_penalty_;
-          // Penalize abbreviated/fuzzy spans.
-          score -= spelling_penalty * std::max(0.0,
-              static_cast<double>(end.first - start.first) - entry->quality_len);
+          // Penalize abbreviated/fuzzy spans. A completed last syllable is not spelled out: it pays
+          // t9/tail_completion_weight for each key still to type instead.
+          double unmatched = static_cast<double>(end.first - start.first) - entry->quality_len;
+          if (tail) {
+            const auto& completed = tail_syllables.at(entry->code.back());
+            unmatched -= static_cast<double>(completed.first);
+            score += o.t9_tail_completion_weight_ * static_cast<double>(completed.second);
+          }
+          score -= spelling_penalty * std::max(0.0, unmatched);
           if (target.size() >= o.t9_sentence_beam_ && score < target.back()->score) { T9_WORK_COUNT(beam_rejected); continue; }
           auto line = New<T9Line>();
           line->previous = previous;
@@ -618,6 +637,8 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       }
     }
   }
+  };
+  extend(graph, states, false, 0);
   if (cache) {
     // Keep the search frontier, not every dictionary bucket behind it. The
     // lattice already owns the winning prefixes. If future pruning moves the
@@ -672,12 +693,105 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       cache->frame_bytes += bytes;
     }
   }
+  // Last syllable still being typed (t9/tail_completion_weight, ln units for each key still to type; 0 = off): 542 is
+  // jia, and also the start of jian, jiang, jiao. Nine keys spell every prefix of jian as a syllable of its own, so
+  // the sentence never saw 时间 until the last key: 搁置了一段时 + 542 came out as 何止可以断食加. A word after other
+  // words, or from the first key with three syllables or more (two would turn 史嘉 typed out into 时间), that ends in a
+  // syllable the last digits begin also finishes a sentence, scored by the word model as typed out. One lookup in the
+  // last few syllables on a small copy of their rows, after the frame for later keys is kept: the main pass, its graph
+  // and the frames stay as they are (completions in the main graph made every next key look its words up again).
+  map<size_t, vector<an<T9Line>>> tail_states;
+  if (o.t9_tail_completion_weight_ < 0 && o.t9_ngram_ && !q.translator->strict_spelling() && total >= 4) {
+    auto* prism = dict->prism().get();
+    SyllableGraph tail_graph;
+    set<SyllableId> typed;
+    for (const auto& row : syllables.edges) {
+      const auto last = row.second.find(total);
+      if (last != row.second.end()) for (const auto& spelling : last->second) typed.insert(spelling.first);
+    }
+    for (const auto& row : syllables.edges) {
+      const auto last = row.second.find(total);
+      const size_t length = total - row.first;
+      if (row.first == 0 || last == row.second.end() || length < 2 || length > 5) continue;
+      if (std::none_of(last->second.begin(), last->second.end(),
+                       [](const auto& spelling) { return spelling.second.type == kNormalSpelling; })) continue;
+      vector<Prism::Match> keys;
+      prism->ExpandSearch(input.substr(row.first, length), &keys, 64);
+      for (const auto& key : keys) {
+        if (key.length <= length) continue;
+        SpellingAccessor accessor(prism->QuerySpelling(key.value));
+        for (; !accessor.exhausted(); accessor.Next()) {
+          const SyllableId id = accessor.syllable_id();
+          if (accessor.properties().type != kNormalSpelling || typed.count(id)) continue;
+          EdgeProperties props(accessor.properties());
+          props.type = kCompletion;
+          props.end_pos = total;
+          const size_t missing = key.length - length;
+          tail_graph.edges[row.first][total].emplace(id, props);
+          auto known = tail_syllables.emplace(id, std::make_pair(length, missing)).first;
+          if (missing < known->second.second) known->second = {length, missing};
+        }
+      }
+    }
+    if (!tail_graph.edges.empty()) {
+      // Words of up to four syllables end in the completion: their starts are the completed rows and up to three
+      // syllables before them. Only these rows are copied, the completion edges replace their edges to the end.
+      const size_t first_completed = tail_graph.edges.begin()->first;
+      set<size_t> origins;
+      for (const auto& row : tail_graph.edges) origins.insert(row.first);
+      for (int step = 0; step < 3; ++step) {
+        const set<size_t> reached = origins;
+        for (const auto& row : syllables.edges)
+          for (const auto& end : row.second)
+            if (reached.count(end.first)) { origins.insert(row.first); break; }
+      }
+      for (const auto origin : origins) {
+        const auto row = syllables.edges.find(origin);
+        if (row == syllables.edges.end()) continue;
+        for (const auto& end : row->second)
+          if (static_cast<size_t>(end.first) < total) tail_graph.edges[origin][end.first] = end.second;
+      }
+      tail_graph.input_length = syllables.input_length;
+      tail_graph.interpreted_length = total;
+      for (const auto& start : tail_graph.edges) {
+        auto& index = tail_graph.indices[start.first];
+        for (auto end = start.second.rbegin(); end != start.second.rend(); ++end)
+          for (const auto& spelling : end->second) index[spelling.first].push_back(&spelling.second);
+      }
+      vector<size_t> starts;
+      for (const auto origin : origins) if (states.count(origin)) starts.push_back(origin);
+      // Only entries from the first completed row on: words of four syllables are collected where their fourth
+      // syllable starts, which is that row.
+      auto buckets = dict->LookupAll(tail_graph, starts, &q.translator->blacklist(), false, first_completed,
+                                     o.t9_dictionary_beam_,
+                                     is_numeric_input(input));
+      WordGraph words;
+      for (auto& start : buckets) {
+        map<int, DictEntryList> found;
+        T9Collect(found, start.second, kTailWordsPerStart);
+        const auto at_end = found.find(static_cast<int>(total));
+        if (at_end == found.end()) continue;
+        auto& list = words[start.first][static_cast<int>(total)];
+        for (const auto& entry : at_end->second)
+          if (entry && !entry->IsPredictiveMatch() && !entry->code.empty() && tail_syllables.count(entry->code.back()) &&
+              (start.first > 0 || entry->code.size() >= kTailFirstWordSyllables))
+            list.push_back(entry);
+      }
+      extend(words, tail_states, true, kTailLinesPerStart);
+    }
+  }
   // Explicit final beam: all survivors receive the same bounded second pass.
   // Reorder the actual native Sentence objects before filters and Menu indexing.
   // Sentence end (n-gram </s>, weighted by t9/ngram_eos_weight): how naturally a finished
   // path could end here. It only orders the finished paths; states kept for later keys
   // are unchanged, since the composition may continue.
   vector<std::pair<double, an<T9Line>>> final;
+  if (tail_states.count(total)) {
+    auto& finished = states[total];
+    for (const auto& line : tail_states[total])
+      if (std::none_of(finished.begin(), finished.end(), [&](const auto& other) { return other->text == line->text; }))
+        finished.push_back(line);
+  }
   for (const auto& line : states[total]) {
     double rank = line->score;
     if (o.t9_ngram_ && o.t9_ngram_eos_weight_ > 0)

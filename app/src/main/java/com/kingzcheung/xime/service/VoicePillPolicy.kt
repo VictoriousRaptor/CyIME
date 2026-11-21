@@ -65,6 +65,29 @@ internal fun voicePillResumeApplies(mark: VoicePillResumeMark?, packageName: Str
     mark != null && packageName != null && mark.packageName == packageName &&
         nowMs - mark.atMs in 0..VOICE_PILL_RESUME_WINDOW_MS
 
+/** 同一个输入框：应用包名 + 输入框编号。聊天应用里不同会话常共用一个编号，只认焦点没离开过的那一次。 */
+internal data class VoiceFieldKey(val packageName: String, val fieldId: Int)
+
+/**
+ * 连续语音：这句听写因为发送停下（输入框从有字变空，或宿主为清空重启了同一个输入框）时，收尾后要不要在原输入框接着听。
+ * 不看是不是收成了悬浮条；用户自己已经要求结束（点麦克风停、松开空格、按住上滑取消）的不接着听。
+ * [textNow] 是停下那一刻输入框里的字：要读得到、而且是空的，才算真发出去了。
+ */
+internal fun voiceRelistenArmsAfterSend(enabled: Boolean, userEnding: Boolean, keyboardOwnField: Boolean,
+    secret: Boolean, field: VoiceFieldKey?, textNow: CharSequence?): VoiceFieldKey? =
+    field.takeIf { enabled && !userEnding && !keyboardOwnField && !secret && textNow != null && textNow.isEmpty() }
+
+/** 真开麦前再查：焦点还在发送前那个输入框（换了框、换了应用都不开）。 */
+internal fun voiceRelistenApplies(target: VoiceFieldKey?, current: VoiceFieldKey?): Boolean =
+    target != null && target == current
+
+/**
+ * 宿主重启输入框时是不是「回到这个应用」：同一个输入框原地重启（发送清空、写满一行重设文字）不算，
+ * 那种情况由 [voiceRelistenApplies] 管；否则一次发送会把悬浮条的记号用掉，下一次发送又没了（「两次一组」）。
+ */
+internal fun voicePillResumeOnStart(restarting: Boolean, last: VoiceFieldKey?, current: VoiceFieldKey?): Boolean =
+    !(restarting && current != null && current == last)
+
 /** 输入框本身是否允许自动开麦：密码等敏感框、不许语音的框、通话中都不开。 */
 internal fun voicePillResumeFieldAllows(sensitive: Boolean, locksNativeInput: Boolean, inCall: Boolean, hasMicPermission: Boolean): Boolean =
     !sensitive && !locksNativeInput && !inCall && hasMicPermission

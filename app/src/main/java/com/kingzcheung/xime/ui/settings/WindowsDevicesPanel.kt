@@ -75,7 +75,7 @@ internal fun WindowsDevicesPanelContent(
     SettingsSection(title = "连接状态", content = {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(status, style = MaterialTheme.typography.titleMedium)
-            Text(if (paired == null) "同一 Wi-Fi 自动查找电脑；首次请点选电脑并核对连接码，或扫描自己电脑的二维码。"
+            Text(if (paired == null) "自动查找同一 Wi-Fi 下的电脑，首次连接要核对连接码。"
                 else if (!enabled) "已记住 ${saved.size} 台设备；本机同步已暂停，可在下方开启。"
                 else if (saved.size > 1) "已记住 ${saved.size} 台设备，自动连接当前网络里能连上的那台。"
                 else "已记住 ${paired.name}，设备可用时自动重连。", style = MaterialTheme.typography.bodyMedium)
@@ -83,7 +83,7 @@ internal fun WindowsDevicesPanelContent(
                 Text("${pending.computerName} · 连接码", style = MaterialTheme.typography.bodyMedium)
                 Text(pending.code, style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.testTag("windows-pairing-code"))
-                Text("请对照自己电脑上显示的连接码；一致才确认。两分钟内未确认会自动取消。",
+                Text("和电脑上显示的连接码一致再确认。",
                     style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (pending.ready) Button(onClick = { onConfirm(pending.requestId) },
@@ -135,8 +135,8 @@ internal fun WindowsDevicesPanelContent(
                 Spacer(Modifier.width(8.dp))
                 Text(if (paired == null) "扫码连接电脑" else "扫码添加另一台设备")
             }
-            SettingsJumpText(if (paired == null) "未能自动连接？在电脑“手机与电脑互联”中展开“连接新手机 / 无法自动连接？”，点击“使用二维码连接”，再用这里扫码。"
-                else "已配对的设备都会保留。扫另一台电脑的二维码，或另一部手机/平板在「让其他手机或平板连接本机」里显示的二维码。",
+            SettingsJumpText(if (paired == null) "连不上？在电脑上选“使用二维码连接”，再用这里扫码。"
+                else "扫码可以再添加一台设备；手机或平板的二维码在它的「让其他手机或平板连接本机」里。",
                 jumps = listOf("让其他手机或平板连接本机"),
                 style = MaterialTheme.typography.bodyMedium)
             val unpaired = devices.filterNot { peer -> saved.any { it.id == peer.id } }

@@ -94,16 +94,17 @@ internal sealed interface HardwareCandidateDecision {
 /**
  * Physical arrows belong to the editor, independent of candidate-window navigation.
  *
- * 空格有意不跟随工具栏高亮（用户 2026-10-12 决定，勿按 Windows 端改回“空格选高亮”）：
- * Android 每次上屏后都会自动弹出下一个词的智能联想，空格必须始终是可预期的普通动作——
- * 组词时确认默认候选，上屏后的联想只能用数字或点按选，空格照常输入空格，
- * 否则正常打字会频繁把联想词误上屏。Windows 端空格上屏 Rime 高亮的那个候选，两端在此有意不同。
+ * 空格不选上屏后的联想（用户 2026-10-12 决定）：Android 每次上屏后都会自动弹出下一个词的智能联想，
+ * 空格在那时照常输入空格，联想只能用数字或点按选，否则正常打字会频繁把联想词误上屏。
+ * 组词时空格上屏默认候选；用户自己用 Tab、方向键把高亮移到别的候选（[highlighted]）时上屏高亮的那个
+ * （11-18 用户反馈：按 Tab 移到第三个，空格上屏的还是第一个）。联想不受影响：高亮只在组词时传进来。
  */
 internal fun physicalCandidateDecision(
     key: HardwareCandidateKey,
     snapshot: HardwareCandidateSnapshot,
     engineHasInput: Boolean?,
     digitIndex: Int? = null,
+    highlighted: Int? = null,
 ): HardwareCandidateDecision = when (key) {
     HardwareCandidateKey.CANCEL -> HardwareCandidateDecision.Cancel
     HardwareCandidateKey.LEFT, HardwareCandidateKey.RIGHT,
@@ -115,7 +116,8 @@ internal fun physicalCandidateDecision(
             // confirms active composition, using the current FIFO snapshot.
             if (engineHasInput == true && !snapshot.presentation.association &&
                 !snapshot.state.isShowingRecentClipboard && snapshot.words.isNotEmpty()) {
-                val index = if (snapshot.expandedGlobalIndices != null || snapshot.windowStart > 0) 0
+                val index = highlighted?.takeIf { it in snapshot.words.indices }
+                    ?: if (snapshot.expandedGlobalIndices != null || snapshot.windowStart > 0) 0
                     else snapshot.state.spaceCandidateIndex(snapshot.profile)
                 HardwareCandidateDecision.Confirm(index, false)
             } else if (engineHasInput == true && !snapshot.presentation.association &&

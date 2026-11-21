@@ -729,6 +729,21 @@ object KeysConfigHelper {
     fun ownSectionForSchema(schemaId: String): String? = _schemaSectionBindings[schemaId]
 
     /**
+     * 判断自定义键盘 section 是否为「单字母按键」布局（无双字母合并键，如乱序十七 `qwerty_lxsq17`）。
+     * 单字母布局每个键只发送单个确定字符，可直接支持局部修改而不受 14/17/18 合并键限制。
+     */
+    internal fun isSingleLetterSection(layoutId: String): Boolean {
+        if (layoutId in setOf("qwerty_14", "qwerty_17", "qwerty_18")) return false
+        val rows = _mergedRows[layoutId] ?: return false
+        if (rows.isEmpty()) return false
+        val configs = _mergedGestureConfigs[layoutId].orEmpty()
+        return rows.flatten().all { cell ->
+            val value = configs[cell]?.tap?.value?.takeIf { it.isNotEmpty() } ?: cell
+            cell.length == 1 && value.length == 1
+        }
+    }
+
+    /**
      * 绑定解析：仅认 schemas 声明（xime.yaml / xime.custom.yaml keyboard.<section>.schemas），
      * 未声明的方案一律全键盘（26 键），不做 id 关键字猜测。
      * 代码布局 section（t9/stroke）不是行数据布局，不作为合并键解析结果。

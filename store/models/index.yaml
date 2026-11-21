@@ -1,0 +1,78 @@
+# 网上模型目录（App 的 RemoteModelVersions 读它）：只给 App 里已有的模型补新版本，最新的放前面。
+# 每个文件都要写 sha256 和 sizeBytes、地址用 https，否则 App 不收。魔搭一份由 scripts/store/sync_modelscope.py store 同步。
+models:
+  - id: ochwpro
+    name: 手写模型
+    category: handwriting
+    versions:
+      - version: v1.3
+        date: "2026-11-19"
+        changelog: 202 人贡献样本微调，没见过的人常用字首选约 71% → 80%
+        size: 6.7 MB
+        files:
+          - name: ochwpro.onnx
+            url: "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/ochwpro-v1.3-ochwpro.onnx"
+            sha256: "e0250abf61e7efdf9ae0e4abd64ef7d52d86fc412d9f11a7c2615cdd4fca6d2b"
+            sizeBytes: 7001270
+            mirrors:
+              - "https://github.com/Cyletix/CyIME/releases/download/models/ochwpro-v1.3-ochwpro.onnx"
+          - name: char_index.json
+            url: "https://www.modelscope.cn/models/bikeand/ochwpro/resolve/master/char_index.json"
+            sha256: "171cf2ac23731428ac9dd28f64be82dece5f66a0ca3d674ffb3b567b51532176"
+            sizeBytes: 51317
+            mirrors:
+              - "https://github.com/Cyletix/CyIME/releases/download/models/ochwpro-v1.0-char_index.json"
+  - id: handwriting-rare
+    name: 手写生僻字
+    category: other
+    versions:
+      - version: 47ef2324
+        date: "2026-11-19"
+        changelog: 配手写模型 v1.3 重做的生僻字模板
+        size: 3.8 MB
+        sha256: "47ef2324965aa395759a69f7137625d9485e02b30452f68c92cfcf918005e870"
+        archive:
+          url: "https://github.com/Cyletix/CyIME/releases/download/models/handwriting-rare-47ef2324.tar.bz2"
+          sha256: "47ef2324965aa395759a69f7137625d9485e02b30452f68c92cfcf918005e870"
+          mirrors:
+            - "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/handwriting-rare-47ef2324.tar.bz2"
+        files:
+          - name: hanzi_rare_och.bin
+            sha256: "3e67104a9b70c488209cea69dfe201b2a249fa73b0b62c53fda4c88af84235e3"
+            sizeBytes: 4797296
+          - name: hanzi_rare_och.json
+            sha256: "105809766a22b6ed175d049571179caa8f296313f4b1d1dc12422b8771fb56a1"
+            sizeBytes: 60435
+  - id: japanese-handwriting
+    name: 日语手写
+    category: other
+    versions:
+      - version: 67d122b5
+        date: "2026-11-19"
+        changelog: 配手写模型 v1.3 重做的假名、日语汉字模板
+        size: 3.0 MB
+        sha256: "67d122b56b7e9242daf01fa19acd1a11c414f7621bb4e0989316f755f719305a"
+        archive:
+          url: "https://github.com/Cyletix/CyIME/releases/download/models/japanese-handwriting-67d122b5.tar.bz2"
+          sha256: "67d122b56b7e9242daf01fa19acd1a11c414f7621bb4e0989316f755f719305a"
+          mirrors:
+            - "https://www.modelscope.cn/models/Cyletix/cyime-model/resolve/master/japanese-handwriting-67d122b5.tar.bz2"
+        files:
+          - name: kana_default_strokes.json
+            sha256: "2b82e9b4ee2c463909e385904f604709af411a02463bda0e46cfd66c801870ab"
+            sizeBytes: 1087267
+          - name: kana_default_och.bin
+            sha256: "f6cb9d7dbd724faaf5395a16de1eac661afb4f273944c9b65ffcc560db6279a4"
+            sizeBytes: 2027520
+          - name: kana_default_och.json
+            sha256: "4b332bec7544ed41e67e5a8a4bc260d3df0ece3fcd211d4a5da35cab14f6d342"
+            sizeBytes: 9606
+          - name: japanese_kanji_strokes.json
+            sha256: "d3fd183315af5e4e9f5b6c171acbc3e0d31f3689c94870c092fe934ecc71529b"
+            sizeBytes: 1450736
+          - name: japanese_kanji_och.bin
+            sha256: "efba1df3d5ad8181bd0e1a3d9481c60a06bc6be0f3aff96331351ed1a08690ec"
+            sizeBytes: 1013760
+          - name: japanese_kanji_och.json
+            sha256: "603dd063befabf60f1e2659e88a8501d906c7713c02d60ddf9a73d41ce2fc349"
+            sizeBytes: 4863
