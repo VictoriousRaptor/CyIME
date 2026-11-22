@@ -141,6 +141,23 @@ class SpeechLanguagesTest {
         assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.JAPANESE) }
     }
 
+    @Test fun cantoneseSharesSenseVoiceFilesButUsesItsOwnDecoderLanguage() {
+        val context = mock<Context>()
+        whenever(context.filesDir).thenReturn(files.root)
+        val manager = AsrModelManager(context)
+        val mode = SpeechModelCatalog.SENSEVOICE_YUE
+        val cantonese = manager.selection(mode, InputLanguage.CHINESE)
+        val mandarin = manager.selection(SpeechModelCatalog.SENSEVOICE, InputLanguage.CHINESE)
+        assertEquals(mandarin.secondDir, cantonese.secondDir)
+        assertEquals("zh", mandarin.recognitionLanguage)
+        assertEquals("yue", cantonese.recognitionLanguage)
+        assertNotEquals(mandarin.key, cantonese.key)
+        assertNull(cantonese.first)
+        assertFalse(SpeechLanguages.supports(mode, InputLanguage.ENGLISH))
+        assertFalse(SpeechModelSelection.xasrFinalizes(mode, chinese = true, wholeSentenceOn = true))
+        assertEquals(listOf(SpeechModelSelection.Finish.NONE), SpeechModelSelection.finishOptions(mode, chinese = true))
+    }
+
     @Test fun incompatibleExplicitSelectionIsRejectedBeforeFileAccess() {
         val context = mock<Context>()
         assertThrows(IllegalArgumentException::class.java) {
