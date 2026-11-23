@@ -7,6 +7,11 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the custom GitHub Release after uploading the APK artifact
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -186,6 +191,7 @@ jobs:
       cancel-in-progress: true
     env:
       GRADLE_OPTS: -Dorg.gradle.daemon=false
+      ROBOLECTRIC_MAVEN_URL: https://maven-central.storage-download.googleapis.com/maven2
     steps:
       - name: Check out source and native submodules
         uses: actions/checkout@v7
@@ -308,6 +314,8 @@ jobs:
             -PbundleModels=false --no-daemon --max-workers=2 --console=plain
 
       - name: Run keyboard regression tests
+        env:
+          JAVA_TOOL_OPTIONS: -Drobolectric.dependency.repo.url=${{ env.ROBOLECTRIC_MAVEN_URL }}
         run: |
           ./gradlew :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
             --tests com.kingzcheung.xime.keyboard.KeyboardModeNavigationTest \
@@ -330,7 +338,7 @@ jobs:
           retention-days: 30
 
       - name: Publish custom GitHub Release
-        if: github.ref == 'refs/heads/custom'
+        if: github.ref == 'refs/heads/custom' && inputs.publish_release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release_version.outputs.tag }}
