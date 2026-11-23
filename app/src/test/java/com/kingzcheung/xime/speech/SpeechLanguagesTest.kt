@@ -155,8 +155,15 @@ class SpeechLanguagesTest {
         assertNull(automatic.first)
         assertEquals(mode, SpeechModelSelection.selectPrimary(mode, SpeechModelCatalog.SENSEVOICE))
         assertFalse(SpeechLanguages.supports(mode, InputLanguage.ENGLISH))
-        assertFalse(SpeechModelSelection.xasrFinalizes(mode, chinese = true, wholeSentenceOn = true))
-        assertEquals(listOf(SpeechModelSelection.Finish.NONE), SpeechModelSelection.finishOptions(mode, chinese = true))
+        assertTrue(SpeechModelSelection.xasrFinalizes(mode, chinese = false, wholeSentenceOn = true))
+        assertEquals(listOf(SpeechModelSelection.Finish.NONE, SpeechModelSelection.Finish.WHOLE), SpeechModelSelection.finishOptions(mode, chinese = true))
+    }
+
+    @Test fun automaticFinalizationUsesXasrOnlyForLanguagesItsModelSupports() {
+        for (language in listOf("zh", "<|zh|>", "en", "<|en|>"))
+            assertTrue(language, SpeechModelCatalog.xasrSupportsLanguage(language))
+        for (language in listOf("<|yue|>", "ja", "ko", "<|nospeech|>", ""))
+            assertFalse(language, SpeechModelCatalog.xasrSupportsLanguage(language))
     }
 
     @Test fun incompatibleExplicitSelectionIsRejectedBeforeFileAccess() {

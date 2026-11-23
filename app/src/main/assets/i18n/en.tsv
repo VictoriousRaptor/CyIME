@@ -4023,3 +4023,5 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 没有候选时点「→」	Tap “→” with no candidates
 光标右移一格，左滑左移、右滑右移。	moves the cursor right one character; swipe left or right to move it.
 超过 22 候选栏会整条变高	Above 22 the whole candidate bar gets taller
+普通话和英语用 X-ASR 定稿；粤语等语言保留首次识别结果	X-ASR finalizes Mandarin and English. Cantonese and other languages keep the first transcript.
+使用 SenseVoice 整句定稿，支持粤语	Finalize whole sentences with SenseVoice, including Cantonese

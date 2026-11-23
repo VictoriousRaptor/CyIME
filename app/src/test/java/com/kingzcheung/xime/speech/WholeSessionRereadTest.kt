@@ -59,6 +59,26 @@ class WholeSessionRereadTest {
         assertTrue("both sentences are decoded at their pause/stop first", engine.reread.size >= 3)
     }
 
+    @Test fun `language routed segments keep their own final text at stop`() {
+        val engine = object : Engine() {
+            override val hasRefinement = false
+            override val isStreaming = false
+            override val finalizesPerRegion = true
+            override fun refinePunctuated(samples: FloatArray): String {
+                reread.add(samples.size)
+                return if (reread.size == 1) "得唔得？" else "Hello."
+            }
+        }
+        val session = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        session.acceptPcm(pcm(16000, loud))
+        session.acceptPcm(pcm(32000, quiet))
+        session.acceptPcm(pcm(16000, loud))
+        val text = session.finish()
+        assertEquals(2, engine.reread.size)
+        assertTrue(text.startsWith("得唔得？"))
+        assertTrue(text.endsWith("Hello."))
+    }
+
     @Test fun `SenseVoice alone with the switch off keeps the old segments without a re-read`() {
         val engine = object : Engine() {
             override val hasRefinement = false

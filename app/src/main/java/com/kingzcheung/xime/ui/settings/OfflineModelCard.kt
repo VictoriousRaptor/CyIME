@@ -152,8 +152,12 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
-                    "整句定稿 · X-ASR" to "说完后用 X-ASR 整句再认一遍" else
-                    "整句定稿 · SenseVoice" to ("说完后整句再认一遍，更准但稍慢" +
+                    "整句定稿 · X-ASR" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
+                        "普通话和英语用 X-ASR 定稿；粤语等语言保留首次识别结果"
+                    else "说完后用 X-ASR 整句再认一遍") else
+                    "整句定稿 · SenseVoice" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
+                        "使用 SenseVoice 整句定稿，支持粤语"
+                    else "说完后整句再认一遍，更准但稍慢" +
                         if (xasrReady) "" else "; 也可下载 X-ASR 对比")
             }
             val checked = finish == current && (finalizer == null || finalizer == usedFinalizer)
