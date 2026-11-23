@@ -101,9 +101,11 @@ private fun EmojiContent(
         listOf(EmojiCategory(name = "最近使用", icon = "🕘", emojis = recentEmojis)) +
             allCategories.filter { !it.isPlugin } + allCategories.filter { it.isPlugin }
     }
-    val pager = rememberPagerState(initialPage = if (categories.size > 1) 1 else 0,
+    // 打开时有最近使用就停在「最近使用」；还没有记录时才去第一个内置分类（笑脸）。
+    val startOnRecent = remember { recentEmojis.isNotEmpty() }
+    val pager = rememberPagerState(initialPage = if (!startOnRecent && categories.size > 1) 1 else 0,
         pageCount = { categories.size })
-    var initialCategoryChosen by remember { mutableStateOf(categories.size > 1) }
+    var initialCategoryChosen by remember { mutableStateOf(startOnRecent || categories.size > 1) }
     val tabs = rememberLazyListState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(categories.size) {

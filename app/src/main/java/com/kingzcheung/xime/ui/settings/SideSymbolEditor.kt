@@ -108,7 +108,7 @@ internal fun SideSymbolEditor(target: SideSymbolTarget, onResetReady: ((() -> Un
     fun save(of: SideSymbolTarget, next: List<String>) {
         lists = lists + (of to next)
         SettingsPreferences.getPrefsPublic(context).edit()
-            .putString(of.prefKey, next.joinToString("\n") { it.trim() }).apply()
+            .putString(of.prefKey, next.joinToString("\n") { SideSymbolTarget.cellText(it) }).apply()
     }
 
     fun reset() {
@@ -178,13 +178,14 @@ internal fun SideSymbolEditor(target: SideSymbolTarget, onResetReady: ((() -> Un
         val canGrow = of.slots == null
         fun finish() {
             editingKey = null
-            val value = draft.trim()
+            // 不去空格：「, 」后面的空格是用户要的（11-22）。全是空格也算一格（上屏空格）。
+            val value = SideSymbolTarget.cellText(draft)
             if (adding) { if (value.isNotEmpty()) save(of, list + value) }
             else if (value != list[index]) save(of, list.toMutableList().also { it[index] = value })
         }
         // 框里改了字还没点「完成」就点了框外或返回：先问，不直接丢（用户 11-19）。
         var leaving by remember(editingKey, index) { mutableStateOf(false) }
-        val changed = draft.trim() != (if (adding) "" else list[index])
+        val changed = SideSymbolTarget.cellText(draft) != (if (adding) "" else list[index])
         AlertDialog(onDismissRequest = { if (changed) leaving = true else editingKey = null },
             modifier = Modifier.testTag("side-symbol-dialog"),
             title = { Text(if (adding) "加一格" else if (targets.size > 1) "${of.label}第 ${index + 1} 格" else "第 ${index + 1} 格") },

@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 首次准备词库时的前台服务（PreparationService）：切到系统设置启用、熄屏时系统不冻结、不先杀掉正在编译的进程。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- 应用内更新：把从 GitHub 下载的新版安装包交给系统安装程序（每次由用户确认）。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     
@@ -41,7 +44,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Xime"
         tools:targetApi="31">
-        
+
+        <!-- true only in 装到我的设备 builds (app/build.gradle.kts): adb may then sample where the CPU goes. -->
+        <profileable android:shell="${profileableByShell}" tools:targetApi="29" />
+
         <!-- Developer tool for test scripts (does nothing outside 装到我的设备 builds); only adb (DUMP) may send it. -->
         <receiver
             android:name="com.kingzcheung.xime.service.DevLearningReceiver"
@@ -389,6 +395,12 @@
                 android:resource="@xml/method" />
         </service>
         
+        <!-- 首次准备词库期间开着，准备完就停（见 PreparationService）。 -->
+        <service
+            android:name="com.kingzcheung.xime.rime.PreparationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

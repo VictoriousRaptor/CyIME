@@ -183,7 +183,7 @@ class PreeditEditorImeTest {
         // Expanded entries render the word and its annotation in one styled Text node.
         val comment = candidate!!.comment.replace("~", "")
         val displayText = value + if (comment.isNotEmpty()) " $comment" else ""
-        rule.pullOpenCandidates()
+        rule.onNodeWithTag("candidate-expansion").performTouchInput { click() }
         rule.waitUntil(5000) { rule.onAllNodesWithTag("expanded-candidates").fetchSemanticsNodes().isNotEmpty() }
         try {
             rule.onNodeWithTag("expanded-candidates").performScrollToNode(hasText(displayText, substring = false))
@@ -289,7 +289,7 @@ class PreeditEditorImeTest {
         rule.onNodeWithText("ni'hao", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("candidate-preedit").assertDoesNotExist()
         val bar = rule.onNodeWithTag("preedit-editor").fetchSemanticsNode()
-        val candidate = rule.onNodeWithTag("candidate-hide").fetchSemanticsNode()
+        val candidate = rule.onNodeWithTag("candidate-expansion").fetchSemanticsNode()
         assertTrue("editor must be above the candidate row", bar.positionOnScreen.y + bar.size.height <= candidate.positionOnScreen.y + 2)
         val qAfter = rule.onNodeWithText("q", ignoreCase = true).fetchSemanticsNode()
         assertEquals(qPosition, qAfter.positionOnScreen); assertEquals(qSize, qAfter.size)
@@ -397,7 +397,7 @@ class PreeditEditorImeTest {
         rule.waitUntil(5000) { engine.getCandidates().contains("你好") }
         tap("，")
         assertSettled("前文你好，")
-        rule.onNodeWithTag("candidate-pull-expand").assertDoesNotExist()
+        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
         rule.onNodeWithTag("candidate-preedit").assertDoesNotExist()
     }
 

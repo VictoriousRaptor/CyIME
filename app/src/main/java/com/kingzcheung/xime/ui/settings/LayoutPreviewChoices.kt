@@ -106,6 +106,8 @@ internal fun LayoutPreviewChoices(
     onManage: (() -> Unit)? = null,
     /** 没有当前方案的布局：标灰，仍可点（点了换方案，由调用方提示）。 */
     unavailableIds: Set<String> = emptySet(),
+    /** 灰卡片上写的原因（[InputProfileSelection.unavailableNotes]），键是布局 ID。 */
+    unavailableNotes: Map<String, String> = emptyMap(),
     onSelect: (String) -> Unit,
 ) {
     val revision by KeysConfigHelper.configVersion.collectAsState()
@@ -142,7 +144,7 @@ internal fun LayoutPreviewChoices(
                     Box(Modifier.choiceRowSlideIn(scroll)) {
                     PreviewChoiceCard(layout.displayName, chosen, width, previewHeight,
                         containerColor, contentColor, accentColor, "$itemTagPrefix${layout.id}", { scroll.picked(); onSelect(layout.id) },
-                        unavailable = layout.id in unavailableIds) {
+                        unavailable = layout.id in unavailableIds, note = unavailableNotes[layout.id]) {
                                 if (rows.isEmpty()) Icon(Icons.Outlined.Keyboard, "${layout.displayName}布局", tint = contentColor)
                                 else MiniatureKeyboard(rows, layout.kind in setOf(LayoutKind.ALPHABETIC, LayoutKind.MERGED, LayoutKind.ZHUYIN),
                                     contentColor, Modifier.testTag("layout-preview:${layout.id}"), fillKeys = !containerColor.isNearBlack(),
@@ -169,17 +171,27 @@ internal fun LayoutPreviewChoices(
 internal fun PreviewChoiceCard(label: String, chosen: Boolean, width: Dp, previewHeight: Dp,
     containerColor: Color, contentColor: Color, accentColor: Color, tag: String,
     onSelect: () -> Unit, isAction: Boolean = false, unavailable: Boolean = false,
+    /** 灰卡片的原因：写在缩略图上，字不跟着变淡；缩略图和名字照旧变淡。 */
+    note: String? = null,
     preview: @Composable BoxScope.() -> Unit) {
     // 同方案卡片：键盘里开着液态玻璃时，没选中的卡片用细亮边代替灰描边。
     val liquid = !chosen && com.kingzcheung.xime.ui.theme.LiquidGlass.surfacesOn()
-    Surface(modifier = if (unavailable) Modifier.alpha(.4f).semantics { stateDescription = "没有当前方案" } else Modifier,
+    val explained = unavailable && note != null
+    Surface(modifier = when {
+            explained -> Modifier.semantics { stateDescription = note!!.replace("\n", "，") }
+            unavailable -> Modifier.alpha(.4f).semantics { stateDescription = "没有当前方案" }
+            else -> Modifier
+        },
         shape = RoundedCornerShape(14.dp), color = containerColor,
         border = if (liquid) null else BorderStroke(if (chosen) 1.5.dp else 1.dp,
             if (chosen) accentColor else contentColor.copy(alpha = idleBorderAlpha(containerColor)))) {
         Column(Modifier.then(if (liquid) Modifier.liquidGlassEdge(14.dp) else Modifier).width(width).testTag(tag).then(if (isAction) Modifier.clickable(role = Role.Button, onClick = onSelect)
             else Modifier.selectable(chosen, role = Role.RadioButton, onClick = onSelect))) {
             Box(Modifier.fillMaxWidth().height(previewHeight).padding(4.dp), contentAlignment = Alignment.Center) {
-                preview()
+                if (explained) {
+                    Box(Modifier.fillMaxSize().alpha(.25f), contentAlignment = Alignment.Center) { preview() }
+                    UnavailableNote(note!!, contentColor, Modifier.testTag("$tag:note"))
+                } else preview()
                 if (chosen) Icon(Icons.Default.CheckCircle, "已选中", Modifier.align(Alignment.TopEnd).size(14.dp), tint = accentColor)
             }
             HorizontalDivider(Modifier.testTag("$tag:divider"), color = contentColor.copy(alpha = .22f))
@@ -187,10 +199,23 @@ internal fun PreviewChoiceCard(label: String, chosen: Boolean, width: Dp, previe
                 .background(if (chosen) chosenFill(containerColor, accentColor) else Color.Transparent)
                 .padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(label, Modifier.weight(1f), color = contentColor,
+                Text(label, Modifier.weight(1f), color = if (explained) contentColor.copy(alpha = .55f) else contentColor,
                     style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/** 两行放得下就写两行（不能用什么、点了换成什么），矮的卡片只写第一行。 */
+@Composable
+private fun UnavailableNote(note: String, contentColor: Color, modifier: Modifier) {
+    val style = MaterialTheme.typography.labelSmall
+    val lineHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val lines = note.lines()
+        val shown = if (maxHeight >= lineHeight * lines.size) note else lines.first()
+        Text(shown, modifier, color = contentColor, style = style, textAlign = TextAlign.Center,
+            maxLines = lines.size, overflow = TextOverflow.Ellipsis)
     }
 }
 

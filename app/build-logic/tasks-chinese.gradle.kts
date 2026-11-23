@@ -786,7 +786,7 @@ val prepareChineseDictionaries by tasks.registering {
             "Upstream rime_ice translator list changed"
         }
         // The 14-key and 注音 schemas (assets/rime_chinese) repeat these sentence rules; keep them the same list.
-        for (schema in listOf("pinyin_14jian", "cyime_zhuyin")) check(file("src/main/assets/rime_chinese/$schema.schema.yaml").readText()
+        for (schema in listOf("pinyin_14jian", "double_pinyin_flypy_14jian", "cyime_zhuyin")) check(file("src/main/assets/rime_chinese/$schema.schema.yaml").readText()
             .contains("  sentence_position_final_only: [${particles.joinToString(", ")}]\n")) {
             "$schema.schema.yaml sentence_position_final_only differs from app/data particle lists"
         }

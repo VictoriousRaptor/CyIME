@@ -446,10 +446,9 @@ fun SwipeableKeyButton(
     val downCornerLabel = swipeDownKeyLabel.takeUnless { reserveDragForGlide && !letterGlideOwnsDrag || downCornerOff }
     val keyOnSwipe = onSwipe.takeUnless { !cornerSymbols && upSymbol != null }
     val keyOnSwipeDown = onSwipeDown.takeUnless { !cornerSymbols && downSymbol != null }
-    // 角标提示关着时键上不画角标，滑动时改用气泡显示要输入的符号（用户 11-14：长按有气泡，上下滑没有）。
+    // 角标提示关着时键上不画角标，滑动时照样提示要输入的符号（用户 11-14：长按有提示，上下滑没有）。
     val upHint = swipeText?.takeIf { it.isNotEmpty() } ?: upSymbol?.takeIf { keyOnSwipe != null }
     val downHint = swipeDownText?.takeIf { it.isNotEmpty() } ?: downSymbol?.takeIf { keyOnSwipeDown != null }
-    val cornerShown = !upCornerLabel.isNullOrEmpty() || !downCornerLabel.isNullOrEmpty()
     // 滑到哪个键按哪个键（用户 11-14，像三星键盘）：滑行和「上下滑输入符号」都关着、整个键盘滑动移光标也关着时才有。
     val slideTaps = !cornerSymbols && !reserveDragForGlide && !LocalLetterGlide.current && LocalT9GlideKeys.current == null &&
         inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD && ctrlTargets != null
@@ -498,8 +497,10 @@ fun SwipeableKeyButton(
         onRelease = { isPressed = false; onRelease?.invoke() },
         // 长按到点后（角标已输入或弹出菜单）方向盘收起，和拂动键一样只留长按气泡。
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
-        // 键上画着角标时在键内渐变预览；角标符号都没画出来时弹气泡（和长按一样）。
-        inlineVerticalPreview = cornerShown || (upSymbol == null && downSymbol == null),
+        // 上下滑一律在键内渐变：要输入的符号从它那一角随手指拖到键中间（用户 11-22）。
+        // 「上方/下方角标提示」只管平时键上画不画角标，不再决定滑动时是渐变还是气泡；没画角标时从那一角淡入。
+        // 气泡只给长按（长按输入、长按菜单）。
+        inlineVerticalPreview = true,
         upText = upHint,
         downText = downHint,
         upPreviewText = swipeUpKeyLabel?.takeIf { it.isNotEmpty() } ?: upHint,
@@ -514,9 +515,10 @@ fun SwipeableKeyButton(
         rightText = letters?.second?.let { if (inputPreferences.uppercaseKeyLabels) it.uppercase() else it } ?: swipeRightText,
         horizontalThresholdDp = if (letters != null) normalizeLetterSwipeDistance(inputPreferences.fourteenLetterSwipeDp) else 50f,
         reserveHorizontalSwipe = letters != null,
-        // With the four-way disc shown, 14-key pairs re-aim freely like kana and nine-key flicks;
-        // the in-key mode keeps the 26-key axis lock.
-        freeDirection = letters != null && inputPreferences.flickDirectionDisc,
+        // 14 键双字母键四个方向都有东西：不管开不开方向盘，都按松手时落在哪个 45° 扇区算，和日语假名、九键拂动一样。
+        // 以前键内模式沿用 26 键的锁轴：先往上拖就一直算上，要先拖回中线附近才换成左右，同一个位置出什么取决于刚才怎么拖，
+        // 范围说不清、换方向时一下跳过去（用户 11-22）。现在键上画出的扇区（[KeyFlickSector]）就是判定范围。
+        freeDirection = letters != null,
         // 横滑动作（如九键 0 键左滑「上一项」）和上下滑一样在键内渐变，不再弹旧的滑动浮窗（用户 10-24）。
         inlineHorizontalPreview = true,
         longPressDrawableIds = longPressDrawableIds.orEmpty(),
@@ -653,6 +655,7 @@ fun SwipeableKeyButton(
     val dpHidesCorners = doublePinyinHints?.hidesCornerLabels(letterGroup ?: text) == true
     // 开着上方或下方角标提示时，角标不藏，和键位提示分层排开，由 DoublePinyinCornerFace 一起画（用户 11-01 去掉了
     // 「和角标一起显示」开关；以前打开过它的照旧分层）。紧凑键面不支持，照旧藏角标。
+    val longSwipeDownLabels = LocalLongSwipeDownLabels.current && layoutMode != ButtonLayout.COMPACT
     val dpWithCorners = dpHidesCorners && layoutMode != ButtonLayout.COMPACT &&
         LocalKeyboardInputPreferences.current.let { it.doublePinyinKeyHintsWithCorners || it.swipeUpHints || it.swipeDownHints }
 
@@ -750,6 +753,11 @@ fun SwipeableKeyButton(
         val dpHint = doublePinyinHint?.takeIf { hintsVisible && dpCornerLayout == null }
         val dpFinals = dpHint?.let { fitDoublePinyinFinals(it.finals, maxWidth.value - 6f, maxHeight.value * 0.42f,
             effectiveSwipeFontSize.value, density.fontScale) }
+        // 下滑标签写得长的键盘（导入的乱序十七的韵母助记）：下滑标签写在键底部一行，主标签上移半行，见 [LocalLongSwipeDownLabels]。
+        // 排法不看滑动预览，滑动时那一行照角标一样淡出，主标签不跳。
+        val downLine = if (longSwipeDownLabels && hintsVisible && !dpHidesCorners && dpHint == null &&
+            !downCornerLabel.isNullOrBlank()) fitSwipeDownLine(downCornerLabel, maxWidth.value - 6f, maxHeight.value * 0.42f,
+            effectiveSwipeFontSize.value, density.fontScale) else null
         Box(Modifier.fillMaxSize().graphicsLayer {
             alpha = (1f - if (ctrlLetter != null) ctrlFade.value else 0f) * (if (showDisc) 1f else 1f - flickFade.strongest)
         }, contentAlignment = if (layoutMode == ButtonLayout.COMPACT) Alignment.TopStart else Alignment.Center) {
@@ -841,6 +849,7 @@ fun SwipeableKeyButton(
                         // 双拼键位提示的韵母在字母下面：字母上移半个提示高，两者一起居中。
                         modifier = Modifier.fillMaxWidth().offset(y = if (dpCornerLayout != null) dpCornerLayout.letterOffsetDp.dp
                             else if (dpHint != null) (-(dpFinals?.heightDp ?: 0f) / 2f).dp
+                            else if (downLine != null) (-downLine.heightDp / 2f).dp
                             else if (hintsVisible && !upCornerLabel.isNullOrEmpty() && keyHeight >= 40.dp) 2.dp else 0.dp)
                             // 和角标一起显示：字母框固定为 1.2 倍字号高、居中、超出裁掉，备用字体（全角分号等）不会伸进上下层。
                             .then(if (dpCornerLayout != null) Modifier
@@ -874,7 +883,7 @@ fun SwipeableKeyButton(
                     )
                 }
 
-                if (hintsVisible && !dpHidesCorners && flickPreview?.fromTop != false && !downCornerLabel.isNullOrEmpty()) {
+                if (downLine == null && hintsVisible && !dpHidesCorners && flickPreview?.fromTop != false && !downCornerLabel.isNullOrEmpty()) {
                     val displayText = if (downCornerLabel.length <= 4) downCornerLabel else downCornerLabel.take(4)
                     Text(
                         text = punctuationKeyLabel(displayText),
@@ -911,6 +920,10 @@ fun SwipeableKeyButton(
                 finalsColor = keyHintColor(resolvedText, frostedGlass, 0.6f, LocalKeyboardInputPreferences.current.cornerHintOpacity),
                 upColor = keyHintColor(resolvedText, frostedGlass, 0.6f, LocalKeyboardInputPreferences.current.cornerHintOpacity),
                 downColor = keyHintColor(resolvedText, frostedGlass, 0.5f, LocalKeyboardInputPreferences.current.cornerHintOpacity), fontFamily = keyLabelFontFamily)
+            if (downLine != null && flickPreview?.fromTop != false) DoublePinyinKeyHintFace(DoublePinyinKeyHint(null, emptyList()),
+                downLine, effectiveSwipeFontSize, initialColor = Color.Unspecified,
+                finalsColor = keyHintColor(resolvedText, frostedGlass, 0.5f, LocalKeyboardInputPreferences.current.cornerHintOpacity),
+                fontFamily = keyLabelFontFamily)
             if (dpHint != null) DoublePinyinKeyHintFace(dpHint, dpFinals, effectiveSwipeFontSize,
                 initialColor = keyHintColor(resolvedText, frostedGlass, 0.7f, LocalKeyboardInputPreferences.current.cornerHintOpacity),
                 finalsColor = keyHintColor(resolvedText, frostedGlass, 0.6f, LocalKeyboardInputPreferences.current.cornerHintOpacity), fontFamily = keyLabelFontFamily)
@@ -923,11 +936,18 @@ fun SwipeableKeyButton(
         else if (showDisc && discLabels != null) {
             KanaDirectionIndicator(discDirection, MaterialTheme.colorScheme.primary.copy(alpha = .6f))
             DirectionDiscPreview(discLabels, discDirection, resolvedBackground, resolvedText, contentScale)
-        } else KeyFlickLabels(flickFade, resolvedText, maxWidth.value, maxHeight.value, effectiveSwipeFontSize.value, labelSize,
-            icons = buildMap {
-                swipeLeftIcon?.let { put(KeyFlickOrigin.LEFT, it) }
-                swipeRightIcon?.let { put(KeyFlickOrigin.RIGHT, it) }
-            }, iconSizeDp = mainIconSize.value)
+        } else {
+            // 四向键（14 键双字母键、九键拂动）拖动时在键上画出各方向的触发夹角，手指所在扇区随距离加深（用户 11-22）。
+            if (currentActions.freeDirection) flickPreview?.let { preview ->
+                KeyFlickSector(keyFlickDragDirection(preview, currentActions.upPreviewFromTop, currentActions.downPreviewFromTop),
+                    MaterialTheme.colorScheme.primary, preview.progress)
+            }
+            KeyFlickLabels(flickFade, resolvedText, maxWidth.value, maxHeight.value, effectiveSwipeFontSize.value, labelSize,
+                icons = buildMap {
+                    swipeLeftIcon?.let { put(KeyFlickOrigin.LEFT, it) }
+                    swipeRightIcon?.let { put(KeyFlickOrigin.RIGHT, it) }
+                }, iconSizeDp = mainIconSize.value)
+        }
     }
 }
 

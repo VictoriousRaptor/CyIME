@@ -104,14 +104,14 @@ class PinyinDeletionWorkflowTest {
             for (letter in "nihso") rule.onNodeWithTag("qwerty-delete-key").performTouchInput { click() }
             rule.waitUntil(5000) { engine.getInput().isEmpty() }
             type()
-            rule.pullOpenCandidates()
+            rule.onNodeWithTag("candidate-expansion").performTouchInput { click() }
             rule.waitUntil(5000) { rule.onAllNodesWithTag("expanded-delete-key").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithTag("expanded-enter-key").performTouchInput { click() }
             rule.waitUntil(5000) { engine.getInput().isEmpty() }
             assertEquals("正文ggd", document())
             rule.runOnUiThread { editor.setText("正文"); editor.setSelection(editor.text.length) }
             type()
-            rule.pullOpenCandidates()
+            rule.onNodeWithTag("candidate-expansion").performTouchInput { click() }
             rule.waitUntil(5000) { rule.onAllNodesWithTag("expanded-delete-key").fetchSemanticsNodes().isNotEmpty() }
             for (remaining in listOf("gg", "g", "")) {
                 rule.onNodeWithTag("expanded-delete-key").performTouchInput { click() }

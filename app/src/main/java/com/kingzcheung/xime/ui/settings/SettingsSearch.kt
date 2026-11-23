@@ -90,6 +90,12 @@ internal fun withCaptionPluginState(results: List<SettingsSearchEntry>, captionA
     return rest
 }
 
+/** 只对日语有用的设置项：没开日语时页面上不显示，搜索也不列（用户 11-22）。 */
+internal val JAPANESE_ONLY_SEARCH_TITLES = setOf("长音键", "假名方向提示")
+
+internal fun withJapaneseState(results: List<SettingsSearchEntry>, japaneseOn: Boolean): List<SettingsSearchEntry> =
+    if (japaneseOn) results else results.filterNot { it.title in JAPANESE_ONLY_SEARCH_TITLES }
+
 /** 布局编辑器是独立的 Activity，不在设置的导航图里。 */
 internal const val SEARCH_TARGET_CUSTOM_LAYOUT = "activity:custom_layout"
 
@@ -262,6 +268,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("移动光标时振动", gestures, gesturePage, "光标 振动 震动 触感", section = "光标与空格"),
         SettingsSearchEntry("移动光标时播放按键音", gestures, gesturePage, "光标 声音 按键音", section = "光标与空格"),
         SettingsSearchEntry("长按空格", gestures, gesturePage, "空格 长按 移动光标 连续空格 语音 语音开关 按住说话 麦克风 上滑取消 松手取消 取消语音", section = "光标与空格"),
+        // 只在长按空格选了语音时显示；不显示时亮「光标与空格」那一组。
+        SettingsSearchEntry("上滑取消", gestures, gesturePage, "空格 按住说话 语音 上滑 松手取消 取消语音 不上屏", section = "光标与空格"),
         // 输入 › 物理键盘
         SettingsSearchEntry("Ctrl + 空格", hardware, SettingsRoutes.HardwareKeyboard, "ctrl 空格 语言切换 快捷键 循环切换"),
         SettingsSearchEntry("单独轻按 Shift", hardware, SettingsRoutes.HardwareKeyboard, "shift 中英切换 快捷键 语言切换"),
@@ -280,7 +288,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("玻璃效果", theme, SettingsRoutes.Theme, "玻璃 毛玻璃 透明 材质 磨砂", section = "材质效果"),
         SettingsSearchEntry("透明度与模糊", theme, SettingsRoutes.Theme, "透明度 模糊 模糊强度 背景不透明度 按键不透明度 玻璃", section = "材质效果"),
         SettingsSearchEntry("液态玻璃", theme, SettingsRoutes.Theme, "液态 液体 玻璃 高光 亮边 反光 iOS 苹果 Liquid Glass", section = "材质效果"),
-        SettingsSearchEntry("液态玻璃强度", theme, SettingsRoutes.Theme, "液态 液体 玻璃 强度 加强 最强 标准 更强 更明显 折射 厚度 高光 亮边", section = "材质效果"),
+        SettingsSearchEntry("液态玻璃强度", theme, SettingsRoutes.Theme, "液态 液体 玻璃 强度 加强 最强 标准 更强 更明显 折射 厚度 高光 亮边 色散 透镜 彩虹", section = "材质效果"),
         SettingsSearchEntry("浅色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 发白 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 白天", section = "背景图片"),
         SettingsSearchEntry("深色遮罩", theme, SettingsRoutes.Theme, "遮罩 变暗 暗度 压暗 变淡 图片太暗 图片太淡 图片看不清 背景亮度 背景暗度 黑夜 夜间", section = "背景图片"),
         SettingsSearchEntry("配色方案", theme, SettingsRoutes.Theme, "配色 颜色 主题色 皮肤 预览"),
@@ -307,17 +315,20 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("候选栏取消按钮", candidates, candidatePage, "取消 左箭头 取消输入 取消候选 关闭候选 取消候选按钮 关闭候选按钮 候选时取消按钮 关闭按钮 返回按钮 返回键 退出输入 取消联想 关闭联想"),
         SettingsSearchEntry("联想关闭键用叉号", candidates, candidatePage, "联想 关闭联想 取消联想 关闭键 关闭按钮 叉 叉号 圆叉 左箭头"),
         SettingsSearchEntry("候选栏按钮按压高亮", candidates, candidatePage, "按住 反馈 取消键 关闭 展开箭头"),
+        SettingsSearchEntry("候选滑到头回弹展开", candidates, candidatePage, "候选 滑动展开 左滑 右滑 拉 回弹 弹回 展开候选 收起候选 收回候选 手势展开"),
+        SettingsSearchEntry("关闭键位置", candidates, candidatePage, "关闭键 取消 叉 叉号 右边 左边 收起键盘 全面屏手势 关闭联想"),
         SettingsSearchEntry("候选注释", candidates, candidatePage, "注释 显示 自动 隐藏 候选显示"),
         SettingsSearchEntry("候选注释内容", candidates, candidatePage, "注释 拼音 释义 翻译 编码 中英 英文意思 词典 英文 单词 英文单词 选英文 出英文 上屏英文 打英文 中译英 下一项 长按下一项 shift"),
         // 九键的「下一项」键：搜「下一项」时排在上面「候选注释内容」后面（同分按先后）
         SettingsSearchEntry("去掉 0 键，回车加高", ninePath, nine, "九键 0键 零键 数字0 去掉0 大回车 回车加高 合并 下一项 上一项 回车键 确定键"),
+        SettingsSearchEntry("空格上滑输入 0", ninePath, nine, "九键 空格 上滑 0 零 数字0 0键 零键 下一项 箭头 光标"),
         SettingsSearchEntry("笔画去掉 0 键，回车加高", ninePath, nine, "笔画 0键 零键 数字0 去掉0 大回车 回车加高 合并 回车键 确定键"),
         SettingsSearchEntry("笔画编码显示成 一丨丿丶乛", ninePath, nine, "笔画 编码 输入串 hspnz 字母 横竖撇点折 一丨丿丶乛 笔画显示 部首 乛 乙"),
         SettingsSearchEntry("显示纠错标记", candidates, candidatePage, "纠错 拼音 标注 红字 隐藏", section = "拼音显示"),
         SettingsSearchEntry("编码显示", candidates, candidatePage, "预编辑 输入框 候选栏 编码位置 拼音显示 拼音框 拼音浮框 拼音气泡"),
         SettingsSearchEntry("双拼编码显示全拼", candidates, candidatePage, "编码 显示 双拼键 原始按键 按键 字母 全拼 拼音 ul pb 小鹤 九键", section = "拼音显示"),
         SettingsSearchEntry("显示拼音编辑栏", candidates, candidatePage, "关闭 隐藏 顶部 拼音浮条 编码"),
-        SettingsSearchEntry("拼音位置", candidates, candidatePage, "拼音放在键盘内 候选上方 紧贴 小签 气泡 浮在上方 贴边 方块 顶上一行 微信 拼音 编辑 遮挡 底栏 抢戏"),
+        SettingsSearchEntry("拼音位置", candidates, candidatePage, "拼音放在键盘内 候选上方 紧贴 小签 小标签 标签 气泡 浮在上方 贴边 方块 顶上一行 整行 微信 拼音 编辑 遮挡 挡住 输入框 底栏 抢戏"),
         SettingsSearchEntry("拼音靠哪边", candidates, candidatePage, "拼音 小签 气泡 方块 靠左 居中 靠右 左边 中间 右边 位置 光标"),
         SettingsSearchEntry("拼音显示声调", candidates, candidatePage, "声调 标调 调号 读音 四声 注音 拼音"),
         SettingsSearchEntry("拼音气泡不透明度", candidates, candidatePage, "拼音 气泡 透明度 不透明度 透明 看不清 实底 浮条"),
@@ -669,7 +680,9 @@ internal fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit,
 internal fun SettingsSearchResults(query: String, onOpen: (SettingsSearchEntry) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val english = com.kingzcheung.xime.ui.i18n.LocalUiTranslations.current
-    val results = withCaptionPluginState(searchSettings(query, english = english), com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(context))
+    val results = withJapaneseState(withCaptionPluginState(searchSettings(query, english = english),
+        com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(context)),
+        com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context))
     if (results.isEmpty()) {
         Text("没有找到「$query」相关的设置", style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))

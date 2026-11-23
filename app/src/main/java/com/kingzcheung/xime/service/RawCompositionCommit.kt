@@ -22,6 +22,8 @@ internal fun rawCompositionCommitText(engineInput: String, preedit: String, t9: 
  * Text that finishes an unfinished composition before a literal (symbol, digit) or a language switch.
  * Gboard rule (user 2026-10-24): symbols and the language key end it as typed — the letters, never the
  * first candidate, and no space; [asTyped] false keeps the first-candidate commit for voice/handwriting.
+ * On-screen digits (number row, corner/long-press digits) are the exception since 11-21: they commit the highlighted
+ * candidate first (ImeTextCommit.literalSubmission), so a stray tap next to the candidate bar no longer spills the letters.
  * T9 and 14-key take the same decoded reading as Enter (T9 partial selections are already in [preedit]).
  */
 internal fun compositionCommitPrefix(asTyped: Boolean, engineInput: String, preedit: String, t9: Boolean,

@@ -94,7 +94,10 @@ fun HardwareKeyboardCandidateBar(
     commentsAreGlosses: Boolean = false,
     /** 候选行画了哪些、完整显示了几个（翻页按这个数走）。 */
     onShown: ((List<String>, Int) -> Unit)? = null,
-    /** 浮窗固定在这一边时，卡片贴着工具条放，不跟光标、不躲输入行（见 [fixedHardwareCandidatePosition]）。 */
+    /**
+     * 浮窗固定在这一边：工具条不动；卡片照样跟到正在打字的那一行旁边（[cursorAnchor]），
+     * 不知道光标在哪时才贴着工具条放（见 [fixedHardwareCandidatePosition]）。
+     */
     fixedEdge: com.kingzcheung.xime.settings.HardwareToolbarEdge? = null,
     /** 正在打字的光标和输入框（屏幕坐标）：卡片挡住正在打的字时报告，和浮条一起变淡。 */
     typingCaret: HardwareCursorAnchor? = null,
@@ -183,7 +186,7 @@ fun HardwareKeyboardCandidateBar(
         val commentStyle = TextStyle(fontSize = (fontSize.value * 11f / 19f).sp, fontFamily = AppFonts.commentFontFamily)
         val textWidth = candidates.take(MAX_VISIBLE_CANDIDATES).mapIndexed { index, text ->
             val comment = comments.getOrNull(index).orEmpty()
-            measurer.measure(AnnotatedString(candidateNumberedText(text, index, true)),
+            measurer.measure(AnnotatedString(candidateNumberedText(text, index, showNumberLabels)),
                 candidatePrimaryTextStyle(fontSize, AppFonts.candidateFontFamily, index == highlightIndex), softWrap = false).size.width +
                 if (comment.isEmpty()) 0 else measurer.measure(AnnotatedString(comment), commentStyle, softWrap = false).size.width +
                     with(density) { 3.dp.roundToPx() }
@@ -210,10 +213,15 @@ fun HardwareKeyboardCandidateBar(
         // 光标所在行按整行宽避让：只要浮卡压住这一行的任何位置，正在打的字就被挡住。
         val caretLine = avoidCaret?.takeIf { hostPositionInRoot != null && it.top.isFinite() && it.bottom.isFinite() }
             ?.let { HardwareCandidateExclusion(0, (it.top - origin.y).roundToInt(), constraints.maxWidth, (it.bottom - origin.y).roundToInt()) }
-        val fixedToolbar = toolbarExclusion?.takeIf { fixedEdge != null && dockBounds == null }
-        val (x, y) = if (fixedEdge != null && fixedToolbar != null) fixedHardwareCandidatePosition(fixedEdge, fixedToolbar,
-            cardSize.width, cardSize.height, constraints.maxWidth, constraints.maxHeight, marginPx)
-        else avoidHardwareCaretLine(HardwareCandidatePosition(
+        // 固定在某一边只固定工具条：知道光标就跟着正在打字的那一行（用户 11-22：注音固定在右侧时候选浮在屏幕中间，
+        // 输入框在底下，眼睛要两边看）；不知道光标、光标不在屏幕里或关了「候选跟随光标」才贴着工具条。
+        val followsCaret = hostPositionInRoot != null && hardwareAnchorInHost(steadyAnchor, origin.x, origin.y,
+            constraints.maxWidth, constraints.maxHeight)
+        val fixedToolbar = toolbarExclusion?.takeIf { fixedEdge != null && dockBounds == null && !followsCaret }
+        // 贴着工具条放时也躲开正在打字的那一行（开着「自动避开输入区域」、知道光标而关了跟随时）：只上下挪。
+        val (x, y) = avoidHardwareCaretLine(if (fixedEdge != null && fixedToolbar != null) fixedHardwareCandidatePosition(fixedEdge,
+            fixedToolbar, cardSize.width, cardSize.height, constraints.maxWidth, constraints.maxHeight, marginPx)
+        else HardwareCandidatePosition(
             dockBounds?.x?.coerceIn(marginPx, maxOf(marginPx, constraints.maxWidth - cardSize.width - marginPx)) ?: placement.x,
             dockBounds?.let { (it.y - cardSize.height - marginPx).coerceAtLeast(marginPx) } ?: placement.y),
             cardSize.width, cardSize.height, constraints.maxHeight, caretLine, toolbarExclusion,

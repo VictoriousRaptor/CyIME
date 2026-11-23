@@ -105,6 +105,8 @@ data class InputUIState(
     val toolPanelDisplay: String? = null,
     /** passive 纯展示节点树（getPanelState.ui，统一 UiNode 声明式模型）。 */
     val toolPanelUiNodes: List<com.kingzcheung.xime.plugin.core.config.UiNode>? = null,
+    /** 翻译栏开着时离线翻译模型的下载进度 0~1（栏里输入框底下画一条进度线）；没在下载是 null。 */
+    val toolPanelDownloadProgress: Float? = null,
     val clipboardSyncEnabled: Boolean = false,
 ) {
     val inputProfile: com.kingzcheung.xime.settings.InputProfile get() {

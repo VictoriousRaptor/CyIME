@@ -82,3 +82,7 @@
 够伤人	gou shang ren	1000
 # His report (2026-11-19): with 简拼 on, uia (小鹤双拼) put 是啊 15th; rime-ice rates it 2700 while 对啊 388506, 是呀 263133, 是爱 87317.
 是啊	shi a	300000
+# His report (2026-11-22, 小鹤双拼 yi'jk'hc'hf'do'le): 已经好狠多了 led 已经好很多了. 好很多 had 391 (ext), so Rime's own
+# sentence took 好狠 (7601) + 多了; without the word model, or when learned words fill Rime's few sentences, the word
+# model never sees 好很多. The word model rates 好+很多 2.2 times 好狠 (ln P -11.99 against -12.81): 7601 × 2.2.
+好很多	hao hen duo	17000

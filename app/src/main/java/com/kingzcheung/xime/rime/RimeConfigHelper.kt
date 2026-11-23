@@ -102,10 +102,15 @@ object RimeConfigHelper {
         val wasDone = SettingsPreferences.isDeploymentDone(context)
         val usable = preparationMutex.withLock {
             preparedInProcess = false
+            // 也报给 PreparationProgress：设置向导这时在等这把锁，不报的话只看到一根不动的进度条、不知道在等什么。
+            PreparationProgress.enter(PreparationProgress.Step.COPY)
             val (user, shared) = initializeRimeDataAsync(context)
+            PreparationProgress.enter(PreparationProgress.Step.ENGINE)
             RimeEngine.getInstance().initialize(user, shared)
+            PreparationProgress.enter(PreparationProgress.Step.COMPILE, "正在检查哪些词库要重新编译")
             val usable = ensureDeployment(context) || (retryWithoutCellEnglish(context) && ensureDeployment(context)) ||
             (addBuiltinWhenNothingCompiles(context) && ensureDeployment(context))
+            if (usable) PreparationProgress.enter(PreparationProgress.Step.DONE)
             preparedInProcess = usable
             usable
         }
@@ -185,9 +190,12 @@ object RimeConfigHelper {
         preparedInProcess = false
         SettingsPreferences.setDeploymentDone(context, false)
         recordProblem(context, "", usable = false)
+        PreparationProgress.enter(PreparationProgress.Step.COPY)
         val (user, shared) = initializeRimeDataAsync(context)
         val engine = RimeEngine.getInstance()
+        PreparationProgress.enter(PreparationProgress.Step.ENGINE)
         engine.initialize(user, shared)
+        PreparationProgress.enter(PreparationProgress.Step.COMPILE, "重新编译全部词库")
         val success = synchronized(deploymentLock) {
             // 「重新部署(修复)」也重编方案列表：librime 只按秒级修改时间判断要不要重编，列表旧了它会一直认为不用编。
             dropCompiledSchemaList(context, "redeploy")
@@ -197,6 +205,7 @@ object RimeConfigHelper {
             usable
         }
         preparedInProcess = success
+        if (success) PreparationProgress.enter(PreparationProgress.Step.DONE)
         if (success) {
             // An already-created IME may still be showing its failed-startup screen.
             val prefs = SettingsPreferences.getPrefsPublic(context)

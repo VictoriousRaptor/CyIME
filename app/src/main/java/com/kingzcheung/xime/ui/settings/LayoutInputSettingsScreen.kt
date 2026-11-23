@@ -41,6 +41,10 @@ internal enum class LayoutInputCategory(val route: String, val title: String, va
     Nine("layout_input_nine", "九键与 14 键", "拂动选字母、双字母键、假名提示"),
     /** 英文、中文 26 键和九键滑行原来分在 26 键、九键两页三个开关（用户 11-09「三个入口太乱」），合到这一页；存的值不变。 */
     Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行"),
+    ;
+
+    /** 没开日语时不提假名提示（那一项不显示，用户 11-22）。 */
+    fun description(japanese: Boolean): String = if (this == Nine && !japanese) "拂动选字母、双字母键" else description
 }
 
 /** 日语 26 键的长音 ー 放在哪：三张带图例的卡片，默认 L 键（见 JapaneseLongVowelKey）。 */
@@ -128,8 +132,11 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings, com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)
                             ?.takeIf { !settings.shiftSyllableSplit }?.message)
                     ShiftSyllableSplitLegend(settings.shiftSyllableSplit)
-                    HorizontalDivider()
-                    JapaneseLongVowelKeySettings(settings) { settings = it; it.save(context) }
+                    // 长音键只有日语 26 键用：没开日语不显示（用户 11-22）。
+                    if (com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)) {
+                        HorizontalDivider()
+                        JapaneseLongVowelKeySettings(settings) { settings = it; it.save(context) }
+                    }
                 })
                 }
                 LayoutInputCategory.Nine -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -140,6 +147,16 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             checked = settings.t9MergeZeroIntoEnter, onCheckedChange = {
                                 settings = settings.copy(t9MergeZeroIntoEnter = it); settings.save(context)
                             })
+                        HorizontalDivider()
+                        // 别人提、他要进 1.15.105（11-22），默认关。和「上滑取消」互锁：都用空格往上滑（见 InputGestureLocks）。
+                        SettingsToggleItem(Icons.TwoTone.SpaceBar, "空格上滑输入 0",
+                            t9SpaceUpZeroSubtitle(settings.t9MergeZeroIntoEnter),
+                            checked = settings.t9SpaceSwipeUpZero, onCheckedChange = {
+                                settings = settings.copy(t9SpaceSwipeUpZero = it); settings.save(context)
+                            },
+                            lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
+                                com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_SPACE_UP_ZERO, true)
+                                ?.takeIf { !settings.t9SpaceSwipeUpZero }?.message)
                     })
                     // 用户 11-17 转来：笔画键盘的 0 键用的也是九键那个键，给它一个同款开关。默认关，原来的排法不变。
                     SettingsSection(title = "笔画按键", content = {
@@ -197,7 +214,8 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     })
-                    InputExperienceSettings(setOf(InputExperiencePart.FLICK_DISC, InputExperiencePart.KANA), "拂动与假名提示")
+                    InputExperienceSettings(setOf(InputExperiencePart.FLICK_DISC, InputExperiencePart.KANA),
+                        if (com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)) "拂动与假名提示" else "拂动提示")
                 }
                 LayoutInputCategory.Glide -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // 三个布局各一行，存的还是原来三个开关（glide_typing_v2、glide_typing_chinese、t9_glide_typing），默认值不变。
@@ -223,7 +241,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     ExternalGlideSchemeItems(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行",
-                        "在九键上一笔划过几个键输入词语",
+                        "在九键上一笔划过几个键输入词语。开着时 2～9 键的拖动归滑行，这些键的角标改为长按输入",
                         checked = settings.t9GlideTyping, onCheckedChange = {
                             settings = settings.copy(t9GlideTyping = it); settings.save(context)
                         },
@@ -590,6 +608,11 @@ internal fun t9MergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe:
     val zero = if (cornerSymbolInput) "0 改在回车上${if (reverseSymbolSwipe) "上滑" else "下滑"}输入" else "0 到数字键盘里打"
     return "没有「下一项」键，$zero"
 }
+
+/** 「空格上滑输入 0」的说明：去掉了 0 键时没有右边那个键，只说空格。 */
+internal fun t9SpaceUpZeroSubtitle(mergeZero: Boolean): String =
+    if (mergeZero) "九键空格往上滑打 0，打字时不接"
+    else "九键空格往上滑打 0，打字时不接；0 键一直是「→」，没有候选时点它光标右移、左滑左移"
 
 /**
  * 笔画编码显示成 一丨丿丶乛（默认关，显示 h s p n z；11-18 贡献者偏向全用字母）。

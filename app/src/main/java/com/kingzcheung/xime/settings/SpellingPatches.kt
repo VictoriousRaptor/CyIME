@@ -32,7 +32,7 @@ object SpellingPatches {
     /**
      * 打双拼时编码显示打的键（ul pb），不换回全拼（shuang pin）。默认显示双拼键，保留已保存的选择。
      * 26 键写方案补丁清空编码显示规则；九键在 [com.kingzcheung.xime.rime.RimeEngine] 显示层把读音换成双拼键。
-     * 14 键和自建合并键布局上的双拼本来就显示双拼键，不受影响。
+     * 14 键和自建合并键布局上的双拼方案本身显示双拼键，开着「显示全拼」时在 RimeEngine 显示层换成首选的全拼（11-21）。
      */
     const val DOUBLE_PINYIN_RAW_PREEDIT_KEY = "double_pinyin_raw_preedit"
     /**
@@ -198,7 +198,7 @@ object SpellingPatches {
      * 小鹤方案构建时已带 enable_correction 和 cyime_neighbor_correction，其他双拼由它生成，同样带着；开关关着时键盘
      * 只交出带 "~;" 的键位表（只纠拼不成音节的两个键），开着才整串纠错（KeyboardLayout）。
      */
-    internal fun doublePinyinSchemas(context: Context): List<String> = (DoublePinyinScheme.BUILTINS.map { it.id } +
+    internal fun doublePinyinSchemas(context: Context): List<String> = (DoublePinyinScheme.ALL_BUILTINS.map { it.id } +
         runCatching { DoublePinyinSchemes.load(context).map { it.id } }.getOrDefault(emptyList())).distinct()
 
     /**
@@ -214,7 +214,7 @@ object SpellingPatches {
      * 先派生出近音拼音再换成双拼键、合并键。以前只给 26 键双拼写，14 键双拼开了模糊音、简拼也不生效（11-15 实测）。
      */
     internal fun doublePinyinK14Schemas(context: Context): List<String> =
-        doublePinyinSchemas(context).map { DoublePinyinScheme.k14Id(it) }
+        doublePinyinSchemas(context).filter { DoublePinyinSchemes.find(it)?.ownLayout == null }.map { DoublePinyinScheme.k14Id(it) }
 
     /** 模糊音设置据此提醒双拼用户打开「模糊音也用于双拼」。 */
     fun usingDoublePinyin(context: Context): Boolean {

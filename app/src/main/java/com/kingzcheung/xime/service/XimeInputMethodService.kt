@@ -584,7 +584,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     /** 分体时模糊分三块：上方工具栏整宽，左右两半各一块，中缝保持清晰。 */
     private fun updateKeyboardGlass() {
         val handwriting = uiState.value.handwritingExpanded
-        val card = withFilledSides(if (handwriting) handwritingGlassControls else keyboardGlassCard)
+        // 语音悬浮条、实体键盘浮条时键盘不在屏幕上：不要键盘那块模糊。原来留着收起前量到的键盘位置，
+        // 拖悬浮条、柔化顶边切换等一调到这里就把它放回来，键盘容器在窗口里的位置又变了，整块模糊挪到屏幕最上面，
+        // 糊住 App 上半截（用户 11-22 手机截图：开了语音浮窗后上面一大块变模糊）。
+        val keyboardOffScreen = uiState.value.voiceCollapsed || uiState.value.isCompact
+        val card = withFilledSides(when {
+            keyboardOffScreen -> null
+            handwriting -> handwritingGlassControls
+            else -> keyboardGlassCard
+        })
         // All pieces below come from the card's measurement, so they share its anchor origin.
         val origin = if (handwriting) handwritingGlassControlsOrigin else keyboardGlassCardOrigin
         val hole = card?.let { splitKeyboardGap.hole(it.bottom.toFloat()) }
@@ -1167,6 +1175,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override fun onCreate() {
         super.onCreate()
+        ImeServiceLiveness.alive = true
         if (BuildConfig.DEV_TOOLS) EnterProbe.service = java.lang.ref.WeakReference(this)
         com.kingzcheung.xime.stats.TypingStats.init(this)
         com.kingzcheung.xime.ui.keyboard.HandwritingGlassRegion.reporter = handwritingGlassRegionReporter
@@ -1983,6 +1992,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             toolPanelDisplay = null,
             toolPanelUiNodes = null,
             toolPanelLoading = false,
+            toolPanelDownloadProgress = null,
             enterKeyText = editorEnterKeyText(),
         )
         ToolPanelEditTextHolder.editText = null
@@ -2474,7 +2484,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             }
                             val hardwareExample = settingsPreviewEditor && settingsExample == KeyboardPanelLaunch.Example.Hardware
                             val position = if (hardwareExample) HardwareToolbarPosition(0.5f, 1f) else hardwareToolbarPositionFor(state.hardwareOptions)
-                            // 固定在某一边：不跟光标、不避让、不能拖，靠边按开着算（设置「浮窗位置」，默认自由拖动不变）。
+                            // 固定在某一边：工具条不跟光标、不避让、不能拖，靠边按开着算（设置「浮窗位置」，默认自由拖动不变）；
+                            // 候选卡照样跟光标、躲开正在打字的那一行（用户 11-22）。
                             val fixedEdge = state.hardwareOptions.fixedEdge.takeUnless { hardwareExample }
                             val docksAtEdge = if (hardwareExample) state.hardwareOptions.dockAtEdge else hardwareDocksAtEdge(state.hardwareOptions)
                             val bottomDocked = position.isBottomDocked(docksAtEdge) && maxWidth >= 336.dp
@@ -2502,7 +2513,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     // 释义只换显示用注释，与屏幕候选栏同一规则。
                                     if (hardwareEnglish || shown.association ||
                                         state.inputProfile.language != com.kingzcheung.xime.settings.InputLanguage.CHINESE) shown
-                                    else if (com.kingzcheung.xime.gloss.CandidateGlossary.physicalShiftHeld.value) {
+                                    // 注音按住 Shift 是在选字（Shift+数字），不对调成英文，免得按下去整排候选变样。
+                                    else if (com.kingzcheung.xime.gloss.CandidateGlossary.physicalShiftHeld.value &&
+                                        !keyRouter.zhuyinHardwareActive()) {
                                         val (words, notes) = com.kingzcheung.xime.gloss.CandidateGlossary.swapped(shown.words, shown.comments)
                                         shown.copy(words = words, comments = notes)
                                     }
@@ -2566,7 +2579,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     candidates = hardwareCandidates.windowWords(state.hardwareOptions.associationInWindow),
                                     hasNextPage = hardwareCandidates.hasNextPage,
                                     hasPrevPage = hardwareCandidates.hasPreviousPage,
-                                    cursorAnchor = state.cursorAnchor.takeIf { state.hardwareOptions.followCursor && fixedEdge == null },
+                                    // 固定在某一边只固定工具条，候选卡照「候选跟随光标」跟到正在打字的那一行旁边（用户 11-22）。
+                                    cursorAnchor = state.cursorAnchor.takeIf { state.hardwareOptions.followCursor },
                                     highlightIndex = hardwareHighlight,
                                     cardBackgroundColor = cardBg,
                                     candidateTextColor = hardwarePalette.candidateText,
@@ -2579,12 +2593,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     onNext = nextHardwareCandidate.takeUnless { hardwareCandidates.association },
                                     onCandidateSelect = selectHardwareCandidate,
                                     bottomDocked = bottomDocked,
-                                    showNumberLabels = true,
+                                    // 英文直接输入的补全不编号：数字、空格照字面打（hello123），按了选不中（#526），和工具条一样。
+                                    showNumberLabels = !hardwareEnglish,
                                     surface = hardwareSurface,
                                     onPreeditBoundsChanged = { updateHardwarePreeditBounds(it) },
                                     onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = false, it) },
                                     avoidBoundsInWindow = hardwareToolbarBounds.value,
-                                    avoidCaret = state.cursorAnchor.takeIf { state.hardwareOptions.avoidEditor && fixedEdge == null },
+                                    avoidCaret = state.cursorAnchor.takeIf { state.hardwareOptions.avoidEditor },
                                     onShown = { words, count -> keyRouter.reportHardwareShown(words, count) },
                                     fixedEdge = fixedEdge,
                                     typingCaret = state.cursorAnchor,
@@ -2674,6 +2689,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onDispose { voicePillOnScreen = false; voicePillMoving = false; voicePillReserveTop = null }
                             }
                             val pillPrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences(isDark)
+                            val pillContinuous = androidx.compose.runtime.remember {
+                                androidx.compose.runtime.mutableStateOf(SettingsPreferences.isSttPillResume(this@XimeInputMethodService))
+                            }
                             val glass = pillPrefs.frostedGlass
                             val pillEnglish = state.isAsciiMode || state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH
                             com.kingzcheung.xime.ui.keyboard.VoiceCollapsedPill(
@@ -2698,6 +2716,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onBackspacePress = { keyboardCallbacks?.onKeyPressDown?.invoke("delete") },
                                 onBackspaceRelease = { keyboardCallbacks?.onKeyRelease?.invoke("delete") },
                                 backspaceRepeatMs = pillPrefs.deleteRepeatSpeed.intervalMs,
+                                // 连续语音开关（设置 › 语音转文本里同一项，键不变）：用户 11-22 要在浮窗里直接开关。
+                                continuous = pillContinuous.value,
+                                onContinuousChange = { on ->
+                                    pillContinuous.value = on
+                                    SettingsPreferences.setSttPillResume(this@XimeInputMethodService, on)
+                                },
                                 onMic = {
                                     // 在悬浮条上点麦克风停下：用户自己停的，之后不再自动续听。
                                     // 收尾期间焦点离开也不能再记成“被打断”。
@@ -2883,6 +2907,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     toolPanelRequestEpoch = state.toolPanelRequestEpoch,
                                     toolPanelDisplay = state.toolPanelDisplay,
                                     toolPanelUiNodes = state.toolPanelUiNodes,
+                                    toolPanelDownloadProgress = state.toolPanelDownloadProgress,
                                     clipboardSyncEnabled = state.clipboardSyncEnabled,
                                 )
                             }
@@ -2902,7 +2927,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                      initialWidthDp = state.resizePreviewWidthDp,
                                      minWidthDp = com.kingzcheung.xime.ui.keyboard.keyboardWidthBounds(resources.configuration.screenWidthDp).first,
                                      maxWidthDp = com.kingzcheung.xime.ui.keyboard.keyboardWidthBounds(resources.configuration.screenWidthDp).last,
-                                     defaultHeightDp = SettingsPreferences.getDefaultKeyboardHeightDp(this@XimeInputMethodService, screenIsLandscape),
+                                     defaultHeightDp = KeyboardHeightProfiles.defaultFixed(this@XimeInputMethodService, screenIsLandscape),
                                      defaultSize = resetSize,
                                      currentBottomPaddingDp = contentBottomPaddingDp + (activeBottomDp - previewInsetDp),
                                      defaultBottomPaddingDp = defaultBottomPadding,
@@ -3209,7 +3234,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val preview = state.showKeyboardResize && !reset
         val height = if (preview && state.resizePreviewHeightDp > 0) state.resizePreviewHeightDp else
             if (floating && !reset && state.clipboardSearchFloatingHeightDp > 0) state.clipboardSearchFloatingHeightDp else
-            if (reset) SettingsPreferences.getDefaultKeyboardHeightDp(this, landscape)
+            // 固定键盘「重置」回到 1.15.104 同一个默认高度（按 244dp 下限夹过）；新的物理下限只放宽拖动范围。
+            if (reset) (if (floating) SettingsPreferences.getDefaultKeyboardHeightDp(this, landscape)
+                else KeyboardHeightProfiles.defaultFixed(this, landscape))
             else KeyboardHeightProfiles.selected(this, floating, landscape, hostHeightDp)
         // 悬浮：已存或预览中的高度可以低到方形吸附点（默认高度已在 KeyboardHeightProfiles 里按默认下限夹过）。
         val heightBounds = if (floating)
@@ -3619,6 +3646,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return true
         }
         val e = event ?: return super.onKeyDown(keyCode, event)
+        // 没接实体键盘时的 Ctrl+字母（XposedEdge 等手势工具的复制、粘贴、全选、撤销）：交给应用，不打成字母（用户 11-21）。
+        if (passesInjectedShortcutToApp(hasHardwareKeyboard, e.isCtrlPressed, e.isAltPressed, e.isMetaPressed)) {
+            if (isHardwarePasteShortcut(keyCode, e.isCtrlPressed, e.isAltPressed, e.isMetaPressed, e.repeatCount) &&
+                !isTerminalEditor()) hideClipboardSuggestionsAfterPaste()
+            return super.onKeyDown(keyCode, event)
+        }
         if (hasHardwareKeyboard) {
             // Shift 单击切语言时这个键会被下面的快捷键吞掉，按住状态要先记下。
             // 全键盘手机的 Alt 数字层（Titan 2：Alt+字母 = 数字）：打字中按出数字就和数字键一样选候选（GitHub #295）。
@@ -3651,6 +3684,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 shiftEnter()
                 ctrlEnterKeys += keyCode
                 return true
+            }
+            // 注音（大千）打字中：Shift+数字（Rime 注音）或 Ctrl+数字（微软注音）选第 N 个候选，光按数字照旧是注音和声调（用户 11-22）。
+            // 没在打字时不接：Shift+数字照旧打标点，Ctrl+数字照旧交给应用。按住不放的重复也吞掉，不漏成标点或应用快捷键。
+            if (keyRouter.zhuyinHardwareActive() && zhuyinChordDigitIndex(keyCode, e.isShiftPressed, e.isCtrlPressed,
+                    e.isAltPressed, e.isMetaPressed) != null) {
+                if (e.repeatCount > 0 && hardwareCandidateNavigationKeys.contains(keyCode)) return true
+                if (e.repeatCount == 0 && keyRouter.hardwareComposing()) {
+                    keyCodeToKey(keyCode, false)?.let { digit ->
+                        keyRouter.handleKeyPress(digit, false, hardwareEvent = KeyEvent(e))
+                        hardwareCandidateNavigationKeys += keyCode
+                        return true
+                    }
+                }
             }
             val continuingCandidatePress = e.repeatCount > 0 && hardwareCandidateNavigationKeys.contains(keyCode)
             if ((e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) && !continuingCandidatePress && !isHardwareArrow(keyCode)) {
@@ -5400,6 +5446,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     override fun onDestroy() {
+        ImeServiceLiveness.alive = false
         updateCursorMagnifierVisibility(false)
         if (EnterProbe.service?.get() === this) EnterProbe.service = null
         if (com.kingzcheung.xime.ui.keyboard.ImeHighRefresh.apply === highRefreshVote) {
@@ -5904,8 +5951,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         SettingsPreferences.isKeyboardBlankFilled(this),
                         editor.left - decorOnScreen[0], editor.right - decorOnScreen[0])
                 }
+                // 拼音贴在键盘上沿（小标签、方块、整行）：顶线再往上报一截，应用把输入框顶到拼音上面（11-21 他：
+                // 「还是挡住的,根本没抬高输入框」）。只改报给应用的顶线，触摸范围仍从键盘顶开始，空出来那条点下去还是应用的。
+                val tabReserve = com.kingzcheung.xime.ui.keyboard.PreeditTabInsets.reservePx
                 val reportedTop = if (editorBeside)
-                    window.window?.decorView?.height ?: resources.displayMetrics.heightPixels else topPx
+                    window.window?.decorView?.height ?: resources.displayMetrics.heightPixels else (topPx - tabReserve).coerceAtLeast(0)
                 outInsets.contentTopInsets = reportedTop
                 outInsets.visibleTopInsets = reportedTop
                 // Transparent side gutters must not swallow touches to the host app.
@@ -5923,6 +5973,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         outInsets.touchableRegion.op(it.left.roundToInt(), it.top.roundToInt(),
                             it.right.roundToInt(), it.bottom.roundToInt(), android.graphics.Region.Op.DIFFERENCE)
                     }
+                } else if (tabReserve > 0 && !editorBeside) {
+                    // 顶线提上去了，不能再用「可见范围就是触摸范围」，否则空出来那条会吃掉点按。
+                    outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+                    outInsets.touchableRegion.set(loc[0], topPx, loc[0] + keyboardContainer.width,
+                        window.window?.decorView?.height ?: resources.displayMetrics.heightPixels)
                 } else {
                     outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
                 }
@@ -6097,7 +6152,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         val connection = currentInputConnection ?: return TextCommitResult.NO_CONNECTION
         val committed = when {
-            caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret, currentInputEditorInfo?.packageName)
+            caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret)
             // 多行短语一行一行上屏（见 commitPhraseLines）。
             com.kingzcheung.xime.settings.PhraseLineBreaks.STORED in text && !isPaste -> connection.commitPhraseLines(delivered)
             else -> connection.commitText(if (isPaste) delivered else withTextLocale(delivered), 1)

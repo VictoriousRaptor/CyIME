@@ -62,7 +62,8 @@ class CandidateGlossEdgeTest {
         } }
         fun inRow(gloss: Boolean, tag: String) = rule.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("row-$gloss")))
         saveComparison()
-        // 候选栏一行不滚动（用户 11-20）：最右的候选字放得下、只有释义被栏边裁掉，照样显示、能点。
+        // 右边放不下的候选照常显示、被栏边裁掉，不再整项藏起来（用户 11-11）。
+        inRow(false, "bar-candidate:2").assertExists()
         val word = inRow(true, "bar-candidate:2")
         word.assertIsDisplayed()
         val edge = inRow(true, "candidate-fixed-strip").fetchSemanticsNode().boundsInWindow.right
@@ -70,8 +71,12 @@ class CandidateGlossEdgeTest {
         assertTrue(label.fetchSemanticsNode().boundsInWindow.right <= edge)
         word.performTouchInput { click(center) }
         rule.runOnIdle { assertEquals(2, picked) }
-        // 看全文：在候选上横着拉开展开页。
-        inRow(true, "candidate-pull-expand").pullAcross()
+        inRow(true, "candidate-scroll-row").performScrollToIndex(2)
+        rule.waitForIdle()
+        val note = rule.onNode(hasText(notes[2]) and hasAnyAncestor(hasTestTag("row-true")), useUnmergedTree = true)
+        val bounds = note.fetchSemanticsNode().boundsInWindow
+        assertTrue("Full gloss fits after scrolling", bounds.width >= note.fetchSemanticsNode().size.width - 1)
+        inRow(true, "candidate-expansion").performClick()
         rule.runOnIdle { assertTrue(expanded) }
     }
 

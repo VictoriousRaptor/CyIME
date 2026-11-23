@@ -5,6 +5,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -94,7 +95,16 @@ fun KeyboardLayoutScreen(
         }
     }
 
-// 系统手势（如三指截图）截走触摸流时，Compose 手势检测器不会被 ACTION_CANCEL 取消，
+    // 系统手势截走触摸、整块键盘重建不算换页：刚才按的键不再交给重建出来的键盘放切换扩散（KeyGapLightHandoff）。
+    val cancelEpoch = uiState.swipeCancelEpoch
+    val seenCancelEpoch = remember { longArrayOf(cancelEpoch) }
+    SideEffect {
+        if (seenCancelEpoch[0] != cancelEpoch) {
+            seenCancelEpoch[0] = cancelEpoch
+            KeyGapLightHandoff.clear()
+        }
+    }
+    // 系统手势（如三指截图）截走触摸流时，Compose 手势检测器不会被 ACTION_CANCEL 取消，
     // 键内部的长按/按下协程会继续执行并继续上报，导致气泡/按下状态残留。
     // 这里用 key() 让整个活动键盘在 cancel（epoch 变化）时 remount：
     // 所有键的 remember 状态重置、所有进行中手势协程被 Compose 取消，彻底清干净。

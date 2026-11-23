@@ -147,7 +147,7 @@ class ExpandedCandidateScrollTest {
         rule.onNodeWithTag("expanded-page-previous").assertIsNotEnabled()
     }
 
-    @Test fun reopeningDuringCloseAnimationStartsAtHead() {
+    @Test fun reopeningWithArrowDuringCloseAnimationStartsAtHead() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         AppFonts.initialize(app)
         KeysConfigHelper.loadConfig(app)
@@ -163,19 +163,18 @@ class ExpandedCandidateScrollTest {
             KeyboardView(model, KeyboardUiState(currentSchemaId = "rime_ice"), callbacks,
                 modifier = Modifier.size(400.dp, 284.dp), candidateState = snapshot, inputSessionManagedByHost = true)
         }
+        val arrow = rule.onNodeWithTag("candidate-expansion")
         val previous = rule.onNodeWithTag("expanded-page-previous")
-        rule.pullOpenCandidates()
+        arrow.performClick()
         rule.onNodeWithTag("expanded-page-next").performClick()
         previous.assertIsEnabled()
         rule.mainClock.autoAdvance = false
         try {
-            // 收回、再拉开都不推时钟，量的是收回动画中途重新展开。
-            rule.runCustomAction("收回候选")
+            arrow.performClick()
             rule.mainClock.advanceTimeBy(32)
             assertEquals(false, model.candidatePageExpanded.value)
             rule.onNodeWithTag("expanded-candidates", true).assertExists() // outgoing page is still composed
-            rule.runCustomAction("展开候选")
-            rule.mainClock.advanceTimeBy(16)
+            arrow.performClick()
         } finally {
             rule.mainClock.autoAdvance = true
         }

@@ -164,11 +164,15 @@ punctuator:
   __include: cyime_punctuator:/punctuator
   # 大千的 , . 是 ㄝ ㄡ，标点在 Shift 上：Shift+, 出「，」、Shift+. 出「。」（同 Rime 注音 bopomofo 方案、微软注音），
   # 不是表里的《》菜单。打字中按下去先上屏转好的字再接标点（ㄅㄨˋㄓˉㄉㄠˋ + Shift+, = 不知道，）。只有实体键盘会送 < >。
+  # 全角那两项只能写成字符串：import_preset 会把这里整段并进 default.custom.yaml 的标点表，那边全角的 < > 是列表，
+  # 写成 { commit: … } 就是往列表里并字典，librime 报 incompatible node type，整个注音方案编不出来，
+  # 新装或第一次打开注音的人一个候选都没有，按键原样上屏（11-22 台湾用户；以前编过的机器留着旧的编译结果，看不出来）。
+  # 半角那边也是 { commit: … }，可以照写。ZhuyinSchemaFeaturesTest 按 default.custom.yaml 查这一条。
   __patch:
     half_shape/<: { commit: "，" }
     half_shape/>: { commit: "。" }
-    full_shape/<: { commit: "，" }
-    full_shape/>: { commit: "。" }
+    full_shape/<: "，"
+    full_shape/>: "。"
 
 # 不引默认的 key_binder：它把有候选时的数字键、空格当选词键，而大千的数字键是 ㄅㄉ…，空格是第一声。
 key_binder:

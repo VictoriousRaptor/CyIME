@@ -201,6 +201,22 @@ internal fun merged14Preedit(raw: String, preedit: String, spelling: String, gro
     return PinyinEditDisplay(raw, reading, groups = groups).text
 }
 
+/**
+ * 「双拼编码显示全拼」开着时合并键（14 键、自建布局）上的双拼：打的键和首选读音换成的双拼键 [keysReading] 逐个对得上，
+ * 就显示首选的全拼 [spelling]（shuang'pin），和 26 键双拼一样；首选只盖住前面几个键时，后面没对上的键照打的显示。
+ * 一个键都对不上时返回 null，照原来显示双拼键。
+ */
+internal fun mergedDoublePinyinFullPreedit(raw: String, keysReading: String, spelling: String, groups: List<String>): String? {
+    val input = PinyinEditBuffer.normalized(raw).replace("'", "")
+    val keys = PinyinEditBuffer.normalized(keysReading).replace("'", "")
+    val syllables = spelling.trim().split(' ', '\'').filter { it.isNotEmpty() }
+    if (keys.isEmpty() || keys.length > input.length || syllables.isEmpty()) return null
+    if (syllables.any { syllable -> syllable.any { it !in 'a'..'z' && it != 'ü' } }) return null
+    if (keys.indices.any { groupRepresentative(input[it], groups) != groupRepresentative(keys[it], groups) }) return null
+    val rest = input.drop(keys.length)
+    return syllables.joinToString("'") + if (rest.isEmpty()) "" else "'$rest"
+}
+
 /** Multi-tap exists only in the explicit pinyin editor, never in ordinary composition. */
 internal class PinyinMultiTap {
     private var group = ""

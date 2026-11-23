@@ -52,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -132,8 +133,10 @@ private fun AppearancePreviewSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.windowInsetsPadding(SheetOuterInsets),
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentWindowInsets = sheetContentInsets,
     ) {
         Column(
             modifier = Modifier
@@ -322,7 +325,9 @@ internal fun ThemeKeyboardPreview(
                     .fillMaxSize()
                     .padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
             ) {
-                CandidateBarPreview(accent, candidateTextColor, selectedTextColor, candidateTextSize)
+                // 主题预览只有 50dp 高，字号最多按 22sp 画（候选栏放大见 candidateBarTextSp）。
+                CandidateBarPreview(accent, candidateTextColor, selectedTextColor,
+                    com.kingzcheung.xime.ui.keyboard.candidateBarTextSp(candidateTextSize))
 
                 Column(modifier = Modifier
                     .fillMaxWidth()

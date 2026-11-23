@@ -117,6 +117,14 @@ object PreparationProgress {
         return ((step.ordinal + within) / steps).coerceIn(0f, 1f)
     }
 
+    /** 纯函数，可单测：首次准备时通知栏的两行字（[PreparationService]），和向导第 2 步写的一样。 */
+    internal fun notificationText(state: State): Pair<String, String> {
+        val idle = "首次使用需要几分钟，切到别的应用也会接着准备"
+        val step = state.step?.takeIf { it != Step.DONE } ?: return "正在准备词库" to idle
+        val count = if (step == Step.COMPILE && state.total > 0) "（${state.done}/${state.total}）" else ""
+        return "正在准备词库：第 ${step.ordinal + 1}/${Step.entries.size - 1} 步 ${step.label}$count" to state.detail.ifEmpty { idle }
+    }
+
     /**
      * 纯函数，可单测：超时后告诉用户可以做什么。按停在哪一步和手机厂商给建议；
      * 小米、vivo、OPPO 这类系统会冻结或清理后台应用，向导切到系统设置去启用时准备可能被停住。
@@ -130,7 +138,7 @@ object PreparationProgress {
                 add("在系统设置 › 应用 › CyIME 里把电池 / 耗电管理设为「允许后台运行」或「不限制」。")
             else -> add("在系统设置 › 应用 › CyIME › 电池里选「不限制」。")
         }
-        add("然后从最近任务里划掉 CyIME 再打开，会重新开始准备。")
+        add("然后点下面的「重新开始准备」：CyIME 会关掉重开再接着准备，已经编好的词库一般不用重编。")
         add("还是不动，点「导出日志」发给我们，日志里有停在哪一步。")
     }
 

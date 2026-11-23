@@ -17,6 +17,7 @@ import androidx.compose.material.icons.twotone.Dialpad
 import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.FormatListNumbered
 import androidx.compose.material.icons.twotone.FormatColorFill
+import androidx.compose.material.icons.twotone.SwipeLeft
 import androidx.compose.material.icons.twotone.AspectRatio
 import androidx.compose.material.icons.twotone.DataObject
 import androidx.compose.material.icons.twotone.RecordVoiceOver
@@ -104,6 +105,8 @@ private fun LayoutDisplayPage(
 ) {
     val context = LocalContext.current
     val pageTitle = LayoutDisplayPages.firstOrNull { it.first == page }?.second
+    // 「候选滑到头回弹展开」放在这一层：「候选栏按钮」里开关它，「候选样式」里的「每页候选词数」跟着改说法（11-22 他：两个要配套）。
+    var swipeExpand by remember { mutableStateOf(SettingsPreferences.isCandidateSwipeExpand(context)) }
 
     KeyboardSettingsScaffold(pageTitle ?: "键盘布局", { if (page != null) closePage() else onBack() },
         preview = true, example = if (page == "candidates") com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Candidates
@@ -118,9 +121,10 @@ private fun LayoutDisplayPage(
         ) {
             if (page == null) item {
                 SettingsSection(title = "各布局", content = {
+                    val japanese = com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)
                     LayoutInputCategory.entries.forEachIndexed { index, category ->
                         if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                        SettingsItem(category.icon, category.title, category.description,
+                        SettingsItem(category.icon, category.title, category.description(japanese),
                             onClick = { onOpenLayout(category.route) }, showArrow = true)
                     }
                 })
@@ -323,6 +327,155 @@ private fun LayoutDisplayPage(
                 })
             }
             if (page == "candidates") item {
+                // 11-22 他：「拼音位置这么重要的东西还是放最后?」候选词页按常用程度排：拼音显示 → 候选样式 → 候选栏按钮 → 注释；
+                // 各组里也是常用的在前。只换位置，键和默认值都没动。
+                SettingsSection(title = "拼音显示", content = {
+                    var inputTextLocation by remember {
+                        mutableStateOf(SettingsPreferences.getInputTextLocation(context))
+                    }
+
+                    Column(Modifier.settingsSearchAnchor("编码显示")) {
+                        Text(
+                            text = "编码显示",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                        )
+                        Text(
+                            text = "未上屏的编码显示在哪里",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CodeDisplayCard(
+                                title = "显示在输入框",
+                                isSelected = inputTextLocation == SettingsPreferences.INPUT_TEXT_INPUT_BOX,
+                                showCodeInInputBox = true,
+                                onClick = {
+                                    inputTextLocation = SettingsPreferences.INPUT_TEXT_INPUT_BOX
+                                    SettingsPreferences.setInputTextLocation(context, SettingsPreferences.INPUT_TEXT_INPUT_BOX)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            CodeDisplayCard(
+                                title = "显示在候选栏",
+                                isSelected = inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR,
+                                showCodeInInputBox = false,
+                                onClick = {
+                                    inputTextLocation = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR
+                                    SettingsPreferences.setInputTextLocation(context, SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR) {
+                        var showPreview by remember { mutableStateOf(SettingsPreferences.showPreeditPreview(context)) }
+                        SettingsToggleItem(Icons.TwoTone.DataObject, "显示拼音编辑栏", "打字时显示编码，支持编辑的方案可点按修改。",
+                            showPreview, { showPreview = it; SettingsPreferences.setShowPreeditPreview(context, it) })
+                        if (showPreview) {
+                            // 拼音位置三选一（11-19）：默认照旧浮在键盘上方的气泡；「紧贴候选上方」是贴在键盘边框上的小签（11-20 他按微信那张图定的）；
+                            // 「候选栏左侧」11-20 他要求去掉，存过的（含老开关「拼音放在键盘内」）按小签读。两张图例卡，和上面「编码显示」一个样（11-20「同样需要设置图例」）。
+                            // 11-21 他：「总共是 4 种样式，每种都能调整位置，左中右」——四张样式卡（两行），下面三张靠哪边的卡。
+                            var preeditStyle by remember { mutableStateOf(SettingsPreferences.preeditStyle(context)) }
+                            var preeditAlign by remember { mutableStateOf(SettingsPreferences.preeditAlign(context)) }
+                            val styles = listOf(
+                                Triple(SettingsPreferences.PREEDIT_STYLE_BUBBLE, "气泡", "拼音浮在键盘上面，会挡住一点输入框。透明度可调。"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_LINE, "小标签", "拼音贴在键盘上边，只有拼音那么宽。输入框往上让开，不会被挡住。"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_BLOCK, "方块", "和小标签一样贴着键盘，但更高、字更大，四角是直角。输入框往上让开，不会被挡住。"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_STRIP, "整行", "拼音占满键盘上面一整行。输入框往上让开，不会被挡住。"),
+                            )
+                            val aligns = listOf(
+                                SettingsPreferences.PREEDIT_ALIGN_LEFT to "靠左",
+                                SettingsPreferences.PREEDIT_ALIGN_CENTER to "居中",
+                                SettingsPreferences.PREEDIT_ALIGN_RIGHT to "靠右",
+                            )
+                            Column(Modifier.fillMaxWidth().settingsSearchAnchor("拼音位置", bleed = 16.dp, bleedVertical = 6.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Text("拼音位置", style = MaterialTheme.typography.titleSmall)
+                                styles.chunked(2).forEach { pair ->
+                                    Row(Modifier.fillMaxWidth().height(150.dp).padding(top = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        pair.forEach { (style, label, _) ->
+                                            PreeditStyleCard(title = label, style = style, isSelected = preeditStyle == style,
+                                                onClick = { preeditStyle = style; SettingsPreferences.setPreeditStyle(context, style) },
+                                                modifier = Modifier.weight(1f), align = preeditAlign)
+                                        }
+                                    }
+                                }
+                                styles.firstOrNull { it.first == preeditStyle }?.let { (_, _, description) ->
+                                    Text(description, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                                }
+                            }
+                            Column(Modifier.fillMaxWidth().settingsSearchAnchor("拼音靠哪边", bleed = 16.dp, bleedVertical = 6.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Text("拼音靠哪边", style = MaterialTheme.typography.titleSmall)
+                                // 140dp：贴边方块比小签高一截（11-21 图例按实际比例画），130dp 时方块会把键盘挤出卡片。
+                                Row(Modifier.fillMaxWidth().height(140.dp).padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    aligns.forEach { (align, label) ->
+                                        PreeditStyleCard(title = label, style = preeditStyle, isSelected = preeditAlign == align,
+                                            onClick = { preeditAlign = align; SettingsPreferences.setPreeditAlign(context, align) },
+                                            modifier = Modifier.weight(1f), align = align, testTag = "preedit-align:$align")
+                                    }
+                                }
+                            }
+                            // 拼音气泡底色可调透明（用户 11-01「我就喜欢透明度」）；点开的编辑条用同一个值（11-16）。只在键盘上方会浮出气泡时显示。
+                            val bubblePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                            // 选「显示在输入框」时没有气泡；页面上的选择先于键盘偏好刷新，所以也看本页的选择。
+                            if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR &&
+                                bubblePrefs.preeditStyle == SettingsPreferences.PREEDIT_STYLE_BUBBLE && bubblePrefs.showCodeInCandidateBar) {
+                                var bubbleOpacity by remember(bubblePrefs.preeditBubbleOpacity) { mutableStateOf(bubblePrefs.preeditBubbleOpacity) }
+                                Column(
+                                    modifier = Modifier.settingsSearchAnchor("拼音气泡不透明度")
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "拼音气泡不透明度：${kotlin.math.round(bubbleOpacity * 100).toInt()}%",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "调低更透明",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Slider(
+                                        value = bubbleOpacity,
+                                        onValueChange = { bubbleOpacity = SettingsPreferences.normalizePreeditBubbleOpacity(it) },
+                                        onValueChangeFinished = { SettingsPreferences.setPreeditBubbleOpacity(context, bubbleOpacity) },
+                                        valueRange = 0.2f..1f,
+                                        steps = 15
+                                    )
+                                }
+                            }
+                            // 拼音标调（用户 11-20「能不能在拼音上显示声调」）：只改气泡／小签里的显示，默认关。
+                            var preeditTones by remember { mutableStateOf(SettingsPreferences.preeditTones(context)) }
+                            SettingsToggleItem(Icons.TwoTone.RecordVoiceOver, "拼音显示声调",
+                                "按首选字的读音标调，如 jiù'shì'zhè'yàng；只是显示，上屏的还是字母。简拼、双拼显示按键时不标。",
+                                preeditTones, { preeditTones = it; SettingsPreferences.setPreeditTones(context, it) })
+                        }
+                    }
+                    // 不常改的两项放在这一组最后（11-22 他：按常用程度排）。
+                    DoublePinyinRawPreeditToggle()
+                    var showCorrectionMarks by remember { mutableStateOf(SettingsPreferences.showCorrectionMarks(context)) }
+                    SettingsToggleItem(Icons.TwoTone.Spellcheck, "显示纠错标记",
+                        "在纠错候选旁显示改正后的拼音",
+                        showCorrectionMarks, { showCorrectionMarks = it; SettingsPreferences.setShowCorrectionMarks(context, it) })
+                })
+            }
+            if (page == "candidates") item {
                 SettingsSection(title = "候选样式", content = {
                     val candidateTextSizePref = SettingsPreferences.getCandidateTextSize(context)
                     var candidateTextSize by remember(candidateTextSizePref) {
@@ -332,12 +485,41 @@ private fun LayoutDisplayPage(
                     Column(
                         modifier = Modifier.settingsSearchAnchor("候选字大小").padding(16.dp)
                     ) {
-                        Text(
-                            text = "候选字大小",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // 当前字号、默认位置和恢复默认（用户 11-22：「没有任何刻度，我甚至都不知道原来默认在哪里」）。
+                        val defaultSp = SettingsPreferences.DEFAULT_CANDIDATE_TEXT_SIZE
+                        val shownSp = kotlin.math.round(candidateTextSize).toInt()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "候选字大小",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "$shownSp sp",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.testTag("candidate-text-size-value")
+                            )
+                            if (shownSp == defaultSp) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "默认",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = {
+                                    candidateTextSize = defaultSp.toFloat()
+                                    SettingsPreferences.setCandidateTextSize(context, defaultSp)
+                                },
+                                enabled = shownSp != defaultSp,
+                                modifier = Modifier.testTag("candidate-text-size-reset")
+                            ) { Text("恢复默认") }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         CandidateTextSizeCard(
                             candidateTextSize = candidateTextSize,
                             modifier = Modifier.fillMaxWidth()
@@ -347,10 +529,31 @@ private fun LayoutDisplayPage(
                             value = candidateTextSize,
                             onValueChange = { candidateTextSize = it },
                             onValueChangeFinished = {
-                                SettingsPreferences.setCandidateTextSize(context, candidateTextSize.toInt())
+                                SettingsPreferences.setCandidateTextSize(context, kotlin.math.round(candidateTextSize).toInt())
                             },
-                            valueRange = 12f..22f,
-                            steps = 9
+                            // 上限 22 → 44（用户 11-22）；超过 22 时候选栏跟着变高，默认 19 不变。
+                            valueRange = com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MIN_SP.toFloat()..
+                                com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MAX_SP.toFloat(),
+                            steps = com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MAX_SP -
+                                com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MIN_SP - 1
+                        )
+                        SliderScaleMarks(
+                            range = com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MIN_SP.toFloat()..
+                                com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MAX_SP.toFloat(),
+                            marks = listOf(
+                                SliderMark(com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MIN_SP.toFloat(), "12"),
+                                SliderMark(defaultSp.toFloat(), "$defaultSp", "默认"),
+                                SliderMark(com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_FIT_SP.toFloat(), "22"),
+                                SliderMark(33f, "33"),
+                                SliderMark(com.kingzcheung.xime.ui.keyboard.CANDIDATE_TEXT_SIZE_MAX_SP.toFloat(), "44"),
+                            ),
+                            highlight = defaultSp.toFloat(),
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "超过 22 候选栏会整条变高",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -395,6 +598,8 @@ private fun LayoutDisplayPage(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
+                    // 开了「候选滑到头回弹展开」：候选栏只排一屏，露全最后半截那个再往左拉就展开全部，用不上这个数（11-22 他：
+                    // 「一个屏幕就是一页」）。存的数不动，关掉开关后照旧按它。
                     val pageSizePref = SettingsPreferences.getPageSize(context)
                     val effectiveValue = if (pageSizePref == 0) 20f else pageSizePref.toFloat()
                     var pageSizeSlider by remember(effectiveValue) {
@@ -415,7 +620,7 @@ private fun LayoutDisplayPage(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${pageSizeSlider.toInt()} 个",
+                                text = if (swipeExpand) "一屏" else "${pageSizeSlider.toInt()} 个",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -429,11 +634,13 @@ private fun LayoutDisplayPage(
                                 SettingsPreferences.setPageSize(context, intValue)
                             },
                             valueRange = 20f..50f,
-                            steps = 29
+                            steps = 29,
+                            enabled = !swipeExpand,
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "下次打字时生效",
+                            text = if (swipeExpand) "已开「候选滑到头回弹展开」：候选栏显示多少就是一页，把最后露半截的那个露全，再往左拉就展开全部。关掉那个开关后按这里的数"
+                                else "下次打字时生效",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -443,6 +650,46 @@ private fun LayoutDisplayPage(
             // 候选栏左右的按钮（11-02 整理：原来 11 行挤在一张「候选词」卡片里，按用途拆成四组，各行原样不变）。
             if (page == "candidates") item {
                 SettingsSection(title = "候选栏按钮", content = {
+                    // 回弹展开决定整条候选栏怎么用，放这一组最前（11-22 他：开关和图例放在候选词页靠前）。
+                    // 11-21 他：滑到头回弹展开只在打开这个开关后才有，默认关；关着时候选栏和 1.15.101 一样。
+                    SettingsToggleItem(Icons.TwoTone.SwipeLeft, "候选滑到头回弹展开",
+                        "候选栏只排一屏，露全最后一个再往左拉就展开，展开后往回划收起；右边那一格不再展开，用来关闭和收起键盘", swipeExpand, {
+                            swipeExpand = it
+                            SettingsPreferences.setCandidateSwipeExpand(context, it)
+                        })
+                    // 11-22 他：全面屏手势的人要「不管什么时候点右边同一个位置都能收起键盘」。开关打开后才有这两项：
+                    // 关闭键放左边（同 104）还是右边（「×」，和收起键盘同一格）。
+                    if (swipeExpand) {
+                        var closeRight by remember { mutableStateOf(SettingsPreferences.isCandidateCloseOnRight(context)) }
+                        Column(Modifier.settingsSearchAnchor("关闭键位置")) {
+                            Text("关闭键位置", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+                            Text("放右边时用「×」，和收起键盘同一个位置：上屏后点一下关掉联想，同一处再点一下收起键盘",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp))
+                            Row(Modifier.fillMaxWidth().choiceCardRowHeight(150.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (right in listOf(false, true)) {
+                                    IllustratedChoiceCard(if (right) "右边" else "左边", closeRight == right,
+                                        onClick = {
+                                            closeRight = right
+                                            SettingsPreferences.setCandidateCloseOnRight(context, right)
+                                        },
+                                        modifier = Modifier.weight(1f), tag = "candidate-close-side:${if (right) "right" else "left"}",
+                                        titleMaxLines = 1) {
+                                        CandidateCloseSideIllustration(right)
+                                    }
+                                }
+                            }
+                            // 11-23 他：四格「操作图例」太丑、也没让人看懂，不如不加，整块拿掉。
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
                     var showCandidateCancel by remember {
                         mutableStateOf(SettingsPreferences.shouldShowCandidateCancelButton(context))
                     }
@@ -602,151 +849,6 @@ private fun LayoutDisplayPage(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                })
-            }
-            if (page == "candidates") item {
-                SettingsSection(title = "拼音显示", content = {
-                    var showCorrectionMarks by remember { mutableStateOf(SettingsPreferences.showCorrectionMarks(context)) }
-                    SettingsToggleItem(Icons.TwoTone.Spellcheck, "显示纠错标记",
-                        "在纠错候选旁显示改正后的拼音",
-                        showCorrectionMarks, { showCorrectionMarks = it; SettingsPreferences.setShowCorrectionMarks(context, it) })
-                    var inputTextLocation by remember {
-                        mutableStateOf(SettingsPreferences.getInputTextLocation(context))
-                    }
-
-                    Column(Modifier.settingsSearchAnchor("编码显示")) {
-                        Text(
-                            text = "编码显示",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                        )
-                        Text(
-                            text = "未上屏的编码显示在哪里",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
-                        )
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CodeDisplayCard(
-                                title = "显示在输入框",
-                                isSelected = inputTextLocation == SettingsPreferences.INPUT_TEXT_INPUT_BOX,
-                                showCodeInInputBox = true,
-                                onClick = {
-                                    inputTextLocation = SettingsPreferences.INPUT_TEXT_INPUT_BOX
-                                    SettingsPreferences.setInputTextLocation(context, SettingsPreferences.INPUT_TEXT_INPUT_BOX)
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            CodeDisplayCard(
-                                title = "显示在候选栏",
-                                isSelected = inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR,
-                                showCodeInInputBox = false,
-                                onClick = {
-                                    inputTextLocation = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR
-                                    SettingsPreferences.setInputTextLocation(context, SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR)
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    DoublePinyinRawPreeditToggle()
-                    if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR) {
-                        var showPreview by remember { mutableStateOf(SettingsPreferences.showPreeditPreview(context)) }
-                        SettingsToggleItem(Icons.TwoTone.DataObject, "显示拼音编辑栏", "打字时显示编码，支持编辑的方案可点按修改。",
-                            showPreview, { showPreview = it; SettingsPreferences.setShowPreeditPreview(context, it) })
-                        if (showPreview) {
-                            // 拼音位置三选一（11-19）：默认照旧浮在键盘上方的气泡；「紧贴候选上方」是贴在键盘边框上的小签（11-20 他按微信那张图定的）；
-                            // 「候选栏左侧」11-20 他要求去掉，存过的（含老开关「拼音放在键盘内」）按小签读。两张图例卡，和上面「编码显示」一个样（11-20「同样需要设置图例」）。
-                            // 11-21 他：「总共是 4 种样式，每种都能调整位置，左中右」——四张样式卡（两行），下面三张靠哪边的卡。
-                            var preeditStyle by remember { mutableStateOf(SettingsPreferences.preeditStyle(context)) }
-                            var preeditAlign by remember { mutableStateOf(SettingsPreferences.preeditAlign(context)) }
-                            val styles = listOf(
-                                Triple(SettingsPreferences.PREEDIT_STYLE_BUBBLE, "浮在键盘上方", "气泡浮在应用上，点开编辑前后位置不变，透明度可调；会挡住一点输入内容。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_LINE, "紧贴候选上方", "圆角小签贴在键盘边框上，和键盘同色，不容易挡住输入内容。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_BLOCK, "贴边方块", "直角方块贴在键盘边框上，和键盘同色，字和气泡一样大。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_STRIP, "键盘顶上一行", "和键盘连成一体，像键盘往上多出一行；键盘本身不变高。"),
-                            )
-                            val aligns = listOf(
-                                SettingsPreferences.PREEDIT_ALIGN_LEFT to "靠左",
-                                SettingsPreferences.PREEDIT_ALIGN_CENTER to "居中",
-                                SettingsPreferences.PREEDIT_ALIGN_RIGHT to "靠右",
-                            )
-                            Column(Modifier.fillMaxWidth().settingsSearchAnchor("拼音位置", bleed = 16.dp, bleedVertical = 6.dp)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                Text("拼音位置", style = MaterialTheme.typography.titleSmall)
-                                styles.chunked(2).forEach { pair ->
-                                    Row(Modifier.fillMaxWidth().height(150.dp).padding(top = 8.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        pair.forEach { (style, label, _) ->
-                                            PreeditStyleCard(title = label, style = style, isSelected = preeditStyle == style,
-                                                onClick = { preeditStyle = style; SettingsPreferences.setPreeditStyle(context, style) },
-                                                modifier = Modifier.weight(1f), align = preeditAlign)
-                                        }
-                                    }
-                                }
-                                styles.firstOrNull { it.first == preeditStyle }?.let { (_, _, description) ->
-                                    Text(description, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                                }
-                            }
-                            Column(Modifier.fillMaxWidth().settingsSearchAnchor("拼音靠哪边", bleed = 16.dp, bleedVertical = 6.dp)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                Text("拼音靠哪边", style = MaterialTheme.typography.titleSmall)
-                                Row(Modifier.fillMaxWidth().height(130.dp).padding(top = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    aligns.forEach { (align, label) ->
-                                        PreeditStyleCard(title = label, style = preeditStyle, isSelected = preeditAlign == align,
-                                            onClick = { preeditAlign = align; SettingsPreferences.setPreeditAlign(context, align) },
-                                            modifier = Modifier.weight(1f), align = align, testTag = "preedit-align:$align")
-                                    }
-                                }
-                            }
-                            // 拼音标调（用户 11-20「能不能在拼音上显示声调」）：只改气泡／小签里的显示，默认关。
-                            var preeditTones by remember { mutableStateOf(SettingsPreferences.preeditTones(context)) }
-                            SettingsToggleItem(Icons.TwoTone.RecordVoiceOver, "拼音显示声调",
-                                "按首选字的读音标调，如 jiù'shì'zhè'yàng；只是显示，上屏的还是字母。简拼、双拼显示按键时不标。",
-                                preeditTones, { preeditTones = it; SettingsPreferences.setPreeditTones(context, it) })
-                        }
-                    }
-                    // 拼音气泡底色可调透明（用户 11-01「我就喜欢透明度」）；点开的编辑条用同一个值（11-16）。只在键盘上方会浮出气泡时显示。
-                    val bubblePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
-                    // 选「显示在输入框」时没有气泡；页面上的选择先于键盘偏好刷新，所以也看本页的选择。
-                    if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR &&
-                        bubblePrefs.preeditStyle == SettingsPreferences.PREEDIT_STYLE_BUBBLE && bubblePrefs.showCodeInCandidateBar) {
-                        var bubbleOpacity by remember(bubblePrefs.preeditBubbleOpacity) { mutableStateOf(bubblePrefs.preeditBubbleOpacity) }
-                        Column(
-                            modifier = Modifier.settingsSearchAnchor("拼音气泡不透明度")
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                        ) {
-                            Text(
-                                text = "拼音气泡不透明度：${kotlin.math.round(bubbleOpacity * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "调低更透明",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Slider(
-                                value = bubbleOpacity,
-                                onValueChange = { bubbleOpacity = SettingsPreferences.normalizePreeditBubbleOpacity(it) },
-                                onValueChangeFinished = { SettingsPreferences.setPreeditBubbleOpacity(context, bubbleOpacity) },
-                                valueRange = 0.2f..1f,
-                                steps = 15
-                            )
-                        }
-                    }
                 })
             }
 

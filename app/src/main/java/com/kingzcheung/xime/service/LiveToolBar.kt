@@ -1,6 +1,8 @@
 package com.kingzcheung.xime.service
 
 import android.os.SystemClock
+import com.kingzcheung.xime.model.ModelDownloadState
+import com.kingzcheung.xime.model.ModelManager
 import com.kingzcheung.xime.plugin.ExtensionManager
 import com.kingzcheung.xime.plugin.PluginNetworkAuthHelper
 import com.kingzcheung.xime.plugin.core.api.ToolPanelState
@@ -9,6 +11,8 @@ import com.kingzcheung.xime.plugin.core.api.ToolResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -39,6 +43,8 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
     private var lastError: String? = null
     /** 最近一次往应用输入框写译文的时间：紧跟着的光标回执是自己写出来的，不当作用户点了输入框。 */
     private var lastWriteAt = 0L
+    /** 栏开着时盯着模型下载：进度一变就重拉插件的栏（见 [watchModelDownloads]）。 */
+    private var downloadWatch: Job? = null
 
     /** 新开栏。 */
     fun reset() {
@@ -50,6 +56,7 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         lastError = null
         // 开栏时收掉应用输入框里没打完的拼音也会报一次光标，不能当成用户点了输入框
         lastWriteAt = SystemClock.uptimeMillis()
+        watchModelDownloads()
     }
 
     /** 栏里的字变了（打字、退格、清空）。 */
@@ -132,6 +139,9 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
     /** 关栏：写进去的留下，没出来的不再写。 */
     fun close() {
         cancel()
+        downloadWatch?.cancel()
+        downloadWatch = null
+        setDownloadProgress(null)
         if (written.isNotEmpty()) service.currentInputConnection?.finishComposingText()
         written = ""
         source = ""
@@ -214,6 +224,51 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         }
     }
 
+    /**
+     * 栏里点了「下载」离线模型：以前栏里的提示停在「下载中 0%」不动，只能去「扩展 › 模型」看进度（用户 11-22）。
+     * 现在栏开着时盯着模型下载，进度一变就重拉一次插件的栏，提示里的百分比跟着走；
+     * 栏里已经有字、看不到提示时，输入框底下也有一条进度线。下完了栏里有字就接着译。没在下载时不重拉。
+     */
+    private fun watchModelDownloads() {
+        downloadWatch?.cancel()
+        downloadWatch = service.serviceScope.launch {
+            var previous: Map<String, Int>? = null
+            ModelManager.downloadStates
+                .map { modelDownloadSignature(it) }
+                .distinctUntilChanged()
+                .collect { now ->
+                    val before = previous
+                    previous = now
+                    if (!isOpen()) return@collect
+                    setDownloadProgress(downloadingProgress(now, translateModelIds))
+                    // 开栏时插件的栏已经取过一次
+                    if (before == null) return@collect
+                    refreshBar()
+                    if (finishedDownloads(before, now).isNotEmpty()) retranslate()
+                    // 进度一秒最多刷几次；StateFlow 只留最新的，中间的百分比跳过
+                    delay(DOWNLOAD_REFRESH_MS)
+                }
+        }
+    }
+
+    private fun setDownloadProgress(progress: Float?) {
+        if (service.uiState.value.toolPanelDownloadProgress != progress) {
+            service.uiState.value = service.uiState.value.copy(toolPanelDownloadProgress = progress)
+        }
+    }
+
+    /** 只重拉插件的栏（提示、按钮），不动正在写的译文和加载状态。 */
+    private suspend fun refreshBar() {
+        val pluginId = service.uiState.value.toolPanelPluginId
+        val plugin = ExtensionManager.getPluginById(pluginId) as? ToolPlugin ?: return
+        val state = withContext(lane) { runCatching { plugin.getPanelState(source) }.getOrNull() } ?: return
+        if (!isOpen() || service.uiState.value.toolPanelPluginId != pluginId) return
+        val ui = state.ui ?: return
+        if (ui != service.uiState.value.toolPanelUiNodes) {
+            service.uiState.value = service.uiState.value.copy(toolPanelUiNodes = ui)
+        }
+    }
+
     /** 没出结果：插件记下的错误（没填密钥、连不上……）弹一次。 */
     private fun showError(pluginId: String, since: Long) {
         val error = com.kingzcheung.xime.plugin.core.security.PluginErrorLog.getLastError(pluginId) ?: return
@@ -252,8 +307,36 @@ internal class LiveToolBar(private val service: XimeInputMethodService) {
         const val PAUSE_MS = 600L
         private const val POLL_MS = 150L
         private const val TIMEOUT_MS = 30_000L
+        /** 下载进度重拉栏的最短间隔。 */
+        private const val DOWNLOAD_REFRESH_MS = 300L
+        /** 翻译插件离线用的模型（中译英、英译中）。 */
+        private val translateModelIds = com.kingzcheung.xime.translate.OfflineTranslation.directions.map { it.modelId }.toSet()
     }
 }
+
+/** 下载状态的摘要：下载中记百分比 0~100，下完记 [MODEL_DOWNLOAD_DONE]，失败记 [MODEL_DOWNLOAD_FAILED]，没在下的不记。 */
+internal fun modelDownloadSignature(states: Map<String, ModelDownloadState>): Map<String, Int> =
+    states.mapNotNull { (id, state) ->
+        when (state) {
+            is ModelDownloadState.Downloading -> id to (state.progress * 100).toInt().coerceIn(0, 100)
+            is ModelDownloadState.Complete -> id to MODEL_DOWNLOAD_DONE
+            is ModelDownloadState.Error -> id to MODEL_DOWNLOAD_FAILED
+            ModelDownloadState.Idle -> null
+        }
+    }.toMap()
+
+/** 上次还在下载、这次已经下完的模型。 */
+internal fun finishedDownloads(before: Map<String, Int>, now: Map<String, Int>): Set<String> =
+    before.filter { (id, progress) -> progress >= 0 && now[id] == MODEL_DOWNLOAD_DONE }.keys
+
+/** [ids] 里正在下载的模型的平均进度 0~1；一个都没在下是 null。 */
+internal fun downloadingProgress(signature: Map<String, Int>, ids: Set<String>): Float? {
+    val running = ids.mapNotNull { id -> signature[id]?.takeIf { it >= 0 } }
+    return if (running.isEmpty()) null else running.average().toFloat() / 100f
+}
+
+internal const val MODEL_DOWNLOAD_DONE = -1
+internal const val MODEL_DOWNLOAD_FAILED = -2
 
 /**
  * 翻译栏拿着输入时，应用输入框报来的光标变化是不是用户点了输入框（要把输入还给应用）。

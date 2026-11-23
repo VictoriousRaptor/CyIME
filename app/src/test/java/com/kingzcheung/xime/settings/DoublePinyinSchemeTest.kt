@@ -682,4 +682,39 @@ class DoublePinyinSchemeTest {
             assertTrue("$syllable $fromTable $fromAsset", fromAsset.containsAll(fromTable))
         }
     }
+
+    /**
+     * 乱序十七（群里 11-22 用的 lxsq17 v4.2）：每个音节的编码和它的拼写规则逐条算出来的一样（这里抄了几组有代表性的）；
+     * 普通声母也换了键（p→H、k→J、r→N、z→W、c→F、s→M），零声母先按 Q。
+     */
+    @Test fun lxsq17FollowsTheGroupsKeyMap() {
+        val s = DoublePinyinScheme.LXSQ17
+        assertEquals(emptyList<String>(), s.problems())
+        mapOf("shuang" to "sq", "pin" to "hs", "zhong" to "zt", "guo" to "gm", "ri" to "nj", "zi" to "wj", "ci" to "fj",
+            "si" to "mj", "kan" to "jn", "lv" to "lx", "lve" to "ll", "jue" to "jl", "chuang" to "cq", "xiong" to "xb",
+            "a" to "qh", "o" to "qx", "e" to "qw", "er" to "qt", "ang" to "qz", "ou" to "qf", "wo" to "wx", "ha" to "hh", "pa" to "hh")
+            .forEach { (syllable, code) -> assertEquals(syllable, code, s.code(syllable)) }
+        val rules = s.algebra()
+        for (syllable in DoublePinyinScheme.SYLLABLES) assertEquals(syllable, setOf(s.code(syllable)!!), spellings(rules, syllable))
+        // 17 个键之外的字母一个都用不到。
+        assertEquals("bcdfghjlmnqstwxyz".toSet(), DoublePinyinScheme.SYLLABLES.flatMap { s.code(it)!!.toList() }.toSet())
+        assertEquals("sq'hs", s.preview())
+        val format = s.preeditFormat()
+        assertEquals("zhong guo", apply(format, "ztgm"))
+        assertEquals("ni hao", apply(format, "njhb"))
+    }
+
+    /** 乱序十七自带 17 键：不进默认补进方案栏的那几种双拼，九键、14 键版本也不生成；小鹤等六种的规则一字不变。 */
+    @Test fun lxsq17IsBuiltinButNotADefaultDoublePinyin() {
+        assertFalse(DoublePinyinScheme.LXSQ17_ID in CyimeInputDefaults.doublePinyin)
+        assertEquals(DoublePinyinScheme.BUILTINS + DoublePinyinScheme.LXSQ17, DoublePinyinScheme.ALL_BUILTINS)
+        assertEquals(DoublePinyinScheme.LXSQ17, DoublePinyinSchemes.find(DoublePinyinScheme.LXSQ17_ID))
+        assertEquals("qwerty_lxsq17", DoublePinyinScheme.LXSQ17.ownLayout)
+        for (scheme in DoublePinyinScheme.BUILTINS) {
+            assertNull(scheme.ownLayout)
+            assertTrue(scheme.plainInitials.isEmpty())
+        }
+        assertEquals(InputScheme.DOUBLE_PINYIN, InputProfiles.builtin(DoublePinyinScheme.LXSQ17_ID).scheme)
+        assertEquals(InputLayout("qwerty_lxsq17", "乱序17键", LayoutKind.MERGED), InputProfiles.builtin(DoublePinyinScheme.LXSQ17_ID).layout)
+    }
 }

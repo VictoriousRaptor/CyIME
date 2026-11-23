@@ -490,6 +490,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         english: Boolean,
         predictionPending: Boolean = false,
     ): Int {
+        // 英文直接输入的补全只能点：空格照打空格、数字照打数字，不标高亮，免得看着像空格能上屏它（#526）。
+        if (english) return -1
         return hardwareCandidateSelection(state, english, predictionPending) ?: 0
     }
 
@@ -636,6 +638,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (next.pendingEnglishText.endsWith(mark)) requestEnglishCompletions(next)
         return true
     }
+
+    /** 实体键盘：中文、没在打字、光标前是数字时，. , : 照半角上屏（#527、#548）。 */
+    private suspend fun keepsDigitSeparatorHalfWidth(key: String): Boolean =
+        !service.uiState.value.isAsciiMode && service.t9PartialSegments.isEmpty() &&
+            service.rimeEngine.readQueuedComposition()?.input.isNullOrEmpty() &&
+            digitSeparatorStaysHalfWidth(key, withEditor {
+                runCatching { service.editorConnection()?.getTextBeforeCursor(1, 0) }.getOrNull() })
 
     private suspend fun <T> withEditor(block: suspend CoroutineScope.() -> T): T =
         withContext(Dispatchers.Main) {
@@ -1028,10 +1037,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 只管自定义编码方案（[com.kingzcheung.xime.settings.InputScheme.EXTERNAL]）；内置方案、字母表里没有的符号返回 null，照旧按标点上屏。
      * 字母表里的数字（声笔 sbxm 末尾带 1234567890，#106）也一样，但只在打字中：方案用数字编码还是选词（sbxm 的
      * alternative_select_keys）由 Rime 定；没在打字时数字照旧直接上屏。九键等数字本来就是编码的键盘不经过这里。
+     * 内置笔画方案的通配键 * 也从这里送进 Rime（[strokeWildcardIsCode]）。
      */
     internal fun schemeCodeKey(text: String): String? {
         val state = service.uiState.value
         if (auxCodeTrigger(text)) return text
+        if (strokeWildcardIsCode(text, state.isAsciiMode, state.inputProfile)) return "*"
         if (text.length != 1 || state.isAsciiMode ||
             state.inputProfile.scheme != com.kingzcheung.xime.settings.InputScheme.EXTERNAL) return null
         val c = schemeCodeChar(text[0])
@@ -1283,6 +1294,38 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 return@command
             }
             if (englishAutoSpace.isArmed && consumeEnglishAutoSpace(key)) return@command
+            // 实体键盘：大写字母组字（N、AGENTS）后打数字、点，原样接在后面上屏，不选词、不翻页（#528）。
+            // 屏幕键盘的数字、点本来就把字母原样上屏（literalSubmission），不走这里。
+            // 点是翻页键，从翻页那条路进来时不带 hardwareEvent（#548），按 [hardwarePageDirection] 认。
+            val physical = hardwareEvent != null || hardwarePageDirection != 0
+            if (physical && capitalsKeepLiteralKey(key) && !service.uiState.value.isAsciiMode &&
+                service.t9PartialSegments.isEmpty() &&
+                hardwareEvent?.let { it.isCtrlPressed || it.isAltPressed || it.isMetaPressed } != true &&
+                compositionIsAllCapitals(service.rimeEngine.readQueuedComposition()?.input)) {
+                commitHardwareLiteral(key)
+                return@command
+            }
+            // 数字后的 , .（3.14、1,000）：这两个是翻页键，走翻页那条路，不经过下面实体键盘那段 #527 的判断，
+            // 104 里只有 : 变半角（#548）。没在打字、光标前是数字时照半角上屏；打字中照旧翻页。
+            if (hardwareEvent == null && hardwarePageDirection != 0 && !zhuyinHardwareActive() &&
+                keepsDigitSeparatorHalfWidth(key)) {
+                commitHardwareLiteral(key)
+                return@command
+            }
+            // 注音（大千）Shift+数字 / Ctrl+数字：按排在前面的注音键都处理完后的候选，选这一组的第 N 个，和光按数字选词同一条路
+            // （用户 11-22，见 zhuyinChordDigitIndex）。数字不能先送进 Rime，那是注音符号和声调。
+            if (hardwareEvent != null && zhuyinHardwareActive() && zhuyinChordDigitIndex(hardwareEvent.keyCode,
+                    hardwareEvent.isShiftPressed, hardwareEvent.isCtrlPressed, hardwareEvent.isAltPressed,
+                    hardwareEvent.isMetaPressed) != null) {
+                if (service.rimeEngine.readQueuedComposition()?.input?.isNotEmpty() == true) {
+                    processHardwareCandidateKey(KeyEvent(KeyEvent.ACTION_DOWN, hardwareEvent.keyCode))
+                    hardwareNavigation.releasePress(HardwareCandidateKey.DIGIT)
+                } else if (hardwareEvent.isShiftPressed) {
+                    // 前面的键已经把字上屏了：Shift+数字照没在打字时那样打标点。
+                    keyCodeToKey(hardwareEvent.keyCode, true)?.let { routeZhuyinPunctuation(it) }
+                }
+                return@command
+            }
             if (hardwareEvent != null && !service.uiState.value.isAsciiMode &&
                 service.uiState.value.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN &&
                 routeZhuyinHardwareKey(key)) return@command
@@ -1336,6 +1379,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         numpad = hardwareEvent.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_EQUALS,
                         chinesePunctuation = !service.uiState.value.isAsciiMode &&
                             service.uiState.value.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE)) {
+                    commitHardwareLiteral(key)
+                    return@command
+                }
+                // 数字后的 . , :（3.14、12:30）：上面的数字是直接上屏的，没进 Rime，Rime 的数字后半角规则管不到，
+                // 中文模式句号会成「。」（#527）。没在打字、光标前是数字时照半角上屏。
+                if (keepsDigitSeparatorHalfWidth(key)) {
                     commitHardwareLiteral(key)
                     return@command
                 }

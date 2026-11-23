@@ -21,9 +21,12 @@ class KaomojiDataTest {
 
     @Test fun catalogHasDistinctCompleteUnicodeStringsAndIndependentHistory() {
         val faces = KaomojiData.categories.flatMap { it.faces }
-        assertEquals(22, KaomojiData.categories.size)
-        assertEquals(572, faces.size)
+        assertEquals(23, KaomojiData.categories.size)
+        assertEquals(611, faces.size)
         assertEquals(faces.size, faces.distinct().size)
+        // 11-22 他点名要的那个放在「流行」第一个，原样（全角括号）。
+        assertEquals("流行", KaomojiData.categories.first().name)
+        assertEquals("\uFF08 \u15DC \u2038 \u15DC \uFF09", KaomojiData.categories.first().faces.first())
         assertTrue(faces.all { it.isNotBlank() && '\n' !in it && '\uFFFD' !in it && '\u2060' !in it })
         assertNotEquals(RecentUsageStore.KEY_RECENT_EMOJIS, RecentUsageStore.KEY_RECENT_KAOMOJI)
         val face = "(づ｡◕‿‿◕｡)づ"

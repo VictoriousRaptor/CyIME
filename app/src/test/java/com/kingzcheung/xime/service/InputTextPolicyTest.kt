@@ -15,6 +15,17 @@ class InputTextPolicyTest {
         listOf(",", "。", "！", "/", "@", "(").forEach { assertTrue(it, isLiteralPunctuation(it)) }
         listOf("delete", "space", "abc", "s", "4", "").forEach { assertFalse(it, isLiteralPunctuation(it)) }
     }
+    // 11-22 笔画通配键：* 是标点，以前直接上屏、进不了引擎；笔画方案里它是编码键，别的方案、西文照旧是标点。
+    @Test fun strokeWildcardGoesToTheEngineOnlyInStroke() {
+        val stroke = com.kingzcheung.xime.settings.InputProfiles.describe("stroke")
+        assertTrue(isLiteralPunctuation("*"))
+        assertTrue(strokeWildcardIsCode("*", false, stroke))
+        assertTrue(strokeWildcardIsCode("＊", false, stroke))
+        assertFalse(strokeWildcardIsCode("*", true, stroke))
+        assertFalse(strokeWildcardIsCode("，", false, stroke))
+        assertFalse(strokeWildcardIsCode("h", false, stroke))
+        assertFalse(strokeWildcardIsCode("*", false, com.kingzcheung.xime.settings.InputProfiles.describe("rime_ice")))
+    }
     // 2026-11-02「标点上屏首选」：只有断句标点先上屏首选，括号、引号、@ 照旧先上屏字母。
     @Test fun onlySentencePunctuationCommitsTheFirstCandidate() {
         listOf(",", "，", ".", "。", "?", "？", "!", "！", "、", ";", "；", ":", "：", "……").forEach { assertTrue(it, isSentencePunctuation(it)) }
@@ -99,5 +110,19 @@ class InputTextPolicyTest {
         // 手打分隔符两侧显示同一个光标位置，一步跨过。
         assertEquals(1, com.kingzcheung.xime.rime.compositionCaretStep("ni'hao", 3, 0, -1))
         assertEquals(4, com.kingzcheung.xime.rime.compositionCaretStep("ni'hao", 2, 0, 1))
+    }
+
+    @Test fun aSeparatorAfterADigitStaysHalfWidth() {
+        // #527：实体键盘中文模式，3 后打 . 要 3.，不是 3。
+        assertTrue(digitSeparatorStaysHalfWidth(".", "3"))
+        assertTrue(digitSeparatorStaysHalfWidth(",", "价格1"))
+        assertTrue(digitSeparatorStaysHalfWidth(":", "12"))
+        assertFalse("不在数字后照常", digitSeparatorStaysHalfWidth(".", "你好"))
+        assertFalse(digitSeparatorStaysHalfWidth(".", ""))
+        assertFalse(digitSeparatorStaysHalfWidth(".", null))
+        assertFalse("全角数字不算", digitSeparatorStaysHalfWidth(".", "３"))
+        assertFalse("问号不是数字分隔", digitSeparatorStaysHalfWidth("?", "3"))
+        assertEquals(".", keyboardLiteralWidth(".", full = true, japanese = false, before = "3"))
+        assertEquals("。", keyboardLiteralWidth(".", full = true, japanese = false, before = "好"))
     }
 }

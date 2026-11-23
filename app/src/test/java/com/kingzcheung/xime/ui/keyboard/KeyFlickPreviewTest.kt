@@ -48,4 +48,15 @@ class KeyFlickPreviewTest {
         assertEquals(KeyFlickPreview("1", 1f, true), keyFlickPreview(0f, -75f, 8f, 50f, "1", "!"))
         assertEquals(KeyFlickPreview("!", 1f, false), keyFlickPreview(0f, 75f, 8f, 50f, "1", "!"))
     }
+
+    @Test fun `sector follows the finger direction, not the symbol corner`() {
+        // 平常：上滑拉上角标，下拉拉下角标。
+        assertEquals(KanaFlickDirection.UP, keyFlickDragDirection(keyFlickPreview(0f, -75f, 8f, 50f, "1", "!")!!, true, false))
+        assertEquals(KanaFlickDirection.DOWN, keyFlickDragDirection(keyFlickPreview(0f, 75f, 8f, 50f, "1", "!")!!, true, false))
+        // 反转角标滑动方向：下拉拉的是上角标，扇区仍画在下面。
+        assertEquals(KanaFlickDirection.DOWN, keyFlickDragDirection(preview(75f)!!, false, true))
+        assertEquals(KanaFlickDirection.UP, keyFlickDragDirection(preview(-75f)!!, false, true))
+        assertEquals(KanaFlickDirection.LEFT, keyFlickDragDirection(horizontalKeyFlickPreview(-40f, 0f, 8f, 24f, "q", "w")!!, true, false))
+        assertEquals(KanaFlickDirection.RIGHT, keyFlickDragDirection(horizontalKeyFlickPreview(40f, 0f, 8f, 24f, "q", "w")!!, true, false))
+    }
 }

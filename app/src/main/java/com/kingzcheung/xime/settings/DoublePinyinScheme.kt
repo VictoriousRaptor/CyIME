@@ -11,6 +11,16 @@ data class DoublePinyinScheme(
     val initials: Map<String, Char>,
     val finals: Map<String, Char>,
     val zero: Map<String, String>,
+    /**
+     * 普通声母换到别的键（乱序十七：p 在 H 键、k 在 J 键、r 在 N 键、z 在 W 键、c 在 F 键、s 在 M 键）；
+     * 没写的声母按它本身那个字母。键位表编辑器不改它，自定义方案都是空的，生成的规则和以前一字不差。
+     */
+    val plainInitials: Map<Char, Char> = emptyMap(),
+    /**
+     * 自带键盘：打字用 xime.yaml 里这个键盘段（乱序十七是 qwerty_lxsq17 的 17 个键），不用 26 键和所选字母排列，
+     * 也不生成九键、14 键和自建布局上的版本（那些键位是给 26 键双拼排的）。null 是普通双拼。
+     */
+    val ownLayout: String? = null,
 ) {
     /** 微软、搜狗双拼把 ing 放在分号键上：Rime 字母表加分号，26 键第二排补一个分号键，不生成九键、14 键版本。 */
     val usesSemicolon: Boolean get() = ';' in finals.values
@@ -21,9 +31,12 @@ data class DoublePinyinScheme(
         val initial = SPECIAL_INITIALS.firstOrNull { syllable.startsWith(it) }
             ?: syllable.take(1).takeIf { it.isNotEmpty() && it[0] in PLAIN_INITIALS } ?: return null
         val key = finals[syllable.substring(initial.length)] ?: return null
-        val first = if (initial.length == 2) initials[initial] ?: return null else initial[0]
+        val first = if (initial.length == 2) initials[initial] ?: return null else plainKey(initial[0])
         return "$first$key"
     }
+
+    /** 普通声母实际按的键（见 [plainInitials]）。 */
+    private fun plainKey(initial: Char): Char = plainInitials[initial] ?: initial
 
     /** 同一编码对应多个音节（如首道双拼 dk = den/dia）；音节按常用程度排列，词库负责区分。 */
     fun collisions(): Map<String, List<String>> = SYLLABLES.groupBy { code(it) }
@@ -36,7 +49,7 @@ data class DoublePinyinScheme(
         for (initial in SPECIAL_INITIALS) {
             val key = initials[initial]
             if (key == null || key !in 'a'..'z') add("$initial 还没有按键")
-            else if (key in PLAIN_INITIALS) add("$initial 不能用 ${key.uppercaseChar()} 键：${key.uppercaseChar()} 本身是声母")
+            else if (PLAIN_INITIALS.any { plainKey(it) == key }) add("$initial 不能用 ${key.uppercaseChar()} 键：${key.uppercaseChar()} 本身是声母")
         }
         if (SPECIAL_INITIALS.mapNotNull { initials[it] }.toSet().size < SPECIAL_INITIALS.size) add("zh、ch、sh 需要三个不同的键")
         FINALS.filter { finals[it]?.let { key -> key in 'a'..'z' || key == ';' } != true }.takeIf { it.isNotEmpty() }
@@ -65,6 +78,8 @@ data class DoublePinyinScheme(
         for (syllable in ZERO_SYLLABLES) add("xform/^$syllable$/${zero.getValue(syllable).upperCircled()}/")
         for (final in FINALS) add("xform/^(zh|ch|sh|[$PLAIN_INITIALS])$final$/\$1${finals.getValue(final).upperCircled()}/")
         for (initial in SPECIAL_INITIALS) add("xform/^$initial/${initials.getValue(initial).upperCircled()}/")
+        // 换了键的普通声母放在翘舌声母后面：zh 已经换成占位符，^z 只会碰到平舌的 z。
+        for ((initial, key) in plainInitials.toSortedMap()) add("xform/^$initial/${key.upperCircled()}/")
         add(if (usesSemicolon) "xlit/$UPPER_CIRCLED$SEMICOLON_PLACEHOLDER/$LETTERS;/" else "xlit/$UPPER_CIRCLED/$LETTERS/")
     }
 
@@ -106,9 +121,20 @@ data class DoublePinyinScheme(
             val initial = SPECIAL_INITIALS.firstOrNull { syllable.startsWith(it) } ?: syllable.take(1)
             readings.putIfAbsent(code[0] to code[1], syllable.substring(initial.length))
         }
-        readings.entries.groupBy({ it.key.second to it.value }, { it.key.first }).forEach { (keyAndFinal, firsts) ->
+        if (plainInitials.isEmpty()) readings.entries.groupBy({ it.key.second to it.value }, { it.key.first }).forEach { (keyAndFinal, firsts) ->
             val (key, final) = keyAndFinal
             add("xform/(^|[ '])([${firsts.sorted().joinToString("")}])$key(?=$|[ '])/\$1\$2${final.lowerCircled()}/")
+        } else {
+            // 一个键上有几个声母（乱序十七 H 键是 h 和 p）：两键编码整个换成较常用的那个音节，键上的字母不一定是声母。
+            // 翘舌声母照旧留着键字母，由下面那条换成 zh/ch/sh。
+            val syllables = LinkedHashMap<String, String>()
+            for (syllable in SYLLABLES) if (syllable !in zero) code(syllable)?.let { syllables.putIfAbsent(it, syllable) }
+            for ((pair, syllable) in syllables) {
+                val special = SPECIAL_INITIALS.firstOrNull { syllable.startsWith(it) }
+                val shown = if (special != null) pair[0] + syllable.substring(special.length).lowerCircled()
+                    else syllable.lowerCircled()
+                add("xform/(^|[ '])$pair(?=$|[ '])/\$1$shown/")
+            }
         }
         // jv（ju 按 ü 键打）显示 ju。
         umlautInitials().takeIf { it.isNotEmpty() }?.let { firsts ->
@@ -131,7 +157,8 @@ data class DoublePinyinScheme(
             .replaceFirst(Regex("(?m)^  schema_id: .*$"), "  schema_id: $id\n  language: zh\n  input_scheme: double_pinyin")
             .replaceFirst(Regex("(?m)^  name: .*$"), Regex.escapeReplacement("  name: ${org.json.JSONObject.quote(name)}"))
             .replaceFirst(Regex("(?m)^  description: \\|\\n(?:    .*\\n)*"),
-                "  description: |\n    CyIME 双拼方案（由键位表生成），词库、符号与按键排列和小鹤双拼相同。\n")
+                if (ownLayout == null) "  description: |\n    CyIME 双拼方案（由键位表生成），词库、符号与按键排列和小鹤双拼相同。\n"
+                else "  description: |\n    CyIME 双拼方案（由键位表生成），自带键盘；词库、符号和小鹤双拼相同。\n")
         check(schemaBlock.contains("  schema_id: $id\n")) { "小鹤双拼方案缺少 schema_id" }
         text = text.replaceRange(header.range, schemaBlock)
         text = replaceList(text, "speller", "algebra", algebra() + separatorRules())
@@ -404,7 +431,9 @@ data class DoublePinyinScheme(
         const val JIAJIA_ID = "double_pinyin_jiajia"
         /** 不用 Rime 的 double_pinyin_mspy，免得和导入的同名方案冲突。 */
         const val MICROSOFT_ID = "double_pinyin_microsoft"
-        private val ID_PATTERN = Regex("$SHOUDAO_ID|$ZIRANMA_ID|$ZNABC_ID|$JIAJIA_ID|$MICROSOFT_ID|${CUSTOM_PREFIX}[a-f0-9]{32}")
+        /** 乱序十七：17 键乱序双拼，自带 17 键键盘（xime.yaml qwerty_lxsq17）。不用 lxsq17，免得和群里流传的导入方案同名。 */
+        const val LXSQ17_ID = "double_pinyin_lxsq17"
+        private val ID_PATTERN = Regex("$SHOUDAO_ID|$ZIRANMA_ID|$ZNABC_ID|$JIAJIA_ID|$MICROSOFT_ID|$LXSQ17_ID|${CUSTOM_PREFIX}[a-f0-9]{32}")
         val SPECIAL_INITIALS = listOf("zh", "ch", "sh")
         const val PLAIN_INITIALS = "bpmfdtnlgkhjqxrzcsyw"
         /** 按词库拼写列出的韵母；jue 的 ue 与 lüe 的 ve、ju 的 u 与 lü 的 v 分开设置。 */
@@ -526,6 +555,31 @@ data class DoublePinyinScheme(
                 "an" to "oj", "en" to "of", "ang" to "oh", "eng" to "og", "er" to "or"))
 
         val BUILTINS = listOf(FLYPY, SHOUDAO, ZIRANMA, ZNABC, JIAJIA, MICROSOFT)
+
+        /**
+         * 乱序十七（17 键乱序双拼，群友 11-22 整理的键位）：3 排 6/6/5 共 17 个键，每个键只出一个字母，
+         * 声母和韵母都换了位置，零声母一律先按 Q 再按韵母键。按 lxsq17 v4.2 的拼写规则逐条对过。
+         *   第一排 H(h p) S(sh en in) Z(zh ang iao) B(ao iong) X(o ü uai uan) M(s ie uo)
+         *   第二排 L(ai ue) D(u) Y(eng ing) W(z e) J(k i) N(r an)
+         *   第三排 C(ch ui iang) Q(零声母 ian uang) G(ei un) F(c iu ou) T(ong er)
+         */
+        val LXSQ17 = DoublePinyinScheme(LXSQ17_ID, "乱序十七", mapOf("zh" to 'z', "ch" to 'c', "sh" to 's'),
+            mapOf("a" to 'h', "o" to 'x', "e" to 'w', "i" to 'j', "u" to 'd', "v" to 'x', "ai" to 'l', "ei" to 'g',
+                "ui" to 'c', "ao" to 'b', "ou" to 'f', "iu" to 'f', "ie" to 'm', "ue" to 'l', "ve" to 'l', "an" to 'n',
+                "en" to 's', "in" to 's', "un" to 'g', "ang" to 'z', "eng" to 'y', "ing" to 'y', "ong" to 't', "ia" to 'h',
+                "ua" to 'h', "uo" to 'm', "iao" to 'z', "ian" to 'q', "uan" to 'x', "iang" to 'c', "uang" to 'q',
+                "iong" to 'b', "uai" to 'x'),
+            mapOf("a" to "qh", "o" to "qx", "e" to "qw", "ai" to "ql", "ei" to "qg", "ao" to "qb", "ou" to "qf",
+                "an" to "qn", "en" to "qs", "ang" to "qz", "eng" to "qy", "er" to "qt"),
+            plainInitials = mapOf('p' to 'h', 'k' to 'j', 'r' to 'n', 'z' to 'w', 'c' to 'f', 's' to 'm'),
+            ownLayout = "qwerty_lxsq17")
+
+        /**
+         * 自带键盘的内置双拼（乱序十七）：和 [BUILTINS] 一样随应用生成、在双拼方案页列出，但不算进默认补进方案栏的
+         * 那几种（[CyimeInputDefaults.doublePinyin]），也不在设置向导里问，用的人自己在双拼方案页打开。
+         */
+        val OWN_LAYOUT_BUILTINS = listOf(LXSQ17)
+        val ALL_BUILTINS = BUILTINS + OWN_LAYOUT_BUILTINS
 
         /** 小鹤双拼编码 → 音节；lo 与 luo 同码时取 luo。 */
         private val FLYPY_DECODE: Map<String, String> = HashMap<String, String>().apply {

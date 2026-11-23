@@ -2254,18 +2254,18 @@ settings-fold:语言键切换方式	=
 显示拼音编辑栏	Show pinyin edit bar
 打字时显示编码，支持编辑的方案可点按修改。	Shows the code while typing; schemes that support editing can be tapped to change it.
 拼音位置	Pinyin position
-紧贴候选上方	Right above candidates
-圆角小签贴在键盘边框上，和键盘同色，不容易挡住输入内容。	A rounded tab on the keyboard edge in the keyboard's color; covers less of what you type.
-贴边方块	Edge block
-直角方块贴在键盘边框上，和键盘同色，字和气泡一样大。	A square block on the keyboard edge in the keyboard's color, with text as large as the bubble.
-键盘顶上一行	Row on top of the keyboard
-和键盘连成一体，像键盘往上多出一行；键盘本身不变高。	Joined to the keyboard like an extra row on top; the keyboard itself does not get taller.
+小标签	Small tab
+拼音贴在键盘上边，只有拼音那么宽。输入框往上让开，不会被挡住。	Pinyin on the keyboard's top edge, only as wide as the pinyin. The text field moves up so it is not covered.
+方块	Block
+和小标签一样贴着键盘，但更高、字更大，四角是直角。输入框往上让开，不会被挡住。	Like the small tab but taller, with larger text and square corners. The text field moves up so it is not covered.
+整行	Full row
+拼音占满键盘上面一整行。输入框往上让开，不会被挡住。	Pinyin fills a whole row above the keyboard. The text field moves up so it is not covered.
 拼音靠哪边	Pinyin alignment
 靠左	Left
 居中	Center
 靠右	Right
-浮在键盘上方	Floating above the keyboard
-气泡浮在应用上，点开编辑前后位置不变，透明度可调；会挡住一点输入内容。	A bubble over the app; editing opens in the same spot and its opacity is adjustable, but it can cover some of what you type.
+气泡	Bubble
+拼音浮在键盘上面，会挡住一点输入框。透明度可调。	Pinyin floats above the keyboard and can cover part of the text field. Opacity is adjustable.
 拼音显示声调	Show tones on pinyin
 按首选字的读音标调，如 jiù'shì'zhè'yàng；只是显示，上屏的还是字母。简拼、双拼显示按键时不标。	Marks tones from the first candidate's reading, e.g. jiù'shì'zhè'yàng. Display only; letters are still what gets entered. Not shown for initials-only input or double pinyin keys.
 拼音气泡不透明度：{0}%	Pinyin bubble opacity: {0}%
@@ -3138,7 +3138,8 @@ CPU 实测 	CPU benchmark
 小米 / 红米（HyperOS、MIUI）：在系统设置 › 应用 › CyIME › 省电策略里选「无限制」，并允许自启动。	Xiaomi / Redmi (HyperOS, MIUI): in Settings › Apps › CyIME › Battery saver choose "No restrictions" and allow autostart.
 在系统设置 › 应用 › CyIME 里把电池 / 耗电管理设为「允许后台运行」或「不限制」。	In Settings › Apps › CyIME set battery management to "Allow background activity" or "Unrestricted".
 在系统设置 › 应用 › CyIME › 电池里选「不限制」。	In Settings › Apps › CyIME › Battery choose "Unrestricted".
-然后从最近任务里划掉 CyIME 再打开，会重新开始准备。	Then swipe CyIME away from recent apps and open it again; preparation starts over.
+然后点下面的「重新开始准备」：CyIME 会关掉重开再接着准备，已经编好的词库一般不用重编。	Then tap "Restart preparation" below: CyIME closes, reopens and carries on; dictionaries already built usually aren't rebuilt.
+重新开始准备	Restart preparation
 还是不动，点「导出日志」发给我们，日志里有停在哪一步。	If it still doesn't move, tap "Export log" and send it to us; the log shows which step it stopped at.
 重试准备	Retry preparation
 用全拼、双拼还是五笔，26 键、14 键还是九键，完成后下一页会问你。	Full pinyin, Shuangpin or Wubi, QWERTY, 14-key or 9-key: the next page asks once this is done.
@@ -3664,7 +3665,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 「字幕」把身边的人说的话实时变成大字，适合开会、上课或和听力不好的人交流。	“Captions” shows what people around you say in large text, in real time, for meetings, classes or talking with hard-of-hearing people.
 「智能联想」关着，这项不起作用。	“Smart prediction” is off, so this has no effect.
 一个字符一格，从左到右对应这一排的键，空格写 {0}。	One character per key, left to right; use {0} for an empty key.
-一个字符一格，从左到右对应这一排的键；打空格就是空着的格子。几个字的短语用「」括起来算一格。	One character per key, left to right; a space leaves that key empty. Wrap a multi-character phrase in 「」 to put it on one key.
+一个字符一格，从左到右对应这一排的键；打空格就是空着的格子。几个字的短语用「」括起来算一格，结尾要带空格就写在」前面，比如「, 」。	One character per key, left to right; a space leaves that key empty. Wrap a multi-character phrase in 「」 to put it on one key; for a trailing space, put it before 」, like 「, 」.
 多写了 {0} 格，最后 {1} 格不放	{0} too many; the last {1} are left out
 改的还没保存	Unsaved changes
 要保存这次的修改吗？	Save these changes?
@@ -3722,6 +3723,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 分体时右半边也有一个 G 键	Adds a G key to the right half when split
 分类和自建分组	Categories and your own groups
 切换大小写时的光效	Light effect when switching case
+切换大小写、中英、语言和符号页时整块键盘的光效	Whole-keyboard light when switching case, Chinese/English, language or the symbols page
 切换或删除手写模型	Switch or delete handwriting models
 刚上屏就删掉的词不记进词库	Words deleted right after entering aren't learned
 删字后在候选栏给出删掉的字和同音字	After deleting, suggest the deleted character and its homophones
@@ -3999,7 +4001,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 需要通讯录权限，请在系统设置里允许	Contacts permission is needed; allow it in system settings
 高度、宽度、悬浮、透明度	Height, width, floating, transparency
 浮窗位置	Floating bar position
-固定后浮窗不再跟着光标走，候选贴着工具条出现。输入框在下面时选顶部，在上面时选底部。	When fixed, the bar no longer follows the cursor and candidates appear next to it. Pick Top when the input box is low on the screen, Bottom when it is high.
+固定后工具条停在这一边、不能拖；候选照样出现在正在打字的那一行旁边，不挡这一行。	When fixed, the toolbar stays on that side and cannot be dragged; candidates still appear next to the line you are typing, without covering it.
 自由拖动	Drag freely
 固定在{0}	Fixed at {0}
 顶部	Top
@@ -4009,3 +4011,15 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 浮窗固定在{0}，这项不起作用	Has no effect while the bar is fixed at {0}
 普通话	Mandarin
 自动识别	Detect automatically
+拂动提示	Flick hints
+拂动选字母、双字母键	Flick for letters, two-letter keys
+空格上滑输入 0	Swipe up on Space for 0
+九键与 14 键 › 空格上滑输入 0	9-key & 14-key › Swipe up on Space for 0
+长按空格 › 上滑取消	Hold space › Swipe up to cancel
+九键空格往上滑打 0，打字时不接	Swipe up on the 9-key Space to type 0 (not while typing)
+九键空格往上滑打 0，打字时不接；0 键一直是「→」，没有候选时点它光标右移、左滑左移	Swipe up on the 9-key Space to type 0 (not while typing). The 0 key always shows “→”; with no candidates, tap it to move the cursor right, swipe left to move it left
+空格上滑	Swipe up on Space
+打 0，打字时不接。见「九键与 14 键 › 空格上滑输入 0」。	types 0 (not while typing). See “9-key & 14-key › Swipe up on Space for 0”.
+没有候选时点「→」	Tap “→” with no candidates
+光标右移一格，左滑左移、右滑右移。	moves the cursor right one character; swipe left or right to move it.
+超过 22 候选栏会整条变高	Above 22 the whole candidate bar gets taller

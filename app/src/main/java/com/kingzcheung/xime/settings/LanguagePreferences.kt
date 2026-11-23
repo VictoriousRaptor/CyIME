@@ -15,6 +15,13 @@ object LanguagePreferences {
         return (if (stored == null) setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH)
         else InputLanguage.entries.filterTo(mutableSetOf()) { it.id in stored } + InputLanguage.ENGLISH) + InputLanguage.UNSPECIFIED
     }
+    /**
+     * 语言列表里开着日语。没开时日语专用的设置项（日语语音、假名方向提示、长音键、布局管理的日语）都不显示，
+     * 设置搜索也搜不到；开了自动出现（用户 11-22）。只管显示，存的值不动。
+     */
+    fun japaneseOn(context: Context): Boolean =
+        InputLanguage.JAPANESE in InputLanguage.supported && InputLanguage.JAPANESE in enabled(context)
+
     fun initialize(context: Context) {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         if (prefs.getStringSet(KEY, null)?.contains(InputLanguage.ENGLISH.id) != true) {

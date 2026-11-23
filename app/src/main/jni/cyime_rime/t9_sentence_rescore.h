@@ -25,6 +25,9 @@ class Sentence;
 // or more leads when the typed letters do not read in full and it beats the typed choice by this margin (0: off).
 // `slip_margin` (t9/slip_correction_margin): a corrected sentence leads a typed one that reads in full when it
 // beats it by this margin for every corrected syllable (0: off).
+// `slip_only` (t9/slip_whole_words, 14 keys): a corrected sentence leads only by `slip_margin`; the stray-initials
+// rule below, which lets the best corrected sentence lead without any margin, is off (a key covers two letters, so
+// nearly every key sequence has stray initials: 刚准确 led by 当众侮辱).
 // `initials_choices` (t9/initials_choices): input typed as initials only (wmjs) used to keep the dictionary's order and
 // made no sentence when a dictionary word had those initials, so a common combination the dictionary lacks or counts
 // low (我们就是, 需要多久) never led. With a count above 0 the n-best (whole words and sentences alike) is ordered by
@@ -41,7 +44,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
-                        deque<an<Sentence>>* sentences);
+                        deque<an<Sentence>>* sentences, bool slip_only = false);
 
 // 14-key: a whole-input word read through the initial of the final merged key (都是 for DOUA, the A key read
 // as s) normally follows the sentence of the typed letters (都啊). With the word model it goes first when its

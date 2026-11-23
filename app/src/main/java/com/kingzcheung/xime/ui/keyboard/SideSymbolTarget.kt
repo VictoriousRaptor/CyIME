@@ -44,7 +44,14 @@ enum class SideSymbolTarget(val key: String, val label: String, val where: Strin
         /** 数字键盘左栏默认的四个运算符，和改动前一样。 */
         val NUMBER_SIDE_DEFAULT = listOf("+", "-", "*", "/")
 
-        fun parse(raw: String?): List<String>? = raw?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }
+        /**
+         * 存的一行就是一格，原样读出（用户 11-22：九键侧栏填「, 」，后面的空格被吞了）：不去前后空格，
+         * 只丢掉完全空的行（结尾换行、删空的格）。以前保存时已经去过空格，旧数据读出来和原来一样。
+         */
+        fun parse(raw: String?): List<String>? = raw?.lines()?.map { it.removeSuffix("\r") }?.filter { it.isNotEmpty() }
             ?.takeIf { it.isNotEmpty() }
+
+        /** 小框里写的一格：原样保留空格，只去掉换行（一行一格，换行会把一格拆成两格）。 */
+        fun cellText(draft: String): String = draft.filter { it != '\n' && it != '\r' }
     }
 }

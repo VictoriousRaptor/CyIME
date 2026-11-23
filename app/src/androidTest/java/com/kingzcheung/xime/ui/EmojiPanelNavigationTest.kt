@@ -16,7 +16,9 @@ import com.kingzcheung.xime.data.EmojiCategory
 import com.kingzcheung.xime.plugin.ExtensionManager
 import com.kingzcheung.xime.ui.keyboard.EmojiKeyboardLayout
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.kingzcheung.xime.data.RecentUsageStore
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -27,6 +29,24 @@ class EmojiPanelNavigationTest {
         .get(ExtensionManager) as MutableStateFlow<List<EmojiCategory>>
     private val saved = categories.value
     @After fun restoreCategories() { categories.value = saved }
+    // 打开停在哪一页取决于有没有最近使用：每个测试从空记录开始，结束后放回原来的记录。
+    private val recentPrefs = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        .getSharedPreferences("recent_usage", android.content.Context.MODE_PRIVATE)
+    private val savedRecent = recentPrefs.getString(RecentUsageStore.KEY_RECENT_EMOJIS, null)
+    @Before fun clearRecent() { recentPrefs.edit().remove(RecentUsageStore.KEY_RECENT_EMOJIS).commit() }
+    @After fun restoreRecent() { recentPrefs.edit().putString(RecentUsageStore.KEY_RECENT_EMOJIS, savedRecent).commit() }
+
+    @Test fun opensOnRecentWhenThereIsHistory() {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_EMOJIS, "😀")
+        show(com.kingzcheung.xime.data.EmojiData.categories)
+        rule.onNodeWithTag("emoji-category:0").assertIsSelected()
+    }
+
+    @Test fun opensOnTheFirstBuiltinCategoryWhenRecentIsEmpty() {
+        show(com.kingzcheung.xime.data.EmojiData.categories)
+        rule.onNodeWithTag("emoji-category:1").assertIsSelected()
+    }
 
     private fun show(items: List<EmojiCategory>, width: Int = 400, height: Int = 184, bottomPadding: Int = 0) {
         categories.value = items

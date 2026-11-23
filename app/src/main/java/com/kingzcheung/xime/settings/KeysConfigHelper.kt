@@ -666,8 +666,27 @@ object KeysConfigHelper {
     // 按键布局模式缓存（中文 qwerty / 英文 qwerty_en）
     private var _buttonLayoutZh: ButtonLayout = ButtonLayout.STANDARD
     private var _buttonLayoutEn: ButtonLayout = ButtonLayout.STANDARD
+    /**
+     * xime.custom.yaml 里给合并键盘段单独写的 button_layout（导入的乱序十七写在 qwerty_lxsq17 里）：以前只认 qwerty 段，
+     * 写在键盘段里的不生效，导入文件只好把整个中文键盘都改成 compact，主标签就挤到了左上角（用户群 11-22）。
+     * 只读用户文件：内置 xime.yaml 各段都写着 standard，读进来会盖掉用户在 qwerty 段设的 compact。
+     */
+    private var _sectionButtonLayouts: Map<String, ButtonLayout> = emptyMap()
     fun getButtonLayout(isAsciiMode: Boolean): ButtonLayout =
-        if (isAsciiMode) _buttonLayoutEn else _buttonLayoutZh
+        if (isAsciiMode) _buttonLayoutEn
+        else _activeMergedSection?.let { _sectionButtonLayouts[it] } ?: _buttonLayoutZh
+
+    /**
+     * 键盘上有没有写长的下滑标签（键上显示的、超过角上写得下的 4 个字符，如导入的乱序十七的韵母助记 "a ia ua"）。
+     * 有就整块键盘的下滑标签改写在键底部一行（[com.kingzcheung.xime.ui.keyboard.LocalLongSwipeDownLabels]）。
+     * 内置键盘键上显示的下滑角标都不超过 4 个字符（仓颉字根是只给气泡的），不受影响。
+     */
+    fun hasLongSwipeDownLabels(rows: List<List<String>>, isAsciiMode: Boolean): Boolean = rows.any { row ->
+        row.any { key ->
+            getKeyGesture(key, isAsciiMode)?.swipeDown?.let { it.display != DisplayMode.BUBBLE &&
+                com.kingzcheung.xime.ui.keyboard.isLongSwipeDownLabel(it.label) } == true
+        }
+    }
 
     // 键盘行布局默认值
     private val DEFAULT_ZH_ROWS: List<List<String>> = listOf(
@@ -1020,6 +1039,9 @@ object KeysConfigHelper {
             }
             _mergedRows = mergedRowsMap
             _mergedGestureConfigs = mergedGesturesMap
+            _sectionButtonLayouts = readCustomText(context)?.let { custom ->
+                mergedRowsMap.keys.mapNotNull { section -> parseButtonLayoutYamlText(custom, section)?.let { section to it } }.toMap()
+            }.orEmpty()
             _sectionGeometry = parseSectionGeometries(context, mergedRowsMap.keys + listOf("qwerty", "qwerty_en"))
             // 九键/笔画手势（keyboard.t9.keys / keyboard.stroke.keys，custom 键级覆盖）
             _t9GestureConfigs = parseGesturesSection(context, "t9")

@@ -90,50 +90,46 @@ class CandidateBarOptionsTest {
         rule.runOnIdle { assertEquals(1, dismissed) }
     }
 
-    /** 用户 11-20：没有展开按钮，候选行横着拉，跟手、越拉越紧；过门槛松手才展开，不够就弹回；拉完马上能点候选。 */
-    @Test fun pullingTheRowFollowsTheFingerAndOpensOnlyPastTheThreshold() {
+    @Test fun expansionArrowRotatesDownAndBackUpWithoutMovingTheButton() {
         val expanded = mutableStateOf(false)
         var opens = 0
-        var picked = -1
-        var hidden = 0
+        var closes = 0
         rule.setContent {
             CompositionLocalProvider(LocalContext provides context) {
                 MaterialTheme {
                     CandidateBar(composing, candidatePageExpanded = expanded.value, visuals = visuals,
-                        callbacks = CandidateBarCallbacks(onCandidateSelect = { picked = it },
+                        callbacks = CandidateBarCallbacks(onCandidateSelect = {},
                             onShowMoreCandidates = { opens++; expanded.value = true },
-                            onHideKeyboard = { hidden++ }), modifier = Modifier.width(320.dp))
+                            onBack = { closes++; expanded.value = false }), modifier = Modifier.width(320.dp))
                 }
             }
         }
-        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
-        rule.onNodeWithContentDescription("收起键盘").performClick()
-        rule.runOnIdle { assertEquals(1, hidden) }
-        val dp = rule.density.density
-        val pull = rule.onNodeWithTag("candidate-pull-expand")
-        val second = rule.onNodeWithTag("bar-candidate:1", useUnmergedTree = true)
-        val rest = second.fetchSemanticsNode().boundsInRoot
-        // 往右拉一小段：跟手往右挪，松手 150 ms 内回原位，不展开（11-21：往右拉展开，展开着往左拉收回）。
+        rule.onNodeWithText("更多").assertDoesNotExist()
+        val before = rule.onNodeWithTag("candidate-expansion").captureToImage()
+        val originalBounds = rule.onNodeWithTag("candidate-expansion").fetchSemanticsNode().boundsInRoot
         rule.mainClock.autoAdvance = false
-        pull.performTouchInput { down(center); repeat(3) { moveBy(androidx.compose.ui.geometry.Offset(20f * dp, 0f)) } }
-        rule.mainClock.advanceTimeByFrame()
-        val held = second.fetchSemanticsNode().boundsInRoot
-        assertTrue("跟手往右挪：${rest.left} → ${held.left}", held.left > rest.left + 5f * dp)
-        assertTrue("越拉越紧：手指走 60dp，栏挪得少", held.left - rest.left < 40f * dp)
-        pull.performTouchInput { up() }
-        rule.mainClock.advanceTimeBy(com.kingzcheung.xime.ui.keyboard.RELEASE_MS + 50L)
-        assertEquals(rest.left, second.fetchSemanticsNode().boundsInRoot.left, 1f)
+        rule.onNodeWithContentDescription("展开候选词").performClick()
+        rule.mainClock.advanceTimeBy(96)
+        val opening = rule.onNodeWithTag("candidate-expansion").captureToImage()
+        rule.mainClock.advanceTimeBy(250)
+        val after = rule.onNodeWithTag("candidate-expansion").captureToImage()
+        assertEquals(originalBounds, rule.onNodeWithTag("candidate-expansion").fetchSemanticsNode().boundsInRoot)
+        fun differs(a: androidx.compose.ui.graphics.ImageBitmap, b: androidx.compose.ui.graphics.ImageBitmap): Boolean {
+            val first = a.toPixelMap(); val second = b.toPixelMap()
+            return (0 until a.height).any { y -> (0 until a.width).any { x -> first[x,y] != second[x,y] } }
+        }
+        assertTrue("展开后的箭头须朝下", differs(before, after))
+        assertTrue("展开过程要有中间帧", differs(before, opening) && differs(after, opening))
+        rule.onNodeWithContentDescription("返回键盘").performClick()
+        rule.mainClock.advanceTimeBy(96)
+        val closing = rule.onNodeWithTag("candidate-expansion").captureToImage()
+        assertTrue("收起过程要有中间帧", differs(before, closing) && differs(after, closing))
+        rule.mainClock.advanceTimeBy(250)
+        val restored = rule.onNodeWithTag("candidate-expansion").captureToImage()
+        assertFalse("收起后恢复朝上", differs(before, restored))
         rule.mainClock.autoAdvance = true
-        rule.runOnIdle { assertEquals(0, opens) }
-        // 回弹途中点候选照样选得上。
-        pull.performTouchInput { down(center); moveBy(androidx.compose.ui.geometry.Offset(60f * dp, 0f)); up() }
-        second.performTouchInput { click() }
-        rule.runOnIdle { assertEquals(1, picked); assertEquals(0, opens) }
-        // 拉过门槛松手展开，展开着再往右拉不会再展开一次。
-        pull.pullAcross()
-        rule.runOnIdle { assertEquals(1, opens); assertTrue(expanded.value) }
-        pull.pullAcross()
-        rule.runOnIdle { assertEquals(1, opens) }
+        rule.onNodeWithContentDescription("展开候选词").assertIsDisplayed()
+        rule.runOnIdle { assertEquals(1, opens); assertEquals(1, closes) }
     }
 
     @Test fun settingIsInitiallyOnAndSavesExplicitChoice() {

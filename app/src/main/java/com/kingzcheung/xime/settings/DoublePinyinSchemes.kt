@@ -19,7 +19,7 @@ object DoublePinyinSchemes {
     fun isCustom(id: String) = id.startsWith(DoublePinyinScheme.CUSTOM_PREFIX) &&
         !id.endsWith(DoublePinyinScheme.T9_SUFFIX) && !id.endsWith(DoublePinyinScheme.K14_SUFFIX) &&
         DoublePinyinScheme.splitLayoutVariant(id) == null
-    private fun isBuiltin(id: String) = DoublePinyinScheme.BUILTINS.any { it.id == id }
+    private fun isBuiltin(id: String) = DoublePinyinScheme.ALL_BUILTINS.any { it.id == id }
     /** 双拼方案的九键版本（每个内置和自定义方案各一个，默认不启用）。 */
     fun isT9(id: String) = id.endsWith(DoublePinyinScheme.T9_SUFFIX) && id.removeSuffix(DoublePinyinScheme.T9_SUFFIX).let {
         isBuiltin(it) || isCustom(it)
@@ -53,7 +53,7 @@ object DoublePinyinSchemes {
     fun find(id: String): DoublePinyinScheme? = if (isT9(id)) find(id.removeSuffix(DoublePinyinScheme.T9_SUFFIX))
         else if (isK14(id)) find(id.removeSuffix(DoublePinyinScheme.K14_SUFFIX))
         else if (isOnLayout(id)) find(baseId(id))
-        else DoublePinyinScheme.BUILTINS.firstOrNull { it.id == id } ?: cached.firstOrNull { it.id == id }
+        else DoublePinyinScheme.ALL_BUILTINS.firstOrNull { it.id == id } ?: cached.firstOrNull { it.id == id }
 
     @Synchronized fun load(context: Context): List<DoublePinyinScheme> {
         val file = File(context.filesDir, FILE)
@@ -63,8 +63,8 @@ object DoublePinyinSchemes {
             .filter { it.valid() && isCustom(it.id) }.distinctBy { it.id }.also { cached = it }
     }
 
-    /** 内置方案（小鹤、首道、自然码等）在前，可以复制成自己的方案。 */
-    fun all(context: Context): List<DoublePinyinScheme> = DoublePinyinScheme.BUILTINS + load(context)
+    /** 内置方案（小鹤、首道、自然码等，乱序十七排在内置最后）在前，可以复制成自己的方案（自带键盘的乱序十七除外）。 */
+    fun all(context: Context): List<DoublePinyinScheme> = DoublePinyinScheme.ALL_BUILTINS + load(context)
 
     private fun decode(o: JSONObject): DoublePinyinScheme {
         fun keys(name: String) = o.getJSONObject(name).let { map -> map.keys().asSequence().associateWith { map.getString(it) } }
@@ -101,6 +101,16 @@ object DoublePinyinSchemes {
     private fun writeSchema(rimeDir: File, scheme: DoublePinyinScheme, layouts: List<CustomKeyboardLayout>) {
         val base = File(rimeDir, "$BASE.schema.yaml")
         check(base.isFile) { "请先完成小鹤双拼部署" }
+        // 自带键盘的方案（乱序十七）只有它自己那一份：九键、14 键、自建布局的版本按 26 键双拼的键排，对它没有意义。
+        if (scheme.ownLayout != null) {
+            if (base.readText().contains(DoublePinyinScheme.pauseId(BASE)))
+                writeIfChanged(File(rimeDir, "${DoublePinyinScheme.pauseId(scheme.id)}.schema.yaml"), scheme.pauseSchema())
+            writeIfChanged(File(rimeDir, "${scheme.id}.schema.yaml"), scheme.schema(base.readText()))
+            val flypyTable = File(rimeDir, "en_dicts/cn_en_flypy.txt")
+            if (flypyTable.isFile) writeIfChanged(File(rimeDir, "en_dicts/${DoublePinyinScheme.cnEnName(scheme.id)}.txt"),
+                scheme.cnEnTable(flypyTable.readText()))
+            return
+        }
         writeLayoutVariants(rimeDir, scheme, base.readText(), layouts)
         if (scheme.id != BASE) {
             // 停顿纠错索引先写：方案文件里把它列为依赖，部署时得已经在。小鹤方案还没带这项（旧安装包的文件）时不写。
@@ -191,7 +201,7 @@ object DoublePinyinSchemes {
             .onFailure { Log.w(TAG, "Cannot drop old correction indexes from the schema list", it) }
         if (!File(rimeDir, "$BASE.schema.yaml").isFile) return
         val layouts = mergedLayouts(context)
-        for (scheme in DoublePinyinScheme.BUILTINS + runCatching { load(context) }.getOrDefault(emptyList())) {
+        for (scheme in DoublePinyinScheme.ALL_BUILTINS + runCatching { load(context) }.getOrDefault(emptyList())) {
             try { writeSchema(rimeDir, scheme, layouts) }
             catch (e: Exception) { Log.w(TAG, "Cannot generate ${scheme.id}", e) }
         }
@@ -239,7 +249,7 @@ object DoublePinyinSchemes {
         require(scheme.valid() && isCustom(scheme.id)) { scheme.problems().firstOrNull() ?: "方案无效" }
         synchronized(this) {
             val old = load(context)
-            require((DoublePinyinScheme.BUILTINS + old).none { it.id != scheme.id && it.name == scheme.name.trim() }) { "已有同名方案" }
+            require((DoublePinyinScheme.ALL_BUILTINS + old).none { it.id != scheme.id && it.name == scheme.name.trim() }) { "已有同名方案" }
             val updated = if (old.any { it.id == scheme.id }) old.map { if (it.id == scheme.id) scheme else it } else old + scheme
             val rimeDir = SchemaManager.getRimeDir(context)
             val schemaFile = File(rimeDir, "${scheme.id}.schema.yaml")

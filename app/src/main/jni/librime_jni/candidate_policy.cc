@@ -246,8 +246,9 @@ class PolicyTranslation : public Translation {
                     EditLookup* edits, an<Candidate> edit, BasicParticleChoices* particles, size_t particle_start,
                     bool drop_corrections = false, double correction_lead_bias = 0.0, int pause_kinds = -1,
                     const std::function<bool(const an<Candidate>&, const an<Candidate>&, bool, int, bool)>& pause_likely = nullptr,
-                    Dictionary* pause_letters = nullptr)
-      : source_(source), end_(input.size()), drop_corrections_(drop_corrections) {
+                    Dictionary* pause_letters = nullptr, bool merged_corrections = false)
+      : source_(source), end_(input.size()), drop_corrections_(drop_corrections),
+        merged_corrections_(merged_corrections) {
     // Bound the work independently of dictionary size. This is native candidate
     // identity-preserving ordering, not a separate UI list with stale indices.
     for (size_t i = 0; i < 64 && !source_->exhausted(); ++i) {
@@ -668,6 +669,30 @@ class PolicyTranslation : public Translation {
       if (now != head_.end() && static_cast<size_t>(now - head_.begin()) > index)
         std::rotate(head_.begin() + index, now, now + 1);
     }
+    // Merged keys: the corrected reading never leads a reading of all the keys as typed (corrected dictionary words
+    // outweighed typed sentences: 很容易 before 很同意 for GEBTOBGTU, 不要脸 before 不太乱); it follows the first one.
+    // When nothing reads all the keys as typed it keeps its place. A word that is not Chinese counts only right
+    // behind it, where it stood first before the correction came in (CTUmE: CyIME, not 吃么).
+    if (merged_corrections_ && head_.size() >= 2) {
+      auto is_corrected = [](const an<Candidate>& item) {
+        const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
+        return p && p->correction_marks().find('=') != std::string::npos;
+      };
+      // A corrected sentence first is the word model's choice (t9/slip_correction_margin, t9/slip_whole_words) and stays
+      // before Chinese readings; the word model knows nothing of a word that is not Chinese, so that one still leads.
+      const auto front = Candidate::GetGenuineCandidate(head_.front());
+      if (is_corrected(head_.front())) {
+        const bool chosen = front && front->type() == "sentence";
+        const auto second = head_.begin() + 1;
+        const auto typed = std::find_if(second, head_.end(), [&](const an<Candidate>& item) {
+          if (is_corrected(item)) return false;
+          return item == *second || (!chosen && !HanCharacters(item->text()).empty());
+        });
+        if (typed != head_.end() && (*typed)->start() == 0 && (*typed)->end() == end_ &&
+            (!chosen || HanCharacters((*typed)->text()).empty()))
+          std::rotate(head_.begin(), typed, typed + 1);
+      }
+    }
     if (particles) particles->Promote(input, particle_start, head_, hidden, seen_);
     Advance();
   }
@@ -705,6 +730,22 @@ class PolicyTranslation : public Translation {
         if (marks.find('=') != std::string::npos && !OneKeySubstitution(marks)) return nullptr;
       }
     }
+    // Merged keys (14 keys, translator/cyime_merged_key_neighbors): a key covers two letters, so nearly every word is
+    // one neighbouring key away from what was typed, and corrected words filled the menu (yijinghao: 于静瑶, 偷井盖
+    // before 已经; taidake: 还打嗝, 要发歌). Only the first corrected reading of all the keys stays (太大了 for 太大可,
+    // the word or the sentence the word model chose); corrected words for part of the keys are dropped.
+    if (merged_corrections_) {
+      if (const auto p = As<Phrase>(Candidate::GetGenuineCandidate(cand))) {
+        const auto& marks = p->correction_marks();
+        if (marks.find('=') != std::string::npos) {
+          // One slip corrects one syllable. A reading through more corrected syllables (GABGZGUBQUE: 当众侮辱 for
+          // 刚准确) is listed only where the word model put it first (t9/slip_correction_margin, paid per syllable).
+          const bool one_slip = std::count(marks.begin(), marks.end(), '=') == 1;
+          if (cand->end() != end_ || merged_corrected_whole_ || (!one_slip && !head_.empty())) return nullptr;
+          merged_corrected_whole_ = true;
+        }
+      }
+    }
     // Keep the engine's complete predictive word and identity. Trimming to the
     // matched prefix discarded precisely the completion the user could select.
     if (hidden.count(cand->text()) || !seen_.insert(cand->text()).second) return nullptr;
@@ -721,6 +762,8 @@ class PolicyTranslation : public Translation {
   an<Translation> source_;
   size_t end_, position_ = 0;
   bool drop_corrections_ = false;
+  bool merged_corrections_ = false;
+  bool merged_corrected_whole_ = false;
   CandidateList head_;
   std::set<std::string> seen_;
   an<Candidate> current_;
@@ -739,6 +782,10 @@ class CandidatePolicy : public Filter {
     // Swapped-letter correction is on only in full pinyin (26 keys); double pinyin, 14 keys and nine keys
     // keep their short-input corrections (a two-key slip in double pinyin is a whole syllable).
     engine_->schema()->config()->GetBool("translator/cyime_transposition_correction", &full_pinyin_);
+    // Merged keys (14 keys) correct neighbouring keys with a fixed key grid; see PolicyTranslation::Prepare.
+    string merged_neighbors;
+    merged_corrections_ = engine_->schema()->config()->GetString("translator/cyime_merged_key_neighbors", &merged_neighbors) &&
+                          !merged_neighbors.empty();
     // Registered for RefineOmission when there is anything to look up after a pause.
     if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_) || !omission_id_.empty())
       spelling_policies[engine_->context()] = this;
@@ -867,7 +914,8 @@ class CandidatePolicy : public Filter {
     return New<PolicyTranslation>(source, input, numeric, omission,
                                   edits, idle && numeric ? pending_digit_edit : nullptr,
                                   whole || tail ? &particles_ : nullptr, tail ? comp.back().start : 0, short_letters,
-                                  correction_lead_bias_, pause_kinds, pause_likely, letters ? letters->dict() : nullptr);
+                                  correction_lead_bias_, pause_kinds, pause_likely, letters ? letters->dict() : nullptr,
+                                  merged_corrections_);
   }
  private:
   Translator* Omission() {
@@ -896,6 +944,7 @@ class CandidatePolicy : public Filter {
   bool pause_sentence_start_ = true;
   int pause_max_keys_ = 0;
   bool pause_letters_ = false;
+  bool merged_corrections_ = false;
   // How much more common than 2000 times (ln units, either sign) a corrected word must be to lead the word as typed.
   double correction_lead_bias_ = 0.0;
   BasicParticleChoices particles_;

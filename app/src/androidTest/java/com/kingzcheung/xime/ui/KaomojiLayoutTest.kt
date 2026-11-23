@@ -10,14 +10,40 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.data.KaomojiData
+import com.kingzcheung.xime.data.RecentUsageStore
 import com.kingzcheung.xime.ui.keyboard.KaomojiKeyboard
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class KaomojiLayoutTest {
     @get:Rule val rule = createComposeRule()
+    // 有记录时打开停在「最近」：每个测试从空记录开始，结束后放回原来的记录。
+    private val recentPrefs = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        .getSharedPreferences("recent_usage", android.content.Context.MODE_PRIVATE)
+    private val savedRecent = recentPrefs.getString(RecentUsageStore.KEY_RECENT_KAOMOJI, null)
+    @Before fun clearRecent() { recentPrefs.edit().remove(RecentUsageStore.KEY_RECENT_KAOMOJI).commit() }
+    @After fun restoreRecent() { recentPrefs.edit().putString(RecentUsageStore.KEY_RECENT_KAOMOJI, savedRecent).commit() }
+
+    @Test fun opensOnRecentWhenThereIsHistoryOtherwiseOnTheFirstCategory() {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        var withHistory by mutableStateOf(false)
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1.5f)) {
+                MaterialTheme { Box(Modifier.requiredSize(320.dp, 320.dp)) {
+                    key(withHistory) { KaomojiKeyboard({}) }
+                } }
+            }
+        }
+        rule.onNodeWithTag("kaomoji-category:0").assertIsSelected()
+        RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_KAOMOJI, KaomojiData.categories.first().faces.first())
+        withHistory = true
+        rule.waitForIdle()
+        rule.onNodeWithTag("kaomoji-recent").assertIsSelected()
+    }
     @Test fun textFacesCommitWholeStringAndHaveIndependentRecentList() {
         val output = mutableListOf<String>()
         rule.setContent {

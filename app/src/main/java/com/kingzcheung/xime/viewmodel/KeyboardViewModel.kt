@@ -132,6 +132,8 @@ data class KeyboardUiState(
     val toolPanelRequestEpoch: Long = 0,
     val toolPanelDisplay: String? = null,
     val toolPanelUiNodes: List<com.kingzcheung.xime.plugin.core.config.UiNode>? = null,
+    /** 翻译栏里正在下载的离线模型进度（0..1），没有在下载时为 null。 */
+    val toolPanelDownloadProgress: Float? = null,
     val clipboardSyncEnabled: Boolean = false,
 ) {
     val inputProfile: com.kingzcheung.xime.settings.InputProfile get() {

@@ -179,6 +179,12 @@ translator:
   prefer_sentence_prefix: true
   dictionary: rime_ice
   prism: pinyin_14jian
+  # 邻键纠错（2026-11-22「太大了打成太大可，纠错没有纠错能力」）：按偏到旁边的键（l 打成 jk）和 26 键一样当场纠，
+  # 纠出的整句按 26 键的规则排（多半在第二位）。14 键没有量出来的键位，用固定的键位表：同一排左右相邻、
+  # 第一二排上下相邻（第三排和第二排错开，不算）。「邻键纠错」关着时 App 设 _cyime_merged_neighbor_off，不纠。
+  enable_correction: true
+  cyime_neighbor_correction: true
+  cyime_merged_key_neighbors: "Q:EA;E:QTD;T:EUG;U:TOJ;O:Ul;A:DQ;D:AGE;G:DJT;J:GlU;l:JO;Z:C;C:ZB;B:Cm;m:B"
   # 整句规则同 26 键（tasks-chinese.gradle.kts 由 app/data/sentence_final_particles.txt、sentence_measure_words.txt
   # 生成的那几行）：每个音节留 4 个单字同音备选，合并键读音多时“已”这类字才进得了整句（woyijiancha 出 我已检查）；
   # 语气词、量词不当句首，把/被不当句末。
@@ -229,6 +235,11 @@ recognizer:
 # 词组模型给 Rime 的四条整句重新打分（同 26 键；2026-10-20 电脑回归：整句首选 调参 LCCC 299→365、SMS 324→387，
 # 各列不变差，逐键 p95 约 +1.5%）。没有 t9_ngram.lm 时照原样只出一条。14 键不传前文，第一个词不按句首算。
 t9:
+  # 按偏一个键（太大了 打成 TAUDAJE 太大可、太低了 打成 TAUDUJE 态度可，后者差一点）：纠出的整词和整句也拿来和原样的整句一起
+  # 让词组模型比，词组模型认为纠出的常见 e^7 倍以上（每纠一个音节算一次）才排第一，原样的退第二。打的键本身拼得
+  # 出词时不造句，不纠；英文和专名照样第一（CTUmE 仍是 CyIME）。2026-11-22 门槛扫过 5～9，回归数字见 k14-correct-1122。
+  slip_correction_margin: 7.0
+  slip_whole_words: true
   sentence_rescore: true
   ngram_model: t9_ngram
   ngram_sentence_start: false

@@ -136,15 +136,22 @@ class MergedKeyboardGestureTest {
         rule.onNodeWithTag("key-flick-preview").assertDoesNotExist()
         key.performTouchInput { down(center); moveTo(center - Offset(30f * density, 0f)); up() }
         rule.runOnIdle { assertEquals(listOf("w", "q"), commits) }
+        // 和方向盘、日语假名同一套判定（用户 11-22）：拖出去再回到键中央松手 = 点按中央。
         key.performTouchInput { down(center); moveTo(center + Offset(40f * density, 0f)); moveTo(center); up() }
         key.performTouchInput { down(center); moveTo(center + Offset(40f * density, 0f)); cancel() }
-        rule.runOnIdle { assertEquals(listOf("w", "q"), commits); settings.value = settings.value.copy(fourteenLetterSwipeDp = 48f) }
+        rule.runOnIdle { assertEquals(listOf("w", "q", "qw"), commits); settings.value = settings.value.copy(fourteenLetterSwipeDp = 48f) }
         // Below the longer threshold this is an ordinary tap, which keeps the ambiguous pair.
         key.performTouchInput { down(center); moveTo(center + Offset(30f * density, 0f)); up() }
         key.performTouchInput { down(center); moveTo(center + Offset(52f * density, 0f)); up() }
-        rule.runOnIdle { assertEquals(listOf("w", "q", "qw", "w"), commits); settings.value = settings.value.copy(fourteenLetterSwipe = false) }
+        rule.runOnIdle { assertEquals(listOf("w", "q", "qw", "qw", "w"), commits) }
+        // 先往上拖再拐到右边松手：按松手时所在的扇区出右边的字母，不再锁在先拖的那一轴（用户 11-22「老是跳变」）。
+        key.performTouchInput { down(center); moveTo(center + Offset(0f, -30f * density)); moveTo(center + Offset(60f * density, -20f * density)) }
+        rule.onNodeWithTag("key-flick-sector:RIGHT").assertExists()
+        key.performTouchInput { up() }
+        rule.onNodeWithTag("key-flick-sector:RIGHT").assertDoesNotExist()
+        rule.runOnIdle { assertEquals(listOf("w", "q", "qw", "qw", "w", "w"), commits); settings.value = settings.value.copy(fourteenLetterSwipe = false) }
         key.performTouchInput { down(center); moveTo(center + Offset(70f * density, 0f)); up() }
         key.performTouchInput { down(center); moveTo(center + Offset(0f, 75f * density)); up() }
-        rule.runOnIdle { assertEquals(listOf("w", "q", "qw", "w", "symbol:1"), commits) }
+        rule.runOnIdle { assertEquals(listOf("w", "q", "qw", "qw", "w", "w", "symbol:1"), commits) }
     }
 }

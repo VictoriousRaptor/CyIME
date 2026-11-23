@@ -53,7 +53,7 @@ object SpeechModelCatalog {
                     mirrors = listOf(RELEASE + "paraformer-zh-en-int8-8e40c43232a1-tokens.txt", DownloadMirrors.CYIME_MODELSCOPE + "paraformer-zh-en-int8-8e40c43232a1-tokens.txt"))
             )))),
         // 2026-10-30 回放：公开口语 CER 6.1 %（SenseVoice 整句 7.2 %），平板外放实测与豆包同为 5.6 %；只用于中文整句定稿。
-        ModelInfo(XASR, "X-ASR · 中英整句定稿", "可选。中文说完后用它整句定稿，更准更快。", ModelCategory.ASR,
+        ModelInfo(XASR, "X-ASR · 中英整句定稿", "可选。中文整句定稿可以改用它，在语音页「说完后」里选。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "2026-06-03", size = "136.4MB",
                 archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2", sha256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224",
                 archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2"),

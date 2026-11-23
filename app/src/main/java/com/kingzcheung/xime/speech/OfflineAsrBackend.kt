@@ -171,6 +171,7 @@ class OfflineAsrBackend(
                 client.setKeepModelAlive(SettingsPreferences.isSttKeepEngineAlive(context))
                 client.setSaveTuningAudio(SettingsPreferences.isSttDebugRecord(context))
                 client.setWholeSentenceFinal(wholeSentence)
+                client.setWholeSentenceFinalizer(SettingsPreferences.getSttWholeFinalizer(context))
                 client.startAsr(selection.mode, asrCallback, language)
             }
         } catch (e: InterruptedException) {

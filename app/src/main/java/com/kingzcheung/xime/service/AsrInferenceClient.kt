@@ -254,4 +254,11 @@ class AsrInferenceClient(context: Context) {
             requireService().setWholeSentenceFinal(enabled)
         } catch (_: Exception) {}
     }
+
+    /** 同步「整句定稿用哪个模型」；下一次录音开始时生效。 */
+    suspend fun setWholeSentenceFinalizer(modelId: String) {
+        try {
+            requireService().setWholeSentenceFinalizer(modelId)
+        } catch (_: Exception) {}
+    }
 }

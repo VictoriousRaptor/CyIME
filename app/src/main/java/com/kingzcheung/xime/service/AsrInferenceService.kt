@@ -39,6 +39,7 @@ class AsrInferenceService : Service() {
     private var engineIdleMs = 60_000L
     @Volatile private var saveTuningAudio = false
     @Volatile private var wholeSentenceFinal = false
+    @Volatile private var wholeSentenceFinalizer = SpeechModelSelection.DEFAULT_WHOLE_FINALIZER
     /** 最近一次语音输入用的模型；结束后据此在后台准备 Zipformer 的快速加载副本。 */
     @Volatile private var lastDictation: AsrModelManager.Selection? = null
     // Opt-in only; keyed by the client's session binder, like pushed PCM.
@@ -163,10 +164,10 @@ class AsrInferenceService : Service() {
                 val chosen = manager.selection(modelId, language)
                 check(chosen.ready) { "所选语音模型尚未完整下载" }
                 // 整句定稿只用于中文（规则见 SpeechModelSelection.wholeSentenceApplies，设置页同一条）：
-                // X-ASR 已下载时用它定稿（代替 SenseVoice），没下载照旧用 SenseVoice。
+                // 语音页选了 X-ASR 且已下载时用它定稿（代替 SenseVoice），否则用 SenseVoice。
                 val wholeSentence = wholeSentenceFinal &&
                     SpeechModelSelection.wholeSentenceApplies(chosen.mode, chosen.recognitionLanguage == "zh")
-                val selection = if (wholeSentence) manager.wholeSentenceFinalizer(chosen) else chosen
+                val selection = if (wholeSentence) manager.wholeSentenceFinalizer(chosen, wholeSentenceFinalizer) else chosen
                 val recorder = if (saveTuningAudio) SpeechTuningRecorder(
                     java.io.File(getExternalFilesDir(null) ?: filesDir, "speech_tuning"), mapOf(
                         "mode" to selection.mode, "language" to (language?.id ?: ""),
@@ -263,6 +264,9 @@ class AsrInferenceService : Service() {
         }
         override fun setWholeSentenceFinal(enabled: Boolean) {
             wholeSentenceFinal = enabled
+        }
+        override fun setWholeSentenceFinalizer(modelId: String?) {
+            wholeSentenceFinalizer = SpeechModelSelection.wholeFinalizer(modelId)
         }
         override fun onKeyboardHidden() {
             val memory = android.app.ActivityManager.MemoryInfo()

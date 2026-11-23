@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kingzcheung.xime.ui.keyboard.preeditTabOutline
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
 import com.kingzcheung.xime.settings.SchemaInfo
@@ -859,8 +860,11 @@ fun PreeditStyleCard(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
-    // 键盘画深一档，和后面的「应用」底色分得开，小签贴在它上面才看得出是键盘长出来的。
-    val keyboard = MaterialTheme.colorScheme.outlineVariant
+    // 键盘和后面的「应用」底色要明显分开，小签贴在它上面才看得出是键盘长出来的。原来用 outlineVariant，
+    // 深色主题下和应用底色几乎一样，三种贴边样式看着全是「拼音平铺在候选上面」（11-21 他：「这三个一样」）。
+    // 改成从应用底色往字色推一截：深色时亮一档、浅色时暗一档。
+    val app = MaterialTheme.colorScheme.surfaceVariant
+    val keyboard = androidx.compose.ui.graphics.lerp(app, onSurface, 0.22f)
     val key = MaterialTheme.colorScheme.surface
     val prefs = com.kingzcheung.xime.settings.SettingsPreferences
     val bubble = style == prefs.PREEDIT_STYLE_BUBBLE
@@ -879,19 +883,25 @@ fun PreeditStyleCard(
             Surface(onClick = onClick, modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 0.dp) {
                 Column(Modifier.fillMaxSize().padding(8.dp).clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    .background(app)) {
                     // 应用的输入框
                     Box(Modifier.padding(5.dp).fillMaxWidth().height(18.dp).clip(RoundedCornerShape(4.dp))
                         .background(MaterialTheme.colorScheme.surface)
                         .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)))
                     Spacer(Modifier.weight(1f))
-                    // 键盘上方：气泡隔开一点、圆角、按键色；小签贴着键盘、键盘同色、只圆上两角（贴边那角直角）；
-                    // 方块直角、高一点；顶上一行整行宽、和键盘连成一体。
+                    // 键盘上方，按实际键盘的比例画（小签 26dp、方块 36dp、候选栏约 40dp）：
+                    // 气泡隔开一点、圆角、按键色、带边框；小签贴着键盘、键盘同色、矮、只圆上两角（贴边那角直角）、宽度跟拼音走；
+                    // 方块直角、高出小签一截、字大；顶上一行整行宽、和键盘连成一体。
                     val tabShape = when {
                         bubble -> RoundedCornerShape(4.dp)
                         strip -> RoundedCornerShape(topStart = keyboardCorner, topEnd = keyboardCorner)
                         block -> RoundedCornerShape(0.dp)
-                        else -> RoundedCornerShape(topStart = if (left) 0.dp else 4.dp, topEnd = if (right) 0.dp else 4.dp)
+                        else -> RoundedCornerShape(topStart = if (left) 0.dp else 5.dp, topEnd = if (right) 0.dp else 5.dp)
+                    }
+                    val tabHeight = when {
+                        bubble -> null
+                        block -> 18.dp
+                        else -> 12.dp
                     }
                     val horizontal = when {
                         strip -> Alignment.Start
@@ -903,16 +913,22 @@ fun PreeditStyleCard(
                         .padding(start = if (bubble && left) 4.dp else 0.dp, end = if (bubble && right) 4.dp else 0.dp,
                             bottom = if (bubble) 4.dp else 0.dp)
                         .then(if (strip) Modifier.fillMaxWidth() else Modifier)
+                        .then(if (tabHeight != null) Modifier.height(tabHeight) else Modifier)
                         .clip(tabShape)
                         .background(if (bubble) key else keyboard)
-                        .then(if (bubble) Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)) else Modifier)
-                        .padding(horizontal = 4.dp, vertical = if (bubble || block) 2.dp else 1.dp),
+                        .then(if (bubble) Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
+                            // 和键盘上一样沿上边和两侧描细线（底边接键盘），形状一眼看得出。
+                            else Modifier.preeditTabOutline(onSurface.copy(alpha = com.kingzcheung.xime.ui.keyboard.PREEDIT_TAB_OUTLINE_ALPHA),
+                                if (strip) keyboardCorner else if (block || left) 0.dp else 5.dp,
+                                if (strip) keyboardCorner else if (block || right) 0.dp else 5.dp))
+                        .padding(horizontal = if (block) 7.dp else if (strip) 6.dp else 4.dp, vertical = if (bubble) 2.dp else 0.dp),
                         contentAlignment = when {
                             !strip || left -> Alignment.CenterStart
                             right -> Alignment.CenterEnd
                             else -> Alignment.Center
                         }) {
-                        Text("shu'ru'fa", fontSize = if (bubble || block) 10.sp else 9.sp, lineHeight = 11.sp, color = onSurface, maxLines = 1)
+                        Text("shu'ru'fa", fontSize = if (block) 12.sp else if (bubble) 10.sp else 9.sp,
+                            lineHeight = if (block) 13.sp else 11.sp, color = onSurface, maxLines = 1)
                     }
                     // 键盘：候选栏 + 一排键
                     Column(Modifier.fillMaxWidth().clip(keyboardShape).background(keyboard)

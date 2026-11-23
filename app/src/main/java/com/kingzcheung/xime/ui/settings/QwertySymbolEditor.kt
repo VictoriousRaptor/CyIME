@@ -533,9 +533,12 @@ private fun SymbolRowsDialog(values: Map<String, String>, variant: CornerVariant
     }
     val drafts = remember { mutableStateMapOf<String, String>().apply { putAll(initial) } }
     var leaving by remember { mutableStateOf(false) }
+    // 只写回改过的那几排：没动的排原样留着，免得写不出来的格子（比如前面带空格的）被读回时弄坏（11-22）。
     fun finish() = onDone(values + buildMap {
         for ((direction, _) in directions) rows.forEachIndexed { index, row ->
-            SymbolRowText.parse(drafts.getValue("$direction.$index"), row.size)
+            val draft = drafts.getValue("$direction.$index")
+            if (draft == initial["$direction.$index"]) return@forEachIndexed
+            SymbolRowText.parse(draft, row.size)
                 .forEachIndexed { column, cell -> put("$direction.${row[column]}", cell) }
         }
     })
@@ -544,7 +547,7 @@ private fun SymbolRowsDialog(values: Map<String, String>, variant: CornerVariant
         title = { Text("整排输入") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("一个字符一格，从左到右对应这一排的键；打空格就是空着的格子。几个字的短语用「」括起来算一格。",
+                Text("一个字符一格，从左到右对应这一排的键；打空格就是空着的格子。几个字的短语用「」括起来算一格，结尾要带空格就写在」前面，比如「, 」。",
                     style = MaterialTheme.typography.bodySmall)
                 for ((direction, directionName) in directions) rows.forEachIndexed { index, row ->
                     val text = drafts.getValue("$direction.$index")

@@ -4,30 +4,31 @@
   <a href="README.en.md">English</a> · <a href="README.zh-TW.md">繁體中文</a>
 </p>
 
-**CyIME** 是 Cyletix 开发的 Android 输入法，基于 [Rime](https://rime.im/) 引擎。中文拼音、双拼、五笔、笔画、仓颉、注音，日语、英文、西班牙语，手写、语音、拍照识字都在本机完成，另有给听障人士用的实时字幕。
+**CyIME** 是 Cyletix 开发的 Android 输入法，基于 [Rime](https://rime.im/) 引擎，fork自Xime。中文拼音九键双拼五笔笔画仓颉注音英日西俄法德意越，离线语音手写拍照OCR识别，另有给听障人士用的实时字幕。
 
-## 想做什么
+## 目标
 
-我想做出世界上最好用的开源输入法：最好的词库、最好的算法、最好的性能优化、最全面的多模态辅助输入、最好看的主题、音效、震动，最合理的排布，最全面的输入法，以及仅离线就能使用所有完整的服务。
+我想做出世界上最好用的开源输入法：最好的词库、最好的算法、最好的性能优化、最全面的多模态辅助输入、最好看的主题、音效、震动，最合理的排布，最全面的输入法，以及离线语音手写拍照识别。
 
-## 亮点
-
-- **不联网也能全部用**：词库、手写、语音识别、拍照识字、实时字幕都在手机上运行，完整版装上就能离线用。
-- **自己训练的九键模型**：九键用 CyIME 自己训练的词组模型，长句一口气打完，逐键选词。
-- **一个键盘，多种打法**：全拼 26 键、九键、14 键；六种内置双拼，还能自建方案；五笔、笔画、仓颉、注音；日语、英文、西班牙语。
-- **手写一次写好几个字**：中文、英文、日语连写，数学公式直接识别成 LaTeX，支持 S Pen。
-- **给听障人士的实时字幕**：把周围的话转成字幕，自动区分说话人，通话时也能用，有人叫你名字时振动。
-- **想怎么放就怎么放**：固定、悬浮、分体三种放法，悬浮键盘能拖动、缩放、旋转；多套配色、玻璃效果、自己的图片做背景。
+- **全功能离线服务**：词库、手写、语音识别、拍照识字、实时字幕都在手机上运行，完整版装上就能离线用。
+- **个人算法模型**：九键用 CyIME 自己训练的词组模型，长句一口气打完，逐键选词。
+- **多语言布局方案**：全拼 26 键、九键、14 键；六种内置双拼，还能自建方案；五笔、笔画、仓颉、注音；英语、日语、韩语、西班牙语、俄语、法语、德语、意大利语、越南语、马来语。
+- **手写**：中文、英文、日语连写，LaTeX公式识别，支持 S Pen。
+- **自定义外观**：固定、悬浮、分体三种放法，悬浮键盘能拖动、缩放、旋转；多套配色、玻璃效果、自己的图片做背景。
+- **无障碍服务**：听障 言语障碍人士， 把周围的话转成字幕，自动区分说话人，通话时也能用，有人叫你名字时振动。将来会支持肢体残疾障碍人士的输入方式。
 
 ## 下载与安装
 
-要求 Android 9.0（API 28）及以上，安装包只有 ARM64。
+要求 Android 9.0（API 28）及以上，安装包只有 ARM64。如有32位要求可以另提，不会为每个版本都打包32位安装包。
 
-1. 在 [Releases](https://github.com/Cyletix/CyIME/releases) 或[魔搭](https://www.modelscope.cn/models/Cyletix/cyime-model/files)（国内，`app/<版本>/` 文件夹）下载安装包，两个包源码相同，只差带不带离线模型：
-   - **轻量版** `CyIME-<版本>-arm64-v8a.apk`：不带语音、手写、联想模型，需要时在「扩展 › 模型」下载。
+1. 在 此GitHub页面的[Releases](https://github.com/Cyletix/CyIME/releases) 或[魔搭社区](https://www.modelscope.cn/models/Cyletix/cyime-model/files)（国内，`app/<版本>/` 文件夹）下载安装包，两个包源码相同，区别只是带不带离线模型：
+   - **轻量版** `CyIME-<版本>-arm64-v8a.apk`：不带语音、手写、联想等模型，需要时在「扩展 › 模型」下载。
    - **完整版** `CyIME-<版本>-full-arm64-v8a.apk`：内置 SenseVoice 语音、手写、声纹、联想模型和九键词组模型，装上就能离线用。边说边出字的 Paraformer 不内置，需要时在应用里下载。
 2. 安装后在系统设置里启用 **CyIME**，并把它设为当前输入法。
 3. 以后在「设置 › 关于 › 检查更新」更新，会下载和现在同一种（轻量／完整）的安装包交给系统安装，国内先从魔搭下载。
+
+<details>
+<summary>安装失败、谷歌开发者验证、从旧版迁移</summary>
 
 **安装失败时，先看系统安装器弹窗的原文。**
 
@@ -40,6 +41,8 @@
 > 带谷歌服务的手机（三星、海外版机型等）从 2027 年起安装未在谷歌登记的应用要先开一次「高级安装」，国行手机和 adb 安装不受影响，见 [谷歌开发者验证与安装](docs/android-developer-verification.md)。
 
 > 从旧版 `com.kingzcheung.xime` 迁移：安装身份已独立为 `com.cyletix.cyime`，系统当作新应用，可以并存，旧版数据不会自动继承。
+
+</details>
 
 ## 功能
 
@@ -56,19 +59,20 @@
 - 选词用固定测试集检查：题目主要取自公开的短信和对话语料，只用来打分，不参与训练和调参。
 - 改词库、解码或排序时，首选率和每键耗时都和上一版对比，任一项超出允许范围就不合入。
 
-**其他语言**
+**多语言**
 
 - 英文：整词补全、滑行输入。
 - 日语：罗马字 26 键和假名键盘，词库来自 rime-jaroomaji。
 - 西班牙语：带 ñ、长按出重音字母、词表补全（默认关）。
+- 德语、法语、意大利语、俄语、韩语、越南语、马来语：各有自己的键盘（默认关），在「语言与方案」里打开。
 
-**手写、语音、识字**
+**手写、语音、文本表格识别**
 
 - 手写：中文、英文、日语（假名和汉字）、数学公式（识别成 LaTeX）；中文、英文、日语一次可以写好几个字，支持 S Pen。
 - 语音：本地离线识别，新装默认 SenseVoice（带标点、整句定稿）；下载 Paraformer 后边说边出字；另可下载 Zipformer、X-ASR、日语模型。长按空格按住说话。也可以填自己的在线识别接口，测试通过才会用。
 - 拍照识字：在剪贴板里拍照或选图，离线识别出文字。
 
-**字幕**
+**实时字幕与无障碍**
 
 - 把周围的话实时转成字幕，支持中文、英文、日语；自动分说话人，可以给说话人起名字。
 - 后台浮窗、通话字幕、字幕记录（可搜索、分享，默认保留 3 天）、有人叫你名字时振动。桌面有单独的「字幕」图标。
@@ -87,12 +91,20 @@
 - 和 Windows 版 CyIME（还没公开）扫码配对后，两边剪贴板互相同步。
 - 本地备份与恢复。
 
-**设置**
+**扩展与设置**
 
 - 设置搜索（认同义词、错别字、繁体字）、按设备推荐配置、性能档位。
 - 扩展页可以下载输入方案和模型，也可以在插件市场按需安装 AI 翻译、帮写、智能回复和输入统计，或从文件导入 Lua 插件（`.xipk`）。
 
-## 构建
+## 更多
+
+- [使用说明](docs/usage.md)：各项功能在哪里设置、怎么用。
+- [贡献](CONTRIBUTING.md)：先提 Issue，再提最小修改的 PR。
+- 作者自己的前作：[Cyletix-Keyboard](https://github.com/Cyletix/Cyletix-Keyboard)（2024 年的键盘布局研究，Cyletix10 布局出自这里）、ASRInput（PC语音字幕软件，语音参数和矫正逻辑沿用此项目）。
+- 社区 Linux 版：[tuxKOH/CyIME 的 linux-desktop-preview 分支](https://github.com/tuxKOH/CyIME/tree/feat/linux-desktop-preview)（IBus 拼音 + 电脑剪贴板，tuxKOH 维护）。欢迎 Linux 版本的魔改，但由于本人精力有限，暂时不会维护 Linux 版本。
+
+<details>
+<summary>构建</summary>
 
 ```bash
 # 克隆项目（含子模块）
@@ -117,36 +129,20 @@ git submodule update --init --recursive
 
 源码包名 `com.kingzcheung.xime`、插件标识、`xime.yaml` / `xime.custom.yaml` 和扩展商店协议沿用早期命名，安装身份是 `com.cyletix.cyime`。取舍见 [命名与身份记录](docs/cyime-identity.md)。
 
-## 相关项目
-
-- 作者自己的前作：[Cyletix-Keyboard](https://github.com/Cyletix/Cyletix-Keyboard)（2024 年的键盘布局研究，Cyletix10 布局出自这里）、ASRInput（电脑上的语音字幕，字幕逐字出现的节奏沿用它）。
-- 社区 Linux 版：[tuxKOH/CyIME 的 linux-desktop-preview 分支](https://github.com/tuxKOH/CyIME/tree/feat/linux-desktop-preview)（IBus 拼音 + 电脑剪贴板，tuxKOH 维护）。欢迎 Linux 版本的魔改，但由于本人精力有限，暂时不会维护 Linux 版本。
-
-## 贡献
-
-见 [CONTRIBUTING.md](CONTRIBUTING.md)：先提 Issue，再提最小修改的 PR。
-
-## 支持作者
-
-CyIME 输入法是我空闲时间制作的一款输入法, 遵循GPL协议, 所以此项目永久免费开源, 并且此项目的任何fork项目也同样必须开源.
-
-如果它帮到了你, 愿意的话可以请我喝杯咖啡, 用来支付agent开销 模型训练和个人测试的时间开销, 感谢支持, 不打赏也完全没关系, 欢迎反馈问题, 同样是很大的支持
-
-我的[爱发电](https://afdian.com/a/cyletix)账号已通过认证。你可以在爱发电支持我，也可以用支付宝或微信扫描对应的个人收款码。
-
-支付宝
-
-<img src="docs/images/alipay.jpg" alt="作者的支付宝个人收款码" width="240">
-
-微信支付
-
-<img src="docs/images/wechat-pay.png" alt="微信支付" width="240">
-
-海外也可以通过 [Ko-fi](https://ko-fi.com/cyletix) 支持我。
+</details>
 
 ## 鸣谢
 
 CyIME 用到了下面这些项目、数据和模型，感谢作者们的工作。许可证全文和版权声明见 `app/src/main/assets/NOTICE.txt`、`app/src/main/assets/licenses/` 和各方案目录下的 NOTICE 文件；应用里在「设置 › 关于 › 鸣谢」和「开源许可证」。
+
+| 项目 | 作者 | 用途 | 许可证 |
+| --- | --- | --- | --- |
+| [Xime](https://github.com/ximeiorg/Xime) | Kingz Cheung | CyIME 基于 Xime 2.8.5 版本开发 | GPL-3.0 |
+
+核心依赖：[librime](https://github.com/rime/librime)、[雾凇拼音](https://github.com/iDvel/rime-ice)、[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)、[Paraformer](https://github.com/modelscope/FunASR)、[ochwpro](https://www.modelscope.cn/models/bikeand/ochwpro)、[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)、[ONNX Runtime](https://github.com/microsoft/onnxruntime)、[LCCC](https://github.com/thu-coai/CDial-GPT)。
+
+<details>
+<summary>完整清单（含作者、用途和许可证）</summary>
 
 ### 输入引擎
 
@@ -252,15 +248,39 @@ CyIME 用到了下面这些项目、数据和模型，感谢作者们的工作�
 
 ### 设计参考
 
-| 产品 | 参考了什么 |
+| 产品 | 参考内容 |
 | --- | --- |
 | [三星键盘](https://www.samsung.com/) | 键盘整体的交互和外观 |
 | [Gboard](https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin) | 键盘交互和外观，如大屏工具栏 |
+| [首道双拼](https://sspai.com/post/108949) | 内置双拼方案 |
+| [小鹤双拼/音形](https://flypy.cc/) | 内置双拼方案 |
+| 自然码 | 内置双拼方案 |
+| 微软双拼 | 内置双拼方案 |
+| 智能ABC | 内置双拼方案 |
+| 拼音加加 | 内置双拼方案 |
+| [Colemak](https://colemak.com/) | Colemak 字母布局 |
 | [Typewise](https://www.typewise.app/) | 蜂窝六边形布局 |
-| [Colemak](https://colemak.com/)（Shai Coleman） | Colemak 字母排列 |
-| [首道双拼](https://sspai.com/post/108949) | 首道双拼键位 |
-| 小鹤双拼（[小鹤音形](https://flypy.cc/)）、自然码、智能ABC、拼音加加、微软双拼 | 内置双拼键位 |
+
+</details>
 
 ## 许可证
 
 [GPLv3](LICENSE)。CyIME 自 2026-09-21 起基于 [Xime](https://github.com/ximeiorg/Xime)（GPL-3.0）独立开发，源文件中原有的版权声明照常保留。第三方组件、数据和模型按各自的许可证分发，见上面的鸣谢和 `app/src/main/assets/NOTICE.txt`。注意公式手写模型的训练数据 MathWriting 为 CC BY-NC-SA 4.0，不能用于商业用途。
+
+## 支持作者
+
+CyIME 输入法是我空闲时间制作的一款输入法, 遵循GPL协议, 所以此项目永久免费开源, 并且此项目的任何fork项目也同样必须开源.
+
+如果它帮到了你, 愿意的话可以请我喝杯咖啡, 用来支付agent开销 模型训练和个人测试的时间开销, 感谢支持, 不打赏也完全没关系, 欢迎反馈问题, 同样是很大的支持
+
+我的[爱发电](https://afdian.com/a/cyletix)账号已通过认证。你可以在爱发电支持我，也可以用支付宝或微信扫描对应的个人收款码。
+
+支付宝
+
+<img src="docs/images/alipay.jpg" alt="作者的支付宝个人收款码" width="240">
+
+微信支付
+
+<img src="docs/images/wechat-pay.png" alt="微信支付" width="240">
+
+海外也可以通过 [Ko-fi](https://ko-fi.com/cyletix) 支持我。

@@ -291,20 +291,14 @@ internal fun InputExperienceSettings(
                     })
             }
             }
-            if (InputExperiencePart.KANA in parts) {
+            // 假名方向提示只对日语假名九键有用：没开日语不显示（用户 11-22）。
+            if (InputExperiencePart.KANA in parts && com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)) {
             divider()
             Row(Modifier.settingsSearchAnchor("假名方向提示", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("假名方向提示", style = MaterialTheme.typography.titleSmall)
                     Text("日语九键按键四周显示各方向的假名",
                         style = MaterialTheme.typography.bodySmall)
-                    // 日语没启用时没有假名九键，这一项不起作用：写明，免得以为开关坏了。
-                    if (com.kingzcheung.xime.settings.InputLanguage.JAPANESE in com.kingzcheung.xime.settings.InputLanguage.supported &&
-                        com.kingzcheung.xime.settings.InputLanguage.JAPANESE !in
-                        com.kingzcheung.xime.settings.LanguagePreferences.enabled(context))
-                        SettingsJumpText("在「语言与方案」打开日语后可用。", jumps = listOf("语言与方案"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = settings.kanaDirectionHints,
                     modifier = Modifier.testTag("kana-direction-hints"), onCheckedChange = {
@@ -352,12 +346,18 @@ internal fun InputExperienceSettings(
                 }
                 // 上滑取消只在按住说话时起作用，选了语音开关才显示（别人提的需求，默认关，11-02）。
                 if (spaceHold == SpaceHoldAction.VOICE_TOGGLE) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // 和「九键与 14 键 › 空格上滑输入 0」互锁（他 11-22）：被锁时置灰、写明被谁锁，点名字跳过去。
+                    val swipeCancelLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
+                        com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.VOICE_SWIPE_CANCEL, true)
+                        ?.takeIf { !settings.voiceSwipeCancel }
+                    Row(Modifier.settingsSearchAnchor("上滑取消").fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("上滑取消", style = MaterialTheme.typography.titleSmall)
                             Text("说话时上滑松手，不上屏", style = MaterialTheme.typography.bodySmall)
+                            if (swipeCancelLock != null) SettingsLockNote(swipeCancelLock.message)
                         }
-                        Switch(checked = settings.voiceSwipeCancel, colors = settingsSwitchColors(), modifier = Modifier.testTag("voice-swipe-cancel"),
+                        Switch(checked = settings.voiceSwipeCancel, enabled = swipeCancelLock == null,
+                            colors = settingsSwitchColors(), modifier = Modifier.testTag("voice-swipe-cancel"),
                             onCheckedChange = { settings = settings.copy(voiceSwipeCancel = it); settings.save(context) })
                     }
                 }

@@ -92,4 +92,23 @@ class EditorEnginePreparationTest {
         assertFalse(isHardwarePasteShortcut(v, ctrl = false, alt = false, meta = false, repeatCount = 0))
         assertFalse(isHardwarePasteShortcut(android.view.KeyEvent.KEYCODE_C, ctrl = true, alt = false, meta = false, repeatCount = 0))
     }
+
+    /** 11-21：没接实体键盘时 XposedEdge 等注入的 Ctrl+C / V 交给应用，不打成字母；普通按键、接了实体键盘的照原路走。 */
+    @Test fun injectedShortcutsWithoutAKeyboardGoToTheApp() {
+        assertTrue(passesInjectedShortcutToApp(hardwareKeyboard = false, ctrl = true, alt = false, meta = false))
+        assertTrue(passesInjectedShortcutToApp(hardwareKeyboard = false, ctrl = false, alt = true, meta = false))
+        assertTrue(passesInjectedShortcutToApp(hardwareKeyboard = false, ctrl = false, alt = false, meta = true))
+        assertFalse(passesInjectedShortcutToApp(hardwareKeyboard = false, ctrl = false, alt = false, meta = false))
+        // 接了实体键盘：Alt 数字层、语言切换快捷键还要先看，交给原来那段处理。
+        assertFalse(passesInjectedShortcutToApp(hardwareKeyboard = true, ctrl = true, alt = false, meta = false))
+    }
+
+    /** onKeyDown 里要在把按键当字母打之前先放行（否则 Ctrl+C 的 C 进了编码）。 */
+    @Test fun serviceChecksInjectedShortcutsBeforeTypingLetters() {
+        val source = java.io.File("src/main/java/com/kingzcheung/xime/service/XimeInputMethodService.kt").readText()
+        val onKeyDown = source.substring(source.indexOf("override fun onKeyDown("), source.indexOf("override fun onKeyUp("))
+        val pass = onKeyDown.indexOf("passesInjectedShortcutToApp(")
+        assertTrue(pass > 0)
+        assertTrue(pass < onKeyDown.indexOf("keyRouter.handleKeyPress(key, isShifted"))
+    }
 }

@@ -270,8 +270,14 @@ internal class LocalSpeechSession(
      * 整句定稿的最后一步：整次输入的原始音频按停顿切成 ≤28 s 的块交给 SenseVoice。只在按停顿定稿都已
      * 完成后运行（同一线程独占识别器）；被取消、超出预算、出现外文字或识别为空时返回 null，保留原文。
      */
+    /** 整句定稿这次走了哪条路（记日志用）：used / 没用上的原因。手机、平板认得不一样时比这一项和耗时。 */
+    @Volatile private var wholeOutcome = "off"
+
     private fun wholeSessionText(deadline: Long): String? = synchronized(wholeLock) {
-        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech) return null
+        val startedAt = System.nanoTime()
+        fun skip(reason: String): String? { wholeOutcome = "$reason after ${(System.nanoTime() - startedAt) / 1_000_000} ms"; return null }
+        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech)
+            return skip(if (sessionOverflow) "overflow" else if (!heardSpeech) "no-speech" else "nothing")
         val pcm = FloatArray(sessionSamples)
         var offset = 0
         sessionAudio.forEach { it.copyInto(pcm, offset); offset += it.size }
@@ -279,17 +285,20 @@ internal class LocalSpeechSession(
         val whole = SpeechTranscript(keepMarks = true)
         var id = 0L
         for ((start, end) in wholeSessionChunks(sessionSamples, sessionPauses)) {
-            if (abandoned.get() || failed.get() || System.nanoTime() > budgetEnd) return null
+            if (abandoned.get() || failed.get() || System.nanoTime() > budgetEnd)
+                return skip(if (System.nanoTime() > budgetEnd) "over-budget(${sessionSamples / 16000}s audio)" else "cancelled")
             val part = engine.refinePunctuated(pcm.copyOfRange(start, end))
-            if (engine.lockedChinese && hasForeignScript(part)) return null
+            if (engine.lockedChinese && hasForeignScript(part)) return skip("foreign-script")
             whole.update(++id, part, SpeechBoundary.PAUSE)
         }
-        if (abandoned.get() || System.nanoTime() > budgetEnd) return null
+        if (abandoned.get() || System.nanoTime() > budgetEnd) return skip("over-budget(${sessionSamples / 16000}s audio)")
         val (first, shown) = synchronized(outputLock) { previews.text() to transcript.text() }
         val merged = guarded(first, whole.text())
         // 整段重识别的字数不到已显示的一半（噪音里常见）：保留按停顿定稿和预览的文字。
-        if (secondPassLostText(shown, merged)) return null
-        return merged.ifEmpty { null }
+        if (secondPassLostText(shown, merged)) return skip("lost-text")
+        if (merged.isEmpty()) return skip("empty")
+        wholeOutcome = "used in ${(System.nanoTime() - startedAt) / 1_000_000} ms"
+        return merged
     }
 
     /** Drains actual audio, then waits only for outstanding work; no artificial stop delay. */
@@ -313,8 +322,12 @@ internal class LocalSpeechSession(
         refinement.shutdown()
         val refined = refinement.awaitTermination(remaining(), TimeUnit.NANOSECONDS)
         val whole = try {
-            if (wholeSentenceActive && drained && refined && !failed.get() && !abandoned.get()) wholeSessionText(deadline) else null
-        } catch (_: Exception) { null } finally { wholeSettled.countDown() }
+            if (wholeSentenceActive && drained && refined && !failed.get() && !abandoned.get()) wholeSessionText(deadline)
+            else { if (wholeSentenceActive) wholeOutcome = "skipped(drained=$drained refined=$refined failed=${failed.get()})"; null }
+        } catch (e: Exception) { wholeOutcome = "error ${e.javaClass.simpleName}"; null } finally { wholeSettled.countDown() }
+        // 只记走了哪条路和耗时，不记文字。整句没用上时，最后一句留的是边说边出的预览（离线定稿没跑），平板慢时会这样。
+        android.util.Log.i("CyIME-AsrTiming", "finish whole=$wholeSentenceActive outcome=$wholeOutcome " +
+            "audio=${sessionSamples / 16000}s streaming=${engine.isStreaming} refine=${engine.hasRefinement}")
         synchronized(outputLock) {
             if (!drained || !refined) {
                 pending.forEach { transcript.update(it, "", ended[it]) }

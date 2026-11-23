@@ -57,7 +57,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * 语音输入时收起键盘后的底部悬浮条（仿 Gboard）：语言、展开键盘、状态、麦克风、退格。
+ * 语音输入时收起键盘后的底部悬浮条（仿 Gboard）：语言、展开键盘、状态、连续语音开关、麦克风、退格。
  * 外观沿用实体键盘浮条；宿主透明全屏，只有这条胶囊进入可触摸区域。
  */
 @Composable
@@ -78,6 +78,12 @@ internal fun VoiceCollapsedPill(
     /** 按住退格连删的间隔，跟键盘删除键同一个「长按删除速度」。 */
     backspaceRepeatMs: Long = com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.DEFAULT.intervalMs,
     onMic: () -> Unit,
+    /**
+     * 「连续语音」开关的当前值（和设置 › 语音转文本里的同一项）：发完消息在同一个输入框里接着听，
+     * 收成悬浮条时回到这个应用也接着听。null = 不显示这个按钮（用户 11-22：浮窗里要有连续语音的按钮）。
+     */
+    continuous: Boolean? = null,
+    onContinuousChange: (Boolean) -> Unit = {},
     backgroundColor: Color,
     contentColor: Color,
     selectedTextColor: Color,
@@ -106,7 +112,8 @@ internal fun VoiceCollapsedPill(
         // 像 Gboard：拖动时左右能伸出屏幕；往侧边推过去松手就靠边变竖条（和实体键盘浮条同一规则），
         // 竖条从上到下与横条从左到右同序：语言、展开键盘、麦克风、退格；竖条不放状态文字，听写看麦克风光圈。
         DraggableFloatingBar(position, onPositionChange, barWidth, dockAtEdge = dockAtEdge,
-            sideDockSize = DpSize(VoicePillButton + 8.dp, VoicePillButton * 4 + 8.dp), dockPreviewColor = accentColor,
+            sideDockSize = DpSize(VoicePillButton + 8.dp, VoicePillButton * (if (continuous != null) 5 else 4) + 8.dp),
+            dockPreviewColor = accentColor,
             onMovingChange = onMovingChange) { vertical ->
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, LocalFrostedTextSurface provides textSurface) {
             // 底板加一圈浅阴影和细边：玻璃开着、主题底色和页面同色时（黑白浅色），底板本身和页面分不出来，
@@ -126,6 +133,7 @@ internal fun VoiceCollapsedPill(
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 HardwareToolbarLanguageKey(color, languageActions, languageLabel, onSwitchLanguage)
                 HardwareToolbarAction(Icons.Default.Keyboard, "展开键盘", "voice-pill-keyboard", color, onClick = onShowKeyboard)
+                continuous?.let { VoicePillContinuous(it, color, accentColor, onContinuousChange) }
                 VoicePillMic(listening, amplitude, color, accentColor, onMic)
                 VoicePillBackspace(color, onBackspace, onBackspacePress, onBackspaceRelease, backspaceRepeatMs)
             } else Row(
@@ -142,6 +150,8 @@ internal fun VoiceCollapsedPill(
                     }, color = color, fontSize = 14.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                // 连续语音开关挨着麦克风：两个都管「听不听」。
+                continuous?.let { VoicePillContinuous(it, color, accentColor, onContinuousChange) }
                 // 麦克风在右数第二个，与展开后工具栏里麦克风的位置一致。
                 VoicePillMic(listening, amplitude, color, accentColor, onMic)
                 VoicePillBackspace(color, onBackspace, onBackspacePress, onBackspaceRelease, backspaceRepeatMs)
@@ -169,6 +179,31 @@ private fun VoicePillMic(listening: Boolean, amplitude: () -> Float, color: Colo
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.Default.Mic, null, tint = if (listening) accentColor else color, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * 连续语音开关：写着「连续」两个字的小胶囊，开着时涨满强调色（字用强调色上的白），关着时只描一圈细边。
+ * 点一下切换；和设置页同一项，切了马上生效（下一次发送或回到应用时按新的值）。
+ */
+@Composable
+private fun VoicePillContinuous(on: Boolean, color: Color, accentColor: Color, onChange: (Boolean) -> Unit) {
+    val fill by animateFloatAsState(if (on) 1f else 0f, tween(160), label = "voice-pill-continuous")
+    Box(
+        Modifier.size(VoicePillButton)
+            .clickable(role = Role.Switch) { onChange(!on) }
+            .semantics { contentDescription = if (on) "连续语音：开" else "连续语音：关"; selected = on }
+            .testTag("voice-pill-continuous"),
+        contentAlignment = Alignment.Center,
+    ) {
+        val shape = RoundedCornerShape(10.dp)
+        Box(Modifier.size(width = 40.dp, height = 26.dp)
+            .clip(shape)
+            .background(accentColor.copy(alpha = fill))
+            .border(1.dp, (if (on) accentColor else color).copy(alpha = 0.55f + 0.45f * fill), shape),
+            contentAlignment = Alignment.Center) {
+            Text("连续", color = androidx.compose.ui.graphics.lerp(color, Color.White, fill), fontSize = 12.sp, maxLines = 1)
+        }
     }
 }
 

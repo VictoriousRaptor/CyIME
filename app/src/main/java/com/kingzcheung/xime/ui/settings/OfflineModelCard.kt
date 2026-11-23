@@ -60,10 +60,14 @@ internal fun OfflineModelCard() {
     fun download(id: String) { ModelManager.getModel(id)?.let { ModelManager.downloadModelInBackground(context, it) } }
     val senseReady = SpeechModelCatalog.SENSEVOICE in ready
     var wholeSentence by remember { mutableStateOf(SettingsPreferences.isSttWholeSentence(context)) }
+    var wholeFinalizer by remember { mutableStateOf(SettingsPreferences.getSttWholeFinalizer(context)) }
+    // 没开日语不列「日语语音」（用户 11-22）；存的日语模型选择不动，开了日语照旧。
+    val shownLanguages = remember { InputLanguage.speech.filter {
+        it != InputLanguage.JAPANESE || com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context) } }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        InputLanguage.speech.forEachIndexed { index, language ->
+        shownLanguages.forEachIndexed { index, language ->
             SettingsSection(title = "${language.displayName}语音") {
-                val content = if (index == InputLanguage.speech.lastIndex) Modifier.testTag("speech-correction") else Modifier
+                val content = if (index == shownLanguages.lastIndex) Modifier.testTag("speech-correction") else Modifier
                 Column(content.fillMaxWidth()) {
                     val mode = selected.getValue(language)
                     if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
@@ -80,8 +84,9 @@ internal fun OfflineModelCard() {
                         }
                     }
                     SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
-                        downloads, onPick = { editing = language }, onDownload = ::download,
-                        onFinish = { finish ->
+                        wholeFinalizer, downloads, onPick = { editing = language }, onDownload = ::download,
+                        onFinish = { finish, finalizer ->
+                            finalizer?.let { wholeFinalizer = it; SettingsPreferences.setSttWholeFinalizer(context, it) }
                             val (mode, whole) = SpeechModelSelection.applyFinish(selected.getValue(language),
                                 chinese = language == InputLanguage.CHINESE, finish = finish)
                             manager.setModel(mode, language); refresh(language)
@@ -103,8 +108,8 @@ internal fun OfflineModelCard() {
 /** 一种语言的完整流程：说话时（点开换模型）→ 说完后（单选定稿方式）。 */
 @Composable
 private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<String>, senseReady: Boolean,
-    xasrReady: Boolean, wholeSentence: Boolean, downloads: Map<String, ModelDownloadState>,
-    onPick: () -> Unit, onDownload: (String) -> Unit, onFinish: (SpeechModelSelection.Finish) -> Unit) {
+    xasrReady: Boolean, wholeSentence: Boolean, wholeFinalizer: String, downloads: Map<String, ModelDownloadState>,
+    onPick: () -> Unit, onDownload: (String) -> Unit, onFinish: (SpeechModelSelection.Finish, String?) -> Unit) {
     val chinese = language == InputLanguage.CHINESE
     val primary = SpeechModelSelection.primary(mode)
     val senseVoiceAlone = primary == SpeechModelCatalog.SENSEVOICE
@@ -133,27 +138,38 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
     val current = SpeechModelSelection.finish(mode, chinese, wholeSentence)
     Text("说完后", style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+    // 整句定稿：X-ASR 下载了就分成两项（SenseVoice / X-ASR），各人按自己实际说话的效果选（2026-11-22）。
+    val wholeModels = if (xasrReady) listOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR) else listOf(SpeechModelCatalog.SENSEVOICE)
+    val rows = options.flatMap { finish ->
+        if (finish == SpeechModelSelection.Finish.WHOLE) wholeModels.map { finish to it } else listOf(finish to null)
+    }
+    val usedFinalizer = if (xasrReady) wholeFinalizer else SpeechModelCatalog.SENSEVOICE
     Column(Modifier.fillMaxWidth().selectableGroup()) {
-        options.forEach { finish ->
+        rows.forEach { (finish, finalizer) ->
             val (title, caption) = when (finish) {
                 SpeechModelSelection.Finish.NONE -> "不校正" to
                     (if (senseVoiceAlone) "每次停顿由 SenseVoice 直接出字" else "直接用说话时出的字")
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
-                SpeechModelSelection.Finish.WHOLE -> (if (xasrReady) "整句定稿 · X-ASR" else "整句定稿 · SenseVoice") to
-                    ("说完后整句再认一遍，更准但稍慢" +
-                        if (xasrReady) "" else "; 下载 X-ASR 更准")
+                SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
+                    "整句定稿 · X-ASR" to "说完后用 X-ASR 整句再认一遍" else
+                    "整句定稿 · SenseVoice" to ("说完后整句再认一遍，更准但稍慢" +
+                        if (xasrReady) "" else "; 也可下载 X-ASR 对比")
             }
-            val enabled = finish == current || when (finish) {
+            val checked = finish == current && (finalizer == null || finalizer == usedFinalizer)
+            val enabled = checked || when (finish) {
                 SpeechModelSelection.Finish.NONE -> true
                 SpeechModelSelection.Finish.SENSEVOICE -> senseReady
                 SpeechModelSelection.Finish.WHOLE -> senseVoiceAlone || senseReady
             }
-            val anchor = if (finish == SpeechModelSelection.Finish.WHOLE) Modifier.settingsSearchAnchor("整句定稿") else Modifier
-            Row(Modifier.fillMaxWidth().then(anchor).testTag("speech-finish:${language.id}:${finish.name.lowercase()}")
-                .selectable(finish == current, enabled = enabled, role = Role.RadioButton, onClick = { onFinish(finish) })
+            val anchor = if (finish == SpeechModelSelection.Finish.WHOLE && finalizer == SpeechModelCatalog.SENSEVOICE)
+                Modifier.settingsSearchAnchor("整句定稿") else Modifier
+            val tag = "speech-finish:${language.id}:${finish.name.lowercase()}" +
+                if (finalizer == SpeechModelCatalog.XASR) "-xasr" else ""
+            Row(Modifier.fillMaxWidth().then(anchor).testTag(tag)
+                .selectable(checked, enabled = enabled, role = Role.RadioButton, onClick = { onFinish(finish, finalizer) })
                 .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(finish == current, onClick = null, enabled = enabled)
+                RadioButton(checked, onClick = null, enabled = enabled)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(title, style = MaterialTheme.typography.bodyLarge)
                     Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

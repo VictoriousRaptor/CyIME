@@ -350,6 +350,44 @@ keyboard:
       "'": { tap: { label: "，", value: "," }, swipe_up: { label: "。", value: "." } , long_press: { display: "bubble", values: [ ",","."] }}
       earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
 
+  # 乱序十七：17 键乱序双拼（对应方案 double_pinyin_lxsq17，由 DoublePinyinScheme.LXSQ17 生成，默认不启用，
+  # 在「双拼方案」页打开）。每个键只出一个字母，键帽写这个键上的声母（HP = h 和 p）；声母韵母怎么归并全在方案里。
+  # 韵母助记不写在这里：打开「主题与外观 › 角标与气泡 › 双拼键位提示」，韵母写在声母下面，声母照样居中。
+  # 上下角标按合并键共用规则（MergedKeySymbols）按读顺序排；这里给某个键写 swipe_up / swipe_down 会顶替预设。
+  # 想改键帽、角标：在 xime.custom.yaml 里写同名的 qwerty_lxsq17 段，只写要改的键（见 docs 里的乱序十七模板）。
+  qwerty_lxsq17:
+    schemas: [double_pinyin_lxsq17]
+    button_layout: standard
+    geometry:
+      middle_row_inset: 0
+      delete_key_weight: 1.4
+      shift_key: false
+    layout:
+      rows:
+        - [h, s, z, b, x, m]
+        - [l, d, y, w, j, n]
+        - [c, q, g, f, t]
+    keys:
+      h: { tap: { label: "HP", value: "h" }, swipe_up: "1", long_press: { display: "bubble", values: ["h", "H"] } }
+      s: { tap: { label: "Sh", value: "s" }, swipe_up: "2", long_press: { display: "bubble", values: ["s", "S"] } }
+      z: { tap: { label: "Zh", value: "z" }, swipe_up: "3", long_press: { display: "bubble", values: ["z", "Z"] } }
+      b: { tap: { label: "B", value: "b" }, swipe_up: "4", long_press: { display: "bubble", values: ["b", "B"] } }
+      x: { tap: { label: "X", value: "x" }, swipe_up: "5", long_press: { display: "bubble", values: ["x", "X"] } }
+      m: { tap: { label: "MS", value: "m" }, swipe_up: "&", long_press: { display: "bubble", values: ["m", "M"] } }
+      l: { tap: { label: "L", value: "l" }, swipe_up: "6", long_press: { display: "bubble", values: ["l", "L"] } }
+      d: { tap: { label: "D", value: "d" }, swipe_up: "7", long_press: { display: "bubble", values: ["d", "D"] } }
+      y: { tap: { label: "Y", value: "y" }, swipe_up: "8", long_press: { display: "bubble", values: ["y", "Y"] } }
+      w: { tap: { label: "WZ", value: "w" }, swipe_up: "9", long_press: { display: "bubble", values: ["w", "W"] } }
+      j: { tap: { label: "JK", value: "j" }, swipe_up: "0", long_press: { display: "bubble", values: ["j", "J"] } }
+      n: { tap: { label: "NR", value: "n" }, swipe_up: "#", long_press: { display: "bubble", values: ["n", "N"] } }
+      c: { tap: { label: "Ch", value: "c" }, swipe_up: "！", long_press: { display: "bubble", values: ["c", "C"] } }
+      q: { tap: { label: "Q", value: "q" }, swipe_up: "：", long_press: { display: "bubble", values: ["q", "Q"] } }
+      g: { tap: { label: "G", value: "g" }, swipe_up: "“”", long_press: { display: "bubble", values: ["g", "G"] } }
+      f: { tap: { label: "FC", value: "f" }, swipe_up: "/", long_press: { display: "bubble", values: ["f", "F"] } }
+      t: { tap: { label: "T", value: "t" }, swipe_up: "？", long_press: { display: "bubble", values: ["t", "T"] } }
+      "'": { tap: { label: "，", value: "," }, swipe_up: { label: "。", value: "." } , long_press: { display: "bubble", values: [ ",","."] }}
+      earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
+
   # 注音（大千式，对应方案 cyime_zhuyin，默认不启用）：键帽是注音符号，同电脑大千键盘的列，
   # 第一行 11 键，第二三行 10 键缩进半键，第四行 10 键加一键半宽的删除键（KeyboardLayout 按 LayoutKind.ZHUYIN 排）。
   # 键帽送注音符号，ImeKeyRouter 换成大千键码（ZhuyinKeys）。第一声是空格。

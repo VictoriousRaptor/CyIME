@@ -3,7 +3,7 @@ package com.kingzcheung.xime.settings
 /**
  * 「按键符号 → 整排输入」：一排键的符号写成一行字，一次改完一整排（用户 11-15：一个一个符号改太弱）。
  * 规则只有一条，和单个键「留空不放符号」一致（用户 11-19：空格子打 □ 反人类、填的时候空格被忽略）：
- * 一个字符一格，空格就是空着的格子；几个字的短语用「」括起来算一格。
+ * 一个字符一格，空格就是空着的格子；几个字的短语用「」括起来算一格，短语结尾可以带空格（「, 」）。
  */
 internal object SymbolRowText {
     const val PHRASE_OPEN = "「"
@@ -21,7 +21,7 @@ internal object SymbolRowText {
     /** 半角、全角空格都算空位：中文全角时按空格键打出来的是全角空格。 */
     private fun blank(cell: String) = cell.isBlank()
 
-    /** 一格写成什么：空着写一个空格，一个字符原样，短语加「」。 */
+    /** 一格写成什么：空着写一个空格，一个字符原样，短语（含「, 」这样结尾带空格的）加「」。 */
     private fun cellText(cell: String): String = when {
         blank(cell) -> " "
         codePoints(cell).size == 1 -> cell
@@ -48,7 +48,13 @@ internal object SymbolRowText {
         while (index < chars.size) {
             val char = chars[index]
             if (char == PHRASE_OPEN) {
-                val close = (index + 1 until chars.size).firstOrNull { chars[it] == PHRASE_CLOSE || chars[it] == PHRASE_OPEN || blank(chars[it]) }
+                var close = (index + 1 until chars.size).firstOrNull { chars[it] == PHRASE_CLOSE || chars[it] == PHRASE_OPEN || blank(chars[it]) }
+                // 短语结尾可以带空格（「, 」= 逗号加空格一格，用户 11-22）：字后面紧跟空格再紧跟」才算；
+                // 空格后面还有字（「a b」）照旧是几格，「 」也照旧是普通符号加空位。
+                if (close != null && close > index + 1 && blank(chars[close])) {
+                    val end = (close until chars.size).firstOrNull { !blank(chars[it]) }
+                    if (end != null && chars[end] == PHRASE_CLOSE) close = end
+                }
                 if (close != null && chars[close] == PHRASE_CLOSE && close - index - 1 >= 2) {
                     cells += chars.subList(index + 1, close).joinToString("")
                     index = close + 1

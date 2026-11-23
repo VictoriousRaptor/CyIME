@@ -1,6 +1,5 @@
 package com.kingzcheung.xime.ui.settings
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.database.ContentObserver
@@ -62,10 +61,6 @@ internal val SHOW_KEYBOARD_BUTTON_SPACE = 48.dp + SHOW_KEYBOARD_BUTTON_MARGIN * 
 @Composable
 internal fun keyboardPreviewContentPadding(top: Dp = 0.dp, bottom: Dp = 0.dp): PaddingValues =
     PaddingValues(top = top, bottom = bottom + LocalKeyboardPreviewInset.current)
-
-internal fun isCyimeSelected(context: Context): Boolean = ComponentName.unflattenFromString(
-    Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty()
-)?.packageName == context.packageName
 
 /** 给真实输入法提供窗口连接，没有文本缓冲区，也不会把 Enter、Tab 等键转发给设置页。 */
 internal class StylePreviewEditor(context: Context) : View(context) {
@@ -169,7 +164,7 @@ internal fun KeyboardSettingsScaffold(
         DisposableEffect(context) {
             fun refresh() {
                 selected = isCyimeSelected(context)
-                enabled = selected || imm?.enabledInputMethodList?.any { it.packageName == context.packageName } == true
+                enabled = isCyimeEnabled(context)
             }
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) = refresh()

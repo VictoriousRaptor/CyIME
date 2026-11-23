@@ -52,6 +52,15 @@ internal fun japaneseChoonpuIsCode(key: String, ascii: Boolean, profile: com.kin
 internal fun zhuyinKeyIsCode(key: String, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
     !ascii && profile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN && ZhuyinKeys.code(key) != null
 
+/**
+ * 笔画方案的通配键 *（笔画键盘第二排末尾那个键，实体键盘 Shift+8）：笔画方案的字母表里有它，每个 * 代替一笔，
+ * 由 lua/cyime_stroke_wildcard.lua 出字（一* → 二 十 七 丁 厂……）。* 在 Unicode 里算标点，以前被 [isLiteralPunctuation]
+ * 当成标点直接上屏：打着笔画时先上屏首选再接一个 *，引擎从来收不到（11-22 他：笔画的通配键一直是坏的）。
+ * 笔画方案、非西文时 * 和全角 ＊ 都当编码键交给按键队列送进 Rime。
+ */
+internal fun strokeWildcardIsCode(key: String, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
+    !ascii && profile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE && (key == "*" || key == "＊")
+
 /** Keyboard punctuation only: never rewrite pasted prose, digits, emoji or speech results. */
 internal fun punctuationWidth(text: String, full: Boolean, japanese: Boolean = false): String {
     if (text.isEmpty() || !text.all { isLiteralPunctuation(it.toString()) }) return text
@@ -79,6 +88,13 @@ internal fun punctuationWidth(text: String, full: Boolean, japanese: Boolean = f
     }
 }
 
+/**
+ * 数字后面的 . , :（3.14、1,000、12:30）照半角上屏，和 Rime 的 digit_separators 一样。实体键盘的数字不经 Rime
+ * 直接上屏，Rime 不知道前面是数字，中文模式下句号就成了「。」（#527）；这里看光标前的那个字。
+ */
+internal fun digitSeparatorStaysHalfWidth(key: String, before: CharSequence?): Boolean =
+    key.length == 1 && key[0] in ".,:" && before?.lastOrNull()?.let { it in '0'..'9' } == true
+
 /** Japanese 英数 letters in full width (Ａ–Ｚ, ａ–ｚ); romaji inside Japanese text stays ASCII. */
 internal fun fullWidthLetters(text: String): String =
     text.map { c -> if (c in 'a'..'z' || c in 'A'..'Z') (c.code + 0xFEE0).toChar() else c }.joinToString("")
@@ -86,7 +102,7 @@ internal fun fullWidthLetters(text: String): String =
 /** Only keyboard literals use this policy; pasted text, speech and candidate words stay intact. */
 internal fun keyboardLiteralWidth(text: String, full: Boolean, japanese: Boolean, numberPanel: Boolean = false, preserveWidth: Boolean = false,
     chineseKeyboard: Boolean = false, before: CharSequence? = null): String {
-    if (preserveWidth) return text
+    if (preserveWidth || digitSeparatorStaysHalfWidth(text, before)) return text
     // 中文屏幕键盘的符号都是固定字符，印什么上屏什么；只有空格两侧的逗号句号由键盘按全角/半角给出。
     if (!japanese && chineseKeyboard) return text
     if (!japanese) return if (numberPanel) text else punctuationWidth(text, full)

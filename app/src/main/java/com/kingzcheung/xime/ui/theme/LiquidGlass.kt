@@ -43,6 +43,7 @@ import com.kingzcheung.xime.platform.AndroidPlatform
  * （用户 11-02「自定义键盘背景的时候可以把按键做成这种玻璃效果」）。
  *
  * 11-15 加「液态玻璃强度」三档（[LiquidGlassStrength]）：标准就是上面这个保守版，也是默认；加强、最强是用户自己选的。
+ * 11-22 加强、最强改成键帽上面的透镜（[LiquidLens]、[LiquidLensShader]），标准不变。
  */
 internal object LiquidGlass {
     private val on = mutableStateOf(false)
@@ -117,7 +118,216 @@ internal fun Modifier.liquidGlassCap(cap: Modifier, radius: Dp): Modifier = comp
             held.value = false
         }
     }
-    observed.then(liquidRefraction(radius, strength)).then(cap).then(liquidRim(radius, dark, held, strength))
+    // 加强、最强（11-22）：Android 13 以上透镜画在键帽上面、文字下面，代替底色下面的折射和亮边。
+    val lens = if (strength.lens != null) liquidLensCap(radius, dark, held, strength) else null
+    if (lens != null) observed.then(cap).then(lens)
+    else observed.then(liquidRefraction(radius, strength)).then(cap).then(liquidRim(radius, dark, held, strength))
+}
+
+/** 着色器能用时返回透镜修饰；Android 12 及以下、编译不过时返回 null，调用方退回亮边。 */
+@androidx.compose.runtime.Composable
+private fun liquidLensCap(radius: Dp, dark: Boolean, held: androidx.compose.runtime.State<Boolean>,
+    strength: LiquidGlassStrength): Modifier? {
+    return if (AndroidPlatform.runtimeShader) liquidLens33(radius, dark, held, strength) else null
+}
+
+/**
+ * 透镜：一个着色器画整个键（中间直接返回透明，只有外圈那一圈和高光真的算）。
+ * 有图片背景（和 [liquidRefraction33] 同样的条件）时折射这张图；没有时只画高光。
+ * 着色器参数每次画时设，键盘不动不重画；按住只重画这一个键，高光亮一点、键面略亮（和亮边版一样）。
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@androidx.compose.runtime.Composable
+private fun liquidLens33(radius: Dp, dark: Boolean, held: androidx.compose.runtime.State<Boolean>,
+    strength: LiquidGlassStrength): Modifier? {
+    val lens = strength.lens ?: return null
+    val shader = LiquidLensShader.shared ?: return null
+    val root = LocalView.current.rootView
+    val backdrop = LocalSharedKeyboardBackdrop.current?.takeIf { it.windowRoot === root && it.opacity >= .99f }
+    val image = backdrop?.image
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    val located = if (image != null) Modifier.onGloballyPositioned { origin = it.positionInRoot() } else Modifier
+    return located.drawWithCache {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val bitmap = image?.asAndroidBitmap()
+        val imageShader = bitmap?.let {
+            BitmapShader(it, android.graphics.Shader.TileMode.DECAL, android.graphics.Shader.TileMode.DECAL)
+                .apply { setFilterMode(BitmapShader.FILTER_MODE_LINEAR) }
+        }
+        val heldFill = Color.White.copy(alpha = if (dark) .04f else .08f)
+        val corner = androidx.compose.ui.geometry.CornerRadius(radius.toPx().coerceAtMost(size.minDimension / 2f))
+        onDrawWithContent {
+            val down = held.value
+            if (down) drawRoundRect(heldFill, cornerRadius = corner)
+            var withImage = false
+            val at = origin
+            if (backdrop != null && bitmap != null && imageShader != null && at != null) {
+                val frame = backdrop.frame
+                if (frame.size.width > 0 && frame.size.height > 0 && bitmap.width > 0 && bitmap.height > 0) {
+                    val offset = frame.origin + backdrop.windowToRoot - at
+                    val motion = backdrop.motion?.transform?.dominant ?: BackgroundMotionTransform.Identity
+                    val width = frame.size.width.toFloat()
+                    val height = frame.size.height.toFloat()
+                    // 和 liquidRefraction33、withSharedBackdropMotion 同一个中心和位移。
+                    val left = offset.x + width * ((1f - motion.scale) / 2f + motion.shiftX)
+                    val top = offset.y + height * ((1f - motion.scale) / 2f + motion.shiftY)
+                    LiquidLensShader.bindImage(shader, imageShader, left, top,
+                        bitmap.width / (width * motion.scale), bitmap.height / (height * motion.scale))
+                    withImage = true
+                }
+            }
+            if (!withImage) LiquidLensShader.bindNoImage(shader)
+            LiquidLensShader.bind(shader, lens, size.width, size.height, radius.toPx(), density,
+                shade = if (!withImage && !dark) lens.shade else 0f, boost = if (down) 1.35f else 1f)
+            paint.shader = shader
+            drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint) }
+            paint.shader = null
+            drawContent()
+        }
+    }
+}
+
+/** 设置页示意键用的透镜（没有图片，只有高光）；着色器不能用时 null。 */
+internal fun liquidLensSample(radius: Dp, dark: Boolean, strength: LiquidGlassStrength): Modifier? {
+    val lens = strength.lens ?: return null
+    if (!AndroidPlatform.runtimeShader) return null
+    return liquidLensSample33(radius, dark, lens)
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private fun liquidLensSample33(radius: Dp, dark: Boolean, lens: LiquidLens): Modifier? {
+    val shader = LiquidLensShader.shared ?: return null
+    return Modifier.drawWithCache {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        onDrawWithContent {
+            LiquidLensShader.bindNoImage(shader)
+            LiquidLensShader.bind(shader, lens, size.width, size.height, radius.toPx(), density,
+                shade = if (dark) 0f else lens.shade, boost = 1f)
+            paint.shader = shader
+            drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint) }
+            paint.shader = null
+            drawContent()
+        }
+    }
+}
+
+/**
+ * 加强、最强的透镜着色器（见 [LiquidLens]）。全进程编译一次，各键在主线程上依次设参数再画（同 [LiquidRefractionShader]）。
+ * 输出是预乘的颜色：先是透镜里弯过的图（只在外圈），再在上面叠白色高光，浅色无图时最后叠很淡的暗边。
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private object LiquidLensShader {
+    private const val SOURCE = """
+        uniform shader image;
+        uniform float hasImage;
+        uniform float2 iSize;
+        uniform float radius;
+        uniform float bevel;
+        uniform float bend;
+        uniform float spread;
+        uniform float visibility;
+        uniform float saturation;
+        uniform float specular;
+        uniform float backLight;
+        uniform float specularWidth;
+        uniform float glow;
+        uniform float shade;
+        uniform float2 imageOrigin;
+        uniform float2 pixelsPerUnit;
+        half4 main(float2 p) {
+            float2 c = iSize * 0.5;
+            float r = min(radius, min(c.x, c.y));
+            float2 rel = p - c;
+            float2 q = abs(rel) - c + r;
+            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+            if (d > 0.5) return half4(0.0);
+            float inner = max(-d, 0.0);
+            float b = min(bevel, min(c.x, c.y) * 0.8);
+            // Inside the band and past the highlight's falloff nothing is drawn: the cap fill shows as is.
+            if (inner >= b && inner >= specularWidth * 6.0) return half4(0.0);
+            float2 g = (q.x > 0.0 && q.y > 0.0) ? normalize(q) : ((q.x > q.y) ? float2(1.0, 0.0) : float2(0.0, 1.0));
+            float2 n = g * sign(rel);
+            float cov = clamp(0.5 - d, 0.0, 1.0);
+            float e = 1.0 - clamp(inner / b, 0.0, 1.0);
+            float3 color = float3(0.0);
+            float alpha = 0.0;
+            if (hasImage > 0.5 && inner < b) {
+                // Circular lens profile: flat inside, steepest at the rim. Sample outward, so what lies
+                // just outside the key bends into its rim. Red bends least, blue most.
+                float disp = bend * (1.0 - sqrt(max(1.0 - e * e, 0.0)));
+                float2 uv = (p - imageOrigin) * pixelsPerUnit;
+                float2 off = n * disp * pixelsPerUnit;
+                float4 t0 = float4(image.eval(uv + off * (1.0 - spread)));
+                float4 t1 = float4(image.eval(uv + off * (1.0 - 0.5 * spread)));
+                float4 t2 = float4(image.eval(uv + off));
+                float4 t3 = float4(image.eval(uv + off * (1.0 + 0.5 * spread)));
+                float4 t4 = float4(image.eval(uv + off * (1.0 + spread)));
+                float3 rgb = float3(
+                    0.40 * t0.r + 0.35 * t1.r + 0.25 * t2.r,
+                    0.25 * t1.g + 0.50 * t2.g + 0.25 * t3.g,
+                    0.25 * t2.b + 0.35 * t3.b + 0.40 * t4.b);
+                float cover = min(min(t0.a, t1.a), min(min(t2.a, t3.a), t4.a));
+                float lum = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+                rgb = clamp(lum + (rgb - lum) * saturation, 0.0, 1.0);
+                rgb = min(rgb, float3(cover));
+                float s = visibility * e * e * (3.0 - 2.0 * e);
+                color = rgb * s;
+                alpha = cover * s;
+            }
+            // Highlight along the rim, light from the top left; a weaker return on the bottom right.
+            float dl = dot(n, float2(-0.70710678, -0.70710678));
+            float edge = exp(-inner / specularWidth);
+            float sp = (specular * pow(max(dl, 0.0), 1.5) + backLight * pow(max(-dl, 0.0), 1.5)) * edge;
+            if (inner < b) sp += glow * max(dl, 0.0) * e * e * e;
+            sp = clamp(sp, 0.0, 1.0);
+            color = color * (1.0 - sp) + float3(sp);
+            alpha = alpha * (1.0 - sp) + sp;
+            if (shade > 0.0) {
+                float sh = shade * pow(max(-dl, 0.0), 1.5) * exp(-max(inner - specularWidth, 0.0) / (specularWidth * 1.5));
+                color = color * (1.0 - sh);
+                alpha = alpha * (1.0 - sh) + sh;
+            }
+            return half4(half3(color), half(alpha)) * half(cov);
+        }
+    """
+
+    val shared: RuntimeShader? by lazy { try { RuntimeShader(SOURCE) } catch (_: Throwable) { null } }
+
+    /** 没有图片时 `image` 也得接一个着色器：一个透明的渐变，不会被取样（hasImage = 0）。 */
+    private val empty: android.graphics.Shader by lazy {
+        android.graphics.LinearGradient(0f, 0f, 1f, 0f, 0, 0, android.graphics.Shader.TileMode.CLAMP)
+    }
+
+    fun bindImage(shader: RuntimeShader, image: android.graphics.Shader, left: Float, top: Float,
+        pixelsPerX: Float, pixelsPerY: Float) {
+        shader.setInputShader("image", image)
+        shader.setFloatUniform("hasImage", 1f)
+        shader.setFloatUniform("imageOrigin", left, top)
+        shader.setFloatUniform("pixelsPerUnit", pixelsPerX, pixelsPerY)
+    }
+
+    fun bindNoImage(shader: RuntimeShader) {
+        shader.setInputShader("image", empty)
+        shader.setFloatUniform("hasImage", 0f)
+        shader.setFloatUniform("imageOrigin", 0f, 0f)
+        shader.setFloatUniform("pixelsPerUnit", 1f, 1f)
+    }
+
+    fun bind(shader: RuntimeShader, lens: LiquidLens, width: Float, height: Float, radius: Float, density: Float,
+        shade: Float, boost: Float) {
+        shader.setFloatUniform("iSize", width, height)
+        shader.setFloatUniform("radius", radius)
+        shader.setFloatUniform("bevel", lens.bevelDp * density)
+        shader.setFloatUniform("bend", lens.bendDp * density)
+        shader.setFloatUniform("spread", lens.spread)
+        shader.setFloatUniform("visibility", lens.visibility)
+        shader.setFloatUniform("saturation", lens.saturation)
+        shader.setFloatUniform("specular", (lens.specular * boost).coerceAtMost(1f))
+        shader.setFloatUniform("backLight", (lens.backLight * boost).coerceAtMost(1f))
+        shader.setFloatUniform("specularWidth", lens.specularWidthDp * density)
+        shader.setFloatUniform("glow", lens.glow * boost)
+        shader.setFloatUniform("shade", shade)
+    }
 }
 
 /**

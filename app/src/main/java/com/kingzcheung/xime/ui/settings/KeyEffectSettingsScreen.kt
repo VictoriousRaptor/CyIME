@@ -471,7 +471,7 @@ private fun KeyGapLightDetailSettings(
         KeyGapLightEventToggle("打字", "按键时光线往四周走。", config.typing, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_TYPING) { onChange(config.copy(typing = it)) }
         KeyGapLightEventToggle("删除", "删除时光线往回收。", config.delete, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_DELETE) { onChange(config.copy(delete = it)) }
         KeyGapLightEventToggle("上屏和发送", "点空格、回车时的光效", config.commit, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_COMMIT) { onChange(config.copy(commit = it)) }
-        KeyGapLightEventToggle("切换大小写", "切换大小写时的光效", config.switch, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SWITCH) { onChange(config.copy(switch = it)) }
+        KeyGapLightEventToggle("切换大小写", "切换大小写、中英、语言和符号页时整块键盘的光效", config.switch, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SWITCH) { onChange(config.copy(switch = it)) }
         KeyGapLightEventToggle("长按进度", "按住时沿键边显示进度", config.hold, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_HOLD) { onChange(config.copy(hold = it)) }
         KeyGapLightEventToggle("空格移光标", "滑动空格移动光标时的光效", config.space, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_SPACE) { onChange(config.copy(space = it)) }
         KeyGapLightEventToggle("语音音量", "说话时键缝显示音量", config.voice, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT_VOICE) { onChange(config.copy(voice = it)) }

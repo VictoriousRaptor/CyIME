@@ -123,8 +123,20 @@ internal fun avoidHardwareCaretLine(
             .thenBy { kotlin.math.abs(it.y - preferred.y) })
 }
 
+/** 光标（屏幕坐标）落在宿主 [width]×[height] 里：和 [hardwareCandidatePosition] 判断能不能跟光标用同一条规则。 */
+internal fun hardwareAnchorInHost(anchor: HardwareCursorAnchor?, hostScreenX: Int, hostScreenY: Int,
+    width: Int, height: Int): Boolean {
+    if (anchor == null || !anchor.left.isFinite() || !anchor.top.isFinite() || !anchor.right.isFinite() ||
+        !anchor.bottom.isFinite() || anchor.left > anchor.right || anchor.top > anchor.bottom) return false
+    val left = anchor.left.toDouble() - hostScreenX
+    val right = anchor.right.toDouble() - hostScreenX
+    val top = anchor.top.toDouble() - hostScreenY
+    val bottom = anchor.bottom.toDouble() - hostScreenY
+    return !(right < 0.0 || left > width.coerceAtLeast(0) || bottom < 0.0 || top > height.coerceAtLeast(0))
+}
+
 /**
- * 浮窗固定在某一边时，拼音和候选卡贴着工具条放，不跟光标、不躲输入行：顶部的放在工具条下面，
+ * 浮窗固定在某一边、又不知道光标在哪时（或关了「候选跟随光标」），拼音和候选卡贴着工具条放：顶部的放在工具条下面，
  * 底部的放在上面，左侧的放在右边，右侧的放在左边；放不下时夹在屏幕内。[toolbar] 是宿主内坐标。
  */
 internal fun fixedHardwareCandidatePosition(

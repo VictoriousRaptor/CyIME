@@ -119,7 +119,9 @@ internal fun OptionMenuCard(
     val focusIndex = highlighted ?: options.indexOf(selected).takeIf { it >= 0 }
     val shown = options.map { labels[it] ?: it }
     // 选项都是一两个字（翻译栏的「自、英、日」）时列表也窄，不占半个键盘
-    val menuWidth = width ?: if (shown.all { it.length <= 2 }) 88.dp else 148.dp
+    // 窄列表要放下两个字：卡片内边距 6×2 + 行内边距 12×2 + 给勾留的 20×2 + 两个 14sp 字约 32，共 108。
+    // 原来 88 只剩 12dp，一个字都放不下，列表里全画成「…」。
+    val menuWidth = width ?: if (shown.all { it.length <= 2 }) 108.dp else 148.dp
     Surface(
         shape = CompactMenuStyle.Shape, tonalElevation = 0.dp, shadowElevation = CompactMenuStyle.Elevation,
         color = colors.surface, contentColor = colors.text,

@@ -18,25 +18,15 @@ internal object PairedSymbols {
     /** 每补一次结尾加一；后面又补了一次时，前一次的延后检查作废。 */
     @Volatile internal var commitGeneration = 0L
 
-    /** 补上结尾后延后多久查编辑框认没认光标位置；测试里换成手动执行。 */
+    /**
+     * 补上结尾后延后多久查编辑框认没认光标位置；测试里换成手动执行。
+     * 不认的编辑框（NotallyX 等）要等它自己处理完这次上屏再挪光标，马上挪会被它改回去（11-14：打一个字光标又跳出去）。
+     * 300 ms 是雨燕输入法在 NotallyX 里实际可用的延时（#489 用户 11-21 对比）。
+     */
     internal var deferCaretCheck: (() -> Unit) -> Unit = { check ->
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ check() }, CARET_CHECK_DELAY_MS)
     }
-    private const val CARET_CHECK_DELAY_MS = 150L
-
-    /**
-     * 查出来不认光标位置的应用（包名）：这次运行里在它们中不再补结尾，免得结尾闪一下又被删掉（#489 NotallyX）。
-     * 只记在内存里，输入法重启后重新判断。
-     */
-    private val caretIgnoringApps = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-
-    fun ignoresCaret(packageName: String?): Boolean = packageName != null && packageName in caretIgnoringApps
-
-    internal fun noteCaretIgnored(packageName: String?) {
-        if (!packageName.isNullOrEmpty()) caretIgnoringApps += packageName
-    }
-
-    internal fun forgetCaretIgnoringApps() = caretIgnoringApps.clear()
+    private const val CARET_CHECK_DELAY_MS = 300L
 
     fun closingFor(literal: String): String? = pairs[literal]
 
@@ -68,8 +58,11 @@ internal data class CommitCaret(val caretBack: Int = 0, val overtype: String? = 
 }
 
 /** 按 [caret] 上屏：结尾单独上屏并把光标放在它前面（newCursorPosition 0 = 插入文字的开头），整段算一次编辑。 */
-internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret, packageName: String? = null): Boolean {
+internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret): Boolean {
     val back = caret.caretBack.coerceIn(0, text.length)
+    // 跳过结尾也算一次新的上屏：上一次补结尾的延后检查作废。不然 300 ms 内点「(」再点「)」，光标前正好是 ()，
+    // 会被当成编辑框不认光标、又挪回括号中间（11-22 审查）。
+    if (caret.overtype != null) PairedSymbols.commitGeneration++
     beginBatchEdit()
     try {
         caret.overtype?.let { overtype ->
@@ -82,28 +75,52 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
         endBatchEdit()
     }
     if (back != 0) {
-        // 不能上屏后马上读：有的编辑框（网页、部分跨平台框架）读回的是还没处理完的旧状态，光标看着落在结尾后面，
-        // 正常编辑框里刚补上的结尾也被删掉（11-16 用户反馈：开成对符号，右半出来又马上没了）。等编辑框处理完再查。
+        // 不能上屏后马上读：有的编辑框（网页、部分跨平台框架）读回的是还没处理完的旧状态，光标看着落在结尾后面
+        // （11-16 用户反馈：右半出来又马上没了）。等编辑框处理完再查。
         val generation = ++PairedSymbols.commitGeneration
         PairedSymbols.deferCaretCheck {
-            if (generation == PairedSymbols.commitGeneration && dropClosingIfCaretIgnored(text, back))
-                PairedSymbols.noteCaretIgnored(packageName)
+            if (generation == PairedSymbols.commitGeneration && caretSitsAfter(text)) {
+                if (moveCaretBackBySelection(back)) {
+                    // 有的网页编辑框不认 setSelection：再等一下，还在后面就按左方向键。
+                    PairedSymbols.deferCaretCheck {
+                        if (generation == PairedSymbols.commitGeneration && caretSitsAfter(text)) sendLeftKeys(back)
+                    }
+                } else {
+                    sendLeftKeys(back)
+                }
+            }
         }
     }
     return true
 }
 
 /**
- * 有的编辑框不认 newCursorPosition 0，光标落在补上的结尾后面（#280，NotallyX 等记事本）。
- * 原来这里再用 setSelection／左方向键把光标挪回中间，但这类编辑框自己记的插入位置没跟着变：
- * 接着打一个字以后光标又跳到结尾外面，拼音只剩第一个字母（11-14 用户反馈）。
- * 这类编辑框里没法可靠地把光标放进一对符号中间，所以把刚补上的结尾去掉，只留用户点的开头，
- * 和没开「输入成对符号」时一样；结尾由用户自己打，不会多出一个。正常的编辑框（光标前面不是整段）不受影响。
+ * 有的编辑框不认 newCursorPosition 0，光标落在补上的结尾后面（#280，NotallyX 等记事本；#436 浏览器）。
+ * 光标前面正好是刚上屏的整段、没有选中文字时才算。正常的编辑框（光标在中间）不受影响。
  */
-private fun InputConnection.dropClosingIfCaretIgnored(text: String, back: Int): Boolean {
+private fun InputConnection.caretSitsAfter(text: String): Boolean {
     val before = runCatching { getTextBeforeCursor(text.length, 0)?.toString() }.getOrNull()
-    if (before != text || !getSelectedText(0).isNullOrEmpty()) return false
-    return deleteSurroundingText(back, 0)
+    return before == text && getSelectedText(0).isNullOrEmpty()
+}
+
+/**
+ * 等编辑框处理完上屏以后，按它报的实际位置把光标往回挪 [back] 个字，落在一对符号中间。
+ * 以前在这类编辑框里马上挪（#280），它随后又改回去，打一个字光标就跳出去（11-14），于是改成去掉结尾（#489）；
+ * 等它处理完再挪就稳了（雨燕输入法同样做法，用户 11-21 说在 NotallyX 里正常）。读不到位置返回 false。
+ */
+private fun InputConnection.moveCaretBackBySelection(back: Int): Boolean {
+    val extracted = runCatching { getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull()
+        ?: return false
+    if (extracted.selectionStart != extracted.selectionEnd || extracted.selectionStart < back) return false
+    val caret = extracted.startOffset + extracted.selectionStart - back
+    return setSelection(caret, caret)
+}
+
+private fun InputConnection.sendLeftKeys(back: Int) {
+    repeat(back) {
+        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
+        sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
+    }
 }
 
 /** 光标夹在一对空符号中间时两边一起删掉；不是这种情况返回 false，由调用方照常退格。 */

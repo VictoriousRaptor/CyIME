@@ -95,6 +95,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     config->GetDouble("t9/rescore_rime_weight", &t9_rescore_rime_weight_);
     config->GetDouble("t9/tail_correction_margin", &t9_tail_correction_margin_);
     config->GetDouble("t9/slip_correction_margin", &t9_slip_correction_margin_);
+    config->GetBool("t9/slip_whole_words", &t9_slip_whole_words_);
     config->GetInt("t9/initials_choices", &t9_initials_choices_);
     config->GetDouble("t9/initials_lead_margin", &t9_initials_lead_margin_);
     config->GetDouble("t9/near_homophone_penalty", &t9_near_homophone_penalty_);

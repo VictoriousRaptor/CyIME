@@ -27,9 +27,8 @@ class SetupGuidePlanTest {
 
     @Test fun lightPhoneOnLiteGetsTheSmallestWorkingSet() {
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.LIGHT), SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false))
-        // X-ASR finalizes instead of SenseVoice, so it costs no extra memory even here.
-        // 全拼 26 键整句也用词组模型（11-15）：轻量版没带，下精简档。
-        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro", CandidateModelCatalog.NGRAM_SMALL),
+        // 全拼 26 键整句也用词组模型（11-15）：轻量版没带，下精简档。X-ASR 不再推荐下载（11-22）。
+        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, "ochwpro", CandidateModelCatalog.NGRAM_SMALL),
             plan.keepIds())
         assertEquals(SpeechModelCatalog.SENSEVOICE, plan.voiceMode)
         assertTrue(plan.keep.all { it.source == SetupSource.DOWNLOAD })
@@ -43,11 +42,11 @@ class SetupGuidePlanTest {
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED, installed = bundled, inPackage = bundled),
             SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false))
         // 全拼 26 键整句也用词组模型（11-15）：安装包带的完整档留着，不删。
-        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.XASR, "ochwpro", CandidateModelCatalog.NGRAM),
+        assertEquals(setOf(SpeechModelCatalog.SENSEVOICE, "ochwpro", CandidateModelCatalog.NGRAM),
             plan.keepIds())
         assertEquals(setOf(BuiltinModelCatalog.SPEAKER_MODEL), plan.removeIds())
         assertEquals(27 * mb, plan.freedBytes)
-        assertEquals(136 * mb, plan.downloadBytes) // only X-ASR is not in the package
+        assertEquals(0L, plan.downloadBytes) // everything needed is in the package
         assertTrue(plan.notes.any { "安装包" in it })
     }
 
@@ -55,14 +54,17 @@ class SetupGuidePlanTest {
         val plan = SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED), SetupAnswers(VoiceUse.OFTEN, t9 = true, caption = false))
         assertEquals(SpeechModelCatalog.TWO_PASS, plan.voiceMode)
         assertTrue(plan.keepIds().containsAll(setOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE,
-            SpeechModelCatalog.XASR, CandidateModelCatalog.NGRAM)))
+            CandidateModelCatalog.NGRAM)))
+        assertFalse(SpeechModelCatalog.XASR in plan.keepIds())
     }
 
-    // 2026-11-01 same-path retest: X-ASR finalizing 5.5% vs SenseVoice 8.5% (Doubao 5.9%), and faster.
-    @Test fun anyVoiceUseGetsXasrUnlessSpaceIsTight() {
+    // 2026-11-22：用户本人在平板上说话 X-ASR 不如 SenseVoice，整句定稿默认 SenseVoice；向导不再推荐下载 X-ASR，已下好的留着。
+    @Test fun xasrIsNotRecommendedButAnInstalledCopyStaysUnlessSpaceIsVeryTight() {
         val sometimes = SetupAnswers(VoiceUse.SOMETIMES, t9 = false, caption = false)
-        assertTrue(SpeechModelCatalog.XASR in SetupGuidePlanner.plan(facts(DeviceModelTier.STANDARD), sometimes).keepIds())
-        // Under 3 GB free: not downloaded, but an X-ASR already on the phone stays.
+        assertFalse(SpeechModelCatalog.XASR in SetupGuidePlanner.plan(facts(DeviceModelTier.ENHANCED), sometimes).keepIds())
+        assertTrue(SpeechModelCatalog.XASR in SetupGuidePlanner.plan(facts(DeviceModelTier.STANDARD,
+            installed = setOf(SpeechModelCatalog.XASR)), sometimes).keepIds())
+        // Under 3 GB free: an X-ASR already on the phone stays.
         assertFalse(SpeechModelCatalog.XASR in SetupGuidePlanner.plan(facts(DeviceModelTier.STANDARD, free = 2 * gb), sometimes).keepIds())
         assertTrue(SpeechModelCatalog.XASR in SetupGuidePlanner.plan(facts(DeviceModelTier.STANDARD, free = 2 * gb,
             installed = setOf(SpeechModelCatalog.XASR)), sometimes).keepIds())

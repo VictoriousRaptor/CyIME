@@ -15,6 +15,18 @@ class SideSymbolTargetTest {
         assertNull(KeyboardInputPreferences().symbolsFor(SideSymbolTarget.COMMON))
     }
 
+    @Test fun cellsKeepTheirSpaces() {
+        // 用户 11-22：九键侧栏填「, 」，后面的空格要原样存、原样上屏。
+        assertEquals(listOf(", ", " 。", "a b"), SideSymbolTarget.parse(", \n 。\na b\n"))
+        assertEquals(listOf(" "), SideSymbolTarget.parse(" "))
+        assertEquals(listOf(", "), SideSymbolTarget.parse(", \r\n"))
+        assertNull(SideSymbolTarget.parse("\n\n"))
+        assertEquals(", ", SideSymbolTarget.cellText(", "))
+        assertEquals("ab ", SideSymbolTarget.cellText("a\nb\r "))
+        val own = KeyboardInputPreferences(sideSymbols = mapOf("t9" to "，\n, \n。"))
+        assertEquals(listOf("，", ", ", "。"), own.symbolsFor(SideSymbolTarget.T9))
+    }
+
     @Test fun fixedSlotBarsAlwaysShowTheirSlotCount() {
         assertEquals(listOf("！", "，", "。"), SideSymbolTarget.HANDWRITING.resolve(listOf("！")))
         assertEquals(listOf("a", "b", "c"), SideSymbolTarget.HANDWRITING.resolve(listOf("a", "b", "c", "d")))

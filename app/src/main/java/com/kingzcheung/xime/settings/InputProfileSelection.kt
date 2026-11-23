@@ -99,6 +99,17 @@ object InputProfileSelection {
     fun switchHint(layout: InputLayout, current: SchemaInfo, target: SchemaInfo): String =
         "${layout.displayName}没有${current.schemeLabel}，已换成${target.schemeLabel}"
 
+    /**
+     * 灰着的布局卡片上直接写的原因（用户 11-22：选了五笔点别的布局像被弹回去，以为坏了）。
+     * 第二行是点了会怎样；卡片矮时只显示第一行。
+     */
+    fun unavailableNote(current: SchemaInfo, target: SchemaInfo): String =
+        "不能用${current.schemeLabel}\n点了换成${target.schemeLabel}"
+
+    /** 布局一行里每张灰卡片的原因，键是布局 ID。 */
+    fun unavailableNotes(current: SchemaInfo, switches: Map<String, LayoutSwitch?>): Map<String, String> =
+        switches.mapNotNull { (id, switch) -> switch?.takeIf { !it.keepsScheme }?.let { id to unavailableNote(current, it.entry) } }.toMap()
+
     /** Changing shape cannot silently change language or encoding. Missing combinations stay unavailable. */
     fun changeLayout(entries: List<SchemaInfo>, current: SchemaInfo, layoutId: String): SchemaInfo? = entries
         .filter { it.profile.mode == InputMode.KEYBOARD && it.profile.language == current.profile.language &&

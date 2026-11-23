@@ -80,6 +80,22 @@ internal fun hardwareSymbolIsLiteral(key: String, shifted: Boolean, numpad: Bool
     return !(chinesePunctuation && isLiteralPunctuation(key))
 }
 
+/**
+ * #528：雾凇系 26 键里大写字母进编码（zuogeDNAjiance → 做个DNA检测）。整串都是大写字母时，
+ * 后面的数字、点不是选第几个候选、也不是翻页，连同大写原样上屏：N1、B12、AGENTS.MD。
+ * 夹着拼音的（zuogeDNA）照旧。先看键，键对了才去读编码。
+ */
+internal fun capitalsKeepLiteralKey(key: String): Boolean = key.length == 1 && (key[0] in '0'..'9' || key[0] == '.')
+
+internal fun compositionIsAllCapitals(input: String?): Boolean = !input.isNullOrEmpty() && input.all { it in 'A'..'Z' }
+
+/**
+ * 屏幕键盘数字行：只打了大写字母（N）时连同大写原样上屏（N1）。只在雾凇 26 键（rime_ice）——
+ * 14 键、双拼 14 键、自建合并键的编码本来就是大写代表字母（打 di 送进引擎的是 DU），那里打拼音再点 2 照旧得到「第2」。
+ */
+internal fun screenDigitKeepsCapitals(schemaId: String, input: String?): Boolean =
+    schemaId == "rime_ice" && compositionIsAllCapitals(input)
+
 internal fun isHardwareArrow(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
     keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 
@@ -113,6 +129,16 @@ internal fun isZhuyinHardwarePunctuation(key: String, keyCode: Int, shift: Boole
 /** 注音（大千）的 , . - 是注音键、Shift 加它们是标点，实体键盘上都不翻页；[ ] = 照旧翻页。 */
 internal fun zhuyinKeepsPagingKey(keyCode: Int): Boolean =
     keyCode != KeyEvent.KEYCODE_COMMA && keyCode != KeyEvent.KEYCODE_PERIOD && keyCode != KeyEvent.KEYCODE_MINUS
+
+/**
+ * 注音（大千）实体键盘按组合键选候选：数字行是注音符号和声调，光按数字是接着打字，所以打字中用
+ * Shift+数字（Rime 注音的习惯）或 Ctrl+数字（微软注音的习惯）选第 N 个候选（用户 11-22）。
+ * 只认数字行；小键盘、带 Alt/Meta、Shift 和 Ctrl 一起按的都不算。返回这一组里的位置（1 → 0 … 9 → 8，0 → 9）。
+ */
+internal fun zhuyinChordDigitIndex(keyCode: Int, shift: Boolean, ctrl: Boolean, alt: Boolean, meta: Boolean): Int? {
+    if (alt || meta || shift == ctrl) return null
+    return hardwareCandidateDigitIndex(keyCode, shifted = false)
+}
 
 /** Only unshifted number-row keys select numbered candidates. */
 internal fun hardwareCandidateDigitIndex(keyCode: Int, shifted: Boolean): Int? {

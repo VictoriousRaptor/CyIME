@@ -89,6 +89,9 @@ struct T9ScriptOptions {
   // t9/slip_correction_margin: see T9RescoreSentences; 0 keeps a typed reading that reads in full before every
   // corrected sentence.
   double t9_slip_correction_margin_ = 0;
+  // t9/slip_whole_words (14 keys): the best corrected dictionary word for all the keys joins the sentences, so the
+  // slip rule above weighs it against the typed choice too (TAUDAJE: 太大了 against 太大可). See ScriptTranslation.
+  bool t9_slip_whole_words_ = false;
   // t9/initials_choices: for input typed as initials only, how many leading candidates are chosen by the same
   // computed score as full sentences (word model + rescore_rime_weight of Rime's weight). 0: dictionary order.
   int t9_initials_choices_ = 0;

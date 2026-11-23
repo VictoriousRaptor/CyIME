@@ -40,13 +40,15 @@ internal fun InputProfileSelectors(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val profile = selected.profile
-    val schemes = InputProfileSelection.schemeEntries(entries, selected)
+    // 键盘的方案面板用同一个函数（11-22：两边列的方案要一样）。
+    val schemes = SchemaPicking.schemeRow(entries, selected)
     val layouts = InputProfileSelection.languageLayouts(entries, selected)
     val switches = layouts.associate { it.id to InputProfileSelection.switchLayout(entries, selected, it.id) }
     Column(modifier.fillMaxWidth().testTag("profile-settings-selectors")) {
         LayoutPreviewChoices(layouts, profile.language, profile.layout.id, "layout-choice:${profile.language.id}",
             containerColor = containerColor, contentColor = contentColor, accentColor = accentColor,
-            unavailableIds = switches.filterValues { it?.keepsScheme == false }.keys) { id ->
+            unavailableIds = switches.filterValues { it?.keepsScheme == false }.keys,
+            unavailableNotes = InputProfileSelection.unavailableNotes(selected, switches)) { id ->
             // 与键盘里的选择面板一致：没有当前方案的布局标灰，点了换成它有的方案并提示。
             switches[id]?.let { switch ->
                 if (!switch.keepsScheme) layouts.firstOrNull { it.id == id }?.let { layout ->

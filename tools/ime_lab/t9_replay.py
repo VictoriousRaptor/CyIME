@@ -57,6 +57,41 @@ def choose_device(output, requested=None):
     return available[0]
 
 
+def pin_cpus(command, choice):
+    """(what was pinned, taskset prefix) for android-run --cpus: little / big (the slowest / fastest cpufreq policy
+    of the device) or a hex mask given as is.
+
+    A budget phone runs on cores of the little class, so a replay pinned to the little cluster of a flagship shows
+    what the engine costs there. The replay is one thread, so its per-key time is then CPU time on those cores.
+    """
+    if not choice:
+        return None, []
+    if choice in ("little", "big"):
+        found = []
+        for policy in command.shell("ls", "/sys/devices/system/cpu/cpufreq").split():
+            if not re.fullmatch(r"policy\d+", policy):
+                continue
+            base = "/sys/devices/system/cpu/cpufreq/" + policy
+            cpus = []
+            for part in command.shell("cat", base + "/related_cpus").replace(",", " ").split():
+                first, _, last = part.partition("-")
+                cpus.extend(range(int(first), int(last or first) + 1))
+            found.append((int(command.shell("cat", base + "/cpuinfo_max_freq").strip() or 0), cpus))
+        if not found:
+            raise ValueError("--cpus: no cpufreq policy on this device; give a hex mask")
+        found.sort()
+        khz, cpus = found[0] if choice == "little" else found[-1]
+        mask = format(sum(1 << cpu for cpu in cpus), "x")
+    else:
+        mask = format(int(choice, 16), "x")
+        khz = None
+    # What the shell may really use of that mask (a device can list cores its shell cannot run on).
+    match = re.search(r"^Cpus_allowed_list:\s*(\S+)", command.shell("taskset", mask, "cat", "/proc/self/status"), re.M)
+    if not match:
+        raise ValueError(f"--cpus: the shell cannot run on mask {mask}")
+    return {"choice": choice, "mask": mask, "max_khz": khz, "cpus_allowed": match.group(1)}, ["taskset", mask]
+
+
 def installed_apk(output):
     paths = [line.removeprefix("package:").strip() for line in output.splitlines() if line.startswith("package:")]
     if len(paths) != 1 or not paths[0].startswith("/data/app/") or not paths[0].endswith("/base.apk"):
@@ -312,7 +347,7 @@ def run_replay(args):
         save(output / "fixture.json", fixture)
     command = Commands(adb, output / "commands.log")
     remote = "/data/local/tmp/cyime-chat-audit-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    for name, default in (("variant", "digits"), ("schema", "t9_pinyin"), ("schema_patch", "")):
+    for name, default in (("variant", "digits"), ("schema", "t9_pinyin"), ("schema_patch", ""), ("cpus", "")):
         if not hasattr(args, name):
             setattr(args, name, default)
     letters = args.variant.startswith("letters")
@@ -320,7 +355,8 @@ def run_replay(args):
         raise ValueError("--variant letters goes with a 26-key --schema (rime_ice); digits with t9_pinyin")
     protocol = dict(key_delay_ms=args.key_delay_ms, row_limit=20, boundary_limit=100,
                     settle_timeout_ms=5000, modes=["continuous"] if letters else ["continuous", "paused"],
-                    variant=args.variant, schema=args.schema, schema_patch=args.schema_patch, runtime="android")
+                    variant=args.variant, schema=args.schema, schema_patch=args.schema_patch, runtime="android",
+                    **({"cpus": args.cpus} if args.cpus else {}))
     manifest = dict(format_version=1, status="running", fixture_sha256=digest(output / "fixture.json"),
                     protocol_settings=protocol, passes=PASSES, user_state="fresh_empty", personalization=False,
                     remote_root=remote, started_utc=datetime.now(timezone.utc).isoformat(),
@@ -336,6 +372,10 @@ def run_replay(args):
                               "model": command.shell("getprop", "ro.product.model").strip(),
                               "android": command.shell("getprop", "ro.build.version.release").strip()}
         abi = command.shell("getprop", "ro.product.cpu.abi").strip()
+        pinned, taskset = pin_cpus(command, args.cpus)
+        if pinned:
+            manifest["device"]["pinned"] = pinned
+            print(f"Pinned to CPUs {pinned['cpus_allowed']} (mask {pinned['mask']})", flush=True)
         print("Compiling standalone diagnostic runner (no APK build/install)", flush=True)
         dex = compile_runner(command, toolchain, output)
         manifest["compiled_runner_sources"] = {p.name: digest(p) for p in (output / "runner/src").glob("*.java")}
@@ -346,7 +386,7 @@ def run_replay(args):
         command.adb_run("push", str(dex), remote + "/replay.dex")
         command.adb_run("push", str(output / "fixture.json"), remote + "/fixture.json")
         print(f"Replaying {len(fixture['cases'])} cases on {command.serial}; immediate + paused", flush=True)
-        command.shell("env", "CLASSPATH=" + remote + "/replay.dex", "LD_LIBRARY_PATH=" + remote + "/lib",
+        command.shell("env", "CLASSPATH=" + remote + "/replay.dex", "LD_LIBRARY_PATH=" + remote + "/lib", *taskset,
                       "app_process", "/system/bin", "com.cyime.audit.ChatReplay", "--apk", remote + "/base.apk",
                       "--lib-dir", remote + "/lib", "--root", remote + "/run", "--corpus", remote + "/fixture.json",
                       "--output", remote + "/replay.jsonl", "--modes", ",".join(protocol["modes"]),
@@ -445,6 +485,9 @@ def main(argv=None):
     run.add_argument("--schema-patch", default="",
                      help='"key=value;..." written as <schema>.custom.yaml before deployment, e.g. '
                           '"translator/max_sentences=1;t9/sentence_rescore=false" to measure a setting off')
+    run.add_argument("--cpus", default="",
+                     help="pin the replay with taskset: little or big (slowest / fastest core cluster of the device) or a "
+                          "hex mask; little shows the per-key cost on budget-phone class cores")
     compare = sub.add_parser("compare", help="Compare two complete stored runs without a device")
     compare.add_argument("baseline", type=Path)
     compare.add_argument("candidate", type=Path)

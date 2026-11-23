@@ -60,6 +60,8 @@ internal fun floatingCornerResizeLimits(
     density: Float,
     /** 屏幕短边（dp），决定拖小的下限；和调节界面同一个算法。 */
     screenShortSideDp: Int = minOf(screenWidthDp, (hostHeightPx / density.coerceAtLeast(0.1f)).roundToInt()),
+    /** 按真实物理尺寸算的最低高度（[physicalKeyboardFloorDp]）；不传时只按屏幕短边。 */
+    physicalFloorDp: Int = Int.MAX_VALUE,
 ): FloatingCornerResizeLimits {
     val d = density.coerceAtLeast(0.1f)
     val bounds = floatingViewportBounds(hostWidthPx, hostHeightPx, bottomInsetPx)
@@ -67,9 +69,9 @@ internal fun floatingCornerResizeLimits(
     val availableWidthDp = (bounds.width / d).roundToInt()
     val availableHeightDp = (bounds.height / d).roundToInt()
     val widthRange = keyboardWidthBounds(screenWidthDp)
-    val minWidthDp = floatingResizeFloorWidthDp(screenShortSideDp, availableWidthDp)
+    val minWidthDp = floatingResizeFloorWidthDp(screenShortSideDp, availableWidthDp, physicalFloorDp)
     val heightRange = floatingResizeHeightBounds((hostHeightPx / d).roundToInt(), landscape)
-    val minContentDp = floatingResizeFloorContentDp(screenShortSideDp, availableHeightDp)
+    val minContentDp = floatingResizeFloorContentDp(screenShortSideDp, availableHeightDp, physicalFloorDp)
     return FloatingCornerResizeLimits(
         bounds = bounds,
         minWidth = (minWidthDp * d).coerceAtMost(start.width),

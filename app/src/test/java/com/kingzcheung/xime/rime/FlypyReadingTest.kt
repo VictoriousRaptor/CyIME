@@ -24,6 +24,15 @@ class FlypyReadingTest {
         assertEquals("ni'hao", merged14Preedit("BUGaO", "bu'gao", "ni hao"))
     }
 
+    /** 14 键双拼开着「双拼编码显示全拼」（11-21 他报开了还是双拼字母）：键都对上首选时显示全拼，只盖住前面时后面照打的键，对不上 null。 */
+    @Test fun mergedDoublePinyinShowsFullPinyinWhenAsked() {
+        assertEquals("ni'hao", mergedDoublePinyinFullPreedit("BUGC", flypyReading("ni hao"), "ni hao", merged14Groups))
+        assertEquals("ni'gc", mergedDoublePinyinFullPreedit("BUGC", flypyReading("ni"), "ni", merged14Groups))
+        assertEquals(null, mergedDoublePinyinFullPreedit("BUGC", flypyReading("wo men"), "wo men", merged14Groups))
+        assertEquals(null, mergedDoublePinyinFullPreedit("BU", flypyReading("ni hao"), "ni hao", merged14Groups))
+        assertEquals(null, mergedDoublePinyinFullPreedit("BUGC", "", "", merged14Groups))
+    }
+
     /** 双拼九键开着「编码显示双拼键」：数字按首选读音换成双拼键，两键一字；对不上时 null，照原来显示拼音。 */
     @Test fun nineKeyDoublePinyinShowsTheSchemeKeys() {
         val flypy = com.kingzcheung.xime.settings.DoublePinyinScheme.FLYPY

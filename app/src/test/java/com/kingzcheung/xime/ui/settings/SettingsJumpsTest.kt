@@ -46,6 +46,9 @@ class SettingsJumpsTest {
                 cursorGesture = CursorGestureMode.KEYBOARD, doublePinyinSemicolonOnShift = true),
             KeyboardInputPreferences(chineseGlideTyping = true, shiftSyllableSplit = true),
             KeyboardInputPreferences(t9GlideTyping = true),
+            // 九键空格上滑输入 0 ↔ 上滑取消（11-22），两个方向各一把。
+            KeyboardInputPreferences(t9SpaceSwipeUpZero = true),
+            KeyboardInputPreferences(spaceHold = com.kingzcheung.xime.ui.keyboard.SpaceHoldAction.VOICE_TOGGLE, voiceSwipeCancel = true),
         ).flatMap { InputGestureLocks.of(it) }.map { it.message }.distinct()
         assertTrue(all.size >= 7)
         for (message in all) {

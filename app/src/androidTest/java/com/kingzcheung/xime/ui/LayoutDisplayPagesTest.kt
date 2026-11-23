@@ -51,7 +51,8 @@ class LayoutDisplayPagesTest {
         }
     }
 
-    @Test fun nineKeyPageHoldsFourteenKeyFlickAndKanaSettings() {
+    @Test fun nineKeyPageHoldsFourteenKeyFlickAndKanaSettings() = withJapaneseOn(
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext) {
         rule.setContent { MaterialTheme { LayoutInputSettingsContent(LayoutInputCategory.Nine, onBack = {}) } }
         rule.onNodeWithText("拂动选字母").assertExists()
         rule.onNodeWithText("左右滑动选字母").performScrollTo().assertIsDisplayed()

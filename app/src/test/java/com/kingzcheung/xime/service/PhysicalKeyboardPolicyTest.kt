@@ -144,4 +144,54 @@ class PhysicalKeyboardPolicyTest {
         assertFalse("不按 Shift 的符号本来就走 Rime", hardwareSymbolIsLiteral("'", shifted = false, numpad = false, chinesePunctuation = true))
         assertFalse("Shift 字母不归这里管", hardwareSymbolIsLiteral("A", shifted = true, numpad = false, chinesePunctuation = false))
     }
+
+    @Test fun `digits and a dot after an all-capitals composition are typed as they are`() {
+        assertTrue(compositionIsAllCapitals("N"))
+        assertTrue(compositionIsAllCapitals("AGENTS"))
+        assertFalse("夹着拼音照旧", compositionIsAllCapitals("zuogeDNA"))
+        assertFalse(compositionIsAllCapitals("ni"))
+        assertFalse(compositionIsAllCapitals(""))
+        assertFalse(compositionIsAllCapitals(null))
+        for (key in listOf("0", "1", "9", ".")) assertTrue(key, capitalsKeepLiteralKey(key))
+        for (key in listOf(",", "a", "N", "10", "space", "。")) assertFalse(key, capitalsKeepLiteralKey(key))
+    }
+
+    /** 屏幕键盘数字行的大写例外只在雾凇 26 键：14 键打 di 送进引擎的是 DU，点 2 还要得到「第2」（11-22 审查）。 */
+    @Test fun `screen digit keeps capitals only on the 26-key rime_ice scheme`() {
+        assertTrue(screenDigitKeepsCapitals("rime_ice", "N"))
+        assertFalse("26 键拼音照旧先上屏候选", screenDigitKeepsCapitals("rime_ice", "di"))
+        assertFalse("14 键合并键是大写代表字母", screenDigitKeepsCapitals("pinyin_14jian", "DU"))
+        assertFalse("双拼 14 键同样", screenDigitKeepsCapitals("double_pinyin_flypy_14jian", "DU"))
+        assertFalse(screenDigitKeepsCapitals("t9_pinyin", "34"))
+    }
+
+    /** 要在实体键盘数字选词、. 翻页之前拦下，不然 N1 的 1 还是会选词。 */
+    @Test fun `the capitals check runs before digit selection and paging`() {
+        val src = java.io.File("src/main/java/com/kingzcheung/xime/service/ImeKeyRouter.kt").readText()
+        val body = src.substringAfter("private fun routeKeyPress(")
+        val capitals = body.indexOf("compositionIsAllCapitals(")
+        assertTrue(capitals > 0)
+        assertTrue(capitals < body.indexOf("if (processHardwareCandidateKey(hardwareEvent)) return@command"))
+        assertTrue(capitals < body.indexOf("if (hardwarePageDirection != 0 &&"))
+    }
+
+    /**
+     * #548：, . 是翻页键，从 onKeyDown 的翻页分支进来时不带 hardwareEvent。数字后半角（#527）和大写后原样（#528）
+     * 都得认 hardwarePageDirection，不然 104 里 123. 还是「。」、AGENTS. 的点还是翻页。
+     */
+    @Test fun `paging keys also get the digit and capitals rules`() {
+        val router = java.io.File("src/main/java/com/kingzcheung/xime/service/ImeKeyRouter.kt").readText()
+        val body = router.substringAfter("private fun routeKeyPress(")
+        val physical = body.indexOf("val physical = hardwareEvent != null || hardwarePageDirection != 0")
+        assertTrue(physical > 0)
+        assertTrue(physical < body.indexOf("compositionIsAllCapitals("))
+        val pagedDigit = body.indexOf("if (hardwareEvent == null && hardwarePageDirection != 0 && !zhuyinHardwareActive() &&")
+        assertTrue(pagedDigit > 0)
+        assertTrue("要在翻页之前", pagedDigit < body.indexOf("if (hardwarePageDirection != 0 &&"))
+        val service = java.io.File("src/main/java/com/kingzcheung/xime/service/XimeInputMethodService.kt").readText()
+        assertTrue("翻页分支仍然不带 hardwareEvent，规则靠方向认",
+            "keyRouter.handleKeyPress(symbol, e.isShiftPressed, hardwarePageDirection = pageDirection)" in service)
+        assertTrue(digitSeparatorStaysHalfWidth(".", "3"))
+        assertTrue(digitSeparatorStaysHalfWidth(",", "1"))
+    }
 }

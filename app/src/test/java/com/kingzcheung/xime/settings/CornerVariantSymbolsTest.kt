@@ -169,4 +169,17 @@ class CornerVariantSymbolsTest {
         val row = listOf("“", "", "你好", "\\", "", "「", "")
         assertEquals(row, SymbolRowText.parse(SymbolRowText.format(row), row.size))
     }
+
+    @Test fun `a phrase may end with spaces`() {
+        // 用户 11-22：半角符号后面加空格（「, 」）不能被吞。
+        assertEquals("「, 」a", SymbolRowText.format(listOf(", ", "a")))
+        assertEquals(listOf(", ", "a"), SymbolRowText.parse("「, 」a", 2))
+        assertEquals(listOf("ok\u3000", "b"), SymbolRowText.parse("「ok\u3000」b", 2))
+        val row = listOf(", ", "", ". ", "你好", "")
+        assertEquals(row, SymbolRowText.parse(SymbolRowText.format(row), row.size))
+        // 空格后面还有字照旧是几格；「 」照旧是符号加空位。
+        assertEquals(listOf("「", "a", "", "b"), SymbolRowText.parse("「a b」", 4))
+        assertEquals(listOf("「", "", "」"), SymbolRowText.parse("「 」", 3))
+        assertEquals(listOf("「", "a", "", ""), SymbolRowText.parse("「a  ", 4))
+    }
 }

@@ -90,6 +90,8 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
         SHIFT_SYLLABLE_SPLIT, SEMICOLON_ON_SHIFT, DOUBLE_PINYIN_AUX_CODE,
         /** 字母键显示大写 ↔ 中文键盘字母显示大写。 */
         UPPERCASE_KEY_LABELS, CHINESE_UPPERCASE_KEY_LABELS,
+        /** 九键空格上滑输入 0 ↔ 按住空格说话时上滑取消：都用空格往上滑。 */
+        VOICE_SWIPE_CANCEL, T9_SPACE_UP_ZERO,
     }
 
     /** 设置页在被锁的那一项下面显示这句。 */
@@ -110,6 +112,13 @@ data class InputGestureLock(val option: Option, val lockedValue: Any, val by: St
 object InputGestureLocks {
     /** 九键滑行锁角标时写的名字；设置页据此只说九键的事（26 键字母键不受它影响，照自己的滑行开关）。 */
     const val T9_GLIDE_LOCK = "九键滑行"
+    /** 锁定提示里写的两项设置名：「」里的名字点一下跳过去（见 SettingsJumps），改名时同步改设置页和搜索索引。 */
+    const val T9_SPACE_UP_ZERO_LOCK = "九键与 14 键 › 空格上滑输入 0"
+    const val VOICE_SWIPE_CANCEL_LOCK = "长按空格 › 上滑取消"
+
+    /** 「上滑取消」真在起作用：开着，并且长按空格是语音（只有按住说话时才有上滑取消）。 */
+    fun voiceSwipeCancelActive(settings: KeyboardInputPreferences): Boolean =
+        settings.voiceSwipeCancel && settings.effectiveSpaceHold == SpaceHoldAction.VOICE_TOGGLE
 
     fun of(settings: KeyboardInputPreferences): List<InputGestureLock> = buildList {
         if (settings.t9GlideTyping && settings.cursorGesture != CursorGestureMode.KEYBOARD) {
@@ -139,6 +148,14 @@ object InputGestureLocks {
             add(InputGestureLock(InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true, "ing 放在 Shift 键上"))
         } else if (settings.shiftSyllableSplit) {
             add(InputGestureLock(InputGestureLock.Option.SEMICOLON_ON_SHIFT, true, "Shift 键分词"))
+        }
+        // 九键空格上滑输入 0 ↔ 按住说话上滑取消（他 11-22：上滑设成 0 了，上滑就不能再做别的）：先开的锁住另一个。
+        // 两个都开着（加锁以前、备份恢复）时都不锁，关哪个都行。
+        val voiceCancel = voiceSwipeCancelActive(settings)
+        if (settings.t9SpaceSwipeUpZero && !voiceCancel) {
+            add(InputGestureLock(InputGestureLock.Option.VOICE_SWIPE_CANCEL, true, T9_SPACE_UP_ZERO_LOCK))
+        } else if (voiceCancel && !settings.t9SpaceSwipeUpZero) {
+            add(InputGestureLock(InputGestureLock.Option.T9_SPACE_UP_ZERO, true, VOICE_SWIPE_CANCEL_LOCK))
         }
         if (settings.doublePinyinAuxCode) {
             add(InputGestureLock(InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true, "双拼辅助码"))

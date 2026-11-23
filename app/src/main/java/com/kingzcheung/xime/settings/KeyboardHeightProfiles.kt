@@ -4,6 +4,7 @@ import android.content.Context
 import com.kingzcheung.xime.ui.keyboard.floatingResizeHeightBounds
 import com.kingzcheung.xime.ui.keyboard.floatingStoredHeightBounds
 import com.kingzcheung.xime.ui.keyboard.keyboardHeightBounds
+import com.kingzcheung.xime.ui.keyboard.keyboardHeightFloorDp
 
 /** 固定键盘继续使用原有高度键；悬浮高度独立保存，横竖屏互不覆盖。 */
 internal object KeyboardHeightProfiles {
@@ -16,12 +17,26 @@ internal object KeyboardHeightProfiles {
     private fun floatingKey(landscape: Boolean) =
         if (landscape) FLOATING_HEIGHT_LANDSCAPE else FLOATING_HEIGHT
 
+    /**
+     * 拖动、确认和读已存高度用的范围：下限按真实物理尺寸算（用户 11-22，见 [keyboardHeightFloorDp]），
+     * 只比原来的 244dp 低；上限不变。
+     */
     fun fixedBounds(context: Context, landscape: Boolean): IntRange =
+        keyboardHeightBounds(context.resources.configuration.screenHeightDp, landscape,
+            minHeightDp = keyboardHeightFloorDp(context))
+
+    /** 算默认高度用的范围，和 1.15.104 一样（下限 244dp）：默认高度不跟着新下限变。 */
+    fun defaultBounds(context: Context, landscape: Boolean): IntRange =
         keyboardHeightBounds(context.resources.configuration.screenHeightDp, landscape)
 
+    /** 没调过时显示的固定高度（「重置」回到的也是它），和 1.15.104 一样。 */
+    fun defaultFixed(context: Context, landscape: Boolean): Int =
+        SettingsPreferences.getDefaultKeyboardHeightDp(context, landscape).coerceIn(defaultBounds(context, landscape))
+
     fun fixed(context: Context, landscape: Boolean): Int =
-        SettingsPreferences.getKeyboardHeightDp(context, landscape)
-            .coerceIn(fixedBounds(context, landscape))
+        if (hasSavedHeight(context, false, landscape))
+            SettingsPreferences.getKeyboardHeightDp(context, landscape).coerceIn(fixedBounds(context, landscape))
+        else defaultFixed(context, landscape)
 
     fun floating(context: Context, landscape: Boolean, hostHeightDp: Int): Int {
         val stored = SettingsPreferences.getPrefsPublic(context).getInt(floatingKey(landscape), 0)
@@ -112,7 +127,7 @@ internal object KeyboardHeightProfiles {
         }
         if (prefs.contains(key) && raw < bounds.first) {
             editor.putInt("${key}_before_height_profiles", raw)
-            editor.putInt(key, SettingsPreferences.getDefaultKeyboardHeightDp(context, landscape).coerceIn(bounds))
+            editor.putInt(key, defaultFixed(context, landscape))
         }
         // 同一 editor 批量写入，监听器不会读到“已打迁移标记但高度尚未修复”的半成品。
         editor.apply()

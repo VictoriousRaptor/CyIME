@@ -30,6 +30,13 @@ fun SchemaListView(
     modifier: Modifier = Modifier, availableSchemas: List<SchemaInfo> = schemas,
     /** 点了布局（不是方案）：手写开着时要回到所选的键盘布局。 */
     onSelectLayout: (String) -> Unit = onSelectSchema,
+    /**
+     * 键盘里为 true：读装着的方案，方案一行和「语言与方案」列同一份（[SchemaPicking]）——关着的五笔、仓颉、
+     * 注音等也列出，点了启用（用户 11-22：设置里有，键盘面板里没有）。
+     */
+    listInstalled: Boolean = false,
+    /** 点了关着的方案：面板先收起，启用和部署在后台做完再换上。 */
+    onClose: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val all = InputModes.available((schemas + availableSchemas).distinctBy { it.schemaId })
@@ -37,7 +44,17 @@ fun SchemaListView(
     val current = all.firstOrNull { it.schemaId == currentSchemaId }
     val entries = all.filter { current != null && it.profile.language == current.profile.language }
     var layoutId by remember(currentSchemaId, current?.profile) { mutableStateOf(current?.profile?.layout?.id) }
-    val schemes = entries.filter { entry -> layoutId?.let { InputProfileSelection.offers(entry, it, all) } == true }
+    // 方案一行和设置页同一个来源、同一个函数：每种方案一张卡片，当前布局没有的方案（注音、笔画）用它自己的布局。
+    val switchable = (schemas + availableSchemas).map { it.schemaId }.toSet()
+    val installed by produceState<Pair<List<SchemaInfo>, List<String>>?>(null, listInstalled) {
+        if (listInstalled) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            SchemaManager.discoverSchemas(context).map { it.toSchemaInfo() } to SchemaManager.getEnabledSchemas(context)
+        }
+    }
+    val pool = InputModes.ordered(context, installed?.let { (found, enabled) ->
+        SchemaPicking.offered((all + found).distinctBy { it.schemaId }, enabled + switchable)
+    } ?: all)
+    val schemes = current?.let { SchemaPicking.schemeRow(pool, it) }.orEmpty()
     BoxWithConstraints(modifier.fillMaxWidth().keyboardPanelBackground(backgroundColor).testTag("input-profile-panel")) {
     val density = LocalDensity.current
     val display = LocalView.current.display
@@ -74,6 +91,7 @@ fun SchemaListView(
             LayoutPreviewChoices(layouts, current.profile.language, layoutId,
                 "profile-layout-list", itemTagPrefix = "panel-layout:",
                 unavailableIds = switches.filterValues { it?.keepsScheme == false }.keys,
+                unavailableNotes = InputProfileSelection.unavailableNotes(current, switches),
                 rowHeight = layoutHeight,
                 qwertyPreviewStagger = qwertyStagger,
                 onManage = {
@@ -107,7 +125,19 @@ fun SchemaListView(
                     // 只会把旧页面拉到前面、收不到 onNewIntent，看起来就是点了没反应；和齿轮、长按菜单走同一个入口。
                     context.startActivity(com.kingzcheung.xime.service.settingsActivityIntent(context,
                         com.kingzcheung.xime.ui.settings.SettingsRoutes.Schema))
-                }, onSelect = onSelectSchema)
+                }) { id ->
+                if (id in switchable) onSelectSchema(id)
+                else schemes.firstOrNull { it.schemaId == id }?.let { entry ->
+                    // 关着的方案：和设置页一样启用并部署，好了键盘自动换上；面板先收起，不用等。
+                    android.widget.Toast.makeText(context, "正在启用${entry.schemeLabel}，几秒后自动换上",
+                        android.widget.Toast.LENGTH_SHORT).show()
+                    SchemaPicking.enableAndPick(context, id, entry.profile.language) { ok ->
+                        if (!ok) android.widget.Toast.makeText(context, "方案部署失败，到「已安装的方案」点「重新部署(修复)」可看原因",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    onClose()
+                }
+            }
         }
     }
     }

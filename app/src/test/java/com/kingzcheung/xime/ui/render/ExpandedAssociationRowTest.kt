@@ -66,7 +66,7 @@ class ExpandedAssociationRowTest {
                 modifier = Modifier.width(411.dp).height(280.dp).testTag("keyboard"),
                 candidateState = snapshot, inputSessionManagedByHost = true)
         }
-        rule.pullOpenCandidates()
+        rule.onNodeWithTag("candidate-expansion").performClick()
         rule.waitForIdle()
         rule.onNodeWithTag("expanded-candidates").assertExists()
         val inBar = rule.onAllNodesWithTag("candidate-fixed-strip", true).fetchSemanticsNodes().let {

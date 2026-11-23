@@ -57,11 +57,9 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
         .filter { it.schemaId in profilesState.enabledSchemas }.map { it.toSchemaInfo() })
     // 一步选方案（用户 11-01 批准）：关着的内置方案（全拼 14 键、内置双拼）和它们的组合（如小鹤 14 键）也列在
     // 布局、方案里，点了自动启用并部署，不用先去「已安装的方案」打开再回来。
-    val installedIds = profilesState.allSchemas.map { it.schemaId }.toSet()
-    val offeredIds = CyimeInputDefaults.withCompanions(
-        (profilesState.enabledSchemas + CyimeInputDefaults.listedWhenOff).filter { it in installedIds }.distinct(), installedIds).toSet()
-    val pickableProfiles = InputModes.ordered(context, profilesState.allSchemas
-        .filter { it.schemaId in offeredIds || it.schemaId in profilesState.enabledSchemas }.map { it.toSchemaInfo() })
+    // 键盘里的方案面板用同一个 [SchemaPicking.offered]，两边列的方案一样（11-22）。
+    val pickableProfiles = InputModes.ordered(context,
+        SchemaPicking.offered(profilesState.allSchemas.map { it.toSchemaInfo() }, profilesState.enabledSchemas))
     val dragOrder = rememberDragOrder(orderedLanguages.map { it.id }) { ids ->
         InputModes.saveLanguageOrder(context, ids)
         orderedLanguages = InputModes.languageOrder(context)
@@ -71,6 +69,22 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
         orderedLanguages = InputModes.languageOrder(context)
         profilesModel.refresh()
         remembered = InputModes.rememberedModes(context)
+    }
+    // 开关日语这类带方案的语言后，方案在后台编译：开关当下读到的方案列表还不全，日语一直显示「正在准备可用组合」、
+    // 中文摘要也读成别的布局，要退出再进才对（105 平板 11-22）。后台准备好、部署完时再读一次。
+    DisposableEffect(Unit) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == LanguagePreferences.SCHEMAS_READY_KEY || key == com.kingzcheung.xime.rime.RimeConfigHelper.DEPLOYMENT_REVISION ||
+                key == LanguagePreferences.KEY) {
+                languages = LanguagePreferences.enabled(context)
+                orderedLanguages = InputModes.languageOrder(context)
+                profilesModel.refresh()
+                remembered = InputModes.rememberedModes(context)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     KeyboardSettingsScaffold("语言与方案", onBack, preview = true, modifier = Modifier.testTag("language-settings")) { modifier ->
         SettingsSearchAutoScroll(dragOrder.list)
@@ -125,6 +139,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                         languages = LanguagePreferences.enabled(context)
                                         orderedLanguages = InputModes.languageOrder(context)
                                         profilesModel.refresh()
+                                        remembered = InputModes.rememberedModes(context)
                                         if (enabled) expandedLanguage = language
                                         message = if (enabled) "已开启" else "已关闭，已下载词库保留"
                                     } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
@@ -157,12 +172,8 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                             } else if (!saving) scope.launch {
                                 saving = true
                                 try {
-                                    withContext(Dispatchers.IO) {
-                                        // 组合（如小鹤 14 键）启用它需要的双拼和 14 键，组合本身由 setEnabledSchemas 补上。
-                                        val needs = CyimeInputDefaults.companionNeeds(entry.schemaId) ?: listOf(entry.schemaId)
-                                        SchemaManager.setEnabledSchemas(context, (SchemaManager.getEnabledSchemas(context) + needs).distinct())
-                                        LanguagePreferences.enableForSchema(context, entry.schemaId)
-                                    }
+                                    // 组合（如小鹤 14 键）启用它需要的双拼和 14 键，组合本身由 setEnabledSchemas 补上。
+                                    withContext(Dispatchers.IO) { SchemaPicking.enable(context, entry.schemaId) }
                                     profilesModel.refresh()
                                     // 关着的方案（笔画、仓颉等）点了也要像开着的一样换上：以前只启用不换，键盘还是拼音，
                                     // 以为点的是笔画、其实在拼音键盘上打（11-06）。部署完再换，没编译好的方案键盘会退回第一个方案。

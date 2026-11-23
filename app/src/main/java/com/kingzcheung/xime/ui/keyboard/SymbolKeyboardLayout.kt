@@ -118,20 +118,26 @@ fun SymbolKeyboardLayout(
     // The spacing scope hands back a fresh modifier; keep the host's glass inheritance marker,
     // otherwise the panel paints a second keyboard background over the glass.
     val inheritBackground = modifier.inheritsKeyboardBackground()
+    // 键缝动效的光层（默认关，关着时是 null）：点符号键打开这一页时从符号键的位置扩开（用户 11-22），
+    // 和数字页、常用符号页一样点按也有键缝光。
+    val gapLight = rememberKeyGapLight()
     KeyboardKeySpacingScope(modifier.padding(bottom = bottomPaddingDp.dp),
         policy = KeyVisualPolicy.Qwerty, allowShrink = isFloatingMode, applyGutter = true,
         growthSpacing = keySpacing) { bodyModifier ->
     CompositionLocalProvider(LocalKeyVisualPadding provides PaddingValues(
         horizontal = keySpacing.first?.dp ?: 2.dp,
         vertical = keySpacing.second?.dp ?: 2.dp,
-    )) {
-    Column(
+    ), LocalKeyGapLight provides gapLight) {
+    Box(
         modifier = bodyModifier
             .fillMaxWidth()
             .inheritKeyboardBackground(inheritBackground)
             .keyboardPanelBackground(backgroundColor)
             .padding(bottom = KeyboardGridBottomMargin)
     ) {
+    // 最先画 = 在所有键帽底下，只从键缝里露出来。
+    KeyGapLightLayer(gapLight, Modifier.matchParentSize())
+    Column(modifier = Modifier.fillMaxSize()) {
         // 内容区：符号网格 + HorizontalPager
         BoxWithConstraints(
             modifier = Modifier
@@ -297,6 +303,7 @@ fun SymbolKeyboardLayout(
             )
         }
 
+    }
     }
     }
     }

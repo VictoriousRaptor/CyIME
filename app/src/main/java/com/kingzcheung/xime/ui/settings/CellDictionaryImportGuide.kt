@@ -19,6 +19,7 @@ import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -32,8 +33,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun CellDictionaryImportGuide(onDismiss: () -> Unit, onImport: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss,
+        modifier = Modifier.windowInsetsPadding(SheetOuterInsets),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        contentWindowInsets = sheetContentInsets) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
             .padding(horizontal = 24.dp).padding(bottom = 16.dp).testTag("cell-dictionary-import-guide"),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {

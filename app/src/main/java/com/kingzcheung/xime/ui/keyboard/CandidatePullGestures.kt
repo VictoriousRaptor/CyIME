@@ -7,7 +7,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -34,6 +40,8 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +86,8 @@ private class RubberBand(private val scope: CoroutineScope, private val haptic: 
     var shown by mutableFloatStateOf(0f)
     /** 只认的方向：1 往右，-1 往左，0 两边都算。拉过头折回来最多回到 0，不会拉到另一边去。 */
     var direction = 0f
+    /** 这一下是能左右滑的候选行滑到头以后多出来的（嵌套滚动喂进来），松手由 onPreFling 结算，不由手势那边弹回。 */
+    var nested = false
     private var raw = 0f
     private var armed = false
     private var job: Job? = null
@@ -161,12 +171,13 @@ private fun Modifier.rubberBandDrag(band: RubberBand, enabled: () -> Boolean, di
             }
             // 不是拉（点候选、长按）：手指抬起来以后再接着弹回，按着时不动，点到的就是看到的那个。
             while (currentEvent.changes.any { it.pressed }) awaitPointerEvent(PointerEventPass.Final)
-            band.release(false)
+            // 能滑的候选行滑到头再拉（嵌套滚动）：松手时由列表的 onPreFling 判断展开没有，这里不抢着弹回。
+            if (!band.nested) band.release(false)
         }
     }
 
 /**
- * 包住候选栏里的候选行：往右拉过门槛松手调 [onExpand]；给了 [onCollapse]（展开着）时改成往左拉过门槛松手调它。
+ * 包住候选栏里的候选行：往左拉过门槛松手调 [onExpand]（和合并前一样，往左拉就展开）；给了 [onCollapse]（展开着）时改成往右拉过门槛松手调它（11-21 他：合并后方向反了）。
  * [enabled] 为 false（没有更多候选、滑行预览）且没有 [onCollapse] 时不拉，行为和以前一样。
  */
 @Composable
@@ -176,6 +187,8 @@ internal fun PullToExpandCandidates(
     hintColor: Color,
     modifier: Modifier = Modifier,
     onCollapse: (() -> Unit)? = null,
+    /** 左边「<」和第一个候选之间的空白（4dp）：画在拉动区里，按在这里也拉得动；点一下照旧算点最近的候选（#274）。 */
+    leadingGap: Dp = 0.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val band = rememberRubberBand()
@@ -184,20 +197,56 @@ internal fun PullToExpandCandidates(
     val currentCollapsing by rememberUpdatedState(collapsing)
     val currentExpand by rememberUpdatedState(onExpand)
     val currentCollapse by rememberUpdatedState(onCollapse)
+    // 1.15.101 的候选行能左右滑（11-21 恢复）：滑到头还往左拉，多出来的距离拉动整行，过门槛松手展开；
+    // 展开着滑到最前还往右拉就收回。没滑到头时照旧只是滑候选，▾ 按钮照旧。
+    val overscrollPull = remember(band) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (!band.nested || source != NestedScrollSource.UserInput) return Offset.Zero
+                val dx = available.x
+                // 拉出来以后往回走：先收回拉出的这段，列表不动。
+                if (band.shown < 0f && dx > 0f || band.shown > 0f && dx < 0f) {
+                    band.move(dx)
+                    return Offset(dx, 0f)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput || !currentEnabled) return Offset.Zero
+                val dir = if (currentCollapsing) 1f else -1f
+                val dx = available.x
+                if (dx == 0f || !band.nested && sign(dx) != dir) return Offset.Zero
+                band.direction = dir
+                band.nested = true
+                band.move(dx)
+                return Offset(dx, 0f)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (!band.nested) return Velocity.Zero
+                band.nested = false
+                if (band.release(true)) { if (currentCollapsing) currentCollapse?.invoke() else currentExpand() }
+                return available
+            }
+        }
+    }
     Box(
         modifier
             .clipToBounds()
             .testTag("candidate-pull-expand")
+            .nestedScroll(overscrollPull)
             .semantics {
                 if (collapsing) customActions = listOf(CustomAccessibilityAction("收回候选") { currentCollapse?.invoke(); true })
                 else if (enabled) customActions = listOf(CustomAccessibilityAction("展开候选") { currentExpand(); true })
             }
-            .rubberBandDrag(band, { currentEnabled }, { if (currentCollapsing) -1f else 1f }) {
+            .rubberBandDrag(band, { currentEnabled }, { if (currentCollapsing) 1f else -1f }) {
                 if (currentCollapsing) currentCollapse?.invoke() else currentExpand()
             },
     ) {
+        if (leadingGap > 0.dp) Spacer(Modifier.align(Alignment.CenterStart).width(leadingGap).fillMaxHeight().candidateGapTaps())
         // 位移只在画的时候读，拉动时候选行不重组。
-        Box(Modifier.graphicsLayer { translationX = band.shown }) { content() }
+        Box(Modifier.align(Alignment.CenterStart).padding(start = leadingGap).graphicsLayer { translationX = band.shown }) { content() }
         PullHint(band, hintColor, if (collapsing) "收起" else "展开")
     }
 }
@@ -217,7 +266,7 @@ private fun BoxScope.PullHint(band: RubberBand, hintColor: Color, verb: String) 
 }
 
 /**
- * 展开页的候选区：左右划过门槛松手调 [onCollapse]，页面跟手挪，不够就弹回。
+ * 展开页的候选区：往右划过门槛松手调 [onCollapse]，页面跟手挪，不够就弹回；往左划不动（只在「候选滑到头回弹展开」打开时有）。
  * 上下划照旧滚列表；只认横着划（先过横向触摸阈值才算），不影响点候选、长按。
  */
 @Composable
@@ -227,7 +276,8 @@ internal fun Modifier.swipeToCollapse(onCollapse: (() -> Unit)?): Modifier {
     val currentCollapse by rememberUpdatedState(onCollapse)
     return this
         .semantics { customActions = listOf(CustomAccessibilityAction("收回候选") { currentCollapse(); true }) }
-        .rubberBandDrag(band, { true }) { currentCollapse() }
+        // 只认往右划（和候选栏上展开着往右拉收回同一方向，11-21 他：展开后往回划收起）。
+        .rubberBandDrag(band, { true }, { 1f }) { currentCollapse() }
         .graphicsLayer {
             translationX = band.shown
             alpha = 1f - 0.3f * (abs(band.shown) / (band.threshold * PULL_MAX_FACTOR)).coerceIn(0f, 1f)

@@ -264,7 +264,7 @@ class LiteralInputModesImeTest {
         setWidthFromMenu(false)
         rule.onAllNodesWithText(",").onLast().performTouchInput { click() }
         assertSettled("," + fullComma + ",")
-        rule.onNodeWithTag("candidate-pull-expand").assertDoesNotExist()
+        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
         // A separate symbol-page path uses onCommitText and must obey the same switch.
         if (schema != "japanese_kana") {
             rule.onNodeWithTag("mode-slot-1", true).performTouchInput { click() }
@@ -280,7 +280,7 @@ class LiteralInputModesImeTest {
         listOf("qw" to "1", "zx" to "1*", "er" to "1*2", "ty" to "1*23").forEach { (key, output) ->
             swipeUp(key)
             assertSettled(output)
-            rule.onNodeWithTag("candidate-pull-expand").assertDoesNotExist()
+            rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
             rule.onNodeWithTag("candidate-preedit").assertDoesNotExist()
         }
         tap("qw")
@@ -288,7 +288,7 @@ class LiteralInputModesImeTest {
         swipeUp("qw")
         rule.waitUntil(5000) { text().endsWith("1") && engine.readPinyinEditSnapshot().firstOrNull().isNullOrEmpty() }
         android.os.SystemClock.sleep(600)
-        rule.onNodeWithTag("candidate-pull-expand").assertDoesNotExist()
+        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
         rule.onNodeWithTag("candidate-preedit").assertDoesNotExist()
     }
 

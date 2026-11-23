@@ -413,12 +413,11 @@ object SetupGuidePlanner {
         val voiceNeeded = answers.voice != VoiceUse.NEVER || answers.caption
         // 字幕只用说完出字时一整句一下子冒出来，看的人跟不上，所以用字幕也配边说边出字。
         var streaming = voiceNeeded && !light && !tight && !saver && (answers.voice == VoiceUse.OFTEN || answers.caption)
-        // 整句精修（X-ASR，136 MB）：用语音就推荐。同一批录音错字 8.5% → 5.5%，比 SenseVoice 定稿还快，
-        // 只用 SenseVoice 时也由它定稿、不再加载 SenseVoice（2026-11-01 复测，用户「就按你说的」）。
-        // 空间紧张时不新下；已经下好的留着，空间极紧才删。
-        // 有内存焦虑：已经下好的也删，以后在语音设置里还能下。
+        // 整句精修（X-ASR，136 MB）：不再主动推荐下载。11-01 的「8.5% → 5.5%」是电脑外放给平板听、多半靠网络录音拉开的；
+        // 用户本人在平板上实际说话 X-ASR 明显不如 SenseVoice（2026-11-22），整句定稿默认改回 SenseVoice，X-ASR 要在语音页自己选。
+        // 已经下好的留着（可能选着它），空间极紧或有内存焦虑才删，以后在语音设置里还能下。
         var xasr = answers.voice != VoiceUse.NEVER && !saver &&
-            (!tight || SpeechModelCatalog.XASR in facts.installed && !veryTight)
+            SpeechModelCatalog.XASR in facts.installed && !veryTight
         if (answers.voice == VoiceUse.OFTEN && !streaming) notes += when {
             light -> "这台${facts.device}${memoryText(facts.memoryBytes)}，边说边出字要同时跑两个语音模型，容易卡，先用「说完一句出字」。"
             saver && !tight -> "选了能省就省，先用「说完一句出字」，少占 226 MB。"
@@ -520,7 +519,7 @@ object SetupGuidePlanner {
         }
         SpeechModelCatalog.PARAFORMER -> if (answers.voice == VoiceUse.OFTEN) "说话时字就跟着出来，不用等说完。"
             else "字幕边听边出字，看的人跟得上。"
-        SpeechModelCatalog.XASR -> "说完后把整句中文再认一遍，错字比只用上面的少三分之一，也更快。"
+        SpeechModelCatalog.XASR -> "已经下好了，留着：语音设置「说完后」里可以选它整句定稿。"
         SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA -> "你已经给日语选了它，保留。"
         BuiltinModelCatalog.SPEAKER_MODEL -> "字幕里分清是谁在说话。"
         CandidateModelCatalog.NGRAM -> "九键、全拼和双拼按整句常用说法组词，长句一次打对的更多。"
@@ -549,7 +548,7 @@ object SetupGuidePlanner {
         SpeechModelCatalog.XASR -> when {
             answers.voice == VoiceUse.NEVER && !answers.caption -> "不用语音，也不用字幕。"
             answers.voice == VoiceUse.NEVER -> "只用字幕，用不到它。"
-            else -> "剩余空间不多，先不多下 136 MB；空间够了再到语音设置里下载，中文整句更准。"
+            else -> "剩余空间不多，删掉省 136 MB；整句定稿照旧能用。"
         }
         SpeechModelCatalog.ZIPFORMER -> if (answers.voice == VoiceUse.NEVER && !answers.caption) "不用语音，也不用字幕。"
             else "和「边说边出字」作用重复。"

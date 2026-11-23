@@ -33,7 +33,21 @@ enum class HapticMode(val value: String) {
 
 class FeedbackManager(private val context: Context) {
 
+    @Volatile
     private var soundPool: SoundPool? = null
+
+    /**
+     * 按键音在自己的线程上放。#529（华为 CDY-AN00，Android 10）日志里主线程卡在 SoundPool.play 上 1 秒，
+     * 紧跟着的两次点候选被丢掉；音频服务忙时 play 会同步等，不能让它挡住打字。用到才建线程。
+     */
+    @Volatile
+    private var soundHandler: android.os.Handler? = null
+
+    private fun soundHandler(): android.os.Handler = soundHandler ?: synchronized(this) {
+        soundHandler ?: android.os.Handler(
+            android.os.HandlerThread("key-sound", android.os.Process.THREAD_PRIORITY_AUDIO).apply { start() }.looper
+        ).also { soundHandler = it }
+    }
     private val soundIds = mutableMapOf<String, Int>()
 
     private val vibrator: Vibrator by lazy {
@@ -130,6 +144,11 @@ class FeedbackManager(private val context: Context) {
         fun enabledUsesTouchUsage(enabled: Boolean, samsungTuned: Boolean, systemHapticEnabled: Boolean): Boolean =
             enabled && !samsungTuned && systemHapticEnabled
 
+        /** 声音线程卡住后才轮到的按键音不再补放：迟到一大截的一串声音比没有更乱。 */
+        const val STALE_SOUND_MS = 150L
+
+        fun soundIsStale(postedAt: Long, now: Long): Boolean = now - postedAt > STALE_SOUND_MS
+
         /** 删除音连发时只保留最新一层；其他按键音照常可以重叠。 */
         fun chokesPrevious(keyType: String): Boolean = keyType == "delete"
 
@@ -224,8 +243,14 @@ class FeedbackManager(private val context: Context) {
         prefsListener?.let {
             SettingsPreferences.getPrefsPublic(context).unregisterOnSharedPreferenceChangeListener(it)
         }
-        soundPool?.release()
-        soundPool = null
+        val handler = soundHandler
+        if (handler == null) {
+            soundPool?.release()
+            soundPool = null
+        } else {
+            handler.post { soundPool?.release(); soundPool = null }
+            handler.looper.quitSafely()
+        }
         feedbackScope.cancel()
     }
 
@@ -292,10 +317,13 @@ class FeedbackManager(private val context: Context) {
                     val capturable = SettingsPreferences.getPrefsPublic(context).getBoolean(KEY_SOUND_CAPTURABLE, false)
                     if (capturable != soundCapturable) {
                         // 音频用途在 SoundPool 建立时固定，切换时重建（十几个小文件，重新加载很快）。
+                        // 在声音线程上换，免得正在放的那一下用到已释放的 SoundPool。
                         soundCapturable = capturable
-                        soundPool?.release()
-                        soundIds.clear()
-                        initSoundPool()
+                        soundHandler().post {
+                            soundPool?.release()
+                            soundIds.clear()
+                            initSoundPool()
+                        }
                     }
                 }
                 "haptic_mode" -> hapticMode = HapticMode.fromValue(SettingsPreferences.getHapticMode(context))
@@ -313,19 +341,25 @@ class FeedbackManager(private val context: Context) {
 
     fun playKeySound(keyType: String = "standard", hardware: Boolean = false) {
         if (!soundEnabled) return
-        if (soundCapturable && runCatching { mutedForCapture(context, true) }.getOrDefault(false)) return
-
-        val pool = soundPool ?: return
+        if (soundPool == null) return
         val style = resolveKeySoundStyle(keySoundStyle, hardware)
-        val soundId = soundIds["$style:$keyType"] ?: soundIds[keyType] ?: soundIds["standard"] ?: return
         val volume = soundVolume / 100f
-
-        // 长按删除每 30 ms 连发一次：新的一下切断上一下删除音，避免多层叠成刺耳的嗡声。
-        if (chokesPrevious(keyType)) lastDeleteStream.takeIf { it != 0 }?.let { pool.stop(it) }
-        val stream = pool.play(soundId, volume, volume, 1, 0, 1.0f)
-        if (chokesPrevious(keyType)) lastDeleteStream = stream
+        val capturable = soundCapturable
+        val postedAt = android.os.SystemClock.uptimeMillis()
+        // 查勿扰 / 静音模式也是跨进程调用，一起放到声音线程。
+        soundHandler().post {
+            if (soundIsStale(postedAt, android.os.SystemClock.uptimeMillis())) return@post
+            if (capturable && runCatching { mutedForCapture(context, true) }.getOrDefault(false)) return@post
+            val pool = soundPool ?: return@post
+            val soundId = soundIds["$style:$keyType"] ?: soundIds[keyType] ?: soundIds["standard"] ?: return@post
+            // 长按删除每 30 ms 连发一次：新的一下切断上一下删除音，避免多层叠成刺耳的嗡声。
+            if (chokesPrevious(keyType)) lastDeleteStream.takeIf { it != 0 }?.let { pool.stop(it) }
+            val stream = pool.play(soundId, volume, volume, 1, 0, 1.0f)
+            if (chokesPrevious(keyType)) lastDeleteStream = stream
+        }
     }
 
+    /** 只在声音线程上读写。 */
     private var lastDeleteStream = 0
 
     /** When a physical key last went down (uptime ms), sounding or not. */

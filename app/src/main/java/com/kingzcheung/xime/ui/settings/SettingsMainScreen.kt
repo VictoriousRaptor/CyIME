@@ -434,14 +434,13 @@ internal data class MainEntryStatus(
 )
 
 internal fun readMainEntryStatus(context: android.content.Context): MainEntryStatus {
-    val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
     val input = context.getSystemService(android.content.Context.INPUT_SERVICE) as? android.hardware.input.InputManager
     val devices: List<android.view.InputDevice> =
         input?.let { manager -> manager.inputDeviceIds.map { id -> manager.getInputDevice(id) }.filterNotNull() }.orEmpty()
     val theme = com.kingzcheung.xime.ui.theme.KeyboardThemes.getThemeById(SettingsPreferences.getKeyboardTheme(context)).name
     val glass = com.kingzcheung.xime.settings.FrostedGlassPreferences.read(context).enabled
     return MainEntryStatus(
-        imeEnabled = imm?.enabledInputMethodList?.any { it.packageName == context.packageName } == true,
+        imeEnabled = isCyimeEnabled(context),
         imeSelected = isCyimeSelected(context),
         keyboardConnected = com.kingzcheung.xime.service.hasPhysicalTextKeyboard(devices),
         themeName = if (glass) context.getString(R.string.status_glass_suffix, theme) else theme,

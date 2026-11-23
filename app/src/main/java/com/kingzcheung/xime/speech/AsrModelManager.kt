@@ -123,8 +123,9 @@ class AsrModelManager(private val context: Context) {
         else Selection(mode, info, dir(mode), null, languageId)
     }
 
-    /** X-ASR for 整句定稿, when fully downloaded; when it applies is [SpeechModelSelection.xasrFinalizes]. */
-    fun wholeSentenceFinalizer(selection: Selection): Selection {
+    /** X-ASR for 整句定稿, when chosen ([finalizer]) and fully downloaded; when it applies is [SpeechModelSelection.xasrFinalizes]. */
+    fun wholeSentenceFinalizer(selection: Selection, finalizer: String): Selection {
+        if (finalizer != SpeechModelCatalog.XASR) return selection
         if (!SpeechModelSelection.xasrFinalizes(selection.mode, selection.recognitionLanguage == "zh", wholeSentenceOn = true)) return selection
         return if (isXasrReady()) selection.copy(finalizerDir = ModelStorage.getModelDir(context, SpeechModelCatalog.XASR)) else selection
     }

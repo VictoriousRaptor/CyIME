@@ -44,8 +44,9 @@ class SpeechModelSelectionTest {
     /** One rule for the :asr service and the settings page: which model writes the final Chinese text. */
     @Test fun chineseFinalizerMatchesWhatTheServiceRuns() {
         val c = SpeechModelCatalog
+        // 下面这组是「语音页选了 X-ASR」时；没选过的默认见 wholeSentenceFinalizerIsChosenAndDefaultsToSenseVoice。
         fun final(mode: String, whole: Boolean, xasr: Boolean, chinese: Boolean = true) =
-            SpeechModelSelection.pipeline(mode, chinese, whole, xasr).finalizer
+            SpeechModelSelection.pipeline(mode, chinese, whole, xasr, wholeFinalizer = c.XASR).finalizer
         assertEquals(c.XASR, final(c.TWO_PASS, whole = true, xasr = true))
         assertEquals(c.XASR, final(c.ZIPFORMER_TWO_PASS, whole = true, xasr = true))
         assertEquals(c.SENSEVOICE, final(c.TWO_PASS, whole = false, xasr = true))
@@ -103,9 +104,28 @@ class SpeechModelSelectionTest {
         assertNull(SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = true, finish = Finish.NONE).second)
         // 各项与 :asr 的定稿模型一致。
         val (whole, on) = SpeechModelSelection.applyFinish(c.PARAFORMER, chinese = true, finish = Finish.WHOLE)
-        assertEquals(c.XASR, SpeechModelSelection.pipeline(whole, true, on!!, xasrReady = true).finalizer)
+        assertEquals(c.XASR, SpeechModelSelection.pipeline(whole, true, on!!, xasrReady = true, wholeFinalizer = c.XASR).finalizer)
         val (sense, off) = SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = true, finish = Finish.SENSEVOICE)
-        assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(sense, true, off!!, xasrReady = true).finalizer)
+        assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(sense, true, off!!, xasrReady = true, wholeFinalizer = c.XASR).finalizer)
+    }
+
+    /** 2026-11-22：X-ASR 下载了也不自动顶替 SenseVoice，要在语音页选；没选过（或存了不认识的值）用 SenseVoice。 */
+    @Test fun wholeSentenceFinalizerIsChosenAndDefaultsToSenseVoice() {
+        val c = SpeechModelCatalog
+        assertEquals(c.SENSEVOICE, SpeechModelSelection.wholeFinalizer(null))
+        assertEquals(c.SENSEVOICE, SpeechModelSelection.wholeFinalizer("whatever"))
+        assertEquals(c.XASR, SpeechModelSelection.wholeFinalizer(c.XASR))
+        assertEquals(c.SENSEVOICE, SpeechModelSelection.wholeFinalizer(c.SENSEVOICE))
+        listOf(c.SENSEVOICE, c.TWO_PASS, c.ZIPFORMER_TWO_PASS).forEach { mode ->
+            assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(mode, true, true, xasrReady = true).finalizer)
+            assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(mode, true, true, xasrReady = true,
+                wholeFinalizer = c.SENSEVOICE).finalizer)
+            assertEquals(c.XASR, SpeechModelSelection.pipeline(mode, true, true, xasrReady = true,
+                wholeFinalizer = c.XASR).finalizer)
+            // 选了 X-ASR 但没下载：照旧 SenseVoice。
+            assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(mode, true, true, xasrReady = false,
+                wholeFinalizer = c.XASR).finalizer)
+        }
     }
 
     @Test fun chineseZipformerIsOfferedOnlyToItsCurrentUsers() {

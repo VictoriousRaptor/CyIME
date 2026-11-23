@@ -176,7 +176,10 @@ fun KeyboardLayout(
     // 自己排的合并键布局（一个键两个字母）也不显示：合并键写不下两个字母的提示，只有单字母键有会前后不一。
     val dpKeyHints = if (doublePinyin && !isAsciiMode && !fourteenKey && keyRows.all { row -> row.all { it.length <= 1 } } &&
         LocalKeyboardInputPreferences.current.doublePinyinKeyHints) remember(uiState.currentSchemaId, cfgVer) {
-        com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId)?.let(::doublePinyinKeyHints)
+        com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId)?.let { scheme ->
+            // 自带键盘的双拼（乱序十七）键帽已经写着声母（Zh、HP），提示只写韵母，不在角上再写一遍 zh。
+            doublePinyinKeyHints(scheme).let { hints -> if (scheme.ownLayout == null) hints else hints.mapValues { it.value.copy(initial = null) } }
+        }
     } else null
     // 「ing 放在 Shift 键上」（默认关）：第二排不补分号键（KeysConfigHelper.setSemicolonOnShift，KeyboardView 交给它），
     // 微软双拼打了声母等韵母时，左下角的 Shift 键换成 ing（SemicolonShiftKey）。
@@ -303,6 +306,10 @@ fun KeyboardLayout(
             if (key.length == 2 && key.all { it.lowercaseChar() in 'a'..'z' }) listOf(key.take(1), key.drop(1)) else listOf(key)
         }
     } else pairedRows
+    // 导入的键盘把下滑标签写成长助记（乱序十七的 "a ia ua"）：整块键盘的下滑标签改写在键底部一行，见 [LocalLongSwipeDownLabels]。
+    val longSwipeDownLabels = remember(cfgVer, isAsciiMode, uiState.currentSchemaId, keyRows) {
+        KeysConfigHelper.hasLongSwipeDownLabels(keyRows, isAsciiMode)
+    }
     // 「合并键均匀排布」：自建字母排列和 14 键（默认关）；分体按 26 键中线拆左右，仍严格对齐。
     val evenMergedKeys = (letterLayout != null || fourteenKey) && !splitKeyboard &&
         LocalKeyboardInputPreferences.current.evenMergedKeys
@@ -599,6 +606,8 @@ fun KeyboardLayout(
     // 按住符号键当 Ctrl：键面换成快捷键时从符号键扩开，换回字母时收回；中英、语言切换时从语言键扩开（用户 11-14）。
     KeyGapLightMode(gapLight, shiftSlideTargets.ctrlFaces, on = shiftSlideTargets.ctrlFaces)
     KeyGapLightMode(gapLight, isAsciiMode to uiState.currentSchemaId)
+    // 换了一块新键盘、收起符号页时，从刚才点的切换键扩开（用户 11-22，见 KeyGapLightHandoff）。
+    KeyGapLightUncover(gapLight)
 
     CompositionLocalProvider(
         LocalKeyGapLight provides gapLight,
@@ -607,6 +616,7 @@ fun KeyboardLayout(
         LocalLetterGeometry provides geometry,
         LocalCustomLayout provides letterLayout,
         LocalEvenMergedKeys provides evenMergedKeys,
+        LocalLongSwipeDownLabels provides longSwipeDownLabels,
         LocalHoneycombKeys provides honeycomb,
         LocalCustomAccent provides KeyboardThemes.getPrimaryColor(uiState.themeId, uiState.isDarkTheme),
         LocalShiftSlideTargets provides shiftSlideTargets,

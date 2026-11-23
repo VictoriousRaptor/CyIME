@@ -98,6 +98,8 @@ data class KeyboardInputPreferences(
     val handwritingRecognizeWhileWriting: Boolean = false,
     val showPressBubble: Boolean = false,
     val showPreeditPreview: Boolean = true,
+    /** 候选滑到头回弹展开（默认关）：关着时展开页里左右划不收回，同 1.15.101，见 [SettingsPreferences.isCandidateSwipeExpand]。 */
+    val candidateSwipeExpand: Boolean = false,
     val inputTextLocation: String = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR,
     /** 「显示在候选栏」时拼音的位置，见 [SettingsPreferences.preeditStyle]。 */
     val preeditStyle: String = SettingsPreferences.PREEDIT_STYLE_BUBBLE,
@@ -263,6 +265,11 @@ data class KeyboardInputPreferences(
     val t9MergeZeroIntoEnter: Boolean = false,
     /** 笔画键盘同款：去掉 0 键、回车加高占两格，0 改成在回车上滑（用户 11-17 转来，默认关）。见 [STROKE_MERGE_ZERO_ENTER_KEY]。 */
     val strokeMergeZeroIntoEnter: Boolean = false,
+    /**
+     * 九键空格上滑输入 0（11-22 别人提、他要进 1.15.105，默认关）。开了以后九键右边那个键一直是「→ 下一项」，
+     * 没有候选时点它光标右移、左滑左移；和「上滑取消」互锁，见 [InputGestureLocks]。见 [T9_SPACE_UP_ZERO_KEY]。
+     */
+    val t9SpaceSwipeUpZero: Boolean = false,
     /** 长按语言键弹出列表，与空格长按分开设置；默认 0.15 秒（2026-10-13 用户要求）。 */
     val languageMenuHoldSeconds: Float = 0.15f,
     /** 长按语言键弹出系统的输入法选择框，不弹语言列表（GitHub #60 #68，别人的需求，默认关）。 */
@@ -396,6 +403,8 @@ data class KeyboardInputPreferences(
         const val T9_MERGE_ZERO_ENTER_KEY = "t9_merge_zero_enter"
         /** 笔画键盘去掉 0 键合并大回车，见 [strokeMergeZeroIntoEnter]。新键（11-17），读不到就是关。 */
         const val STROKE_MERGE_ZERO_ENTER_KEY = "stroke_merge_zero_enter"
+        /** 九键空格上滑输入 0，见 [t9SpaceSwipeUpZero]。新键（11-22），读不到就是关。 */
+        const val T9_SPACE_UP_ZERO_KEY = "t9_space_up_zero"
 
         /** 正在显示的键盘监听这些键，改了就重新读取；[save] 写入的每个键都必须在内，否则设置页的改动要等输入法重启才生效。 */
         /** 角标不透明度；新键，读不到就是 1（原样）。 */
@@ -403,7 +412,7 @@ data class KeyboardInputPreferences(
         const val HIDE_FUNCTION_KEY_HINTS_KEY = "hide_function_key_hints"
         internal val watchedKeys: Set<String> by lazy {
             setOf(CORNER_SYMBOL_INPUT_KEY, KeyEffectPreferences.GLOW, KeyEffectPreferences.ANIMATION, SettingsPreferences.KEY_SHOW_PRESS_BUBBLE,
-                SettingsPreferences.KEY_SHOW_PREEDIT_PREVIEW, SettingsPreferences.KEY_INLINE_PREEDIT_PREVIEW, SettingsPreferences.KEY_PREEDIT_STYLE, SettingsPreferences.KEY_PREEDIT_ALIGN, SettingsPreferences.KEY_INPUT_TEXT_LOCATION,
+                SettingsPreferences.KEY_SHOW_PREEDIT_PREVIEW, SettingsPreferences.KEY_CANDIDATE_SWIPE_EXPAND, SettingsPreferences.KEY_INLINE_PREEDIT_PREVIEW, SettingsPreferences.KEY_PREEDIT_STYLE, SettingsPreferences.KEY_PREEDIT_ALIGN, SettingsPreferences.KEY_INPUT_TEXT_LOCATION,
                 SettingsPreferences.KEY_PREEDIT_BUBBLE_OPACITY, SettingsPreferences.KEY_PREEDIT_TONES,
                 CURSOR_MAGNIFIER_ENABLED_KEY, CURSOR_MAGNIFIER_WIDTH_KEY,
                 com.kingzcheung.xime.settings.LetterSwipeBindings.CHINESE, com.kingzcheung.xime.settings.LetterSwipeBindings.ENGLISH,
@@ -411,7 +420,7 @@ data class KeyboardInputPreferences(
                 "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "symbol_long_press_seconds_v2", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
                 JAPANESE_KANJI_KEY, KOREAN_HANJA_KEY, CANTONESE_CHARACTERS_KEY,
                 "fourteen_letter_swipe", "fourteen_letter_swipe_dp", "reverse_symbol_swipe", CLEAR_ALL_WHILE_COMPOSING_KEY, CLEAR_BEFORE_CURSOR_ONLY_KEY, SWIPE_DISTANCE_DELETE_KEY, com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.KEY, REVERSE_DELETE_SWIPE_KEY, CLEAR_SWIPE_PERCENT_KEY, JAPANESE_LONG_VOWEL_KEY, "syllable_split_key", "shift_syllable_split", "kana_direction_hints", "flick_direction_disc", "flick_direction_disc_v2",
-                "glide_typing", "glide_typing_v2", "letter_long_press_menu", "t9_flick_letters", "t9_glide_typing", "language_key_hold_seconds", "language_key_hold_seconds_v2", LANGUAGE_KEY_IME_PICKER_KEY, "symbol_key_hold_seconds", "t9_candidate_drag_percent", T9_MERGE_ZERO_ENTER_KEY, STROKE_MERGE_ZERO_ENTER_KEY,
+                "glide_typing", "glide_typing_v2", "letter_long_press_menu", "t9_flick_letters", "t9_glide_typing", "language_key_hold_seconds", "language_key_hold_seconds_v2", LANGUAGE_KEY_IME_PICKER_KEY, "symbol_key_hold_seconds", "t9_candidate_drag_percent", T9_MERGE_ZERO_ENTER_KEY, STROKE_MERGE_ZERO_ENTER_KEY, T9_SPACE_UP_ZERO_KEY,
                 SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, "qwerty_stagger_mode", "qwerty_stagger_custom", "qwerty_comma_key", "qwerty_period_key", "qwerty_period_key_v2", "bottom_punctuation_swipe_up_v3", com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS,
                 DOUBLE_PINYIN_KEY_HINTS_KEY, DOUBLE_PINYIN_KEY_HINTS_WITH_CORNERS_KEY, DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY,
                 com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_KEY,
@@ -445,6 +454,7 @@ data class KeyboardInputPreferences(
                 frostedGlassRequested = glass,
                 showPressBubble = SettingsPreferences.shouldShowPressBubble(context),
                 showPreeditPreview = SettingsPreferences.showPreeditPreview(context),
+                candidateSwipeExpand = SettingsPreferences.isCandidateSwipeExpand(context),
                 inputTextLocation = SettingsPreferences.getInputTextLocation(context),
                 preeditStyle = SettingsPreferences.preeditStyle(context),
                 preeditAlign = SettingsPreferences.preeditAlign(context),
@@ -554,6 +564,7 @@ data class KeyboardInputPreferences(
                 t9GlideTyping = prefs.getBoolean("t9_glide_typing", false),
                 t9MergeZeroIntoEnter = prefs.getBoolean(T9_MERGE_ZERO_ENTER_KEY, false),
                 strokeMergeZeroIntoEnter = prefs.getBoolean(STROKE_MERGE_ZERO_ENTER_KEY, false),
+                t9SpaceSwipeUpZero = prefs.getBoolean(T9_SPACE_UP_ZERO_KEY, false),
                 keyTextScale = prefs.getFloat("key_text_scale", DEFAULT_KEY_TEXT_SCALE)
                     .takeIf { it.isFinite() }?.coerceIn(0.8f, 1.6f) ?: DEFAULT_KEY_TEXT_SCALE,
                 cornerHintOpacity = normalizeCornerHintOpacity(prefs.getFloat(CORNER_HINT_OPACITY_KEY, 1f)),
@@ -631,6 +642,7 @@ data class KeyboardInputPreferences(
             .putBoolean("t9_glide_typing", t9GlideTyping)
             .putBoolean(T9_MERGE_ZERO_ENTER_KEY, t9MergeZeroIntoEnter)
             .putBoolean(STROKE_MERGE_ZERO_ENTER_KEY, strokeMergeZeroIntoEnter)
+            .putBoolean(T9_SPACE_UP_ZERO_KEY, t9SpaceSwipeUpZero)
             .putFloat("cursor_step_dp", cursorStepDp.coerceIn(6f, 24f))
             .putFloat("cursor_swipe_lines", normalizeCursorSwipeLines(cursorSwipeLines))
             .putBoolean("cursor_step_haptic", cursorStepHaptic)

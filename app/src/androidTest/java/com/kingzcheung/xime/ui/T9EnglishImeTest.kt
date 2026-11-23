@@ -86,7 +86,7 @@ class T9EnglishImeTest {
                     val bar = rule.onNodeWithTag("bar-candidate:$rank")
                     if (bar.isDisplayed()) bar.performClick()
                     else {
-                        rule.pullOpenCandidates()
+                        rule.onNodeWithTag("candidate-expansion").performClick()
                         rule.onNodeWithTag("expanded-candidates").performScrollToNode(hasTestTag("expanded-candidate:$rank"))
                         rule.onNodeWithTag("expanded-candidate:$rank").performTouchInput { down(center); up() }
                     }

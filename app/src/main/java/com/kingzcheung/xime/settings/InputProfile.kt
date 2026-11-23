@@ -188,6 +188,8 @@ object InputProfiles {
             id == "handwriting" -> InputLayout.HANDWRITING
             id == "numbers" -> InputLayout.NUMBER
             id == "cyime_zhuyin" -> InputLayout.ZHUYIN
+            // 自带键盘的双拼（乱序十七）：没读到 xime.yaml 的绑定时也知道它是 17 键，方案列表不把它排进 26 键。
+            DoublePinyinSchemes.find(id)?.ownLayout != null -> resolveLayout(DoublePinyinSchemes.find(id)!!.ownLayout)
             else -> InputLayout.QWERTY
         }
         return InputProfile(inputLanguage, inputScheme, layout,
@@ -203,6 +205,8 @@ object InputProfiles {
         if (profile.layout.kind != LayoutKind.ALPHABETIC || !LetterLayouts.appliesTo(profile.language, profile.scheme)) return profile
         return LetterLayouts.chosen(profile.language)?.let { profile.copy(layout = customLayout(it)) } ?: profile
     }
+
+    const val LXSQ17_SECTION = "qwerty_lxsq17"
 
     /** Actual layout bindings win over built-in defaults, including an explicitly unbound schema. */
     fun resolveLayout(section: String?, custom: CustomKeyboardLayout? = null): InputLayout = when (section) {
@@ -226,6 +230,8 @@ object InputProfiles {
             "qwerty_14" -> InputLayout.MERGED14
             "qwerty_17" -> InputLayout("qwerty_17", "17键", LayoutKind.MERGED)
             "qwerty_18" -> InputLayout("qwerty_18", "18键", LayoutKind.MERGED)
+            // 乱序十七（DoublePinyinScheme.LXSQ17）自带的 17 键；导入的同名键盘段也用这个名字，布局栏不再显示 qwerty_lxsq17。
+            LXSQ17_SECTION -> InputLayout(LXSQ17_SECTION, "乱序17键", LayoutKind.MERGED)
             else -> InputLayout(section, section, LayoutKind.MERGED)
         }
     }

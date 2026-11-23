@@ -453,7 +453,7 @@ fun KeyboardView(
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
     com.kingzcheung.xime.settings.KeysConfigHelper.cornerFullWidth = punctuationFull
-    // 按住空格说话滑到右上角锁定：空格和候选栏右端的锁共用这一份状态（SpaceVoiceLock）。
+    // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
         LocalInlineQuickActionEditor provides inlineEditor,
@@ -539,7 +539,8 @@ fun KeyboardView(
 
         val hostLandscape = screenW > screenH
         val hostHeightDp = maxHeight.value.roundToInt().coerceAtLeast(1)
-        val fixedRange = fixedHeightRange ?: keyboardHeightBounds(screenH, hostLandscape)
+        val heightFloorDp = rememberKeyboardHeightFloorDp()
+        val fixedRange = fixedHeightRange ?: keyboardHeightBounds(screenH, hostLandscape, minHeightDp = heightFloorDp)
         val minBottomPx = state.floatingMinOffsetY.coerceAtLeast(0) * resizeControlDensity.density
         val normalFloatingRect = floatingCardRect(
             hostWidthPx = hostWidthPx,
@@ -660,6 +661,22 @@ fun KeyboardView(
                 (if (state.isFloatingMode) cardWidthDp else state.keyboardWidthDp.takeIf { it > 0 }
                     ?: state.fixedWidthDp.takeIf { it > 0 } ?: screenW).toFloat(),
                 state.keyboardHeightDp.toFloat()))
+        }
+        // 「候选字大小」超过 22sp 时候选栏整条放大的倍数（11-22）；面板让开候选栏时要按放大后的高度算。
+        val candidateZoom = candidateTextZoom(rememberCandidateTextSize())
+        // 拼音贴在键盘上沿（小标签、方块、整行）时让应用的输入框往上让开那一截，见 PreeditTabInsets；悬浮键盘不占应用的地方，不用让。
+        val tabReservePx = if (inputPreferences.preeditOnTopLine && !state.isFloatingMode) {
+            val tabHeight = if (inputPreferences.preeditStyle == com.kingzcheung.xime.settings.SettingsPreferences.PREEDIT_STYLE_BLOCK)
+                PREEDIT_BLOCK_HEIGHT else PREEDIT_TAB_HEIGHT
+            // 拼音是单独的弹窗，弹窗里的 dp 按屏幕本来的 density 算，不跟候选栏放大（见 PreeditTab）。
+            kotlin.math.ceil(tabHeight.value * LocalContext.current.resources.displayMetrics.density).toInt()
+        } else 0
+        val insetsHost = LocalView.current
+        SideEffect {
+            if (PreeditTabInsets.reservePx != tabReservePx) {
+                PreeditTabInsets.reservePx = tabReservePx
+                insetsHost.requestLayout()
+            }
         }
         // 候选栏上面那一截的高度（翻译栏、工具面板、剪贴板搜索、拼音编辑条）；菜单等面板据此让开工具栏，见 belowCandidateBar。
         val aboveCandidateBarPx = remember { mutableIntStateOf(0) }
@@ -1313,6 +1330,7 @@ fun KeyboardView(
                         callbacks.onToolPanelAction?.invoke(com.kingzcheung.xime.service.toolPanelSelectAction(key, option))
                     },
                     onSwap = { swap?.key?.let { callbacks.onToolPanelAction?.invoke(it) } },
+                    downloadProgress = state.toolPanelDownloadProgress,
                 )
             } else if (state.toolPanelVisible && state.toolPanelDisplay != "PASSIVE") {
                 ToolPanel(
@@ -1496,8 +1514,8 @@ fun KeyboardView(
                             else cs.highlightedCandidateIndex,
                         hardwareHighlightIndex = hardwareCandidateHighlight,
                         associationHighlightIndex = cs.focusedT9AssociationIndex,
-                        // 英文补全也能往左拉展开（用户 11-20）；展开页接着栏里露出的往下排，栏里第一个是已打的原词。
-                        expandAssociations = true,
+                        // 英文补全不出 ▾，同 1.15.101（11-21 恢复）。
+                        expandAssociations = cs.pendingEnglishText.isEmpty(),
                     )
                 }
             }
@@ -1554,7 +1572,7 @@ fun KeyboardView(
                         }
                     }
                 } else Modifier)
-                    .clipboardPanelExpandGesture().spaceVoiceLockTarget(spaceVoiceLock, accentColor).drawWithContent {
+                    .clipboardPanelExpandGesture().drawWithContent {
                     drawContent()
                     InputLatencyTrace.finish(candidateState.value.traceEventId, "draw-submitted")
                 },
@@ -1901,10 +1919,13 @@ fun KeyboardView(
                         floating = state.isFloatingMode,
                     ),
                     callbacks = CandidatePageCallbacks(
-                        onCollapse = {
-                            toolbarFeedback()
-                            viewModel.setCandidatePageExpanded(false)
-                        },
+                        // 展开页里左右划收回：只在「候选滑到头回弹展开」打开时有（11-21 他：默认关，同 1.15.101）。
+                        onCollapse = if (inputPreferences.candidateSwipeExpand) {
+                            {
+                                toolbarFeedback()
+                                viewModel.setCandidatePageExpanded(false)
+                            }
+                        } else null,
                         onCandidateSelect = { entry ->
                             if (sentenceEdit != null) {
                                 if (sentenceWordsCode == sentenceCode && sentenceWordsSelection == sentenceSelected) sentenceWords.getOrNull(entry.globalIndex)?.let {
@@ -2165,6 +2186,8 @@ fun KeyboardView(
                         }
                         CompositionLocalProvider(
                             LocalSuppressCursorMove provides suppressCursorMove,
+                            // 符号页收起时主键盘从「返回」那个位置扩开（键缝动效的切换扩散，用户 11-22）。
+                            LocalKeyboardCoveredBySymbols provides symbolPageShown,
                         ) {
                             KeyboardLayoutScreen(
                                 keyboardState = keyboardState,
@@ -2395,7 +2418,7 @@ fun KeyboardView(
                     val toolbarSlot = handwritingOverlaySlot
                     Box((if (toolbarSlot == null) Modifier.align(Alignment.TopCenter).fillMaxWidth()
                         else Modifier.align(Alignment.BottomCenter)
-                            .padding(bottom = (toolbarSlot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue)).coerceAtLeast(0f).dp)
+                            .padding(bottom = (toolbarSlot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue * candidateZoom)).coerceAtLeast(0f).dp)
                             .absoluteOffset(x = toolbarSlot.offsetXDp.dp).width(toolbarSlot.widthDp.dp))
                         .keyboardPanelBackground(keyboardBgColor)
                         .then(if (!overlayVisibility.targetState) Modifier.clearAndSetSemantics {} else Modifier)) {
@@ -2408,6 +2431,8 @@ fun KeyboardView(
                     }
                 }
             }
+            // 按住空格说话时键区右上角浮出的锁按钮（SpaceVoiceLock）：最上面一层，不接触摸、不占布局。
+            SpaceVoiceLockLayer(spaceVoiceLock, accentColor, keyBgColor, Modifier.matchParentSize().zIndex(30f))
             }
 
             val configuration = LocalConfiguration.current
@@ -2543,9 +2568,9 @@ fun KeyboardView(
                 visible = page is KeyboardPage.Overlay,
                 modifier = (handwritingOverlaySlot?.let { slot ->
                     Modifier.align(Alignment.BottomCenter).absoluteOffset(x = slot.offsetXDp.dp).width(slot.widthDp.dp)
-                        .height((slot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue)).coerceAtLeast(0f).dp)
+                        .height((slot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue * candidateZoom)).coerceAtLeast(0f).dp)
                 } ?: Modifier.fillMaxSize().belowCandidateBar(aboveCandidateBarPx,
-                    candidateBarHeightDp(candidateBarScaleState.floatValue).dp))
+                    candidateBarHeightDp(candidateBarScaleState.floatValue * candidateZoom).dp))
                     .testTag("keyboard-overlay"),
                 visibility = overlayVisibility,
                 revealState = overlayReveal,
@@ -2596,6 +2621,8 @@ fun KeyboardView(
                             (callbacks.onSwitchSchemaForLayout ?: callbacks.onSwitchSchema)?.invoke(schemaId)
                             viewModel.closeOverlay()
                         },
+                        listInstalled = true,
+                        onClose = { viewModel.closeOverlay() },
                         modifier = panelMaterial.fillMaxSize().padding(bottom = renderedBottomPaddingDp.dp)
                     )
                     is OverlayRoute.Clipboard -> ClipboardView(
@@ -2818,7 +2845,8 @@ fun KeyboardView(
             density = resizeControlDensity,
             aspectLimits = KeyboardAspectLimits.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction),
             squareSnap = KeyboardSquareSnap.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction,
-                inputPreferences.wideKeys, numberRow = inputPreferences.numberRow),
+                inputPreferences.wideKeys, numberRow = inputPreferences.numberRow)
+                ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize())),
             splitGapFraction = splitGapSetting,
             splitPitchDp = splitPitchDp,
             onSplitGapChange = { splitGapPreview.value = it },

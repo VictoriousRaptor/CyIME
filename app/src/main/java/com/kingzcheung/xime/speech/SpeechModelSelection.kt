@@ -54,12 +54,24 @@ internal object SpeechModelSelection {
         chinese && mode != SpeechModelCatalog.SENSEVOICE_AUTO && (hasCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)
 
     /**
-     * X-ASR (when downloaded) writes the final Chinese text wherever 整句定稿 applies: after a streaming preview with
-     * SenseVoice correction, and for SenseVoice alone (the public default), where it then decodes every sentence.
-     * 2026-10-30 same-path test, 83 clips: X-ASR whole 5.6 % CER, SenseVoice whole 8.1 %, 豆包 5.7 %.
+     * Where 整句定稿 applies (after a streaming preview with SenseVoice correction, and for SenseVoice alone), X-ASR
+     * writes the final Chinese text when it is downloaded AND chosen (see [wholeFinalizer]).
+     * 2026-10-30 same-path test, 83 read clips: X-ASR whole 5.6 % CER, SenseVoice whole 8.1 %, 豆包 5.7 %;
+     * but in the user's own dictation on the tablet (2026-11-22) X-ASR was clearly worse than SenseVoice.
      */
     fun xasrFinalizes(mode: String, chinese: Boolean, wholeSentenceOn: Boolean): Boolean =
         wholeSentenceOn && wholeSentenceApplies(mode, chinese)
+
+    /**
+     * 整句定稿用哪个模型，语音页「说完后」里选（键 stt_whole_finalizer）。没选过时用 SenseVoice：
+     * 2026-11-22 用户在平板上实际说话，X-ASR 明显不如 SenseVoice（10-30 的 83 段朗读录音结论相反，以真用为准）。
+     */
+    val DEFAULT_WHOLE_FINALIZER = SpeechModelCatalog.SENSEVOICE
+
+    fun wholeFinalizer(stored: String?): String = when (stored) {
+        SpeechModelCatalog.XASR, SpeechModelCatalog.SENSEVOICE -> stored
+        else -> DEFAULT_WHOLE_FINALIZER
+    }
 
     /** What decodes one language's dictation; the :asr service and every line of the voice settings page use this. */
     data class Pipeline(
@@ -70,10 +82,11 @@ internal object SpeechModelSelection {
         val wholeSentence: Boolean,
     )
 
-    fun pipeline(mode: String, chinese: Boolean, wholeSentenceOn: Boolean, xasrReady: Boolean): Pipeline {
+    fun pipeline(mode: String, chinese: Boolean, wholeSentenceOn: Boolean, xasrReady: Boolean,
+        wholeFinalizer: String = DEFAULT_WHOLE_FINALIZER): Pipeline {
         val primary = primary(mode)
         val finalizer = when {
-            xasrReady && xasrFinalizes(mode, chinese, wholeSentenceOn) -> SpeechModelCatalog.XASR
+            xasrReady && wholeFinalizer == SpeechModelCatalog.XASR && xasrFinalizes(mode, chinese, wholeSentenceOn) -> SpeechModelCatalog.XASR
             !hasCorrection(mode) -> primary
             else -> SpeechModelCatalog.SENSEVOICE
         }

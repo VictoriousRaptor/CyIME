@@ -148,7 +148,8 @@ fun PluginConfigFormScreen(
                             plugin = plugin,
                             onSelectionChange = { if (definition.any { it.visibleWhen?.first == field.key }) selectionRevision++ },
                             // 点测试前先把填的接口地址授权，不用先点「保存」
-                            beforeAction = { autoAuthorizeConfiguredHosts() }
+                            beforeAction = { autoAuthorizeConfiguredHosts() },
+                            showTranslateModels = pluginButtonShowsTranslateModels(pluginId, field.key),
                         )
                     }
                 }
@@ -351,7 +352,9 @@ private fun UiNodeEditor(
     options: List<String>,
     plugin: IPluginConfigurable,
     onSelectionChange: () -> Unit,
-    beforeAction: () -> Unit = {}
+    beforeAction: () -> Unit = {},
+    /** 这个按钮会下载离线翻译模型：按钮下面直接画两个模型的下载进度，不再让用户去「扩展 › 模型」看。 */
+    showTranslateModels: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -621,7 +624,9 @@ private fun UiNodeEditor(
                 Text(if (buttonBusy) "处理中…" else field.label ?: "")
             }
             val result = buttonResult
-            if (!buttonBusy && result != null) {
+            // 下载模型的按钮：结果就是下面每个模型的状态（下载中带进度条），插件那句「进度在『扩展 › 模型』」不再显示
+            if (showTranslateModels) OfflineTranslateModelRows()
+            else if (!buttonBusy && result != null) {
                 Text(
                     text = if (result.isEmpty()) "结果：成功" else "结果：$result",
                     style = MaterialTheme.typography.bodyMedium,
@@ -633,6 +638,12 @@ private fun UiNodeEditor(
         }
     }
 }
+
+/** 翻译插件设置页的「下载离线模型」按钮（插件的 downloadOffline 动作）。 */
+internal fun pluginButtonShowsTranslateModels(pluginId: String, action: String?): Boolean =
+    pluginId == TRANSLATE_PLUGIN_ID && action == "downloadOffline"
+
+internal const val TRANSLATE_PLUGIN_ID = "com.kingzcheung.xime.plugin.translate"
 
 /** 插件自己没有设置项、设置由宿主画在插件页里的插件（字幕的开关、日语的下载状态）。 */
 internal fun hasHostSettings(pluginId: String): Boolean =

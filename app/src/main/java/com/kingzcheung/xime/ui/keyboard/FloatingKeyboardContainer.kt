@@ -353,6 +353,7 @@ internal fun FloatingKeyboardContainer(
         }
         // 正常态和调节态共用 TopStart 放置，不在确认时重新换坐标系。
         val context = LocalContext.current
+        val heightFloorDp = rememberKeyboardHeightFloorDp()
         var holdPhase by remember { mutableStateOf(FloatingLockHoldPhase.Idle) }
         val lockSweep = rememberFloatingLockSweep(holdPhase, floatingLockHoldMs(geometryLocked) - FLOATING_HOLD_QUIET_MS)
         val lockNudge = rememberFloatingLockNudge()
@@ -542,7 +543,8 @@ internal fun FloatingKeyboardContainer(
                                 val start = currentCardRect
                                 val limits = floatingCornerResizeLimits(start, hostWidthPx, hostHeightPx, bottomInsetPx,
                                     configuration.screenWidthDp, configuration.screenWidthDp > configuration.screenHeightDp,
-                                    density.density, minOf(configuration.screenWidthDp, configuration.screenHeightDp))
+                                    density.density, minOf(configuration.screenWidthDp, configuration.screenHeightDp),
+                                    physicalFloorDp = heightFloorDp)
                                 var raw = start
                                 var resized = false
                                 var tapped = false

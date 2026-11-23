@@ -9,14 +9,16 @@ internal data class KeyboardSquareSnap(val columns: Float, val split: Boolean, v
     /** 「加宽按键」：与渲染同一套留白和键缝（分体不加宽）。 */
     val wideKeys: Boolean = false,
     /** 键盘体分几排高（字母键盘 4 排，开了「数字行」再加 [NUMBER_ROW_HEIGHT_WEIGHT]），方形按字母键算。 */
-    val rows: Float = 4f) {
+    val rows: Float = 4f,
+    /** 「候选字大小」超过 22sp 时候选栏放大的倍数（[candidateTextZoom]）；候选栏变高，按键区相应变矮。 */
+    val candidateZoom: Float = 1f) {
     val section get() = if (keypad) "t9" else "qwerty"
 
     fun capDifference(rect: ResizeRect, density: Float, extra: Float,
         floating: Boolean, spacing: Pair<Float?, Float?>): Float {
         val width = rect.width / density
         val panelHeight = (rect.height - extra) / density
-        val bodyHeight = panelHeight - candidateBarHeightDp(candidateBarScale(width, panelHeight))
+        val bodyHeight = panelHeight - candidateBarHeightDp(candidateBarScale(width, panelHeight) * candidateZoom)
         val fraction = if (split) SplitKeyboardGeometry.keyWidthFraction(width, gapFraction,
             SplitKeyboardGeometry.gutterDp(floating)) else 1f
         val widened = wideKeys && !split

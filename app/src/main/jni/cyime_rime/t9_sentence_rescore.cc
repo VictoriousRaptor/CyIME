@@ -72,7 +72,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
-                        deque<an<Sentence>>* sentences) {
+                        deque<an<Sentence>>* sentences, bool slip_only) {
   // translator/max_sentences gave the n-best to choose from; the menu keeps one sentence, as with
   // max_sentences: 1 (followed by Rime's best when that one is a correction).
   auto corrected = [&](const an<Sentence>& sentence) {
@@ -296,7 +296,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     }
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
     // slips, so the corrected n-best is chosen by the word model too and leads (清晨 over 清真 in 是清晨的一杯).
-    if (q.syllables.cyime_stray_initials && q.enable_correction) {
+    if (q.syllables.cyime_stray_initials && q.enable_correction && !slip_only) {
       an<Sentence> fixed;
       double fixed_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {

@@ -9,6 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,50 @@ internal val LocalKeyGapLight = staticCompositionLocalOf<KeyGapLightField?> { nu
  * 没提供（设置页的预览等）就没有音量条。
  */
 internal val LocalKeyGapLightVoice = staticCompositionLocalOf<(() -> Float)?> { null }
+
+/**
+ * 主键盘正被符号页盖着。符号页是另一块面板，主键盘一直留在底下没拆，所以收起符号页时主键盘没有「新建」这一步；
+ * 由 KeyboardView 提供，[KeyGapLightUncover] 看它从盖着变回露出来时接过切换扩散（[KeyGapLightHandoff]）。
+ */
+internal val LocalKeyboardCoveredBySymbols = compositionLocalOf { false }
+
+/** 按下切换键后多久之内新出来的键盘还接这一次扩散（毫秒）：从按下算，松手开符号页、换键盘一般一两百毫秒。 */
+private const val GAP_LIGHT_HANDOFF_MS = 900L
+
+/**
+ * 换页、换键盘时的切换扩散（用户 11-22：点符号、切语言原来的全键盘扩散没了）。
+ *
+ * 原因：中英切换、换 26/14/9 键、进出数字页时整块键盘是新建的（KeyboardLayoutScreen 的 `key(keyboardState)`），
+ * 符号页是另一块面板；新键盘的光层是新的，刚按的那个键记在旧光层里跟着丢了，而 [KeyGapLightMode] 第一次组合只记状态不画，
+ * 所以 11-14 加的「切换语言也放全键盘波纹」只在键盘没重建时（同一块键盘里换方案）才放得出来，点符号键从来没放过。
+ *
+ * 做法：按键时记下键中心的窗口坐标和时间（只在「切换大小写」这一项开着时记）；新光层排好后的第一帧在
+ * [GAP_LIGHT_HANDOFF_MS] 之内拿到，就从那个位置扩开一次，拿了就清掉；符号页收起时主键盘照样拿一次。
+ * 没换键盘的按键留下的记录过时自己作废。只在主线程用。
+ */
+internal object KeyGapLightHandoff {
+    private var x = 0f
+    private var y = 0f
+    private var at = Long.MIN_VALUE
+
+    internal fun post(windowCenter: Offset, nowMillis: Long) {
+        x = windowCenter.x
+        y = windowCenter.y
+        at = nowMillis
+    }
+
+    /** 还新鲜就交出位置（窗口坐标）并清掉；过时或已被拿走返回 null。 */
+    internal fun take(nowMillis: Long): Offset? {
+        val stamp = at
+        if (stamp == Long.MIN_VALUE || nowMillis - stamp !in 0L..GAP_LIGHT_HANDOFF_MS) return null
+        at = Long.MIN_VALUE
+        return Offset(x, y)
+    }
+
+    internal fun clear() {
+        at = Long.MIN_VALUE
+    }
+}
 
 /** 同时在走的动效最多这么多个，打得再快也不会越积越多。 */
 private const val GAP_LIGHT_MAX_PULSES = 8
@@ -387,6 +432,24 @@ internal class KeyGapLightField {
         wave(origin, on, size.width, size.height, scale)
     }
 
+    /**
+     * 新的一块键盘排好了（或符号页收起、主键盘露出来）：刚才在上一块键盘按的切换键还新鲜，就从它的位置扩开一次。
+     * 还没排好就不拿，留给下一次；位置落在这块键盘外面（两块键盘大小不一样）就贴到最近的边上。
+     */
+    internal fun takeHandoff() {
+        val config = config
+        if (!config.enabled || !config.switch) return
+        val scale = motionScale?.scaleFactor ?: 1f
+        if (scale <= 0f) return
+        val layer = layer?.takeIf { it.isAttached } ?: return
+        ensureNet() ?: return
+        val origin = KeyGapLightHandoff.take(android.os.SystemClock.uptimeMillis()) ?: return
+        val size = layer.size
+        val local = layer.windowToLocal(origin)
+        val at = Offset(local.x.coerceIn(0f, size.width.toFloat()), local.y.coerceIn(0f, size.height.toFloat()))
+        wave(at, true, size.width, size.height, scale)
+    }
+
     private fun wave(origin: Offset, expand: Boolean, width: Int, height: Int, scale: Float) {
         val config = config
         val size = androidx.compose.ui.unit.IntSize(width, height)
@@ -540,6 +603,13 @@ internal class KeyGapLightField {
         val config = config
         lastTouch = token
         aimPoint = null
+        // 这一下可能是切换键（符号、语言、123、abc）：记下位置，下一块键盘接着扩开（[KeyGapLightHandoff]）。
+        if (config.enabled && config.switch) {
+            spots[token]?.coordinates?.takeIf { it.isAttached }?.let { cap ->
+                KeyGapLightHandoff.post(cap.localToWindow(Offset(cap.size.width / 2f, cap.size.height / 2f)),
+                    android.os.SystemClock.uptimeMillis())
+            }
+        }
         // 「上屏和发送」关着时，空格和回车就当普通键：按下照样走线。
         val kind = if (!config.commit && (pressed == GapLightKind.RISE || pressed == GapLightKind.SWEEP)) GapLightKind.PRESS else pressed
         if ((kind != GapLightKind.PRESS && kind != GapLightKind.PULL) || !config.enabled) return
@@ -1011,6 +1081,9 @@ internal fun KeyGapLightLayer(field: KeyGapLightField?, modifier: Modifier = Mod
     }
     LaunchedEffect(field) {
         field.motionScale = coroutineContext[MotionDurationScale]
+        // 新建的键盘：等排好的下一帧（各键已登记位置）接过上一块键盘的切换扩散（[KeyGapLightHandoff]）。
+        withFrameNanos { }
+        field.takeHandoff()
         // 有动效在走才向系统要帧；走完就停在这里等下一次按键。
         snapshotFlow { field.running }.collect { running ->
             if (running) while (field.running) withFrameNanos { field.advance(it) }
@@ -1119,6 +1192,25 @@ internal fun KeyGapLightMode(field: KeyGapLightField?, state: Any?, on: Boolean 
         if (shown[0] != state) {
             shown[0] = state
             field.modeChanged(on)
+        }
+    }
+}
+
+/**
+ * 符号页收起、主键盘露出来时接过切换扩散（[LocalKeyboardCoveredBySymbols]、[KeyGapLightHandoff]）：从符号页上点的
+ * 「返回」那个位置扩开。第一次组合只记下状态，不画。
+ */
+@Composable
+internal fun KeyGapLightUncover(field: KeyGapLightField?) {
+    if (field == null) return
+    val covered = LocalKeyboardCoveredBySymbols.current
+    val shown = remember(field) { booleanArrayOf(covered) }
+    LaunchedEffect(field, covered) {
+        if (shown[0] == covered) return@LaunchedEffect
+        shown[0] = covered
+        if (!covered) {
+            withFrameNanos { }
+            field.takeHandoff()
         }
     }
 }

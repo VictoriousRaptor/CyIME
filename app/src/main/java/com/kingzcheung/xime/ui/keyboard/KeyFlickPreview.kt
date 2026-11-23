@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.keyboard
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.State
@@ -16,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -78,12 +80,57 @@ internal fun rememberKeyFlickFade(preview: KeyFlickPreview?): KeyFlickFade {
     // The preview itself drives recomposition; this only remembers each side's last text.
     val texts = remember { HashMap<KeyFlickOrigin, String>() }
     if (preview == null) texts.clear() else texts[preview.origin] = preview.text
+    // 换方向时新方向不再一下子整个跳出来（用户 11-22「上下左右拖动老是跳变」）：从原来那一角用 90 ms 追上手指，
+    // 追上以后照旧紧跟手指；旧方向照旧 120 ms 缩回去。同一方向里来回拖始终紧跟，不加延迟。
+    val entering = remember { HashSet<KeyFlickOrigin>() }
+    val previous = remember { arrayOfNulls<KeyFlickOrigin>(1) }
+    if (preview == null) entering.clear()
+    else if (previous[0] != null && previous[0] != preview.origin) entering.add(preview.origin)
+    previous[0] = preview?.origin
     val progress = KeyFlickOrigin.entries.map { origin ->
         val active = preview?.origin == origin
-        animateFloatAsState(if (active) preview!!.progress else 0f,
-            if (active || preview == null) snap() else tween(120), label = "flick-${origin.name}")
+        val target = if (active) preview!!.progress else 0f
+        val catchingUp = active && origin in entering
+        val state = animateFloatAsState(target, when {
+            preview == null -> snap()
+            catchingUp -> tween(90)
+            active -> snap()
+            else -> tween(120)
+        }, label = "flick-${origin.name}")
+        if (catchingUp && abs(state.value - target) < 0.02f) entering.remove(origin)
+        state
     }
     return KeyFlickFade(texts.toMap(), progress)
+}
+
+/**
+ * 手指往哪个方向拖（不是符号从哪一角来：「反转角标滑动方向」时下拉拉的是上角标）。
+ * [upFromTop]/[downFromTop] 是这个键上滑、下滑的预览各从哪一边出来（[KeyGestureActions.upPreviewFromTop]）。
+ */
+internal fun keyFlickDragDirection(preview: KeyFlickPreview, upFromTop: Boolean, downFromTop: Boolean): KanaFlickDirection =
+    when (preview.origin) {
+        KeyFlickOrigin.LEFT -> KanaFlickDirection.LEFT
+        KeyFlickOrigin.RIGHT -> KanaFlickDirection.RIGHT
+        else -> if (preview.fromTop == downFromTop && preview.fromTop != upFromTop) KanaFlickDirection.DOWN else KanaFlickDirection.UP
+    }
+
+/**
+ * 四向键（14 键双字母键）拖动时画出触发范围（用户 11-22：像日语那样显示方向和触发夹角）：
+ * 两条 45° 分界线标出四个方向各占的夹角，手指所在方向的扇区随拖动距离加深，到触发距离时最深。
+ * 和日语假名方向盘同一画法；这类键松手落在哪个扇区就出哪个方向（[KeyGestureActions.freeDirection]），画的就是判定范围。
+ */
+@Composable
+internal fun BoxScope.KeyFlickSector(direction: KanaFlickDirection, color: Color, progress: Float) {
+    Canvas(Modifier.matchParentSize().testTag("key-flick-sector:${direction.name}")) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val s = minOf(size.width, size.height) / 2f
+        val line = color.copy(alpha = color.alpha * 0.35f)
+        val stroke = 1.dp.toPx()
+        drawLine(line, Offset(cx - s, cy - s), Offset(cx + s, cy + s), stroke)
+        drawLine(line, Offset(cx - s, cy + s), Offset(cx + s, cy - s), stroke)
+    }
+    KanaDirectionIndicator(direction, color.copy(alpha = color.alpha * (0.15f + 0.30f * progress.coerceIn(0f, 1f))))
 }
 
 @Composable

@@ -68,13 +68,18 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val profile = ui.inputProfile
         // 双拼 26 键（11-16）停一下后也补：少打一个键、同一个键多按一下、两个键打反。
         val doublePinyin = profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+        // 每个键只出一个字母的合并键盘（乱序十七的 17 键）：编码和 26 键双拼一样是一个个字母，停一下后照样补。
+        fun singleLetterKeys(layout: com.kingzcheung.xime.settings.InputLayout) =
+            layout.kind == com.kingzcheung.xime.settings.LayoutKind.MERGED &&
+                com.kingzcheung.xime.settings.KeysConfigHelper.isSingleLetterSection(layout.id)
         // 14 键全拼（11-20）停一下后也补，三种同双拼；输入是合并键的大写代表字母（QETUOADGJZCB），l、m 单独。
         val merged14 = profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN &&
             profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.MERGED
         if (ascii || !service.isChineseMode || !state.isComposing || state.hasPrevPage ||
             profile.language != InputLanguage.CHINESE ||
             (profile.scheme != com.kingzcheung.xime.settings.InputScheme.PINYIN && !doublePinyin) ||
-            (profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !merged14) ||
+            (profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !merged14 &&
+                !(doublePinyin && singleLetterKeys(profile.layout))) ||
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
             state.inputText.length !in 4..80 || !pauseInputLetters(state.inputText, merged14)) return
         // 停顿后只补漏键和打反两种读法（双拼、14 键还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
@@ -661,6 +666,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
             add("_cyime_pause_swap_off" to
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)))
+            // 14 键打字时的邻键纠错（固定键位表，见 pinyin_14jian 的 cyime_merged_key_neighbors）跟「邻键纠错」走。
+            add("_cyime_merged_neighbor_off" to !neighbor)
             add("_cyime_l_letter" to lLetter)
         }
         var changed = false

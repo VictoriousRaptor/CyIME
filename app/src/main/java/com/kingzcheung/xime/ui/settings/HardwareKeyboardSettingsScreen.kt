@@ -52,21 +52,18 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
                 save("page_comma_period", it)
             }
             Text("浮窗", style = MaterialTheme.typography.titleMedium)
-            // 固定在某一边时，跟随光标、避开输入区域、靠边停靠、锁定这几项用不上：置灰写明，存的值不变（用户 11-20 转来的反馈）。
+            // 固定在某一边时，靠边停靠、锁定这两项用不上：置灰写明，存的值不变（用户 11-20 转来的反馈）。
+            // 跟随光标、避开输入区域照样管候选卡：固定的只是工具条，候选跟到正在打字的那一行旁边（用户 11-22）。
             val fixedNote = options.fixedEdge?.let { "浮窗固定在${it.label}，这项不起作用" }
             FloatingBarEdgeOption(options.fixedEdge) {
                 HardwareKeyboardPreferences.setFixedEdge(context, it)
                 options = HardwareKeyboardPreferences.read(context)
             }
-            HardwareOption("候选跟随光标", "候选窗显示在光标旁边", options.followCursor,
-                lockMessage = fixedNote) { save("follow_cursor", it) }
-            // 联想词只在「智能联想」开着时才有（PredictionManager）；关着时这项没有效果，置灰写明。
-            val predictionOn = remember { com.kingzcheung.xime.settings.SettingsPreferences.isSmartPredictionEnabled(context) }
-            HardwareOption("联想也显示在候选窗", "联想词也显示在候选浮窗里",
-                options.associationInWindow,
-                lockMessage = if (predictionOn) null else "「智能联想」关着，没有联想词") { save("association_in_window", it) }
-            HardwareOption("自动避开输入区域", "浮窗不挡住正在输入的地方", options.avoidEditor,
-                lockMessage = fixedNote) { save("avoid_editor", it) }
+            HardwareOption("候选跟随光标", "候选窗显示在光标旁边", options.followCursor) { save("follow_cursor", it) }
+            // 中文联想词只在「智能联想」开着时才有，但英文直接输入的补全也按这项放，与智能联想无关，所以不置灰（#526）。
+            HardwareOption("联想也显示在候选窗", "联想词和英文补全也显示在候选浮窗里",
+                options.associationInWindow) { save("association_in_window", it) }
+            HardwareOption("自动避开输入区域", "浮窗不挡住正在输入的地方", options.avoidEditor) { save("avoid_editor", it) }
             HardwareOption("靠边停靠", "浮窗拖到屏幕边缘时贴边停靠", options.dockAtEdge,
                 lockMessage = fixedNote) { save("dock_edge", it) }
             // 原「底边使用三星式通栏」（用户 11-01 改名「底部候选」）：只在停靠到底边时起作用（HardwareKeyboardToolbar 里
@@ -99,7 +96,7 @@ private fun FloatingBarEdgeOption(selected: com.kingzcheung.xime.settings.Hardwa
         Column(Modifier.settingsSearchAnchor("浮窗位置", bleed = 8.dp, bleedVertical = 4.dp).fillMaxWidth()
             .padding(16.dp)) {
             Text("浮窗位置", style = MaterialTheme.typography.titleSmall)
-            Text("固定后浮窗不再跟着光标走，候选贴着工具条出现。输入框在下面时选顶部，在上面时选底部。",
+            Text("固定后工具条停在这一边、不能拖；候选照样出现在正在打字的那一行旁边，不挡这一行。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val choices = listOf<Pair<com.kingzcheung.xime.settings.HardwareToolbarEdge?, String>>(null to "自由拖动") +
                 com.kingzcheung.xime.settings.HardwareToolbarEdge.entries.map { it to "固定在${it.label}" }

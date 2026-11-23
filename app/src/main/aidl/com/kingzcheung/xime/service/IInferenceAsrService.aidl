@@ -35,4 +35,6 @@ interface IInferenceAsrService {
     boolean releaseIdleModelsNow();
     /** 语音进程自己的 PSS（kB）：正式包里别的进程读不到它的 /proc，存储空间页靠这个显示；读不到返回 0。 */
     long memoryKb();
+    /** 整句定稿用哪个模型（SpeechModelCatalog 的 SenseVoice / X-ASR id）；下一次录音开始时生效。 */
+    oneway void setWholeSentenceFinalizer(String modelId);
 }

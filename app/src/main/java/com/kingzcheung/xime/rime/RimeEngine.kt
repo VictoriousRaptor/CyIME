@@ -608,12 +608,18 @@ class RimeEngine {
         // At an interior caret Rime translates the prefix and echoes its physical keys for the tail.
         if (mergedEditReading?.first != input || caret !in confirmed until input.length) mergedEditReading = null
         val editReading = mergedEditReading?.second
+        // 「双拼编码显示全拼」开着（11-21 他报：开了还是双拼字母）：合并键上的双拼也显示全拼；光标在编码中间改键时仍显示键。
+        if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN && !doublePinyinKeysPreedit &&
+            editReading == null && caret >= input.length) {
+            mergedDoublePinyinFullPreedit(input.drop(confirmed), reading, spelling, groups)?.let { return prefix + it }
+        }
         return prefix + merged14Preedit(input.drop(confirmed), preedit.removePrefix(prefix), editReading ?: reading, groups)
     }
 
     /**
      * 「双拼编码显示全拼」关闭时显示双拼键：输入法服务按设置写入。
-     * 双拼九键在这里把显示的读音换成双拼键（[t9DoublePinyinKeys]）；26 键由方案补丁清空编码显示规则，不经过这里。
+     * 双拼九键在这里把显示的读音换成双拼键（[t9DoublePinyinKeys]）；26 键由方案补丁清空编码显示规则，不经过这里；
+     * 合并键（14 键、自建布局）上的双拼本来显示键，开着「显示全拼」时在这里换成首选的全拼（[mergedDoublePinyinFullPreedit]）。
      */
     @Volatile var doublePinyinKeysPreedit = false
 

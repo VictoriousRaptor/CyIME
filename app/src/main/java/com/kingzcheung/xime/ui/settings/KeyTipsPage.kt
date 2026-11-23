@@ -65,6 +65,12 @@ internal fun keyTipGroups(settings: KeyboardInputPreferences): List<KeyTipGroup>
                 add(KeyTip("回车${if (settings.reverseSymbolSwipe) "上拉" else "下拉"}", "打 0，打字选词时不接。0 键已去掉，见「九键与 14 键 › 去掉 0 键，回车加高」。",
                     listOf("九键与 14 键 › 去掉 0 键，回车加高")))
             }
+            // 「空格上滑输入 0」开着时（用户 11-22，默认关）写上空格上滑，以及 0 键一直是「→」时没候选能移光标。
+            if (settings.t9SpaceSwipeUpZero) {
+                add(KeyTip("空格上滑", "打 0，打字时不接。见「九键与 14 键 › 空格上滑输入 0」。",
+                    listOf("九键与 14 键 › 空格上滑输入 0")))
+                if (!settings.t9MergeZeroIntoEnter) add(KeyTip("没有候选时点「→」", "光标右移一格，左滑左移、右滑右移。"))
+            }
         }),
         KeyTipGroup("其他按键", listOf(
             KeyTip("${upper}字母键", "输入键上方的角标；${lower}输入下方的角标。"),

@@ -26,6 +26,21 @@ class KanaDirectionHintsSettingsTest {
 
     @Test fun visibleSwitchUpdatesTheKeysAndPersistsWithoutChangingGestureSettings() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // 假名方向提示只在开了日语时显示（11-22）。
+        withJapaneseOn(context) { kanaSwitch(context) }
+    }
+
+    @Test fun hiddenWithoutJapanese() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val saved = prefs.getStringSet(com.kingzcheung.xime.settings.LanguagePreferences.KEY, null)?.toSet()
+        if (saved != null && "ja" in saved) return
+        rule.setContent { MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) { InputExperienceSettings() } } }
+        rule.onNodeWithTag("kana-direction-hints").assertDoesNotExist()
+        rule.onNodeWithTag("flick-direction-disc").performScrollTo().assertIsDisplayed()
+    }
+
+    private fun kanaSwitch(context: android.content.Context) {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         val affectedKeys = listOf("kana_direction_hints", "space_hold_action", "cursor_gesture_mode",
             "cursor_hold_seconds", "neighbor_correction", "fourteen_letter_swipe", "fourteen_letter_swipe_dp",

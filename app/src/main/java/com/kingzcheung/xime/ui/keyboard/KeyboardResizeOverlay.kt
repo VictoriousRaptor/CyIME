@@ -157,6 +157,8 @@ internal fun KeyboardResizeOverlay(
 ) {
     val density = LocalDensity.current
     val hostView = LocalView.current
+    // 按真实物理尺寸算的最低高度（11-22）：固定键盘的下限、悬浮键盘拖小的下限都和它取小。
+    val heightFloorDp = rememberKeyboardHeightFloorDp()
     val currentSnapFeedback by rememberUpdatedState(onSnapFeedback ?: {
         hostView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
     })
@@ -605,7 +607,7 @@ internal fun KeyboardResizeOverlay(
                         val session = currentPreviewState
                         val stableBounds = session.bounds ?: gestureViewRect
                         val fixedRange = session.fixedHeightRange ?:
-                            keyboardHeightBounds(configuration.screenHeightDp, isLandscape)
+                            keyboardHeightBounds(configuration.screenHeightDp, isLandscape, minHeightDp = heightFloorDp)
                         // 框外不是移动区域；框内空白和底部拖条仍可移动，控件自己消费触摸。
                         if (dragEdge == ResizeHandle.NONE && splitEdge == 0 &&
                             (down.position.x < gestureRect.left || down.position.x > gestureRect.right ||
@@ -622,13 +624,13 @@ internal fun KeyboardResizeOverlay(
                         // 悬浮最低高度和点亮四角直接拖用同一个（11-03「通过不同方法调整的最小尺寸不一致」）。
                         // 下限按屏幕短边算（11-03），横竖屏同一个值。
                         val screenShortSideDp = minOf(configuration.screenWidthDp, configuration.screenHeightDp)
-                        val minContentHeightDp = floatingResizeFloorContentDp(screenShortSideDp, availableHeightDp)
+                        val minContentHeightDp = floatingResizeFloorContentDp(screenShortSideDp, availableHeightDp, heightFloorDp)
                         val minHeightPx = ((if (gestureFloating) minContentHeightDp else
                             fixedRange.first + session.bottomPaddingDp) + dragBarDp) * density.density
                         val screenMaxHeightPx = ((if (gestureFloating) floatingHeightRange.last else
                             fixedRange.last + session.bottomPaddingDp) + dragBarDp) * density.density
                         val baseMinWidthPx = if (gestureFloating) {
-                            floatingResizeFloorWidthDp(screenShortSideDp, availableWidthDp).toFloat() * density.density
+                            floatingResizeFloorWidthDp(screenShortSideDp, availableWidthDp, heightFloorDp).toFloat() * density.density
                         } else gestureRect.width
                         val maxWidthPx = if (gestureFloating) {
                             minOf(stableBounds.width, maxWidthDp.toFloat() * density.density)
@@ -1054,7 +1056,7 @@ internal fun KeyboardResizeOverlay(
                             previewState.onBottomPaddingChange(defaultBottomPaddingDp)
                             currentOnPaddingEdited(defaultBottomPaddingDp)
                             val range = previewState.fixedHeightRange ?:
-                                keyboardHeightBounds(configuration.screenHeightDp, isLandscape)
+                                keyboardHeightBounds(configuration.screenHeightDp, isLandscape, minHeightDp = heightFloorDp)
                             val availableWidth = (viewRect.width / density.density).roundToInt()
                             val size = defaultSize ?: protectKeyboardSize(availableWidth, availableWidth,
                                 defaultHeightDp.coerceIn(range), 0, previewState.aspectLimits)

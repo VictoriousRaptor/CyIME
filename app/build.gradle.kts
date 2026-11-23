@@ -105,8 +105,8 @@ android {
         // 按发布批次定号：兼容修复升 PATCH，兼容功能升 MINOR 并归零 PATCH。
         // 不兼容变更升 MAJOR；日常编辑不逐次升号。完整规则见 docs/packaging.md。
         // versionCode 是独立递增的交付序号；同批普通版与内置版共用。
-        versionCode = 20261489
-        versionName = "1.15.103"
+        versionCode = 20261515
+        versionName = "1.15.105"
 
 
         // Isolated Compose rendering on a local x86 emulator; ordinary device tests keep the full app.
@@ -126,6 +126,9 @@ android {
         // Developer-only features (handwriting training / capture): only the packager's 装到我的设备 preset (-PdevTools=true)
         // and debug builds show them; public, elder and friend packages never do.
         buildConfigField("boolean", "DEV_TOOLS", (providers.gradleProperty("devTools").orNull == "true").toString())
+        // The same preset lets `adb shell simpleperf` sample the app (tools/ime_lab/cpu_profile.py: where the CPU goes,
+        // by thread and function). Every other package keeps the platform default: not profileable from the shell.
+        manifestPlaceholders["profileableByShell"] = (providers.gradleProperty("devTools").orNull == "true").toString()
     }
 
     signingConfigs {

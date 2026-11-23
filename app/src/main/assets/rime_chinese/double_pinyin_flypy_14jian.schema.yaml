@@ -129,8 +129,22 @@ speller:
     - derive/^(.{1})[bn](.*)$/$1B$2/
 
 translator:
+  # 整句规则和词组模型挑句同 14 键全拼、26 键小鹤（2026-11-22：yijkhchfdole 首选「已经贵很多了」，14 键小鹤原来
+  # 只出 Rime 的一条整句，词组模型没接上；gh、cv 同键，好/贵 都是 GC）。
+  sentence_char_homophones: 4
+  sentence_position_penalty: -2.0
+  sentence_position_final_only: [吧, 呗, 呢, 吗, 啊, 嘛, 啦, 呀, 哦, 咯, 哟, 哇, 嘞, 喽, 个, 只, 条, 张, 件, 位, 块]
+  sentence_position_initial_only: [把, 被]
+  max_sentences: 4
+  sentence_cutoff_threshold: 100
   dictionary: rime_ice
   prism: double_pinyin_flypy_14jian
+  # 邻键纠错（2026-11-22「太大了打成太大可，纠错没有纠错能力」）：按偏到旁边的键（l 打成 jk）和 26 键一样当场纠，
+  # 纠出的整句按 26 键的规则排（多半在第二位）。14 键没有量出来的键位，用固定的键位表：同一排左右相邻、
+  # 第一二排上下相邻（第三排和第二排错开，不算）。「邻键纠错」关着时 App 设 _cyime_merged_neighbor_off，不纠。
+  enable_correction: true
+  cyime_neighbor_correction: true
+  cyime_merged_key_neighbors: "Q:EA;E:QTD;T:EUG;U:TOJ;O:Ul;A:DQ;D:AGE;G:DJT;J:GlU;l:JO;Z:C;C:ZB;B:Cm;m:B"
   spelling_hints: 8
   always_show_comments: true
   preedit_format:
@@ -185,3 +199,16 @@ traditionalize_user:
   opencc_config: cyime_s2tw_user.json
   tips: none
   excluded_types: [simplified]
+
+# 四条整句里由词组模型挑最自然的一条放第一，同 26 键小鹤（双拼两个键一个字，按键数算音节）。没有 t9_ngram.lm 时照原样。
+t9:
+  # 按偏一个键（太大了 打成 TAUDAJE 太大可、太低了 打成 TAUDUJE 态度可，后者差一点）：纠出的整词和整句也拿来和原样的整句一起
+  # 让词组模型比，词组模型认为纠出的常见 e^7 倍以上（每纠一个音节算一次）才排第一，原样的退第二。打的键本身拼得
+  # 出词时不造句，不纠；英文和专名照样第一（CTUmE 仍是 CyIME）。2026-11-22 门槛扫过 5～9，回归数字见 k14-correct-1122。
+  slip_correction_margin: 7.0
+  slip_whole_words: true
+  sentence_rescore: true
+  rescore_keys_per_syllable: 2
+  ngram_model: t9_ngram
+  ngram_sentence_start: false
+  rescore_rime_weight: 0

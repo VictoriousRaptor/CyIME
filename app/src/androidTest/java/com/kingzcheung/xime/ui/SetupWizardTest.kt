@@ -70,11 +70,12 @@ class SetupWizardTest {
     /** 11-20：准备时显示第几步、在写哪个文件；超时后说停在哪、给日志和下一步，能导出日志。 */
     @Test fun preparationShowsTheStepAndATimeoutNotice() {
         var exports = 0
+        var restarts = 0
         val stall = mutableStateOf<PreparationStall?>(null)
         rule.setContent { MaterialTheme {
             SetupWizardContent(SetupStatus(), {}, {}, {}, {}, {},
                 progress = PreparationProgress.State(PreparationProgress.Step.COMPILE, "正在写 rime_ice.table.bin（38 MB）", done = 1, total = 3),
-                stepElapsedMs = 42_000L, stall = stall.value, onExportLog = { exports++ })
+                stepElapsedMs = 42_000L, stall = stall.value, onExportLog = { exports++ }, onRestart = { restarts++ })
         } }
         rule.onNodeWithText("第 3/3 步：编译词库（42 秒）").assertExists()
         rule.onNodeWithText("已编译词典 1/3").assertExists()
@@ -86,5 +87,7 @@ class SetupWizardTest {
         rule.onNodeWithText("停在：编译词库").assertExists()
         rule.onNodeWithText("导出日志").performScrollTo().performClick()
         assertEquals(1, exports)
+        rule.onNodeWithText("重新开始准备").performScrollTo().performClick()
+        assertEquals(1, restarts)
     }
 }

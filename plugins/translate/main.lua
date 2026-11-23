@@ -806,7 +806,8 @@ end
 
 -- 栏里平时的提示：互译时两种语言都写上
 local function readyHint()
-  if sourceLang() == nil then return "打字，停一下" .. nativeLang().name .. "和" .. otherLang().name .. "互译" end
+  -- 用单字简称（「中英互译」），栏上不再出「简体中文」全名（11-22 他：显示 中 英 日 就够了）
+  if sourceLang() == nil then return "打字，停一下" .. nativeLang().short .. otherLang().short .. "互译" end
   return "打字，停一下译成" .. targetLang().name
 end
 

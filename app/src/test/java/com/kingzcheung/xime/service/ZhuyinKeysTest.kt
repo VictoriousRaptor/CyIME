@@ -93,10 +93,11 @@ class ZhuyinKeysTest {
         assertTrue(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_LEFT_BRACKET))
         assertTrue(zhuyinKeepsPagingKey(KeyEvent.KEYCODE_EQUALS))
         val punctuator = schema.substringAfter("\npunctuator:").substringBefore("\nkey_binder:")
-        for (shape in listOf("half_shape", "full_shape")) {
-            assertTrue(shape, punctuator.contains("$shape/<: { commit: \"，\" }"))
-            assertTrue(shape, punctuator.contains("$shape/>: { commit: \"。\" }"))
-        }
+        assertTrue(punctuator.contains("half_shape/<: { commit: \"，\" }"))
+        assertTrue(punctuator.contains("half_shape/>: { commit: \"。\" }"))
+        // 全角的 < > 在 default.custom.yaml 里是列表，只能写字符串（见 ZhuyinSchemaFeaturesTest）。
+        assertTrue(punctuator.contains("full_shape/<: \"，\""))
+        assertTrue(punctuator.contains("full_shape/>: \"。\""))
     }
 
     @Test fun `enter commits the bopomofo on screen, not the key codes`() {

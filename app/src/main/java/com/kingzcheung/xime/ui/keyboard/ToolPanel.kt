@@ -33,6 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -157,7 +160,7 @@ private fun toolPanelEditText(
     onFocusChange: (Boolean) -> Unit,
     onTextChange: ((String) -> Unit)?,
     keepFocusOnBlur: Boolean = false,
-): android.widget.EditText = android.widget.EditText(context).apply {
+): android.widget.EditText = (if (singleLine) DragScrollEditText(context) else android.widget.EditText(context)).apply {
     setBackgroundColor(android.graphics.Color.TRANSPARENT)
     setTextColor(textColor.hashCode())
     setHintTextColor((textColor.copy(alpha = 0.4f)).hashCode())
@@ -223,6 +226,8 @@ fun ToolPanelBar(
     showSwap: Boolean = false,
     onSelect: (key: String, option: String) -> Unit = { _, _ -> },
     onSwap: () -> Unit = {},
+    /** 离线翻译模型的下载进度 0~1：输入框底下画一条细线，栏里有字、看不到提示时也知道下到哪了。 */
+    downloadProgress: Float? = null,
 ) {
     // 圆钮用按键底色和按键字色，跟着键盘主题走（原来取应用主题的浅紫，深色下白字看不清）
     val circleBg = cardBgColor
@@ -275,7 +280,9 @@ fun ToolPanelBar(
                 update = { editText ->
                     syncToolPanelEditText(editText, isFocused, "")
                     // 打字去了应用输入框：栏里不显示光标，看得出字不会进栏；点一下栏又回来。
-                    if (editText.isCursorVisible != isFocused) editText.isCursorVisible = isFocused
+                    // 一行的栏用 DragScrollEditText：光标滚到框外时它自己先不画
+                    if (editText is DragScrollEditText) editText.setCursorWanted(isFocused)
+                    else if (editText.isCursorVisible != isFocused) editText.isCursorVisible = isFocused
                     if (editText.hint?.toString() != hint) editText.hint = hint
                 },
                 modifier = Modifier.fillMaxWidth().height(36.dp),
@@ -285,6 +292,15 @@ fun ToolPanelBar(
                     modifier = Modifier.align(Alignment.CenterEnd).size(14.dp),
                     color = textColor.copy(alpha = 0.5f),
                     strokeWidth = 1.5.dp,
+                )
+            }
+            if (downloadProgress != null) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { downloadProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp)
+                        .testTag("live-bar-download-progress"),
+                    color = textColor.copy(alpha = 0.6f),
+                    trackColor = textColor.copy(alpha = 0.12f),
                 )
             }
         }
@@ -314,6 +330,27 @@ fun ToolPanelBar(
  * 每边一个 36dp 高的胶囊，和圆钮、关闭按钮一样高；插件给了单字（optionLabels）就画单字，是个 36dp 圆，
  * 省下的宽度给右边输入框。旧插件没给就画全名。
  */
+/** 翻译栏语言胶囊最近的按下时间、最近一次被点外面关掉的列表和时间（不参与重组）。 */
+internal class LiveBarLangTaps {
+    val downAt = mutableMapOf<String, Long>()
+    var dismissedKey: String? = null
+    var dismissedAt = Long.MIN_VALUE
+}
+
+/** 弹窗关掉和胶囊按下相差这么久以内，算同一下点击。 */
+internal const val LIVE_BAR_LANG_SAME_TAP_MS = 400L
+
+/**
+ * 点了语言胶囊 [key] 以后哪个列表开着：同一个开着就关；刚因为这一下点击被点外面关掉的（两者时间差在
+ * [LIVE_BAR_LANG_SAME_TAP_MS] 以内）保持关着；别的情况打开它（另一个胶囊开着时换成这个）。
+ */
+internal fun liveBarLangTap(open: String?, key: String, dismissedKey: String?, dismissedAt: Long, downAt: Long?): String? {
+    if (open == key) return null
+    if (open == null && dismissedKey == key && downAt != null && dismissedAt != Long.MIN_VALUE &&
+        kotlin.math.abs(dismissedAt - downAt) <= LIVE_BAR_LANG_SAME_TAP_MS) return null
+    return key
+}
+
 @Composable
 private fun LiveBarLanguages(
     selects: List<com.kingzcheung.xime.plugin.core.config.UiNode>,
@@ -324,6 +361,10 @@ private fun LiveBarLanguages(
     onSwap: () -> Unit,
 ) {
     var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    // 列表开着时再点同一个胶囊：弹窗先当「点了外面」把列表关掉，胶囊随后又收到这一下点击，列表马上又开了，
+    // 看着就是点开以后关不上（用户 11-22）。记下哪个列表是什么时候被点外面关掉的、胶囊是什么时候按下的，
+    // 是同一下就只关不开。
+    val taps = remember { LiveBarLangTaps() }
     Row(verticalAlignment = Alignment.CenterVertically) {
         selects.forEachIndexed { index, node ->
             val key = node.key ?: return@forEachIndexed
@@ -345,7 +386,14 @@ private fun LiveBarLanguages(
                     .clip(RoundedCornerShape(18.dp))
                     .background(pillColor)
                     .testTag("live-bar-lang:$key")
-                    .clickable { open = key }
+                    .pointerInput(key) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false,
+                                pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            taps.downAt[key] = down.uptimeMillis
+                        }
+                    }
+                    .clickable { open = liveBarLangTap(open, key, taps.dismissedKey, taps.dismissedAt, taps.downAt[key]) }
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -355,7 +403,11 @@ private fun LiveBarLanguages(
                 if (open == key) {
                     OptionMenuPopup(node.label.orEmpty(), node.options, node.value, labels = node.optionLabels,
                         onChoose = { option -> open = null; if (option != node.value) onSelect(key, option) },
-                        onDismiss = { open = null })
+                        onDismiss = {
+                            taps.dismissedKey = key
+                            taps.dismissedAt = android.os.SystemClock.uptimeMillis()
+                            open = null
+                        })
                 }
             }
         }

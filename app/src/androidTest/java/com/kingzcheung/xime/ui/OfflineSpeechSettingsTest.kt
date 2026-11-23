@@ -37,7 +37,8 @@ class OfflineSpeechSettingsTest {
             if (value == null) editor.remove(key) else editor.putString(key, value)
         } }.commit() }
     }
-    @Test fun eachLanguageSelectsIndependentlyAndShowsOnlyCompatibleModels() = withSavedChoices { manager ->
+    // 「日语语音」只在开了日语时列出（11-22）。
+    @Test fun eachLanguageSelectsIndependentlyAndShowsOnlyCompatibleModels() = withJapaneseOn(rule.activity) { withSavedChoices { manager ->
         screen()
         val zh = InputLanguage.CHINESE; val ja = InputLanguage.JAPANESE; val en = InputLanguage.ENGLISH
         rule.onNodeWithTag("speech-finish:ja:sensevoice").assertDoesNotExist()
@@ -71,7 +72,7 @@ class OfflineSpeechSettingsTest {
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
         try { output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
         finally { bitmap.recycle() }
-    }
+    } }
     @Test fun senseVoiceCannotCorrectItselfAndDoesNotChangeOtherLanguages() = withSavedChoices { manager ->
         val japanese = manager.getSelectedModelId(InputLanguage.JAPANESE)
         manager.setModel(SpeechModelCatalog.SENSEVOICE, InputLanguage.CHINESE)

@@ -40,6 +40,24 @@ class PreparationProgressTest {
         assertTrue(PreparationProgress.stallAdvice(null, DeviceVendor.OTHER, lowStorage = true).any { "剩余空间" in it })
     }
 
+    @Test fun notificationSaysTheStep() {
+        val (idleTitle, idleText) = PreparationProgress.notificationText(PreparationProgress.State())
+        assertEquals("正在准备词库", idleTitle)
+        assertTrue("接着准备" in idleText)
+        val (title, text) = PreparationProgress.notificationText(PreparationProgress.State(
+            PreparationProgress.Step.COMPILE, "正在写 rime_ice.table.bin（38 MB）", done = 1, total = 3))
+        assertEquals("正在准备词库：第 3/3 步 编译词库（1/3）", title)
+        assertEquals("正在写 rime_ice.table.bin（38 MB）", text)
+        assertEquals("正在准备词库", PreparationProgress.notificationText(
+            PreparationProgress.State(PreparationProgress.Step.DONE)).first)
+    }
+
+    @Test fun adviceOffersTheRestartButton() {
+        val advice = PreparationProgress.stallAdvice(PreparationProgress.Step.COMPILE, DeviceVendor.OTHER, lowStorage = false)
+        assertTrue(advice.any { "「重新开始准备」" in it })
+        assertTrue(advice.none { "最近任务" in it })
+    }
+
     @Test fun logTailKeepsPreparationLines() {
         val log = """
             2026-11-20 23:10:00.000 [W] RimeConfigHelper: Build directory missing, empty or damaged, running full deploy

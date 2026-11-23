@@ -40,7 +40,7 @@ data class KeyGapLightConfig(
     val delete: Boolean = true,
     /** 上屏和发送：点空格一块色带往上走，点回车整排往上扫。 */
     val commit: Boolean = true,
-    /** 切换扩散：大写出现时从 Shift 扩开，取消时收回去。 */
+    /** 切换扩散：大写出现时从 Shift 扩开，取消时收回去；切中英、切语言、进出符号页时从点的那个键扩开（KeyGapLightHandoff）。 */
     val switch: Boolean = true,
     /** 长按进度：按住有长按的键，线沿键边走一圈，走满就是长按生效的那一刻。 */
     val hold: Boolean = true,

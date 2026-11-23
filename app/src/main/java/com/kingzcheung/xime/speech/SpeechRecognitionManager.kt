@@ -489,6 +489,22 @@ class SpeechRecognitionManager(
             onNotice = { message -> mainHandler.post { noticeCallback?.invoke(message) } })
     }
 
+    /** 录音实际走的麦和格式（不含声音）：来源、采样率、声道、路由到的输入设备、正在用的麦克风位置。 */
+    private fun describeRoute(record: AudioRecord): String = buildString {
+        append("source=").append(record.audioSource).append(" rate=").append(record.sampleRate)
+            .append(" channels=").append(record.channelCount).append(" session=").append(record.audioSessionId)
+        runCatching { record.routedDevice }.getOrNull()?.let { d ->
+            append(" device=").append(d.type).append('/').append(d.productName)
+            append('@').append(d.address)
+        }
+        runCatching { record.activeMicrophones }.getOrNull()?.let { mics ->
+            append(" mics=").append(mics.joinToString(",") { m -> "${m.type}:${m.location}:${m.description}" })
+        }
+        append(" ns=").append(android.media.audiofx.NoiseSuppressor.isAvailable())
+            .append(" agc=").append(android.media.audiofx.AutomaticGainControl.isAvailable())
+            .append(" aec=").append(android.media.audiofx.AcousticEchoCanceler.isAvailable())
+    }
+
     private fun createAudioRecord(bufferSecs: Float = 2.0f): AudioRecord? {
         audioRecordFactory?.let { return it() }
         val bufferSize = (SAMPLE_RATE * bufferSecs).toInt()
@@ -703,6 +719,8 @@ class SpeechRecognitionManager(
             }
         }
 
+        private var levels: InputLevelStats? = null
+
         override fun run() {
             var deliveryStarted = false
             try {
@@ -715,6 +733,8 @@ class SpeechRecognitionManager(
                 }
                 if (!started) error("麦克风没能开始录音：可能被其他应用占用，或没有录音权限")
                 FileLogger.i(TAG, "Microphone ready session=$session elapsedMs=${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - requestedAt)}")
+                // 用的是哪个麦、什么格式：手机和平板认得不一样时先比这一行（用户 11-22）。
+                FileLogger.i(TAG, "Microphone route session=$session ${runCatching { describeRoute(audioRecord) }.getOrElse { "unknown" }}")
                 deliveryThread = Thread(::deliverAudio, "AsrAudioDelivery").also { it.start() }
                 deliveryStarted = true
                 val draining = drainBytes >= 0
@@ -725,6 +745,7 @@ class SpeechRecognitionManager(
 
                 val buffer = ShortArray((SAMPLE_RATE * BUFFER_SIZE_SECONDS).toInt())
                 val byteBuffer = ByteArray(buffer.size * 2)
+                levels = InputLevelStats(SAMPLE_RATE)
                 var speechDetected = false
                 // 语音前缓冲：保存检测到语音前的若干块，检测到后一起送入 ASR，
                 // 避免"你/觉"等弱开头的语音块因音量低于阈值被当作静音丢弃
@@ -739,6 +760,7 @@ class SpeechRecognitionManager(
                         else audioRecord.read(buffer, 0, buffer.size)
                     if (nread > 0) {
                         drained += nread * 2L
+                        levels?.add(buffer, nread)
                         var peak = 0
                         for (i in 0 until nread) {
                             val s = buffer[i].toInt()
@@ -787,6 +809,8 @@ class SpeechRecognitionManager(
                 cancelRequested = true
             } finally {
                 stopRequested = true
+                // 这次收到的电平（只记数字）：说话电平、底噪、低频占比、削顶。
+                levels?.let { FileLogger.i(TAG, "Microphone level session=$session ${it.summary()}") }
                 microphone.close()
                 audioFocus.release(otherAudioOwner)
                 captureEnded = true

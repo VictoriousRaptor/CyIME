@@ -267,6 +267,7 @@ private fun T9KeyboardSwipeOverlay(
     // 按住 !@# 当 Ctrl、中英或语言切换：和 26 键一样从按的那个键扩开（用户 11-14）。
     KeyGapLightMode(gapLight, ctrlTargets.ctrlFaces, on = ctrlTargets.ctrlFaces)
     KeyGapLightMode(gapLight, uiState.isAsciiMode to uiState.inputProfile)
+    KeyGapLightUncover(gapLight)
 
     CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
         LocalT9GlideKeys provides glideKeys,
@@ -751,9 +752,17 @@ private fun T9KeyboardContent(
                     ctrlTargets = ctrlTargets, onCtrlShortcut = onCtrlShortcut,
                 )
                 if (languageOnLeft) LanguageKey()
+                // 「空格上滑输入 0」（11-22，默认关）：打字时不接（空格上滑照旧什么都不做），没在打字时（含出联想）上滑打 0。
+                val spaceUpZero = LocalKeyboardInputPreferences.current.t9SpaceSwipeUpZero
+                val typing by remember(candidateState) {
+                    androidx.compose.runtime.derivedStateOf {
+                        candidateState.value.let { it.isComposing || it.inputText.isNotEmpty() || it.preeditText.isNotEmpty() }
+                    }
+                }
                 T9SpaceKey(
                     schemaName = "拼音", isSttEnabled = uiState.isSttEnabled,
                     voiceSticky = uiState.voiceSticky,
+                    onSwipeUp = if (spaceUpZero && !typing) ({ commitDirect("0") }) else null,
                     onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
                     onVoiceModeChange = callbacks.onVoiceModeChange,
                     backgroundColor = keyBackgroundColor, textColor = keyTextColor,
@@ -832,9 +841,12 @@ private fun T9KeyboardContent(
             // 读 revision 让词典加载完成后重组到这里。
             val glossHoldEnabled = nextCandidate && com.kingzcheung.xime.gloss.CandidateGlossary.revision
                 .let { com.kingzcheung.xime.gloss.CandidateGlossary.isLoaded }
+            // 「空格上滑输入 0」开着时 0 在空格上滑，这个键一直是「→」（用户 11-22）：没有候选时点它光标右移、左右滑移光标。
+            val arrowOnly = LocalKeyboardInputPreferences.current.t9SpaceSwipeUpZero && !nextCandidate
+            val onCursorMove = LocalKeyboardInputActions.current.onCursorMove
             if (!mergeZero) NineKeyButton(
-                digit = "", letters = if (nextCandidate) "下一项" else "0",
-                icon = if (nextCandidate) rememberVectorPainter(Icons.AutoMirrored.Filled.KeyboardArrowRight) else null,
+                digit = "", letters = if (nextCandidate) "下一项" else if (arrowOnly) "光标右移" else "0",
+                icon = if (nextCandidate || arrowOnly) rememberVectorPainter(Icons.AutoMirrored.Filled.KeyboardArrowRight) else null,
                 // 箭头只占图标框中间一小块，按退格等功能图标的视觉高度放大（用户 10-24：太小看不清）。
                 iconSizeDp = T9NextCandidateIconDp,
                 onClick = {
@@ -842,7 +854,8 @@ private fun T9KeyboardContent(
                     else if (nextCandidate) {
                         callbacks.onDismissPreeditEditor?.invoke()
                         callbacks.onNextCandidate(candidateState.value)
-                    } else commitDirect("0")
+                    } else if (arrowOnly) onCursorMove?.invoke(1)
+                    else commitDirect("0")
                 },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
                 // 拖出超过键盘一半宽或高（设置里可调）才算拖动选词（画出拖线），拖到候选上松手等于按住 Shift 选它（有英文上屏英文）；
@@ -854,11 +867,11 @@ private fun T9KeyboardContent(
                 onSwipeLeft = if (nextCandidate) ({
                     callbacks.onDismissPreeditEditor?.invoke()
                     callbacks.onPreviousCandidate(candidateState.value)
-                }) else null,
+                }) else if (arrowOnly && onCursorMove != null) ({ onCursorMove(-1) }) else null,
                 onSwipeRight = if (nextCandidate) ({
                     callbacks.onDismissPreeditEditor?.invoke()
                     callbacks.onNextCandidate(candidateState.value)
-                }) else null,
+                }) else if (arrowOnly && onCursorMove != null) ({ onCursorMove(1) }) else null,
                 onPress = { onKeyPressDown?.invoke("0") },
                 onSwipeStateChange = onSwipeStateChange, swipes = swipesFor("0"),
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
@@ -1320,11 +1333,13 @@ private fun T9SpaceKey(
     shadowEnabled: Boolean = true,
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
+    onSwipeUp: (() -> Unit)? = null,
 ) {
 
     SpaceKeyButton(onClick = { onKeyPress("space") }, backgroundColor = backgroundColor,
         textColor = textColor, schemaName = schemaName, modifier = modifier,
         onPress = { onKeyPressDown?.invoke("space") }, voiceSticky = voiceSticky,
         isSttEnabled = isSttEnabled, onVoiceModeChange = onVoiceModeChange,
-        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+        shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
+        onSwipeUp = onSwipeUp, swipeUpLabel = if (onSwipeUp != null) "0" else null)
 }

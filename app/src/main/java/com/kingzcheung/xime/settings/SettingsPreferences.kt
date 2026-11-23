@@ -132,6 +132,7 @@ object SettingsPreferences {
     const val KEY_STT_ENGINE_IDLE_MINUTES = "stt_engine_idle_minutes"
     const val KEY_STT_DEBUG_RECORD = "stt_debug_record"
     const val KEY_STT_WHOLE_SENTENCE = "stt_whole_sentence"
+    const val KEY_STT_WHOLE_FINALIZER = "stt_whole_finalizer"
     const val KEY_STT_AUTO_PUNCTUATION = "stt_auto_punctuation"
     const val KEY_STT_PUNCTUATION_COMMA = "stt_punctuation_comma"
     const val KEY_STT_PUNCTUATION_PERIOD = "stt_punctuation_period"
@@ -474,6 +475,10 @@ object SettingsPreferences {
     const val KEY_ASSOCIATION_CANCEL_CROSS = "association_cancel_cross"
     const val KEY_HANDWRITING_WUBI_HINTS = "handwriting_wubi_hints"
     const val KEY_CANDIDATE_PRESS_HIGHLIGHT = "candidate_press_highlight"
+    /** 候选滑到头回弹展开（11-21 他：默认关，关着时候选栏和 1.15.101 完全一样）。 */
+    const val KEY_CANDIDATE_SWIPE_EXPAND = "candidate_swipe_expand"
+    /** 开了「候选滑到头回弹展开」时，取消／关联想键放右边画成「×」（11-22 他：和收起键盘同一个位置）；默认左边。 */
+    const val KEY_CANDIDATE_CLOSE_ON_RIGHT = "candidate_close_on_right"
     const val KEY_INPUT_TEXT_LOCATION = "input_text_location"
     const val KEY_SHOW_PREEDIT_PREVIEW = "show_preedit_preview"
     const val KEY_INLINE_PREEDIT_PREVIEW = "inline_preedit_preview"
@@ -606,6 +611,29 @@ object SettingsPreferences {
 
     fun setShowCandidateCancelButton(context: Context, show: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SHOW_CANDIDATE_CANCEL_BUTTON, show).apply()
+    }
+
+    /**
+     * 候选滑到头回弹展开（11-21 他：「谁让你直接生效了」，默认关）：打开后候选行滑到最后再往左拉、松手展开，
+     * 展开后往右拉收回，展开页里左右划也收回；右边 ▾/▴ 照常。关着时候选栏和 1.15.101 一样，只有 ▾/▴。
+     */
+    fun isCandidateSwipeExpand(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CANDIDATE_SWIPE_EXPAND, false)
+
+    fun setCandidateSwipeExpand(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CANDIDATE_SWIPE_EXPAND, enabled).apply()
+    }
+
+    /**
+     * 关闭键放右边（11-22 他：全面屏手势的人要「不管什么时候点右边同一个位置都能收起键盘」）：只在
+     * [isCandidateSwipeExpand] 打开时起作用。打开后打字时右边是「×」取消输入、出联想时是「×」关联想、空闲时是收起键盘，
+     * 上屏后同一个位置点两下就收起；左边不放按钮。默认关（左边「<」，右边永远收起键盘，同 1.15.104）。
+     */
+    fun isCandidateCloseOnRight(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CANDIDATE_CLOSE_ON_RIGHT, false)
+
+    fun setCandidateCloseOnRight(context: Context, right: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CANDIDATE_CLOSE_ON_RIGHT, right).apply()
     }
 
     /**
@@ -1124,6 +1152,15 @@ object SettingsPreferences {
         getPrefs(context).edit().putBoolean(KEY_STT_WHOLE_SENTENCE, enabled).apply()
     }
 
+    /** 整句定稿用哪个模型：SenseVoice 或 X-ASR（X-ASR 下载了才有得选）；没选过时见 [SpeechModelSelection.DEFAULT_WHOLE_FINALIZER]。 */
+    fun getSttWholeFinalizer(context: Context): String =
+        com.kingzcheung.xime.speech.SpeechModelSelection.wholeFinalizer(getPrefs(context).getString(KEY_STT_WHOLE_FINALIZER, null))
+
+    fun setSttWholeFinalizer(context: Context, model: String) {
+        getPrefs(context).edit().putString(KEY_STT_WHOLE_FINALIZER,
+            com.kingzcheung.xime.speech.SpeechModelSelection.wholeFinalizer(model)).apply()
+    }
+
     /**
      * 语音自动加标点：保留识别结果自带的标点（本地整句定稿的模型标点，以及内置在线接口返回的原文标点）。
      * 默认关，和 1.15.0 以前一样：标点变成空格，只有口述「逗号」「句号」「问号」「感叹号」出标点。
@@ -1315,7 +1352,10 @@ object SettingsPreferences {
     fun getKeyboardHeightDp(context: Context, isLandscape: Boolean): Int {
         val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
         val stored = getPrefs(context).getInt(key, -1)
-        if (stored > 0) return if (isLandscape) stored.coerceIn(com.kingzcheung.xime.ui.keyboard.keyboardHeightBounds(context.resources.configuration.screenHeightDp, true)) else stored
+        // 横屏存值夹在范围内；下限按物理尺寸算（11-22），横屏调矮的值不被拉回 244dp。
+        if (stored > 0) return if (isLandscape) stored.coerceIn(com.kingzcheung.xime.ui.keyboard.keyboardHeightBounds(
+            context.resources.configuration.screenHeightDp, true,
+            minHeightDp = com.kingzcheung.xime.ui.keyboard.keyboardHeightFloorDp(context))) else stored
         // 横竖屏各存一份：横屏没调过就用横屏默认高度，不再借竖屏存的高度（竖屏 40% 多的高度放到横屏会盖住大半个屏幕，用户 11-02）。
         return getDefaultKeyboardHeightDp(context, isLandscape)
     }

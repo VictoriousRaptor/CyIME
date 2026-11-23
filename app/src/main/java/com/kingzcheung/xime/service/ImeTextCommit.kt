@@ -219,10 +219,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         val literal = keyboardLiteral(text, preserveWidth = preserveWidth, hardware = hardware)
         // 成对符号只管屏幕键盘；实体键盘的符号多数由引擎处理，只配一部分反而不一致。
         // 终端不认光标回退：补上的结尾会留在光标前面。
-        // 查出来不认光标位置的应用只上屏开头，不再补结尾又删掉（#489）。
+        // 不认光标位置的编辑框（#489 NotallyX、#436 浏览器）也补结尾，上屏后等它处理完再把光标挪回中间。
         val (paired, caret) = if (!hardware && !service.isTerminalEditor() &&
-            com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service) &&
-            !PairedSymbols.ignoresCaret(service.currentInputEditorInfo?.packageName))
+            com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service))
             PairedSymbols.commitFor(literal) else literal to CommitCaret.NONE
         service.voiceRecognitionHandler.abandonPendingOnManualInput()
         val owner = service.uiState.value.inputSessionId
@@ -231,7 +230,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         // 编码是 h s p n z，原样上屏没有用（11-18 贡献者）。
         val strokeKeyboard = !hardware && service.uiState.value.let {
             !it.isAsciiMode && it.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE }
-        val candidateFirst = !hardware && (strokeKeyboard || isSentencePunctuation(literal) &&
+        // 数字行、角标、长按打的数字（11-21 他报：想点候选误触了数字行，上屏成了 pinyinzimu1）：打着中文时先上屏高亮的候选再接数字
+        // （拼音字母 + 1），不再把字母原样上屏；打「di2」得到「第2」。实体键盘的数字照旧按序号选词，标点照旧先上屏字母。
+        val candidateFirst = !hardware && (strokeKeyboard || isComposingDigit(literal) || isSentencePunctuation(literal) &&
             com.kingzcheung.xime.settings.SettingsPreferences.isPunctuationCommitsCandidateEnabled(service))
         val submit: suspend () -> Unit = literal@ {
             if (owner != service.uiState.value.inputSessionId) return@literal
@@ -256,7 +257,11 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
                 // onT9RefreshComposition 不再二次 post，屏上候选与本队列的引擎输入因此同源。
                 withContext(Dispatchers.Main) { Unit }
             }
-            if (candidateFirst && !emailDomain && owner == service.uiState.value.inputSessionId &&
+            // 只打了大写字母（N、AGENTS）时点数字行，连同大写原样上屏（N1），同实体键盘 #528，不先上屏首选英文词。
+            // 只在雾凇 26 键：14 键的合并键在引擎里是大写代表字母（di 送进去是 DU），不能当成打了大写（11-22 审查）。
+            val capitalsDigit = isComposingDigit(literal) &&
+                screenDigitKeepsCapitals(service.uiState.value.currentSchemaId, engine.getInput())
+            if (candidateFirst && !capitalsDigit && !emailDomain && owner == service.uiState.value.inputSessionId &&
                 commitCandidateAndPunctuation(paired, caret)) return@literal
             if (owner != service.uiState.value.inputSessionId) return@literal
             val committed = commitCompositionAndLiteral(output, asTyped = true, caret = caret)
@@ -271,6 +276,10 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         }
         return submit
     }
+
+    /** 屏幕键盘打出的一个数字（半角或全角），见 [literalSubmission] 里的 candidateFirst。 */
+    private fun isComposingDigit(literal: String): Boolean =
+        literal.length == 1 && (literal[0] in '0'..'9' || literal[0] in '０'..'９')
 
     /** One editor transaction for prefix + literal, reused when leaving a typing panel.
      * [asTyped]: symbols, panels and the language key keep the letters, not the first candidate. */

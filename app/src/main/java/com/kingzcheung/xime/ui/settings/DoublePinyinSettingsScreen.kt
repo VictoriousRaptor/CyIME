@@ -161,8 +161,9 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DoublePinyinKeyMap(scheme)
                             // 九键没有分号键：ing 在分号上的方案（微软双拼）分号和 L 同在 5 键。
-                            listOf(Triple(scheme.id, "在方案栏显示", "在「语言与方案」里可以选它"),
-                                Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "在九键上用${scheme.name}")
+                            // 自带键盘的乱序十七只有 17 键这一种，没有九键版本。
+                            listOfNotNull(Triple(scheme.id, "在方案栏显示", "在「语言与方案」里可以选它"),
+                                Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "在九键上用${scheme.name}").takeIf { scheme.ownLayout == null }
                             ).forEach { (id, title, subtitle) ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
@@ -203,7 +204,9 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                             if (scheme.usesSemicolon) SemicolonOnShiftLegend(keyboardPrefs.doublePinyinSemicolonOnShift)
                             Row {
                                 if (custom) TextButton(onClick = { edit(scheme) }, enabled = !busy) { Text("编辑") }
-                                TextButton(onClick = { edit(copyOf(scheme)) }, enabled = !busy) { Text(if (custom) "复制" else "复制修改") }
+                                // 乱序十七的普通声母也换了键，键位表编辑器只能改翘舌声母和韵母，复制出来就不是它了。
+                                if (scheme.ownLayout == null)
+                                    TextButton(onClick = { edit(copyOf(scheme)) }, enabled = !busy) { Text(if (custom) "复制" else "复制修改") }
                                 if (custom) TextButton(onClick = { deleteId = scheme.id }, enabled = !busy) { Text("删除") }
                             }
                         }
@@ -290,20 +293,32 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
         }) { Text("删除") } }, dismissButton = { TextButton(onClick = { deleteId = null }) { Text("取消") } }) }
 }
 
-/** 26 键键位图：键上是字母、翘舌声母（强调色）和韵母；[onKey] 为空时只显示。 */
+/**
+ * 键位图：键上是字母、声母（强调色）和韵母；[onKey] 为空时只显示。普通双拼画 26 键；自带键盘的乱序十七画它自己的 17 键，
+ * 键上的强调色写这个键上的声母（H 键写 p，Z 键写 zh），和键盘键帽一致。
+ */
 @Composable
 internal fun DoublePinyinKeyMap(scheme: DoublePinyinScheme, highlight: Char? = null, onKey: ((Char) -> Unit)? = null) {
     val labels = scheme.keyLabels()
+    val ownRows = scheme.ownLayout?.let { section ->
+        com.kingzcheung.xime.settings.KeysConfigHelper.previewKeyRows(
+            com.kingzcheung.xime.settings.InputProfiles.resolveLayout(section), com.kingzcheung.xime.settings.InputLanguage.CHINESE)
+            .map { row -> row.filter { it.length == 1 && it[0] in labels }.joinToString("") }.filter { it.isNotEmpty() }
+    }?.takeIf { it.isNotEmpty() }
+    // ing 在分号上的方案第二排多一个分号键，和键盘上一样排满十格。
+    val rows = ownRows ?: listOf("qwertyuiop", if (';' in labels) "asdfghjkl;" else "asdfghjkl", "zxcvbnm")
+    val columns = if (ownRows != null) ownRows.maxOf { it.length } else 10
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = 3.dp
-        val slot = (maxWidth - gap * 9) / 10
+        val slot = (maxWidth - gap * (columns - 1)) / columns
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-            // ing 在分号上的方案第二排多一个分号键，和键盘上一样排满十格。
-            listOf("qwertyuiop", if (';' in labels) "asdfghjkl;" else "asdfghjkl", "zxcvbnm").forEachIndexed { row, letters ->
-                Row(Modifier.padding(start = (slot + gap) * (if (letters.length == 10) 0f else row * 0.5f)),
+            rows.forEachIndexed { row, letters ->
+                Row(Modifier.padding(start = (slot + gap) * (if (ownRows != null || letters.length == 10) 0f else row * 0.5f)),
                     horizontalArrangement = Arrangement.spacedBy(gap)) {
                     letters.forEach { key ->
-                        val (initial, finals) = labels.getValue(key)
+                        val (special, finals) = labels.getValue(key)
+                        val moved = scheme.plainInitials.filterValues { it == key }.keys.sorted().joinToString(" ")
+                        val initial = listOfNotNull(special, moved.takeIf { it.isNotEmpty() }).joinToString(" ").ifEmpty { null }
                         val chosen = key == highlight
                         Surface(shape = RoundedCornerShape(7.dp),
                             color = if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,

@@ -11,6 +11,27 @@ class FeedbackManagerTest {
         FeedbackManager::class.java.getDeclaredField("hapticMode").apply { isAccessible = true }.set(it, mode)
     }
 
+    @Test fun `key sounds that waited behind a stuck play are dropped`() {
+        org.junit.Assert.assertFalse(FeedbackManager.soundIsStale(postedAt = 1_000L, now = 1_150L))
+        org.junit.Assert.assertTrue(FeedbackManager.soundIsStale(postedAt = 1_000L, now = 2_003L))
+    }
+
+    @Test fun `key sound never plays on the calling thread`() {
+        val src = java.io.File("src/main/java/com/kingzcheung/xime/service/FeedbackManager.kt").readText()
+        val body = src.substringAfter("fun playKeySound(").substringBefore("\n    }\n")
+        val posted = body.indexOf("soundHandler().post")
+        org.junit.Assert.assertTrue(posted > 0)
+        org.junit.Assert.assertTrue(body.indexOf("pool.play(") > posted)
+        org.junit.Assert.assertTrue(body.indexOf("mutedForCapture(") > posted)
+    }
+
+    @Test fun `no sound thread is started while nothing can play`() {
+        val m = manager(HapticMode.Enabled)
+        m.playKeySound()
+        val handler = FeedbackManager::class.java.getDeclaredField("soundHandler").apply { isAccessible = true }.get(m)
+        org.junit.Assert.assertNull(handler)
+    }
+
     @Test fun `cursor steps use text movement feedback and honor disabled mode`() {
         val view = mock<View>()
         manager(HapticMode.Enabled).hapticFeedback(view, type = KeyFeedbackType.CURSOR_STEP)

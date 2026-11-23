@@ -49,7 +49,8 @@ internal fun numberRowLongPressItems(key: String): List<String>? =
     NUMBER_ROW_FRACTIONS.takeIf { numberRowShiftSymbol(key) != null }
 
 /**
- * 数字行的一排键：点按把键上写的原样上屏（[onInput]，和字母键上角标的数字同一条路，不拿来选候选）。
+ * 数字行的一排键：点按把键上写的原样上屏（[onInput]，和字母键上角标的数字同一条路，不按序号选候选）；
+ * 打着中文时先上屏高亮的候选再接数字（11-21，见 ImeTextCommit.literalSubmission）。
  * 键上不画角标（用户 11-15）；数字键长按弹出 [numberRowLongPressItems]，挪到哪格松手输入哪格，
  * 按多久和「长按输入」设的一样。上滑、下滑照旧输入 [numberRowShiftSymbol]，只是不画出来。
  */

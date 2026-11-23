@@ -23,6 +23,7 @@ enum class PlatformFeature(val minSdk: Int, val label: String) {
     NAV_BAR_COLOR_IGNORED(Build.VERSION_CODES.VANILLA_ICE_CREAM, "系统不画导航栏颜色，只把键盘底色报给系统"),
 
     // —— 编辑框 ——
+    TEXT_CURSOR_DRAWABLE(Build.VERSION_CODES.Q, "编辑框光标换成自己画的（翻译栏一行框）"),
     INITIAL_SURROUNDING_TEXT(Build.VERSION_CODES.R, "EditorInfo 自带光标前后文字"),
     INLINE_SUGGESTIONS(Build.VERSION_CODES.R, "自动填充建议显示在候选栏"),
     SURROUNDING_TEXT(Build.VERSION_CODES.S, "一次读光标前后文字和选区"),
@@ -60,6 +61,8 @@ enum class PlatformFeature(val minSdk: Int, val label: String) {
     BATCH_COMPONENT_STATE(Build.VERSION_CODES.TIRAMISU, "一次切换多个启动图标"),
     TILE_PENDING_INTENT(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "快捷开关用 PendingIntent 打开页面"),
     INSTALL_SOURCE(Build.VERSION_CODES.R, "读安装来源（F-Droid 装的不在应用里更新）"),
+    CURRENT_INPUT_METHOD(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "默认输入法设置读不到时问系统当前输入法"),
+    FOREGROUND_SERVICE_TYPE(Build.VERSION_CODES.Q, "前台服务声明类型（首次准备词库的 dataSync 服务）"),
 
     // —— 调试测量（只在调试工具里用） ——
     ASYNC_TRACE(Build.VERSION_CODES.Q, "异步 Trace 段"),
@@ -130,6 +133,8 @@ object AndroidPlatform {
     val navBarColorIgnored: Boolean = has(PlatformFeature.NAV_BAR_COLOR_IGNORED)
 
     // —— 编辑框 ——
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
+    val textCursorDrawable: Boolean = has(PlatformFeature.TEXT_CURSOR_DRAWABLE)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
     val initialSurroundingText: Boolean = has(PlatformFeature.INITIAL_SURROUNDING_TEXT)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
@@ -192,6 +197,10 @@ object AndroidPlatform {
     val tilePendingIntent: Boolean = has(PlatformFeature.TILE_PENDING_INTENT)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
     val installSource: Boolean = has(PlatformFeature.INSTALL_SOURCE)
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    val currentInputMethod: Boolean = has(PlatformFeature.CURRENT_INPUT_METHOD)
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
+    val foregroundServiceType: Boolean = has(PlatformFeature.FOREGROUND_SERVICE_TYPE)
 
     // —— 调试测量 ——
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)

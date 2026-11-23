@@ -54,18 +54,36 @@ class LiquidGlassStrengthTest {
         assertEquals(listOf("标准", "加强", "最强"), levels.map { it.label })
         levels.zipWithNext { a, b ->
             assertTrue(b.strokeDp > a.strokeDp)
-            assertTrue(b.bandDp > a.bandDp)
             assertTrue(b.bevelDp > a.bevelDp && b.bendDp > a.bendDp && b.spread > a.spread)
-            for (dark in listOf(true, false)) {
-                assertTrue(b.rimAlphas(dark)[0] > a.rimAlphas(dark)[0])
-                assertTrue(b.bandAlpha(dark) > a.bandAlpha(dark))
-                assertTrue(b.sheenAlpha(dark) > a.sheenAlpha(dark))
-            }
-            // 暗边只在浅色下画：白键上的白色厚度显不出来。
-            assertTrue(b.shadeAlpha(dark = false) > a.shadeAlpha(dark = false))
-            assertEquals(0f, b.shadeAlpha(dark = true), 0f)
+            for (dark in listOf(true, false)) assertTrue(b.rimAlphas(dark)[0] > a.rimAlphas(dark)[0])
         }
         levels.forEach { level -> level.rimAlphas(true).plus(level.rimAlphas(false)).forEach { assertTrue(it in 0f..1f) } }
+    }
+
+    /**
+     * 11-22（用户「加强的看起来很丑」）：后两档不再画三圈白描边、上半那层白和浅色暗边（像塑料边框），
+     * 改成键帽上面的透镜；最强的透镜每一项都比加强强。标准档没有透镜。
+     */
+    @Test fun strongerLevelsAreALensNotAPlasticOutline() {
+        assertEquals(null, LiquidGlassStrength.STANDARD.lens)
+        for (level in listOf(LiquidGlassStrength.STRONG, LiquidGlassStrength.STRONGEST)) {
+            assertEquals(0f, level.bandDp, 0f)
+            for (dark in listOf(true, false)) {
+                assertEquals(0f, level.bandAlpha(dark), 0f)
+                assertEquals(0f, level.shadeAlpha(dark), 0f)
+                assertEquals(0f, level.sheenAlpha(dark), 0f)
+            }
+            val lens = level.lens!!
+            for (alpha in listOf(lens.visibility, lens.specular, lens.backLight, lens.glow, lens.shade)) assertTrue(alpha in 0f..1f)
+            assertTrue(lens.saturation >= 1f)
+            // 往外取的比透镜圈宽：键外面的图才弯得进边里。
+            assertTrue(lens.bendDp > lens.bevelDp)
+        }
+        val a = LiquidGlassStrength.STRONG.lens!!
+        val b = LiquidGlassStrength.STRONGEST.lens!!
+        assertTrue(b.bevelDp > a.bevelDp && b.bendDp > a.bendDp && b.spread > a.spread)
+        assertTrue(b.visibility > a.visibility && b.saturation > a.saturation)
+        assertTrue(b.specular > a.specular && b.backLight > a.backLight && b.glow > a.glow)
     }
 
     @Test fun nothingStoredOrAnUnknownValueIsStandard() {

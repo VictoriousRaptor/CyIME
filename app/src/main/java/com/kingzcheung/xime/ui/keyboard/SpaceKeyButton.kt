@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
@@ -64,6 +65,12 @@ fun SpaceKeyButton(
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
     fontSize: TextUnit = 14.sp,
+    /**
+     * 空格往上滑一下（没到长按时间、往上多于往旁边）松手时做的事，如九键「空格上滑输入 0」；null 时上滑照旧什么都不做。
+     * 滑的时候空格上渐渐写出 [swipeUpLabel]，过了点击容差就是到位，松手执行；滑回来就不算。
+     */
+    onSwipeUp: (() -> Unit)? = null,
+    swipeUpLabel: String? = null,
 ) {
     val settings = LocalKeyboardInputPreferences.current
     val actions = LocalKeyboardInputActions.current
@@ -76,18 +83,24 @@ fun SpaceKeyButton(
     val voiceOn by rememberUpdatedState(isVoiceMode)
     val holdAction = settings.effectiveSpaceHold
     val cursorUnitPx = rememberCursorUnitPx()
-    // 滑到右上角锁定（SpaceVoiceLock）：键盘外没有提供时为 null，长按说话照旧、不能锁定。
+    // 滑到左右两把锁上锁定（SpaceVoiceLock）：键盘外没有提供时为 null，长按说话照旧、不能锁定。
     val voiceLock = LocalSpaceVoiceLock.current
     DisposableEffect(Unit) { onDispose {
         onCursorMode?.invoke(false)
         voiceLock?.holding = false
         voiceLock?.armed = false
+        voiceLock?.side = 0
+        voiceLock?.cancelShown = false
+        voiceLock?.cancelArmed = false
     } }
-    // 空格在 Compose 根里的左上角：手指位置换算到根坐标，和右上角锁定区比。只在手势里读，不触发重组。
+    // 空格在 Compose 根里的左上角：手指位置换算到根坐标，和锁按钮比。只在手势里读，不触发重组。
     val spaceOrigin = remember { floatArrayOf(0f, 0f) }
+    // 这个空格自己在根里的范围：开始按住说话时才交给锁（别的布局里也有空格，平时不去改共用的那一份）。
+    var spaceBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val currentClick by rememberUpdatedState(onClick)
     val currentPress by rememberUpdatedState(onPress)
     val currentRelease by rememberUpdatedState(onRelease)
+    val currentSwipeUp by rememberUpdatedState(onSwipeUp)
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     val density = LocalDensity.current
@@ -103,6 +116,9 @@ fun SpaceKeyButton(
     // 这次长按开了语音：空格从按住处铺开一层强调色、写「正在听…」、麦克风随音量起伏（用户 11-20：长按后看不出进没进语音）。
     var voiceHoldStarted by remember { mutableStateOf(false) }
     var voiceHoldX by remember { mutableFloatStateOf(0f) }
+    // 空格上滑（[onSwipeUp]）：往上走了多少（0~1，到点击容差为 1）和到没到位。到位后松手执行。
+    var swipeUpProgress by remember { mutableFloatStateOf(0f) }
+    var swipeUpArmed by remember { mutableStateOf(false) }
     val frostedGlass = settings.frostedGlass
     val shadow = remember(shadowEnabled, shadowElevation, shadowShapeRadius, KeyShapes.current, density, backgroundColor, frostedGlass.enabled) {
         if (shadowEnabled && !frostedGlass.enabled) Modifier.drawBehind {
@@ -121,8 +137,17 @@ fun SpaceKeyButton(
     val voiceLocked = voiceLock?.locked == true && isVoiceMode
     // 进入语音的样子同样只在麦克风真开着时出现：总开关关着、输入框不许语音时不假装在听。
     val showVoiceHold = (voiceHoldStarted || voiceLocked) && isVoiceMode
-    // 手指在右上角：松手就锁定。
-    val showVoiceLockArmed = voiceHoldStarted && voiceLock?.armed == true
+    // 锁按钮跟着麦克风真开着才浮出来（按住说话、但麦没开起来时不出锁）；只由开始这次说话的这个空格去写。
+    // 开了上滑取消时中间的取消按钮一起浮出，过线时跟空格一起变红。
+    SideEffect {
+        if (voiceHoldStarted && voiceLock != null) {
+            voiceLock.holding = isVoiceMode
+            voiceLock.cancelShown = showVoiceCancel
+            voiceLock.cancelArmed = showVoiceCancel && voiceCancelArmed
+        }
+    }
+    // 手指在锁按钮上：松手就锁定。和锁按钮「到位」的样子同一个条件。
+    val showVoiceLockArmed = voiceHoldStarted && voiceLock?.lockReady == true
     // 锁定后这句结束了（点麦克风停、发送后没接着听、离开输入框）：稍等一下再解除，发送后接着听时锁定的样子不闪掉。
     LaunchedEffect(isVoiceMode, voiceLock?.locked) {
         if (!isVoiceMode && voiceLock?.locked == true) {
@@ -174,7 +199,10 @@ fun SpaceKeyButton(
     val flashVisible by remember { derivedStateOf { flashAlpha.value > 0f } }
     BoxWithConstraints(
         modifier.fillMaxSize().testTag("space-key")
-            .onGloballyPositioned { it.positionInRoot().let { p -> spaceOrigin[0] = p.x; spaceOrigin[1] = p.y } }
+            .onGloballyPositioned {
+                it.positionInRoot().let { p -> spaceOrigin[0] = p.x; spaceOrigin[1] = p.y }
+                spaceBounds = it.boundsInRoot()
+            }
             .pointerInput(holdAction, settings.cursorStepDp, settings.cursorSwipeLines, cursorUnitPx, settings.spaceHoldDelayMs,
                 settings.voiceSwipeCancel) {
                 val step = settings.cursorStepDp * cursorUnitPx
@@ -188,6 +216,8 @@ fun SpaceKeyButton(
                     if (!guarded) currentPress?.invoke()
                     // 已锁定在听：这一下（点或按住都算）就是结束，松手结束并上屏，不输入空格、不再长按。
                     val endsLock = voiceLock?.locked == true && voiceOn
+                    // 这一下按下时有没有上滑动作：整个手势按按下时的算，中途候选变了也不换。
+                    val swipeUp = currentSwipeUp?.takeIf { !endsLock && !guarded }
                     var held = false
                     var movedBeforeHold = false
                     // 按住说话（用户 10-30：长按开了语音松手不停，和点麦克风是两回事）：这次长按开的语音，松手就结束并上屏。
@@ -217,7 +247,7 @@ fun SpaceKeyButton(
                                 startedVoice = !voiceOn
                                 onVoiceToggle?.invoke()
                                 voiceHolding = startedVoice && settings.voiceSwipeCancel
-                                if (startedVoice) { voiceHoldX = lastX; voiceHoldStarted = true; voiceLock?.holding = true }
+                                if (startedVoice) { voiceHoldX = lastX; voiceHoldStarted = true; voiceLock?.space = spaceBounds }
                             }
                         }
                     }
@@ -233,22 +263,41 @@ fun SpaceKeyButton(
                             lastX = change.position.x
                             val dy = change.position.y - lastY
                             lastY = change.position.y
-                            // 滑到右上角（工具栏语音键的位置）：松手锁定。那一格不算上滑取消。
+                            // 滑到左右任一把浮起来的锁上（弧线以内）：松手锁定。那里不算上滑取消。
                             var lockArmed = false
+                            var onCancelButton = false
                             if (startedVoice && voiceLock != null) {
-                                lockArmed = voiceLock.zoneContains(Offset(spaceOrigin[0] + change.position.x,
-                                    spaceOrigin[1] + change.position.y))
+                                val inRoot = Offset(spaceOrigin[0] + change.position.x, spaceOrigin[1] + change.position.y)
+                                val side = voiceLock.zoneSide(inRoot)
+                                lockArmed = spaceVoiceLockArmed(side != 0, released = !change.pressed,
+                                    wasArmed = voiceLock.armed)
+                                // 抬手那一下偏出去：还算刚才那一把。
+                                voiceLock.side = if (side != 0) side else if (lockArmed) voiceLock.side else 0
+                                onCancelButton = voiceLock.cancelButtonContains(inRoot)
+                                voiceLock.finger = inRoot
                                 if (lockArmed != voiceLock.armed) {
                                     voiceLock.armed = lockArmed
-                                    if (lockArmed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                    if (lockArmed && voiceLock.holding) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                             }
-                            // 上滑取消：手指高过空格顶边一个键高才算，左右挪不管；滑回来就恢复松手上屏。
+                            // 上滑取消：手指高过空格顶边一个键高（或在中间的取消按钮上）才算，左右挪不管；滑回来就恢复松手上屏。
                             if (voiceHolding) {
                                 voiceCancelPull = if (lockArmed) 0f else (-change.position.y / size.height).coerceIn(0f, 1f)
-                                val armed = spaceVoiceCancelArmed(lockArmed, change.position.y, size.height.toFloat())
+                                val armed = spaceVoiceCancelArmed(lockArmed, change.position.y, size.height.toFloat(), onCancelButton)
                                 if (armed != voiceCancelArmed) {
                                     voiceCancelArmed = armed
+                                    if (armed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                }
+                            }
+                            // 空格上滑：长按还没开始时，往上比往旁边多、超过点击容差就到位；滑回来或往旁边偏多了就不算。
+                            // 长按一开始（光标、语音、连续空格）就不再是上滑，照旧交给长按。
+                            if (swipeUp != null) {
+                                val up = down.position.y - change.position.y
+                                val vertical = !held && up > abs(change.position.x - down.position.x)
+                                swipeUpProgress = if (vertical) (up / tapTolerance).coerceIn(0f, 1f) else 0f
+                                val armed = vertical && up > tapTolerance
+                                if (armed != swipeUpArmed) {
+                                    swipeUpArmed = armed
                                     if (armed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                             }
@@ -275,6 +324,9 @@ fun SpaceKeyButton(
                                 if (endsLock) {
                                     voiceLock?.locked = false
                                     onVoiceHoldEnd?.invoke()
+                                } else if (swipeUp != null && swipeUpArmed && !held) {
+                                    gapLightTrigger.tap()
+                                    swipeUp()
                                 } else if (!held && !movedBeforeHold && !guarded) {
                                     gapLightTrigger.tap()
                                     currentClick()
@@ -290,19 +342,33 @@ fun SpaceKeyButton(
                         gapLightTrigger.cursorEnd()
                         timer.cancel()
                         if (startedVoice) {
+                            val lockNow = voiceLock?.lockReady == true
+                            // 松手时记一笔（只记状态，不记文字）：再有人说「动画到了松手没锁上」，日志里看得出卡在哪一项。
+                            com.kingzcheung.xime.util.FileLogger.i("SpaceVoiceLock", "release armed=${voiceLock?.armed} side=${voiceLock?.side} " +
+                                "holding=${voiceLock?.holding} voiceOn=$voiceOn lock=$lockNow cancel=${voiceHolding && voiceCancelArmed}")
                             when {
-                                // 锁定：手指离开也一直听，点一下空格结束。
-                                voiceLock?.armed == true && voiceOn -> voiceLock?.locked = true
+                                // 锁定：手指离开也一直听，点一下空格结束。和锁按钮画「到位」用同一个条件（[SpaceVoiceLockState.lockReady]）。
+                                lockNow -> {
+                                    voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: 1
+                                    voiceLock?.locked = true
+                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                }
                                 voiceHolding && voiceCancelArmed -> onVoiceHoldCancel?.invoke()
                                 else -> onVoiceHoldEnd?.invoke()
                             }
                         }
                         voiceLock?.holding = false
                         voiceLock?.armed = false
+                        voiceLock?.side = 0
+                        voiceLock?.cancelShown = false
+                        voiceLock?.cancelArmed = false
+                        voiceLock?.finger = Offset.Unspecified
                         voiceHolding = false
                         voiceCancelArmed = false
                         voiceCancelPull = 0f
                         voiceHoldStarted = false
+                        swipeUpProgress = 0f
+                        swipeUpArmed = false
                         pressed = false
                         cursorActive = false
                         onCursorMode?.invoke(false)
@@ -315,6 +381,9 @@ fun SpaceKeyButton(
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
             .background(cancelColors?.background ?: keyFill)
             .drawBehind {
+                // 空格上滑：往上走时一层强调色跟着变深（键内渐变，不弹气泡），到位时最深。
+                val up = swipeUpProgress
+                if (up > 0f) drawRect(accentColor.copy(alpha = (if (swipeUpArmed) 0.24f else 0.12f) * up))
                 // 开始说话：强调色从按住的地方铺满整个空格，之后随音量轻轻变深；上滑时一点点让给删除色。
                 val spread = voiceSpread.value * (1f - cancelProgress)
                 if (spread > 0f) {
@@ -346,8 +415,10 @@ fun SpaceKeyButton(
                 VoiceHoldMic(lerp(accentColor, color, cancelProgress), (hintSize * 1.3f).dp, voiceLevel)
                 if (voiceLocked && !voiceHoldStarted) {
                     Spacer(Modifier.width(2.dp))
+                    // 锁身重、锁梁细：按外框居中看着偏下，和锁按钮一样按视觉重心往上提一点。
                     Icon(Icons.Default.Lock, contentDescription = null, tint = color,
-                        modifier = Modifier.size((hintSize * 0.95f).dp).testTag("space-voice-lock-icon"))
+                        modifier = Modifier.size((hintSize * 0.95f).dp)
+                            .offset(y = -(hintSize * 0.95f * SPACE_VOICE_LOCK_ICON_LIFT).dp).testTag("space-voice-lock-icon"))
                 }
                 if (this@BoxWithConstraints.maxWidth.value >= hintSize * density.fontScale * 4.6f + hintSize * 1.3f + 8f) {
                     Spacer(Modifier.width(4.dp))
@@ -363,6 +434,14 @@ fun SpaceKeyButton(
                         modifier = Modifier.testTag(if (showVoiceCancel) "space-voice-cancel-hint" else "space-voice-hold-hint"))
                 }
             }
+        } else if (swipeUpLabel != null && swipeUpProgress > 0f) {
+            // 往上滑时空格上写要打的字（如「0」），越往上越清楚；到位时用强调色。
+            val size = (maxHeight.value * 0.5f / density.fontScale).coerceIn(10f, 24f)
+            Text(swipeUpLabel, color = if (swipeUpArmed) accentColor else textColor,
+                fontSize = size.sp, lineHeight = (size * 1.2f).sp, maxLines = 1, softWrap = false,
+                fontFamily = AppFonts.keyFontFamily,
+                modifier = Modifier.graphicsLayer { alpha = 0.35f + 0.65f * swipeUpProgress }
+                    .testTag("space-swipe-up-label").semantics { contentDescription = "空格" })
         } else if (cursorActive) {
             SpaceCursorHint(textColor, maxWidth.value, maxHeight.value, density.fontScale, !settings.hideFunctionKeyHints)
         } else if (!settings.hideFunctionKeyHints && SpaceLanguageFlash.isLanguageName(displayName) && labelSize >= 8f) {
