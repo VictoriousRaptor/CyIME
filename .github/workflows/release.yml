@@ -310,14 +310,14 @@ jobs:
 
       - name: Compile ARM64 release from source
         run: |
-          ./gradlew :app:assembleRelease -I scripts/phone-release-abi.gradle \
+          bash scripts/ci-gradle.sh :app:assembleRelease -I scripts/phone-release-abi.gradle \
             -PbundleModels=false --no-daemon --max-workers=2 --console=plain
 
       - name: Run keyboard regression tests
         env:
           JAVA_TOOL_OPTIONS: -Drobolectric.dependency.repo.url=${{ env.CI_MAVEN_CENTRAL_URL }}
         run: |
-          ./gradlew :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
+          bash scripts/ci-gradle.sh :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
             --tests com.kingzcheung.xime.keyboard.KeyboardModeNavigationTest \
             --tests com.kingzcheung.xime.settings.SettingsRoundTripTest \
             --tests com.kingzcheung.xime.settings.RemovedSchemaRestoreTest \
