@@ -27,8 +27,8 @@ internal interface LocalSpeechEngine : AutoCloseable {
     fun refine(samples: FloatArray): String
     /** 整句定稿：同 [refine]，但保留模型的句末、逗号、问号等标点。 */
     fun refinePunctuated(samples: FloatArray): String = refine(samples)
-    /** Preserve each region's detected language instead of decoding a multilingual recording as one utterance. */
-    val finalizesPerRegion: Boolean get() = false
+    /** SenseVoice first pass supplies language tags for a single X-ASR decision at stop. */
+    val checkXasrLanguagesAtStop: Boolean get() = false
     /** Captions keep punctuation and the event label; dictation keeps using [refine]. */
     fun refineRich(samples: FloatArray): RichTranscript = RichTranscript(refine(samples))
     /** Decoding is pinned to Chinese: a second pass that still comes back as kana is rejected. */
@@ -92,12 +92,13 @@ internal class LocalSpeechSession(
     // the same end-of-input re-read; its segments stay at the engine's 6 s so text still appears while speaking.
     private val wholeSentenceActive = wholeSentence &&
         (engine.hasRefinement && engine.isStreaming || !engine.isStreaming && !engine.hasRollingPreview)
+    // Written by the serial first-pass worker; read only after that worker has drained.
+    private val detectedLanguages = mutableSetOf<String>()
     /**
      * 整句定稿时保留模型标点，但不保留停顿处的：第二遍只听到这一段，段尾总会补一个标点，说话停一下就是一个逗号、句号。
      * 说话中只显示段内的标点，结束时整段重识别按整句的意思重新加。
      */
-    private val rereadSession = wholeSentenceActive && !engine.finalizesPerRegion
-    private val transcript = SpeechTranscript(keepMarks = wholeSentenceActive, pauseMarks = engine.finalizesPerRegion)
+    private val transcript = SpeechTranscript(keepMarks = wholeSentenceActive, pauseMarks = false)
     /** 流式预览的定稿前文字，整段重识别时作为把关的第一遍。 */
     private val previews = SpeechTranscript()
     private val decodeTimeoutMs = if (wholeSentenceActive) maxOf(engine.decodeTimeoutMs, WHOLE_SENTENCE_DECODE_TIMEOUT_MS)
@@ -192,7 +193,7 @@ internal class LocalSpeechSession(
             try {
                 audio.execute {
                     if (!abandoned.get() && !failed.get()) try {
-                        if (rereadSession && !sessionOverflow) {
+                        if (wholeSentenceActive && !sessionOverflow) {
                             if (sessionSamples + samples.size > WHOLE_SESSION_MAX_SAMPLES) { sessionOverflow = true; sessionAudio.clear() }
                             else { sessionAudio.add(samples); sessionSamples += samples.size }
                         }
@@ -211,7 +212,7 @@ internal class LocalSpeechSession(
         synchronized(outputLock) { ended[id] = boundary }
         heardSpeech = true
         // The region ends inside the current capture chunk, after at least 1 s of quiet.
-        if (rereadSession && boundary == SpeechBoundary.PAUSE) sessionPauses.add(sessionSamples)
+        if (wholeSentenceActive && boundary == SpeechBoundary.PAUSE) sessionPauses.add(sessionSamples)
         onRegion(id, samples.size, boundary)
         previewAudio.clear()
         val preview = if (engine.isStreaming) engine.finishStream() else ""
@@ -220,7 +221,7 @@ internal class LocalSpeechSession(
         // 整句定稿: the end-of-input re-read covers the last sentence, so the stop region is not decoded twice
         // (saves up to one 30 s decode of waiting). If the re-read is cancelled or over budget, its preview stays.
         // Without a streaming preview there is nothing to keep, so the stop region is still decoded.
-        if (rereadSession && engine.isStreaming && boundary == SpeechBoundary.STOP && !sessionOverflow) return
+        if (wholeSentenceActive && engine.isStreaming && boundary == SpeechBoundary.STOP && !sessionOverflow) return
         if (engine.hasRefinement || !engine.isStreaming) {
             synchronized(outputLock) { pending.add(id) }
             val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(decodeTimeoutMs)
@@ -229,7 +230,17 @@ internal class LocalSpeechSession(
                     if (abandoned.get()) return@execute
                     try {
                         check(System.nanoTime() < deadline) { "离线识别积压" }
-                        val second = guarded(preview, keepChinese(preview, if (wholeSentenceActive) engine.refinePunctuated(samples) else engine.refine(samples), engine.lockedChinese))
+                        val decoded = when {
+                            wholeSentenceActive && engine.checkXasrLanguagesAtStop -> {
+                                val first = engine.refineRich(samples)
+                                cleanSenseVoiceText(first.text, first.language).also { text ->
+                                    if (text.isNotEmpty()) detectedLanguages.add(first.language)
+                                }
+                            }
+                            wholeSentenceActive -> engine.refinePunctuated(samples)
+                            else -> engine.refine(samples)
+                        }
+                        val second = guarded(preview, keepChinese(preview, decoded, engine.lockedChinese))
                         val text = if (engine.isStreaming && secondPassLostText(preview, second)) preview else second
                         check(System.nanoTime() < deadline) { "离线识别超时" }
                         synchronized(outputLock) { pending.remove(id); publish(id, text, boundary, confirmed = true) }
@@ -281,6 +292,9 @@ internal class LocalSpeechSession(
         fun skip(reason: String): String? { wholeOutcome = "$reason after ${(System.nanoTime() - startedAt) / 1_000_000} ms"; return null }
         if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech)
             return skip(if (sessionOverflow) "overflow" else if (!heardSpeech) "no-speech" else "nothing")
+        if (engine.checkXasrLanguagesAtStop &&
+            (detectedLanguages.isEmpty() || !detectedLanguages.all(SpeechModelCatalog::xasrSupportsLanguage)))
+            return skip("unsupported-language")
         val pcm = FloatArray(sessionSamples)
         var offset = 0
         sessionAudio.forEach { it.copyInto(pcm, offset); offset += it.size }
@@ -325,8 +339,8 @@ internal class LocalSpeechSession(
         refinement.shutdown()
         val refined = refinement.awaitTermination(remaining(), TimeUnit.NANOSECONDS)
         val whole = try {
-            if (rereadSession && drained && refined && !failed.get() && !abandoned.get()) wholeSessionText(deadline)
-            else { if (rereadSession) wholeOutcome = "skipped(drained=$drained refined=$refined failed=${failed.get()})"; null }
+            if (wholeSentenceActive && drained && refined && !failed.get() && !abandoned.get()) wholeSessionText(deadline)
+            else { if (wholeSentenceActive) wholeOutcome = "skipped(drained=$drained refined=$refined failed=${failed.get()})"; null }
         } catch (e: Exception) { wholeOutcome = "error ${e.javaClass.simpleName}"; null } finally { wholeSettled.countDown() }
         // 只记走了哪条路和耗时，不记文字。整句没用上时，最后一句留的是边说边出的预览（离线定稿没跑），平板慢时会这样。
         android.util.Log.i("CyIME-AsrTiming", "finish whole=$wholeSentenceActive outcome=$wholeOutcome " +

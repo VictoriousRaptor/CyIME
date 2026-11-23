@@ -153,7 +153,7 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
                     "整句定稿 · X-ASR" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
-                        "普通话和英语用 X-ASR 定稿；粤语等语言保留首次识别结果"
+                        "仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字"
                     else "说完后用 X-ASR 整句再认一遍") else
                     "整句定稿 · SenseVoice" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
                         "使用 SenseVoice 整句定稿，支持粤语"
