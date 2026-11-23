@@ -191,7 +191,7 @@ jobs:
       cancel-in-progress: true
     env:
       GRADLE_OPTS: -Dorg.gradle.daemon=false
-      ROBOLECTRIC_MAVEN_URL: https://maven-central.storage-download.googleapis.com/maven2
+      CI_MAVEN_CENTRAL_URL: https://maven-central.storage-download.googleapis.com/maven2
     steps:
       - name: Check out source and native submodules
         uses: actions/checkout@v7
@@ -315,7 +315,7 @@ jobs:
 
       - name: Run keyboard regression tests
         env:
-          JAVA_TOOL_OPTIONS: -Drobolectric.dependency.repo.url=${{ env.ROBOLECTRIC_MAVEN_URL }}
+          JAVA_TOOL_OPTIONS: -Drobolectric.dependency.repo.url=${{ env.CI_MAVEN_CENTRAL_URL }}
         run: |
           ./gradlew :app:testDebugUnitTest -I scripts/phone-release-abi.gradle \
             --tests com.kingzcheung.xime.keyboard.KeyboardModeNavigationTest \

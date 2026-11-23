@@ -8,6 +8,7 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        providers.environmentVariable("CI_MAVEN_CENTRAL_URL").orNull?.let { maven(it) }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -15,13 +16,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        providers.environmentVariable("ROBOLECTRIC_MAVEN_URL").orNull?.let { mirror ->
-            exclusiveContent {
-                forRepository { maven(mirror) }
-                filter { includeGroup("org.robolectric") }
-            }
-        }
         google()
+        providers.environmentVariable("CI_MAVEN_CENTRAL_URL").orNull?.let { maven(it) }
         mavenCentral()
         maven("https://jitpack.io") {
             content { includeGroup("cz.adaptech.tesseract4android") }
