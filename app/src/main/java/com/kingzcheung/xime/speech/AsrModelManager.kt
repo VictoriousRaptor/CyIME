@@ -100,8 +100,7 @@ class AsrModelManager(private val context: Context) {
         }
         // SenseVoice's automatic language detection turns short, phone-quality Mandarin into Japanese
         // (2026-10-18: up to 23% of 0.5 s telephone-band clips with "auto", none with "zh"). Mandarin and
-        // an unspecified language default to Chinese. Detection stays only when the
-        // voice language is explicitly Japanese or English (one shared engine for both, as before).
+        // an unspecified language default to Chinese. Japanese and English share automatic detection.
         val languageId = when (language) {
             InputLanguage.JAPANESE, InputLanguage.ENGLISH -> "auto"
             else -> "zh"
@@ -110,8 +109,8 @@ class AsrModelManager(private val context: Context) {
             ModelStorage.migrateLegacyForModel(context, id)
             return ModelStorage.getModelDir(context, id)
         }
-        if (mode == SpeechModelCatalog.SENSEVOICE_YUE)
-            return Selection(mode, null, null, dir(SpeechModelCatalog.SENSEVOICE), "yue")
+        if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
+            return Selection(mode, null, null, dir(SpeechModelCatalog.SENSEVOICE), "auto")
         val firstId = when (mode) {
             SpeechModelCatalog.TWO_PASS -> SpeechModelCatalog.PARAFORMER
             SpeechModelCatalog.ZIPFORMER_TWO_PASS -> SpeechModelCatalog.ZIPFORMER

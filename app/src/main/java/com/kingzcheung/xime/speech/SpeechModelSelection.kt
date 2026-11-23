@@ -14,7 +14,7 @@ internal object SpeechModelSelection {
     fun supportsCorrection(mode: String) = primary(mode) in setOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.ZIPFORMER)
 
     fun primary(mode: String): String = when (mode) {
-        SpeechModelCatalog.SENSEVOICE_YUE -> SpeechModelCatalog.SENSEVOICE
+        SpeechModelCatalog.SENSEVOICE_AUTO -> SpeechModelCatalog.SENSEVOICE
         SpeechModelCatalog.ZIPFORMER_TWO_PASS -> SpeechModelCatalog.ZIPFORMER
         SpeechModelCatalog.TWO_PASS -> SpeechModelCatalog.PARAFORMER
         else -> mode
@@ -34,6 +34,7 @@ internal object SpeechModelSelection {
 
     fun selectPrimary(current: String, model: String): String {
         require(model in primaryIds)
+        if (model == primary(current)) return current
         return withCorrection(model, hasCorrection(current))
     }
 
@@ -50,7 +51,7 @@ internal object SpeechModelSelection {
      * correction, or SenseVoice alone. Paraformer / Zipformer alone and other languages ignore the switch.
      */
     fun wholeSentenceApplies(mode: String, chinese: Boolean): Boolean =
-        chinese && mode != SpeechModelCatalog.SENSEVOICE_YUE && (hasCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)
+        chinese && mode != SpeechModelCatalog.SENSEVOICE_AUTO && (hasCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)
 
     /**
      * X-ASR (when downloaded) writes the final Chinese text wherever 整句定稿 applies: after a streaming preview with

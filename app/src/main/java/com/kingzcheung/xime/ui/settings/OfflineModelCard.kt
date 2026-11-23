@@ -7,7 +7,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -68,12 +67,17 @@ internal fun OfflineModelCard() {
                 Column(content.fillMaxWidth()) {
                     val mode = selected.getValue(language)
                     if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
-                        SettingsToggleItem(Icons.Filled.Mic, "粤语识别", "开启时按粤语识别，关闭时按普通话识别",
-                            checked = mode == SpeechModelCatalog.SENSEVOICE_YUE,
-                            onCheckedChange = { cantonese ->
-                                manager.setModel(if (cantonese) SpeechModelCatalog.SENSEVOICE_YUE else SpeechModelCatalog.SENSEVOICE, language)
-                                refresh(language)
-                            })
+                        Row(Modifier.fillMaxWidth().selectableGroup()) {
+                            for ((id, label) in listOf(SpeechModelCatalog.SENSEVOICE to "普通话", SpeechModelCatalog.SENSEVOICE_AUTO to "自动识别")) {
+                                Row(Modifier.weight(1f).selectable(selected = mode == id, role = Role.RadioButton,
+                                    onClick = { manager.setModel(id, language); refresh(language) })
+                                    .heightIn(min = 48.dp).padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = mode == id, onClick = null)
+                                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                                }
+                            }
+                        }
                     }
                     SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
                         downloads, onPick = { editing = language }, onDownload = ::download,

@@ -11,7 +11,7 @@ object SpeechModelCatalog {
     const val ZIPFORMER_TWO_PASS = "zipformer-sensevoice"
     const val PARAFORMER = "paraformer-zh-en-int8"
     const val SENSEVOICE = "sensevoice-multilingual-int8"
-    const val SENSEVOICE_YUE = "sensevoice-yue" // Recognition mode sharing the multilingual model files.
+    const val SENSEVOICE_AUTO = "sensevoice-auto" // Recognition mode sharing the multilingual model files.
     const val TWO_PASS = "paraformer-sensevoice"
     /** 整句定稿的可选模型：X-ASR 中英 Zipformer（离线、自带标点）；何时代替 SenseVoice 见 [SpeechModelSelection.xasrFinalizes]。 */
     const val XASR = "xasr-zh-en-punct-int8"
