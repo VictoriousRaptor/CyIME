@@ -315,8 +315,7 @@ private fun cleanSpeechTextOnly(text: String): String {
 internal fun cleanSenseVoiceText(text: String, detectedLanguage: String = "", keepMarks: Boolean = false): String {
     // sherpa-onnx separates the language/event prefix from text. A no-speech classification
     // must be handled before tag cleanup; it is not a word-confidence score or a blacklist.
-    if (detectedLanguage.removePrefix("<|").removeSuffix("|>").equals("nospeech", ignoreCase = true) ||
-        text.contains("<|nospeech|>", ignoreCase = true)) return ""
+    if (isSenseVoiceNoSpeech(text, detectedLanguage)) return ""
     val plain = richTags.replace(text, "")
     fun cjk(c: Char) = c in '\u3040'..'\u30ff' || c in '\u3400'..'\u9fff'
     val joined = buildString {
@@ -336,6 +335,10 @@ internal fun cleanSenseVoiceText(text: String, detectedLanguage: String = "", ke
     }
     return cleanSpeechText(joined, keepMarks)
 }
+
+internal fun isSenseVoiceNoSpeech(text: String, language: String) =
+    language.removePrefix("<|").removeSuffix("|>").equals("nospeech", ignoreCase = true) ||
+        text.contains("<|nospeech|>", ignoreCase = true)
 
 /**
  * Identified regions allow late second-pass results to replace exactly their preview.

@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.twotone.Language
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -73,7 +74,17 @@ internal fun OfflineModelCard() {
             SettingsSection(title = "${language.displayName}语音") {
                 val content = if (index == shownLanguages.lastIndex) Modifier.testTag("speech-correction") else Modifier
                 Column(content.fillMaxWidth()) {
-                    SpeechPipeline(language, selected.getValue(language), ready, senseReady, xasrReady, wholeSentence,
+                    val mode = selected.getValue(language)
+                    if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
+                        SettingsToggleItem(icon = Icons.TwoTone.Language, title = "自动识别语音语言",
+                            subtitle = "开启后可输入粤语，关闭时使用普通话",
+                            checked = mode == SpeechModelCatalog.SENSEVOICE_AUTO,
+                            onCheckedChange = { automatic ->
+                                manager.setModel(if (automatic) SpeechModelCatalog.SENSEVOICE_AUTO else SpeechModelCatalog.SENSEVOICE, language)
+                                refresh(language)
+                            })
+                    }
+                    SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
                         wholeFinalizer, downloads, onPick = { editing = language }, onDownload = ::download,
                         onFinish = { finish, finalizer ->
                             finalizer?.let { wholeFinalizer = it; SettingsPreferences.setSttWholeFinalizer(context, it) }
@@ -142,7 +153,9 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
-                    "整句定稿 · X-ASR" to "说完后用 X-ASR 整句再认一遍" else
+                    "整句定稿 · X-ASR" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
+                        "仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字"
+                    else "说完后用 X-ASR 整句再认一遍") else
                     "整句定稿 · SenseVoice" to ("说完后整句再认一遍，更准但稍慢" +
                         if (xasrReady) "" else "; 也可下载 X-ASR 对比")
             }

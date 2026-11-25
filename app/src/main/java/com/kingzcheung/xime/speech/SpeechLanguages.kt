@@ -8,7 +8,7 @@ object SpeechLanguages {
         SpeechModelCatalog.ZIPFORMER -> language == InputLanguage.CHINESE
         SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> language == InputLanguage.JAPANESE
         SpeechModelCatalog.PARAFORMER -> language in setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH)
-        SpeechModelCatalog.SENSEVOICE -> language in InputLanguage.speech
+        SpeechModelCatalog.SENSEVOICE -> if (mode == SpeechModelCatalog.SENSEVOICE_AUTO) language == InputLanguage.CHINESE else language in InputLanguage.speech
         else -> false
     }
 

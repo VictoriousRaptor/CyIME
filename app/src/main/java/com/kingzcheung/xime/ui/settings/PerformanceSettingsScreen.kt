@@ -56,6 +56,10 @@ import com.kingzcheung.xime.runtime.adaptation.DeviceCapabilityProbe
 import com.kingzcheung.xime.runtime.adaptation.PerformanceTier
 import com.kingzcheung.xime.runtime.adaptation.PerformanceTiers
 import com.kingzcheung.xime.settings.PerformanceCosts
+import com.kingzcheung.xime.settings.InputLanguage
+import com.kingzcheung.xime.speech.AsrModelManager
+import com.kingzcheung.xime.speech.SpeechModelCatalog
+import com.kingzcheung.xime.speech.SpeechModelSelection
 import com.kingzcheung.xime.settings.PerformanceProfile
 import com.kingzcheung.xime.settings.PerformanceSettings
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -287,14 +291,15 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
             if (speech) item {
                 SettingsSection(title = "明细") {
                     // 分档横条，与「输入体验」里长按时长等设置同一样式：标题写当前值，下面一行说明，再是分档滑块。
-                    // 二次校正只有「两遍识别」的语音模型才有（SherpaSpeechEngine.hasRefinement）；所有语言都只用一个模型时
-                    // 这一项不起作用，就不显示（用户 11-01），存的值不变。读不出来时照常显示。
+                    // 只在有可单独释放的第二个模型时显示。读不出来时照常显示。
                     val hasSecondPass = remember {
                         runCatching {
-                            val models = com.kingzcheung.xime.speech.AsrModelManager(context)
-                            com.kingzcheung.xime.settings.InputLanguage.speech.any { language ->
-                                models.getSelectedModelId(language) in setOf(com.kingzcheung.xime.speech.SpeechModelCatalog.TWO_PASS,
-                                    com.kingzcheung.xime.speech.SpeechModelCatalog.ZIPFORMER_TWO_PASS)
+                            val models = AsrModelManager(context)
+                            InputLanguage.speech.any { language ->
+                                val mode = models.getSelectedModelId(language)
+                                SpeechModelSelection.hasCorrection(mode) ||
+                                    (mode == SpeechModelCatalog.SENSEVOICE_AUTO && SettingsPreferences.isSttWholeSentence(context) &&
+                                        SettingsPreferences.getSttWholeFinalizer(context) == SpeechModelCatalog.XASR && models.isXasrReady())
                             }
                         }.getOrDefault(true)
                     }

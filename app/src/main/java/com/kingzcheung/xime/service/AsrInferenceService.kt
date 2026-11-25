@@ -65,7 +65,7 @@ class AsrInferenceService : Service() {
     private val refinerRelease = Runnable {
         synchronized(lock) {
             if (captionOwner == null) sessions.releaseRefinementIfIdle {
-                FileLogger.i("AsrInferenceService", "idle ladder: second pass released, streaming model kept")
+                FileLogger.i("AsrInferenceService", "idle ladder: second pass released, primary model kept")
             }
         }
     }

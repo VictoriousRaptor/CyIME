@@ -4109,3 +4109,6 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 上下滑输入符号的距离	Swipe distance for symbols
 长句拖选改局部	Drag to edit long sentences
 首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除	When the first candidate is over 6 characters, hold and drag across part of it to change only that part; holding without dragging still opens pin and delete
+自动识别语音语言	Detect spoken language automatically
+开启后可输入粤语，关闭时使用普通话	Enable for Cantonese dictation. Turn off to use Mandarin.
+仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字	X-ASR finalizes Mandarin and English. If another language is detected, the entire recording keeps its first transcript.

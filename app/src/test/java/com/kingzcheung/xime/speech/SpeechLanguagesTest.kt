@@ -144,6 +144,31 @@ class SpeechLanguagesTest {
         assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.JAPANESE) }
     }
 
+    @Test fun automaticRecognitionSharesMandarinModelFilesButUsesLanguageDetection() {
+        val context = mock<Context>()
+        whenever(context.filesDir).thenReturn(files.root)
+        val manager = AsrModelManager(context)
+        val mode = SpeechModelCatalog.SENSEVOICE_AUTO
+        val automatic = manager.selection(mode, InputLanguage.CHINESE)
+        val mandarin = manager.selection(SpeechModelCatalog.SENSEVOICE, InputLanguage.CHINESE)
+        assertEquals(mandarin.secondDir, automatic.secondDir)
+        assertEquals("zh", mandarin.recognitionLanguage)
+        assertEquals("auto", automatic.recognitionLanguage)
+        assertNotEquals(mandarin.key, automatic.key)
+        assertNull(automatic.first)
+        assertEquals(mode, SpeechModelSelection.selectPrimary(mode, SpeechModelCatalog.SENSEVOICE))
+        assertFalse(SpeechLanguages.supports(mode, InputLanguage.ENGLISH))
+        assertTrue(SpeechModelSelection.xasrFinalizes(mode, chinese = false, wholeSentenceOn = true))
+        assertEquals(listOf(SpeechModelSelection.Finish.NONE, SpeechModelSelection.Finish.WHOLE), SpeechModelSelection.finishOptions(mode, chinese = true))
+    }
+
+    @Test fun automaticFinalizationUsesXasrOnlyForLanguagesItsModelSupports() {
+        for (language in listOf("zh", "<|zh|>", "en", "<|en|>"))
+            assertTrue(language, SpeechModelCatalog.xasrSupportsLanguage(language))
+        for (language in listOf("<|yue|>", "ja", "ko", "<|nospeech|>", ""))
+            assertFalse(language, SpeechModelCatalog.xasrSupportsLanguage(language))
+    }
+
     @Test fun incompatibleExplicitSelectionIsRejectedBeforeFileAccess() {
         val context = mock<Context>()
         assertThrows(IllegalArgumentException::class.java) {
