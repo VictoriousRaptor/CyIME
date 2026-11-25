@@ -11,16 +11,10 @@ object SpeechModelCatalog {
     const val ZIPFORMER_TWO_PASS = "zipformer-sensevoice"
     const val PARAFORMER = "paraformer-zh-en-int8"
     const val SENSEVOICE = "sensevoice-multilingual-int8"
-    const val SENSEVOICE_AUTO = "sensevoice-auto" // Recognition mode sharing the multilingual model files.
+    const val SENSEVOICE_YUE = "sensevoice-yue" // Recognition mode sharing the multilingual model files.
     const val TWO_PASS = "paraformer-sensevoice"
     /** 整句定稿的可选模型：X-ASR 中英 Zipformer（离线、自带标点）；何时代替 SenseVoice 见 [SpeechModelSelection.xasrFinalizes]。 */
     const val XASR = "xasr-zh-en-punct-int8"
-    fun xasrSupportsLanguage(detectedLanguage: String): Boolean =
-        when (detectedLanguage.removePrefix("<|").removeSuffix("|>")) {
-            "zh", "en" -> true
-            else -> false
-        }
-
     /** CyIME 自己 Release 里的原样转存（哈希与原站一致）：HuggingFace 和它的国内镜像都下不来时用。 */
     private const val RELEASE = "https://github.com/Cyletix/CyIME/releases/download/models/"
     private const val reazonBase = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/291488c8151be24d7da4bf7af26e533fad96e407"

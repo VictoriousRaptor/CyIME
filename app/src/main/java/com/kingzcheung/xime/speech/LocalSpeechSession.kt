@@ -27,8 +27,6 @@ internal interface LocalSpeechEngine : AutoCloseable {
     fun refine(samples: FloatArray): String
     /** 整句定稿：同 [refine]，但保留模型的句末、逗号、问号等标点。 */
     fun refinePunctuated(samples: FloatArray): String = refine(samples)
-    /** SenseVoice first pass supplies language tags for a single X-ASR decision at stop. */
-    val checkXasrLanguagesAtStop: Boolean get() = false
     /** Captions keep punctuation and the event label; dictation keeps using [refine]. */
     fun refineRich(samples: FloatArray): RichTranscript = RichTranscript(refine(samples))
     /** Decoding is pinned to Chinese: a second pass that still comes back as kana is rejected. */
@@ -92,8 +90,6 @@ internal class LocalSpeechSession(
     // the same end-of-input re-read; its segments stay at the engine's 6 s so text still appears while speaking.
     private val wholeSentenceActive = wholeSentence &&
         (engine.hasRefinement && engine.isStreaming || !engine.isStreaming && !engine.hasRollingPreview)
-    // Written by the serial first-pass worker; read only after that worker has drained.
-    private val detectedLanguages = mutableSetOf<String>()
     /**
      * 整句定稿时保留模型标点，但不保留停顿处的：第二遍只听到这一段，段尾总会补一个标点，说话停一下就是一个逗号、句号。
      * 说话中只显示段内的标点，结束时整段重识别按整句的意思重新加。
@@ -230,17 +226,7 @@ internal class LocalSpeechSession(
                     if (abandoned.get()) return@execute
                     try {
                         check(System.nanoTime() < deadline) { "离线识别积压" }
-                        val decoded = when {
-                            wholeSentenceActive && engine.checkXasrLanguagesAtStop -> {
-                                val first = engine.refineRich(samples)
-                                cleanSenseVoiceText(first.text, first.language).also { text ->
-                                    if (text.isNotEmpty()) detectedLanguages.add(first.language)
-                                }
-                            }
-                            wholeSentenceActive -> engine.refinePunctuated(samples)
-                            else -> engine.refine(samples)
-                        }
-                        val second = guarded(preview, keepChinese(preview, decoded, engine.lockedChinese))
+                        val second = guarded(preview, keepChinese(preview, if (wholeSentenceActive) engine.refinePunctuated(samples) else engine.refine(samples), engine.lockedChinese))
                         val text = if (engine.isStreaming && secondPassLostText(preview, second)) preview else second
                         check(System.nanoTime() < deadline) { "离线识别超时" }
                         synchronized(outputLock) { pending.remove(id); publish(id, text, boundary, confirmed = true) }
@@ -292,9 +278,6 @@ internal class LocalSpeechSession(
         fun skip(reason: String): String? { wholeOutcome = "$reason after ${(System.nanoTime() - startedAt) / 1_000_000} ms"; return null }
         if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech)
             return skip(if (sessionOverflow) "overflow" else if (!heardSpeech) "no-speech" else "nothing")
-        if (engine.checkXasrLanguagesAtStop &&
-            (detectedLanguages.isEmpty() || !detectedLanguages.all(SpeechModelCatalog::xasrSupportsLanguage)))
-            return skip("unsupported-language")
         val pcm = FloatArray(sessionSamples)
         var offset = 0
         sessionAudio.forEach { it.copyInto(pcm, offset); offset += it.size }

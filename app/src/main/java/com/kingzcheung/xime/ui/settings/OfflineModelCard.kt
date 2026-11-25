@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -71,17 +72,12 @@ internal fun OfflineModelCard() {
                 Column(content.fillMaxWidth()) {
                     val mode = selected.getValue(language)
                     if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
-                        Row(Modifier.fillMaxWidth().selectableGroup()) {
-                            for ((id, label) in listOf(SpeechModelCatalog.SENSEVOICE to "普通话", SpeechModelCatalog.SENSEVOICE_AUTO to "自动识别")) {
-                                Row(Modifier.weight(1f).selectable(selected = mode == id, role = Role.RadioButton,
-                                    onClick = { manager.setModel(id, language); refresh(language) })
-                                    .heightIn(min = 48.dp).padding(horizontal = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = mode == id, onClick = null)
-                                    Text(label, modifier = Modifier.padding(start = 8.dp))
-                                }
-                            }
-                        }
+                        SettingsToggleItem(Icons.Filled.Mic, "粤语识别", "开启时按粤语识别，关闭时按普通话识别",
+                            checked = mode == SpeechModelCatalog.SENSEVOICE_YUE,
+                            onCheckedChange = { cantonese ->
+                                manager.setModel(if (cantonese) SpeechModelCatalog.SENSEVOICE_YUE else SpeechModelCatalog.SENSEVOICE, language)
+                                refresh(language)
+                            })
                     }
                     SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
                         wholeFinalizer, downloads, onPick = { editing = language }, onDownload = ::download,
@@ -152,12 +148,8 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
-                    "整句定稿 · X-ASR" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
-                        "仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字"
-                    else "说完后用 X-ASR 整句再认一遍") else
-                    "整句定稿 · SenseVoice" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
-                        "使用 SenseVoice 整句定稿，支持粤语"
-                    else "说完后整句再认一遍，更准但稍慢" +
+                    "整句定稿 · X-ASR" to "说完后用 X-ASR 整句再认一遍" else
+                    "整句定稿 · SenseVoice" to ("说完后整句再认一遍，更准但稍慢" +
                         if (xasrReady) "" else "; 也可下载 X-ASR 对比")
             }
             val checked = finish == current && (finalizer == null || finalizer == usedFinalizer)

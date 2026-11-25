@@ -26,7 +26,6 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
     override val minimumPauseMs get() = if (japanese) 1000 else super.minimumPauseMs
     override val hasRollingPreview get() = japanese
     override val lockedChinese get() = selection.recognitionLanguage == "zh"
-    override val checkXasrLanguagesAtStop get() = selection.mode == SpeechModelCatalog.SENSEVOICE_AUTO && selection.finalizerDir != null
     // Quiet speech validated by VAD must not be vetoed by a recent louder phrase's RMS.
     override val useEnergyPause get() = !japanese && !paraformer
     override val resetDetectorOnPause get() = paraformer
@@ -70,7 +69,7 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
             // With X-ASR finalizing whole sentences, SenseVoice loads only if something still asks for it.
             // Beside a streaming model it loads in the background (prepareRefinement), so the first words
             // do not wait for it: 2026-10-30, sherpa-onnx 1.13.8 on x86, SenseVoice int8 takes 1.2–2.2 s to load.
-            if (selection.secondDir != null && (selection.finalizerDir == null || checkXasrLanguagesAtStop)) {
+            if (selection.secondDir != null && selection.finalizerDir == null) {
                 if (japanese) punctuator = createSenseVoice(selection.secondDir)
                 else if (online == null) offline = createSenseVoice(selection.secondDir)
             } else if (selection.finalizerDir != null && online == null && !japanese) {

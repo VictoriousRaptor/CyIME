@@ -59,38 +59,6 @@ class WholeSessionRereadTest {
         assertTrue("both sentences are decoded at their pause/stop first", engine.reread.size >= 3)
     }
 
-    @Test fun `one unsupported language skips X-ASR for the entire recording regardless of order`() {
-        for (langs in listOf(listOf("en", "yue"), listOf("yue", "zh"), listOf("zh", "en"))) {
-            val engine = object : Engine() {
-                override val hasRefinement = false
-                override val isStreaming = false
-                override val checkXasrLanguagesAtStop = true
-                var firstPasses = 0
-                override fun refineRich(samples: FloatArray): RichTranscript {
-                    val index = firstPasses++
-                    return RichTranscript(if (index == 0) "first" else "second", langs[index])
-                }
-                override fun refinePunctuated(samples: FloatArray): String {
-                    reread.add(samples.size)
-                    return "final transcript"
-                }
-            }
-            val session = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
-            session.acceptPcm(pcm(16000, loud))
-            session.acceptPcm(pcm(32000, quiet))
-            session.acceptPcm(pcm(16000, loud))
-            val text = session.finish()
-            assertEquals(2, engine.firstPasses)
-            if ("yue" in langs) {
-                assertEquals("first second", text)
-                assertTrue(engine.reread.isEmpty())
-            } else {
-                assertEquals("final transcript", text)
-                assertEquals(listOf(64000), engine.reread)
-            }
-        }
-    }
-
     @Test fun `SenseVoice alone with the switch off keeps the old segments without a re-read`() {
         val engine = object : Engine() {
             override val hasRefinement = false
