@@ -101,6 +101,8 @@ internal fun SideRailEditItem(target: SideSymbolTarget, textColor: Color, backgr
     val context = androidx.compose.ui.platform.LocalContext.current
     var pressed by remember { mutableStateOf(false) }
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     val frosted = LocalKeyboardInputPreferences.current.frostedGlass
     Box(modifier
         .background(if (pressed) frostedKeyColor(backgroundColor, textColor, frosted,
@@ -111,6 +113,7 @@ internal fun SideRailEditItem(target: SideSymbolTarget, textColor: Color, backgr
                 currentOnPress?.invoke()
                 tryAwaitRelease()
                 pressed = false
+                currentOnRelease?.invoke()
             }, onTap = { onOpen(context) })
         }, contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.Edit, contentDescription = "编辑${target.label}", tint = textColor.copy(alpha = 0.6f),

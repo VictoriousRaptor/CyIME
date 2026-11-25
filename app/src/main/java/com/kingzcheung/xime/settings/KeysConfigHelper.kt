@@ -589,7 +589,13 @@ data class XimeConfig(
     val style: StyleConfig? = null,
     @SerialName("metadata")
     val metadata: MetadataConfig? = null,
-)
+    /** 以后的版本在键盘配置里给商店目录那一段换了键名；只写了新键名的照样认（见 [storeIndex]）。 */
+    @SerialName(NewerBackupNames.STORE_INDEX_KEY)
+    val newerIndex: XimeIndexConfig? = null,
+) {
+    /** 商店目录：这一版的键名写了用它，没写看新键名的。 */
+    val storeIndex: XimeIndexConfig? get() = ximeIndex ?: newerIndex
+}
 
 /**
  * CyIME 自己的商店目录（仓库 store/），与 assets/xime.yaml 的 xime_index.base_urls 保持一致。
@@ -616,7 +622,8 @@ data class KeysConfig(
 object KeysConfigHelper {
     private const val TAG = "KeysConfigHelper"
     private const val XIME_CONFIG_FILE = "xime.yaml"
-    private const val XIME_CUSTOM_CONFIG_FILE = "xime.custom.yaml"
+    /** rime/ 下用户自己写的键盘配置。恢复备份时，以后的版本的文件名也落到这里（[BackupRestoreTransaction]）。 */
+    internal const val XIME_CUSTOM_CONFIG_FILE = "xime.custom.yaml"
 
     /** 九键左侧快捷符号栏内置默认值：最常用的中文标点，按使用频率排，括号只留一对（用户 10-31）。 */
     /** 都取自常用符号面板（commonSymbolsFor 中文）；超过 4 个时侧栏可滑动。 */
@@ -1741,7 +1748,7 @@ object KeysConfigHelper {
         if (custom == null) return default ?: XimeConfig()
         if (default == null) return custom
         return XimeConfig(
-            ximeIndex = custom.ximeIndex ?: default.ximeIndex,
+            ximeIndex = custom.storeIndex ?: default.storeIndex,
             // 合并而非替换：custom 覆盖同名字题，其余保留内置主题，
             // 这样用户只需在 xime.custom.yaml 中添加自定义背景主题而不会丢失内置主题。
             colorSchemes = mergeColorSchemes(default.colorSchemes, custom.colorSchemes),
@@ -1852,7 +1859,7 @@ object KeysConfigHelper {
 
     fun loadXimeIndexConfig(context: Context): XimeIndexConfig {
         val merged = loadMergedConfig(context)
-        return merged.ximeIndex ?: XimeIndexConfig()
+        return merged.storeIndex ?: XimeIndexConfig()
     }
 
     /** 从 xime.yaml 加载 color_schemes 配置。 */

@@ -34,6 +34,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "zh-rCN-w400dp-h800dp-xhdpi")
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class T9SpaceUpZeroTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
@@ -122,6 +123,37 @@ class T9SpaceUpZeroTest {
         }
         rule.waitForIdle()
         assertEquals("左滑光标左移", listOf(1, -1), moves)
+    }
+
+    /**
+     * 11-25 他：方向要和数字键一样、跟「底排标点固定上滑」。关了这个开关时跟数字键的上角标：没反转就是下拉出 0，上滑不出；
+     * 反转了就是上滑。滑到一半看得到 0 从右上角移进键中央（和数字键同一个动画）。
+     */
+    @Test fun directionFollowsBottomRowAndDigitKeys() {
+        show(KeyboardInputPreferences(t9SpaceSwipeUpZero = true, bottomPunctuationSwipeUp = false))
+        swipeSpaceUp()
+        assertTrue("底排不固定上滑、没反转：上滑不打 0：$keys", "0" !in keys)
+        rule.onNodeWithTag("space-key", true).performTouchInput {
+            down(center)
+            for (step in 1..6) moveTo(center + Offset(0f, 8.dp.toPx() * step))
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("key-flick-preview", true).assertExists()
+        // 滑到一半的样子存一张，和数字键滑出数字对照。
+        val root = rule.activity.window.decorView
+        val frame = android.graphics.Bitmap.createBitmap(root.width, root.height, android.graphics.Bitmap.Config.ARGB_8888)
+        rule.runOnIdle { root.draw(android.graphics.Canvas(frame)) }
+        java.io.File("build/reports/t9-space-zero-swipe.png").apply { parentFile?.mkdirs() }
+            .outputStream().use { frame.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        rule.onNodeWithTag("space-key", true).performTouchInput { up() }
+        rule.waitForIdle()
+        assertEquals("下拉打 0", listOf("0"), keys.filter { it == "0" || it == "space" })
+    }
+
+    @Test fun reversedSwipeMakesItUpAgain() {
+        show(KeyboardInputPreferences(t9SpaceSwipeUpZero = true, bottomPunctuationSwipeUp = false, reverseSymbolSwipe = true))
+        swipeSpaceUp()
+        assertTrue("反转后上滑出上角标：$keys", "0" in keys)
     }
 
     /** 去掉了 0 键时空格上滑一样打 0（两处都能打，不冲突）。 */

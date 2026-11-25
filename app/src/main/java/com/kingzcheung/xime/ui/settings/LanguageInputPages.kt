@@ -15,7 +15,10 @@ import androidx.compose.material.icons.twotone.SpaceBar
 import androidx.compose.material.icons.twotone.Translate
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -87,7 +90,7 @@ private fun ChineseOutputSection() {
         HorizontalDivider()
         // 11-20 从生僻字分出来（他：是日语的字就叫日语的字，是什么就叫什么），各自默认关，候选后面注「日」「韩」「粤」。
         SettingsToggleItem(Icons.TwoTone.FontDownload, "日文汉字",
-            "在中文字后面给出日本的字和日本人名地名",
+            "在中文字后面给出日本用字和人名地名",
             checked = input.japaneseKanji, onCheckedChange = { input.copy(japaneseKanji = it).save(context) },
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.JAPANESE_KANJI)
         CandidateExtraLegend("japanese-kanji-legend", "ze", listOf("泽", "则", "责"), "沢", input.japaneseKanji,
@@ -121,7 +124,7 @@ private fun ChineseOutputSection() {
         CandidateExtraLegend("candidate-emoji-legend", "kaixin", listOf("开心"), "😄", input.candidateEmoji)
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.Functions, "打符号名出符号",
-            "打符号的名字时多给一个符号，如 加号 +、摄氏度 ℃、平方 ²、约等于 ≈",
+            "打符号名时给出符号，如 加号 +、平方 ²",
             checked = input.symbolNames, onCheckedChange = { input.copy(symbolNames = it).save(context) },
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.SYMBOL_NAMES)
         CandidateExtraLegend("symbol-names-legend", "sheshidu", listOf("摄氏度"), "℃", input.symbolNames)
@@ -134,6 +137,34 @@ private fun ChineseOutputSection() {
     }
 }
 
+/** #101 英文下一词（默认关）；输入法每次按空格时读这个开关，改了马上生效。 */
+@Composable
+private fun EnglishNextWordToggle() {
+    val context = LocalContext.current
+    val prefs = remember { com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context) }
+    var on by remember { mutableStateOf(prefs.getBoolean(com.kingzcheung.xime.service.EnglishNextWords.PREF_KEY, false)) }
+    SettingsToggleItem(Icons.TwoTone.Translate, "英文下一词",
+        "英文打完一个词按空格后，候选栏给出常跟在后面的词",
+        checked = on, onCheckedChange = {
+            on = it
+            prefs.edit().putBoolean(com.kingzcheung.xime.service.EnglishNextWords.PREF_KEY, it).apply()
+        })
+}
+
+/** #404 打开键盘时退出英文（默认关）；输入法每次进输入框时读这个开关。 */
+@Composable
+private fun LeaveEnglishOnOpenToggle() {
+    val context = LocalContext.current
+    val prefs = remember { com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context) }
+    var on by remember { mutableStateOf(prefs.getBoolean(com.kingzcheung.xime.settings.LeaveEnglishOnOpen.PREF_KEY, false)) }
+    SettingsToggleItem(Icons.TwoTone.Translate, "打开键盘时退出英文",
+        "换输入框或回到应用时，从英文切回中文等原来的语言",
+        checked = on, onCheckedChange = {
+            on = it
+            prefs.edit().putBoolean(com.kingzcheung.xime.settings.LeaveEnglishOnOpen.PREF_KEY, it).apply()
+        })
+}
+
 @Composable
 private fun EnglishInputSection() {
     val context = LocalContext.current
@@ -143,10 +174,14 @@ private fun EnglishInputSection() {
             "在网址和邮箱输入框里自动用英文",
             checked = input.addressFieldsEnglish, onCheckedChange = { input.copy(addressFieldsEnglish = it).save(context) })
         HorizontalDivider()
+        LeaveEnglishOnOpenToggle()
+        HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.SpaceBar, "选词后自动加空格",
             "英文选词后自动加一个空格",
             checked = input.englishAutoSpace, onCheckedChange = { input.copy(englishAutoSpace = it).save(context) })
         AutoSpaceLegend("english-auto-space-legend", "点 world", "hello world", "|", input.englishAutoSpace)
+        HorizontalDivider()
+        EnglishNextWordToggle()
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.SpaceBar, "标点后自动加空格",
             "英文打 , . ? ! 后自动加一个空格",

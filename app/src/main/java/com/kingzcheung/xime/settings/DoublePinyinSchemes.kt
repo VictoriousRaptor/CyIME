@@ -35,8 +35,20 @@ object DoublePinyinSchemes {
     /**
      * 双拼方案在自建合并键布局（如自己排的 20 键）上的版本，和 14 键版本一样是组合配置：
      * 这个双拼方案和那个布局都启用时自动提供，在那个布局上切换时保持当前双拼方案。
+     * 内置、自建双拼和写明双拼的导入方案（#160）都有；导入方案的版本要登记过（[noteImportedLayoutVariants]）才算。
      */
-    fun isOnLayout(id: String) = DoublePinyinScheme.splitLayoutVariant(id)?.first?.let { isBuiltin(it) || isCustom(it) } == true
+    fun isOnLayout(id: String) = DoublePinyinScheme.splitLayoutVariant(id)?.first?.let { isBuiltin(it) || isCustom(it) } == true ||
+        id in importedOnLayout
+
+    /** 导入方案在合并键布局上的版本（#160）：发现方案时、生成时登记，按键路径上只查这个集合，不读文件。 */
+    @Volatile private var importedOnLayout: Set<String> = emptySet()
+
+    /** 发现方案时调用：名字是「方案_布局」、写明双拼、原方案不是内置或自建双拼的，就是导入方案的布局版本。 */
+    internal fun noteImportedLayoutVariants(entries: List<SchemaMeta>) {
+        importedOnLayout = entries.filter { entry -> entry.scheme == InputScheme.DOUBLE_PINYIN &&
+            DoublePinyinScheme.splitLayoutVariant(entry.schemaId)?.first?.let { !isBuiltin(it) && !isCustom(it) } == true }
+            .map { it.schemaId }.toSet()
+    }
     /** 布局版本所在的自建布局 id；不是布局版本时为 null。 */
     fun layoutOf(id: String): String? = DoublePinyinScheme.splitLayoutVariant(id)?.takeIf { isOnLayout(id) }?.second
     /** 九键、14 键、布局版本对应的 26 键双拼方案 id；其他 id 原样返回。 */
@@ -152,6 +164,59 @@ object DoublePinyinSchemes {
             DoublePinyinScheme.splitLayoutVariant(id)?.takeIf { it.first == schemeId }?.let { file to it.second }
         }
 
+    /** 写明是双拼的导入方案（#160）：生成它在合并键布局上的版本要用的几项。 */
+    internal class ImportedDoublePinyin(val id: String, val name: String, val semicolon: Boolean)
+
+    /**
+     * 一份方案文本是不是写明双拼的导入方案：方案段 input_scheme 是 double_pinyin、语言是中文或没写。
+     * CyIME 生成的文件不算。[id] 和文件里的 schema_id 不一致时也不算。
+     */
+    internal fun importedDoublePinyin(id: String, text: String): ImportedDoublePinyin? {
+        val body = text.trimStart('\uFEFF')
+        if (body.startsWith(DoublePinyinScheme.GENERATED_MARK)) return null
+        val block = SchemaManager.extractSchemaBlock(body) ?: return null
+        val entry = runCatching { SchemaManager.yaml.decodeFromString(SchemaYaml.serializer(), block).schema }.getOrNull() ?: return null
+        if (entry.schemaId != id || entry.inputScheme?.trim() != InputScheme.DOUBLE_PINYIN.id) return null
+        if (entry.language?.trim()?.lowercase()?.startsWith("zh") == false) return null
+        return ImportedDoublePinyin(id, entry.name.ifBlank { id }, Regex("(?m)^\\s+alphabet:.*;").containsMatchIn(body))
+    }
+
+    /** rime 目录里写明双拼的导入方案；CyIME 自带、生成的方案和各布局版本不算。 */
+    private fun importedDoublePinyin(context: Context, rimeDir: File): List<ImportedDoublePinyin> =
+        rimeDir.listFiles { f -> f.isFile && f.name.endsWith(".schema.yaml") }.orEmpty().sortedBy { it.name }.mapNotNull { file ->
+            val id = file.name.removeSuffix(".schema.yaml")
+            if (DoublePinyinScheme.splitLayoutVariant(id) != null ||
+                com.kingzcheung.xime.rime.RimeConfigHelper.isAppSchema(context, id)) return@mapNotNull null
+            runCatching { importedDoublePinyin(id, file.readText()) }.getOrNull()
+        }
+
+    /**
+     * #160：写明双拼的导入方案在每个有合并键的自建布局上各写一个版本（见 DoublePinyinScheme.importedLayoutSchema）。
+     * 原方案删了或不再写明双拼、布局删了或不再有合并键时，删掉旧版本；只删带 CyIME 生成标记的文件，词库和学习记录不动。
+     */
+    private fun writeImportedLayoutVariants(context: Context, rimeDir: File, layouts: List<CustomKeyboardLayout>) {
+        val wanted = layouts.filter { it.mergedGroups.isNotEmpty() }
+        val keep = mutableSetOf<String>()
+        // 没有合并键布局时不用读各方案文件，只清旧版本。
+        if (wanted.isNotEmpty()) for (schema in importedDoublePinyin(context, rimeDir)) for (layout in wanted) {
+            val id = DoublePinyinScheme.layoutVariantId(schema.id, layout.id)
+            try {
+                writeIfChanged(File(rimeDir, "$id.schema.yaml"), DoublePinyinScheme.importedLayoutSchema(
+                    schema.id, schema.name, id, layout.name, layout.mergedGroups, schema.semicolon))
+                keep += id
+            } catch (e: Exception) { Log.w(TAG, "Cannot generate $id", e) }
+        }
+        for (file in rimeDir.listFiles().orEmpty()) {
+            val id = file.name.removeSuffix(".schema.yaml").takeIf { file.isFile && file.name.endsWith(".schema.yaml") } ?: continue
+            val base = DoublePinyinScheme.splitLayoutVariant(id)?.first ?: continue
+            if (isBuiltin(base) || isCustom(base) || id in keep) continue
+            val generated = runCatching { file.bufferedReader().use { it.readLine() } }.getOrNull()
+                ?.startsWith(DoublePinyinScheme.GENERATED_MARK) == true
+            if (generated) file.delete()
+        }
+        importedOnLayout = keep
+    }
+
     private fun mergedLayouts(context: Context) =
         runCatching { CustomKeyboardLayouts.load(context) }.getOrDefault(emptyList()).filter { it.mergedGroups.isNotEmpty() }
 
@@ -205,6 +270,8 @@ object DoublePinyinSchemes {
             try { writeSchema(rimeDir, scheme, layouts) }
             catch (e: Exception) { Log.w(TAG, "Cannot generate ${scheme.id}", e) }
         }
+        runCatching { writeImportedLayoutVariants(context, rimeDir, layouts) }
+            .onFailure { Log.w(TAG, "Cannot generate layout variants of imported schemas", it) }
     }
 
     /**
@@ -221,6 +288,8 @@ object DoublePinyinSchemes {
                 try { writeLayoutVariants(rimeDir, scheme, base, layouts) }
                 catch (e: Exception) { Log.w(TAG, "Cannot generate layout variants of ${scheme.id}", e) }
             }
+            runCatching { writeImportedLayoutVariants(context, rimeDir, layouts) }
+                .onFailure { Log.w(TAG, "Cannot generate layout variants of imported schemas", it) }
         }
         val current = SettingsPreferences.getCurrentSchema(context)
         if (isOnLayout(current) && !File(rimeDir, "$current.schema.yaml").isFile)
@@ -236,6 +305,9 @@ object DoublePinyinSchemes {
             else current.take(after + 1) + id + current.drop(after + 1)
         } else current.filterNot { it == id }.ifEmpty { listOf("rime_ice") }
         if (updated == current) return
+        // 新打开的双拼排在已打开的方案最后，不挤动用户原来的顺序（11-23）。
+        if (enabled) InputModes.placeNewlyEnabledLast(context,
+            SchemaManager.discoverSchemas(context).map { it.toSchemaInfo() }, current, listOf(id))
         // 隐藏方案时它的 14 键版本跟着隐藏，正在用 14 键版本也要换掉。
         if (!enabled && SettingsPreferences.getCurrentSchema(context).let { it == id || it == DoublePinyinScheme.k14Id(id) ||
                 isOnLayout(it) && baseId(it) == id })

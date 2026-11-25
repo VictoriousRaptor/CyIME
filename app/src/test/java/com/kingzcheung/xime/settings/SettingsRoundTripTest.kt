@@ -90,7 +90,7 @@ class SettingsRoundTripTest {
             t9FlickLetters = true, letterLongPressMenu = true, cursorStepDp = 14f, cursorSwipeLines = 1.75f, keyTextScale = 1.3f, handwritingPauseSeconds = 0.8f,
             formulaDelimiter = FormulaDelimiter.entries.last { it != FormulaDelimiter.DOLLAR }, fixedSymbols = "，\n。",
             qwertyStagger = QwertyStaggerMode.PHYSICAL, qwertyStaggerCustom = 0.25f,
-            qwertyCommaKey = false, qwertyPeriodKey = false, symbolKeyCycle = true, languageKeyOnLeft = true,
+            qwertyCommaKey = false, qwertyPeriodKey = false, shiftTapLocks = true, symbolKeyCycle = true, languageKeyOnLeft = true,
             qwertyBottomRow = com.kingzcheung.xime.ui.keyboard.QwertyBottomRowConfig.parse("language,space,symbols,numbers"),
         )
         changed.save(context)

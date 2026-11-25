@@ -449,4 +449,108 @@ class BackupManagerTest {
         // An old backup has none.
         assertEquals(null, BackupManager.clipboardEntry(zipOfText(mapOf(BackupManager.META_PREFIX + "settings.json" to "{}"))))
     }
+
+    // ---- 以后的版本做的备份（换了前缀和几个名字，见 NewerBackupNames） ----
+
+    private val newer = NewerBackupNames.META_PREFIX
+
+    @Test
+    fun `the newer names are exactly the ones the newer version writes`() {
+        // 照新版本实际写的名字一个字一个字地写在这里：常量写错了，下面那些测试照样过，只有这一项会报。
+        assertEquals("_cyime_backup/", NewerBackupNames.META_PREFIX)
+        assertEquals("cyime.custom.yaml", NewerBackupNames.KEYBOARD_CUSTOM_FILE)
+        assertEquals("store_index", NewerBackupNames.STORE_INDEX_KEY)
+        assertEquals("__cyime_english", NewerBackupNames.ENGLISH_MODE_ID)
+    }
+
+    @Test
+    fun `a backup made by a newer version is recognised and its clipboard records are read`() {
+        val json = """{"app":"CyIME","items":[{"text":"固定的","pinned":true}]}"""
+        val bytes = zipOfText(linkedMapOf(newer + "settings.json" to "{}", newer + "clipboard.json" to json))
+        assertTrue(BackupManager.isCyimeBackup(bytes))
+        assertEquals(json, BackupManager.clipboardEntry(bytes))
+    }
+
+    @Test
+    fun `restoring a newer backup puts everything where this version keeps it`() {
+        val filesDir = tempDir.newFolder("files")
+        val bytes = zipOfText(linkedMapOf(
+            newer + "manifest.json" to """{"format":2}""",
+            newer + "settings.json" to """{"input_mode_order":{"t":"s","v":"rime_ice\n${NewerBackupNames.ENGLISH_MODE_ID}"}}""",
+            newer + "prefs/caption_mode.json" to """{"font":{"t":"i","v":2}}""",
+            newer + "files/custom-keyboard-layouts.json" to "[]",
+            newer + "cells/state.json" to """{"installed":[]}""",
+            NewerBackupNames.KEYBOARD_CUSTOM_FILE to "patch: {}",
+            "rime_ice.custom.yaml" to "patch: {a: 1}",
+        ))
+
+        val result = restore(filesDir, bytes)
+
+        assertTrue(result.exceptionOrNull()?.toString(), result.isSuccess)
+        assertEquals(setOf("kime_settings", "caption_mode"), restoredPrefs.keys)
+        assertEquals("rime_ice\n${InputModes.ENGLISH}",
+            org.json.JSONObject(restoredPrefs.getValue("kime_settings")).getJSONObject("input_mode_order").getString("v"))
+        assertEquals("[]", File(filesDir, "custom-keyboard-layouts.json").readText())
+        assertEquals("""{"installed":[]}""", File(filesDir, "${BackupManager.CELLS_DIR}/state.json").readText())
+        assertEquals("patch: {}", File(filesDir, "rime/${KeysConfigHelper.XIME_CUSTOM_CONFIG_FILE}").readText())
+        assertEquals("patch: {a: 1}", File(filesDir, "rime/rime_ice.custom.yaml").readText())
+        assertTrue(!File(filesDir, "rime/${NewerBackupNames.KEYBOARD_CUSTOM_FILE}").exists())
+        assertTrue(!File(filesDir, "rime/$newer").exists())
+    }
+
+    @Test
+    fun `when a backup has both keyboard config names this version's own file wins in either order`() {
+        val mine = KeysConfigHelper.XIME_CUSTOM_CONFIG_FILE
+        val theirs = NewerBackupNames.KEYBOARD_CUSTOM_FILE
+        for ((i, order) in listOf(listOf(mine, theirs), listOf(theirs, mine)).withIndex()) {
+            val filesDir = tempDir.newFolder("files-$i")
+            val entries = linkedMapOf(BackupManager.META_PREFIX + "settings.json" to "{}")
+            order.forEach { entries[it] = if (it == mine) "mine" else "newer" }
+            val result = restore(filesDir, zipOfText(entries))
+            assertTrue(result.exceptionOrNull()?.toString(), result.isSuccess)
+            assertEquals("mine", File(filesDir, "rime/$mine").readText())
+            assertTrue(!File(filesDir, "rime/$theirs").exists())
+        }
+    }
+
+    @Test
+    fun `the same entry under both prefixes is refused and nothing is written`() {
+        val filesDir = tempDir.newFolder("files")
+        val files = zipOfText(linkedMapOf(
+            BackupManager.META_PREFIX + "files/custom-keyboard-layouts.json" to "[1]",
+            newer + "files/custom-keyboard-layouts.json" to "[2]",
+        ))
+        assertTrue(restore(filesDir, files).isFailure)
+        assertTrue(!File(filesDir, "custom-keyboard-layouts.json").exists())
+        val settings = zipOfText(linkedMapOf(BackupManager.META_PREFIX + "settings.json" to "{}", newer + "settings.json" to "{}"))
+        assertTrue(restore(filesDir, settings).isFailure)
+        assertTrue(restoredPrefs.isEmpty())
+    }
+
+    @Test
+    fun `a newer english mode id in setting values becomes this version's, keys and other values stay`() {
+        val id = NewerBackupNames.ENGLISH_MODE_ID
+        val json = """{"input_mode_order":{"t":"s","v":"rime_ice\n$id\njapanese"},""" +
+            """"modes":{"t":"ss","v":["$id","x$id","${id}_2"]},"$id":{"t":"s","v":"x"},"dark_mode":{"t":"b","v":true}}"""
+        val out = org.json.JSONObject(NewerBackupNames.incomingSettings(json.toByteArray()).toString(Charsets.UTF_8))
+        assertEquals("rime_ice\n${InputModes.ENGLISH}\njapanese", out.getJSONObject("input_mode_order").getString("v"))
+        val modes = out.getJSONObject("modes").getJSONArray("v")
+        assertEquals(setOf(InputModes.ENGLISH, "x$id", "${id}_2"), (0 until modes.length()).map { modes.getString(it) }.toSet())
+        assertEquals("x", out.getJSONObject(id).getString("v"))
+        assertEquals(true, out.getJSONObject("dark_mode").getBoolean("v"))
+        // Nothing to change: the very same bytes come back.
+        val plain = """{"dark_mode":{"t":"b","v":true}}""".toByteArray()
+        assertTrue(NewerBackupNames.incomingSettings(plain) === plain)
+    }
+
+    @Test
+    fun `a keyboard config that names the store index only the newer way still gives its mirrors`() {
+        val yaml = com.charleskorn.kaml.Yaml(configuration = com.charleskorn.kaml.YamlConfiguration(strictMode = false))
+        fun mirrors(text: String) = yaml.decodeFromString(XimeConfig.serializer(), text).storeIndex?.baseUrls
+        val newerKey = NewerBackupNames.STORE_INDEX_KEY
+        assertEquals(listOf("https://a/"), mirrors("$newerKey:\n  base_urls: [\"https://a/\"]\n"))
+        // Both written: this version's key wins.
+        assertEquals(listOf("https://b/"), mirrors("xime_index:\n  base_urls: [\"https://b/\"]\n$newerKey:\n  base_urls: [\"https://a/\"]\n"))
+        assertEquals(null, mirrors("unrelated: 1\n"))
+    }
 }

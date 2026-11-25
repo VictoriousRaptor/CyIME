@@ -38,10 +38,20 @@ import kotlin.concurrent.thread
  * - `op=cell_set --es ids a,b --ez english false`：把开着的导入词库设成正好这几个（目录里的搜狗词库没下载的先下载），
  *   再像点「应用更改」一样应用。应用要几分钟，所以立刻回 `cell_set: started`，脚本用 cell_state 等 applying=false。
  * - `op=cell_remove --es ids a,b`：删掉这几个没在用的下载词库（脚本测完删掉它为测量下载的，原来就有的不动）。
+ * - `op=data_state`：除了安装包以外还有什么在决定候选，一行 `t9_ngram=字节数:sha256前16位 models=[名:字节数,…]
+ *   userdb=[名:字节数,…] personal=[名:字节数:行数,…] custom=[名:字节数,…] cells=[名:字节数,…]`：rime/ 里实际在用的词组模型
+ *   （下载的哪一档、安装包带的，还是以前的安装包留下的，靠大小和校验和分清）、别的可选模型、每个用户词库、
+ *   个人词条和自定义短语文件（行数含文件头）、方案补丁、导入词库目录。只读，只报名字和数量，不读出任何词条；
+ *   真机和电脑对照结果前记下原状。
+ * - `op=touch_stats`：把按键落点统计（[com.kingzcheung.xime.stats.TouchStatsData]：每个键的落点格、没出字的原因、
+ *   几根手指交叠、删掉重打的键对等，只有计数）连同打字统计、屏幕密度写到 Android/data/<包名>/files/cyime-dev/touch-stats-<时间>/，
+ *   给 tools/ime_lab/touch_stats_report.py 出报告。不含任何打过的文字。
  * - `op=enter_info`：当前输入框的 EditorInfo（包名、回车动作、「回车不做动作」标记、类型、actionId），不含文字。
  * - `op=enter_probe --es method <做法> --es marker t01`：清空当前输入框，上屏标记，用这一种做法回车，
  *   回 `result=sent|newline|nothing|other`（只报长度）。做法见 [EnterProbe.methods]；给 QQ、微信试哪种回车发送、哪种换行。
  *   会真的发出消息，只在文件传输助手、我的电脑这类发给自己的聊天里用。
+ * - `op=stt_record --ez on true|false`：开关「保存语音调优录音」（和设置页同一个值），回 `stt_record=true|false`；
+ *   录音存 Android/data/<包名>/files/speech_tuning/，电脑 adb pull 回放比模型。测完关回去。
  * 输入法正在部署时回 busy，稍后重试。每个 op 的结果写进广播结果（am broadcast 会打印 data=...）和 logcat 标签 DevLearning。
  * 用法：adb shell am broadcast -n com.cyletix.cyime/com.kingzcheung.xime.service.DevLearningReceiver -a com.cyletix.cyime.DEV_LEARNING --es op unlearn
  * 只有 adb（持有 DUMP 权限）能发，普通应用发不进来。
@@ -56,6 +66,10 @@ class DevLearningReceiver : BroadcastReceiver() {
                 SettingsPreferences.setIncognito(app, intent.getBooleanExtra("on", true))
                 // `am broadcast` prints this, so a script can check the switch really changed.
                 report("incognito=${SettingsPreferences.isIncognito(app)}")
+            }
+            "stt_record" -> {
+                SettingsPreferences.setSttDebugRecord(app, intent.getBooleanExtra("on", false))
+                report("stt_record=${SettingsPreferences.isSttDebugRecord(app)}")
             }
             "unlearn" -> {
                 val file = File(app.getExternalFilesDir(null), "unlearn.tsv")
@@ -82,6 +96,29 @@ class DevLearningReceiver : BroadcastReceiver() {
                     val dict = RimeEngine.getInstance().exportUserDict(File(dir, "user_dict.userdb.txt").path)
                     val cylm = File(rime, "cylm_learned.tsv").takeIf { it.isFile }?.copyTo(File(dir, "cylm_learned.tsv"), true) != null
                     "export: ${dir.path} userdb=$dict cylm_learned=$cylm"
+                }
+            }
+            "data_state" -> {
+                // 不碰引擎，不用等部署的锁；200 MB 的模型算一遍校验和要一两秒，放后台。
+                val pending = goAsync()
+                thread(name = "dev-data-state") {
+                    val message = runCatching { dataState(app) }.getOrElse { "data_state failed: ${it.message}" }
+                    Log.i(TAG, message)
+                    pending.resultData = message
+                    pending.finish()
+                }
+            }
+            "touch_stats" -> {
+                val dir = File(app.getExternalFilesDir(null), "cyime-dev/touch-stats-" +
+                    java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date()))
+                // 不碰引擎，不用等部署的锁。
+                val pending = goAsync()
+                thread(name = "dev-touch-stats") {
+                    val message = runCatching { com.kingzcheung.xime.stats.TouchStatsStore.export(app, dir) }
+                        .getOrElse { "touch_stats failed: ${it.message}" }
+                    Log.i(TAG, message)
+                    pending.resultData = message
+                    pending.finish()
                 }
             }
             "snapshot" -> background {
@@ -251,6 +288,39 @@ class DevLearningReceiver : BroadcastReceiver() {
         }.joinToString("\n")
     }
 
+    /**
+     * What decides the candidates besides the package itself, by name, size and count only: no entry is read out.
+     * The word model is the file really in rime/ (a downloaded tier, the bundled one, or one an earlier package
+     * left behind: BundledRimeSync keeps files a package dropped), told apart by its size and checksum.
+     */
+    private fun dataState(app: Context): String {
+        val rime = File(app.filesDir, "rime")
+        fun bytes(file: File): Long =
+            if (file.isDirectory) file.walkTopDown().filter { it.isFile }.sumOf { it.length() } else file.length()
+        fun sha16(file: File): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 20)
+                while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) }
+            }
+            return digest.digest().take(8).joinToString("") { "%02x".format(it) }
+        }
+        fun list(files: List<File>, describe: (File) -> String) = files.sortedBy { it.name }.joinToString(",", "[", "]", transform = describe)
+        val top = rime.listFiles().orEmpty().toList()
+        val model = File(rime, "t9_ngram.lm")
+        val models = top.filter { it.isFile && it.name != model.name && (MODEL_FILE.matches(it.name)) }
+        val stores = top.filter { it.name.endsWith(".userdb") || it.name.endsWith(".userdb.txt") }
+        val personal = top.filter { it.isFile && PERSONAL_TEXT.matches(it.name) }
+        val custom = top.filter { it.isFile && it.name.endsWith(".custom.yaml") }
+        val cells = File(rime, "cyime_cells").listFiles().orEmpty().filter { it.isFile }
+        return "t9_ngram=${if (model.isFile) "${model.length()}:${sha16(model)}" else "none"} " +
+            "models=${list(models) { "${it.name}:${it.length()}" }} " +
+            "userdb=${list(stores) { "${it.name}:${bytes(it)}" }} " +
+            "personal=${list(personal) { "${it.name}:${it.length()}:${it.useLines { lines -> lines.count() }}" }} " +
+            "custom=${list(custom) { "${it.name}:${it.length()}" }} " +
+            "cells=${list(cells) { "${it.name}:${it.length()}" }}"
+    }
+
     private fun report(message: String) {
         Log.i(TAG, message)
         resultData = message
@@ -283,6 +353,10 @@ class DevLearningReceiver : BroadcastReceiver() {
         const val SETTINGS_PREFS = "kime_settings"
         const val SETTINGS_FILE = "kime_settings.json"
         const val USERDB = "user_dict.userdb.txt"
+        /** Optional scoring models in rime/ (data_state): word model variants, grammar, sentence model, CyLM files. */
+        val MODEL_FILE = Regex(""".*\.(lm|gram|onnx)|cylm_.*""")
+        /** Personal word packs and custom phrase tables in rime/ (data_state reports name, bytes and lines only). */
+        val PERSONAL_TEXT = Regex("""user_.*\.dict\.yaml|custom_phrase.*\.txt""")
         /** Settings an app update rewrites on its own while redeploying Rime; not the run's doing. */
         val DEPLOY_STATE = setOf("deployment_done", "deployment_hash", "rime_assets_version", "builtin_schemas_merged")
         /** Files under filesDir an automated run may change: custom layouts, Rime saved options, CyLM learned layer. */

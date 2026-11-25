@@ -53,7 +53,8 @@ internal object KeyboardHeightProfiles {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         if (floating) return prefs.getInt(floatingKey(landscape), 0) > 0
         // 只看这个方向自己存的高度；竖屏调过不算横屏调过，横屏没调过照默认尺寸排。
-        return prefs.getInt(fixedKey(landscape), 0) > 0
+        // 折叠屏另一块屏调的也不算（#396）。
+        return SettingsPreferences.storedFixedHeightDp(context, landscape) > 0
     }
 
     /** 只有确认才调用。悬浮确认绝不写 keyboard_height_dp*。 */

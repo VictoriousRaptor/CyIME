@@ -1,8 +1,8 @@
 --[[
   CyIME：打一个完整拼音音节（an、ai、en、ou、ang…）时，常用单字留在前面。
-  这样的输入也能读成首字母（an = a'n），学过的或词频高的两字词（爱你、按钮、安娜…）会排到单字前面，
+  这样的输入也能读成首字母（an = a'n），词频高的两字词（爱你、按钮、安娜…）会排到单字前面，
   第一页放不下 安 按 暗 岸 案。这里保证前 6 个单字排在靠首字母读出的多字词之前；完整拆成音节的词
-  （xian = xi'an 西安）、英文、表情、符号和自定义短语不动，
+  （xian = xi'an 西安）、用户选过的词（照学习排）、英文、表情、符号和自定义短语不动，
   输入不是单个完整音节时不做任何事。
 --]]
 local KEEP = 6
@@ -73,8 +73,10 @@ local function cyime_single_syllable(input, env)
         end
         local held = {}
         for i, cand in ipairs(buffer) do
-            -- custom_phrase entries (initial_quality 99) are the user's own choice and keep their place.
-            if i <= last_single and han_count(cand.text) >= 2 and cand.quality < 50 and abbreviated(cand) then
+            -- custom_phrase entries (initial_quality 99) are the user's own choice and keep their place, and so do words
+            -- the user has picked (user_phrase): learning ranks them like any word (2026-11-24, 学过的要能往前排).
+            if i <= last_single and han_count(cand.text) >= 2 and cand.quality < 50 and abbreviated(cand) and
+                cand:get_genuine().type ~= "user_phrase" then
                 held[#held + 1] = cand
             else
                 yield(cand)

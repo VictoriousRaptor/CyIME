@@ -293,6 +293,7 @@ class SpeechRecognitionLanguageSessionTest {
         assertEquals(listOf("日本語"), f.results)
     }
 
+    // 压低音量 = 原音量的三分之一（11-24 改，原来五分之一）：10 → 3。
     // 2026-10-31 tablet user: right after the keyboard opens, the first short phrase gave no text.
     // Releasing (or tapping stop) while the model still loaded threw the captured audio away.
     @Test fun stoppingWhileTheModelLoadsStillRecognizesWhatWasSaid() = Fixture(preload = false, duckMedia = true).use { f ->
@@ -300,13 +301,13 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.startRecognition()
         f.manager.startPreStart()
         val mic = f.microphones.single()
-        assertEquals(listOf(2), f.mediaVolumes.toList())
+        assertEquals(listOf(3), f.mediaVolumes.toList())
         mic.feed(1000)
         mic.feed(1001)
         // The keyboard ends the voice session the same way endVoiceSession does: pre-start first, then stop.
         f.manager.cancelPreStart()
         f.manager.stopRecognition()
-        assertEquals(listOf(2, 10), f.mediaVolumes.toList())
+        assertEquals(listOf(3, 10), f.mediaVolumes.toList())
         assertFalse("The captured audio must survive until the model is ready", mic.released.get())
 
         f.backend.initGate?.countDown()
@@ -316,7 +317,7 @@ class SpeechRecognitionLanguageSessionTest {
         assertEquals(listOf(1000.toShort(), 1001.toShort()), f.backend.audio.map { (_, pcm) -> pcm.toShortSample() })
         assertEquals(listOf("closing result"), f.results)
         f.await { mic.released.get() }
-        assertEquals("Decoding saved audio must not lower volume again", listOf(2, 10), f.mediaVolumes.toList())
+        assertEquals("Decoding saved audio must not lower volume again", listOf(3, 10), f.mediaVolumes.toList())
         assertTrue(f.errors.isEmpty())
     }
 
@@ -329,7 +330,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.cancelPreStart()
         f.manager.cancelRecognition()
         assertTrue(mic.released.get())
-        assertEquals(listOf(2, 10), f.mediaVolumes.toList())
+        assertEquals(listOf(3, 10), f.mediaVolumes.toList())
 
         f.backend.initGate?.countDown()
         f.await { f.manager.getState() == RecognitionState.IDLE }
@@ -343,12 +344,12 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.startPreStart()
         assertTrue("A pending gesture alone must leave media alone", f.mediaVolumes.isEmpty())
         f.manager.startRecognition()
-        assertEquals(listOf(2), f.mediaVolumes.toList())
+        assertEquals(listOf(3), f.mediaVolumes.toList())
         f.backend.initGate?.countDown()
         f.session()
-        assertEquals(listOf(2), f.mediaVolumes.toList())
+        assertEquals(listOf(3), f.mediaVolumes.toList())
         f.manager.stopRecognition()
-        assertEquals(listOf(2, 10), f.mediaVolumes.toList())
+        assertEquals(listOf(3, 10), f.mediaVolumes.toList())
     }
 
     private fun ByteArray.toShortSample(): Short = ((this[1].toInt() shl 8) or (this[0].toInt() and 0xFF)).toShort()
@@ -542,7 +543,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.startRecognition(InputLanguage.JAPANESE)
         f.await { f.microphones.size == 2 && f.microphones[1].starts.get() == 1 }
         val waitingMicrophone = f.microphones[1]
-        repeat(150) { waitingMicrophone.feed(300 + it) }
+        repeat(650) { waitingMicrophone.feed(300 + it) } // 60 s queue (600 chunks) must overflow
         f.await { f.errors.isNotEmpty() && waitingMicrophone.released.get() }
 
         assertTrue(f.errors.single().contains("准备时间过长"))
@@ -584,7 +585,7 @@ class SpeechRecognitionLanguageSessionTest {
         val failedSession = f.session()
         f.await { f.microphones.single().starts.get() == 1 }
         val failedMicrophone = f.microphones.single()
-        repeat(150) { failedMicrophone.feed(500 + it) }
+        repeat(650) { failedMicrophone.feed(500 + it) } // past the 60 s queue
         f.await { f.errors.isNotEmpty() && failedMicrophone.released.get() }
         assertTrue(f.errors.single().contains("准备时间过长"))
         assertEquals("The test must not unblock startup or issue a UI stop", 1L, blockedStart.count)

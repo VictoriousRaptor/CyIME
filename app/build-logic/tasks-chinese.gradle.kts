@@ -135,12 +135,17 @@ val prepareChineseDictionaries by tasks.registering {
     // 游戏名、网络流行语（tools/dictionaries/new_words.py 生成，和 cyime_domain_terms.tsv 一样只往上提）。
     val newWords = file("data/cyime_new_words.tsv")
     inputs.file(newWords)
+    // 口语「动作 + 时长/动量/结果」短语（讲半天、骂一下、问了一下），词典里没有，逐字拼会出 将半天。同样只往上提，选法见文件头。
+    val spokenPhrases = file("data/cyime_spoken_phrases.tsv")
+    inputs.file(spokenPhrases)
     val removedWords = file("data/cyime_removed_words.txt.gz")
     inputs.file(removedWords)
     val removedNames = file("data/cyime_removed_names.txt")
     inputs.file(removedNames)
     val removedPoetry = file("data/cyime_removed_poetry.txt")
     inputs.file(removedPoetry)
+    val removedFragments = file("data/cyime_removed_fragments.txt")
+    inputs.file(removedFragments)
     val removedParticleHomophones = file("data/cyime_removed_particle_homophones.txt")
     inputs.file(removedParticleHomophones)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
@@ -197,6 +202,31 @@ val prepareChineseDictionaries by tasks.registering {
                 }
             }
         }
+        // 候选里显示表情只给表情（#496）。雾凇的 emoji.json 还套着 others.txt（英文月份、偏旁、化学式、数学和单位符号……），
+        // 只开表情也出符号，开着「打符号名出符号」时加号、平方这些出两遍。只留 emoji.txt，再去掉里面的货币符号和 © ® ™
+        // （符号表里有人民币符号、版权符号这些）。
+        File(root, "opencc/emoji.json").writeText("""
+            {
+              "name": "Chinese to Emoji (CyIME: emoji only)",
+              "segmentation": { "type": "mmseg", "dict": { "type": "text", "file": "emoji.txt" } },
+              "conversion_chain": [ { "dict": { "type": "text", "file": "emoji.txt" } } ]
+            }
+        """.trimIndent() + "\n")
+        val emojiTable = File(root, "opencc/emoji.txt")
+        fun isEmoji(value: String) = value.codePoints().anyMatch {
+            it >= 0x1F000 || it in 0x2190..0x2BFF || it == 0xFE0F || it == 0x3030 || it == 0x303D || it == 0x3297 || it == 0x3299
+        }
+        var droppedSymbols = 0
+        emojiTable.writeText(emojiTable.readLines().mapNotNull { line ->
+            val tab = line.indexOf('\t')
+            if (tab < 0) return@mapNotNull line.takeIf { it.isNotEmpty() }
+            // 第一个值是词本身，留着；后面只留表情，一个表情都不剩的行整行不要。
+            val values = line.substring(tab + 1).split(' ')
+            val kept = values.take(1) + values.drop(1).filter(::isEmoji)
+            droppedSymbols += values.size - kept.size
+            if (kept.size < 2) null else line.substring(0, tab + 1) + kept.joinToString(" ")
+        }.joinToString("\n", postfix = "\n"))
+        check(droppedSymbols in 1..100) { "Upstream emoji table changed: $droppedSymbols non-emoji values" }
         fun reweight(name: String, table: File) {
             val estimated = java.util.zip.GZIPInputStream(table.inputStream()).bufferedReader().useLines { lines ->
                 lines.associate { line -> line.substringBeforeLast('\t') to line.substringAfterLast('\t') }
@@ -232,7 +262,7 @@ val prepareChineseDictionaries by tasks.registering {
         // rate the IME's own words near zero (上屏 43, 出词 11), so 只输入声母 came out 只输入圣母 and 每个键
         // 每个见. Raise the existing rime-ice entries here; missing ones are added to cyime_terms below.
         // The user's must-pass words (app/data/cyime_user_fixes.tsv) use the same floor, one code each.
-        val domainFloors = (domainTerms.readLines() + userFixes.readLines() + newWords.readLines()).filter { it.isNotBlank() && !it.startsWith("#") }
+        val domainFloors = (domainTerms.readLines() + userFixes.readLines() + newWords.readLines() + spokenPhrases.readLines()).filter { it.isNotBlank() && !it.startsWith("#") }
             .map { it.split('\t') }.associate { (it[0] + "\t" + it[1]) to it[2].toInt() }.toMutableMap()
         // Sentence pattern verb + 完了/好了 + 吗/没 (user 2026-10-30: 测完了吗 came out 测验了吗 on nine-key): these
         // phrases sat near 200, below 洗澡了吗 and 吃药了吗 on the same keys; each one present gets at least 1000
@@ -266,6 +296,10 @@ val prepareChineseDictionaries by tasks.registering {
         // the word model scores 何枝可依 as one word, so one rare word beat three common ones). They belong in the
         // optional 古诗词名句 pack; how the list was chosen is in its header.
         removedPoetry.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // Phrase fragments: a dictionary word glued to a function character (逼一逼你, 比香港), rare (ext/tencent weight
+        // under 150) and never in base.dict (2026-11-23: nine-key ai'zi'bing showed 逼一逼你 and 比香港 after 艾滋病).
+        // Rime still composes them from the word and the character; how the list was chosen is in its header.
+        removedFragments.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
         // A common word plus a homophone of a sentence-final particle that chat writes far less often than the word plus
         // the particle (2026-11-15: shengxiaoma gave 生肖马, not 生效吗, on every keyboard). One whole word beat 生效 + 吗 in
         // the sentence; the list is built by tools/ime_lab/particle_homophone_words.py, which never lists a base.dict word.
@@ -647,9 +681,23 @@ val prepareChineseDictionaries by tasks.registering {
             "  cyime_doubled_letter_correction: true\n" +
             // Two neighbouring letters typed swapped (lnu → 论) read as one edit; full pinyin only, not double pinyin.
             "  cyime_transposition_correction: true\n" +
+            // The swapped pair was only looked for in the last three letters of the input, so a swap typed earlier in
+            // a sentence was never read (woxaing..., 22% of swapped clauses right). With this it is looked for in
+            // every syllable. 2026-11-17 cloud engine, 6457 real SMS clauses nobody trained on, typed by the finger
+            // model: clauses with one swap 19.2% -> 43.6% first choice; alone on 2000 clauses 39 fixed, none broken.
+            "  cyime_transposition_anywhere: true\n" +
             // One letter typed too many inside a syllable (zhonng → 中, shhi → 是), only as an extra key press
             // (same key twice or a neighbour); same 20x gate, never first (docs/development/typo-correction-20261021.md).
             "  cyime_extra_letter_correction: true\n" +
+            // A word read through an extra letter never joined a sentence ("never first" above), so a key pressed
+            // twice inside a sentence was never fixed (woomenquchifan: 0.4% right). With this the reading of the same
+            // key pressed twice (not of a neighbour touched with it: dawojia must stay 大我家, not 到家) joins the
+            // sentences and leads by t9/slip_correction_margin like any slip; not at the end of the input when the
+            // letter is a syllable of its own (dianhuaa is 电话啊: 0.59% of 30772 real clauses end that way).
+            // 2026-11-17, the same 6457 clauses: one key twice 0.4% -> 65.9%; all three options together, typed with
+            // the finger model's errors 50.3% -> 56.6% first choice (429 fixed, 24 broken), neighbour keys only
+            // 70.4% -> 70.7% (35 / 18), typed without error 2 fixed, 5 broken; must-pass 1193: none broken.
+            "  cyime_extra_letter_sentences: true\n" +
             // Typed letters that read only with an initial standing alone before the last syllable (zhe'b'zhe'b'g), when
             // neighbour corrections read them in full (zhen'zheng): such an initial weighs as a slip and the corrected
             // sentence comes first; long input is corrected from its start (docs/development/typo-correction-20261021.md).
@@ -665,9 +713,15 @@ val prepareChineseDictionaries by tasks.registering {
             "  sentence_position_final_only: [${particles.joinToString(", ")}]\n" +
             // 把/被 open a verb phrase and never end a sentence: shuoshuobei is 说说呗, not 说说被.
             "  sentence_position_initial_only: [把, 被]\n" +
-            // Four sentences for t9/sentence_rescore to choose from (the menu still shows one); the cutoff
-            // keeps Rime from dropping alternatives whose weight is a word penalty away.
-            "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n" +
+            // Sixteen sentences for t9/sentence_rescore to choose from (the menu still shows one); the cutoff
+            // keeps Rime from dropping alternatives whose weight is a word penalty away. Four until 2026-11-17: of 363
+            // wrong first choices on 2000 correctly typed real SMS clauses, the right sentence was not among the
+            // sentences in 9%. 6457 more such clauses: 16 (short input 32) fixed 75 and broke 20; with
+            // t9/rescore_rime_weight 0.15, 8 / 16 fixed 107 and broke 33, 16 / 32 141 and 47, 32 / 64 167 and 58.
+            // Sixteen cost 14.5% of a key (exact instruction counts; 21.8% before Poet::MakeSentences stopped
+            // rebuilding each line's context for every word), and the whole 2026-11-17 batch together is still 5.8%
+            // under the engine it replaces.
+            "  max_sentences: 16\n  sentence_cutoff_threshold: 100\n" +
             // Sentences of short input (four syllables at most) choose from two words per span, not one: liangkuaile
             // could only be 两块 + 了, 凉快 never reached a sentence. And after the four n-best, four more whose words
             // before the last differ (the n-best is often one word with four last characters: 语言过 语言国 语言果
@@ -687,8 +741,14 @@ val prepareChineseDictionaries by tasks.registering {
             // 68843 short phrases: first choice 50613 -> 50927 (348 gained, 34 lost; of the 36 the two-word change had
             // made clearly worse, all are right again). Sixteen sentences cost 8% on the per-key p95 of short input,
             // eight 2%; for all lengths eight cost 5% on long input (cloud engine, rough).
-            "  sentence_short_max_sentences: 8\n")
-            .lineSequence().filterNot { it.contains("- lua_filter@*long_word_filter") }
+            // 32 since 2026-11-17, with max_sentences 16 above.
+            "  sentence_short_max_sentences: 32\n")
+            // rime-ice's force_gc translator runs a Lua collection step on every key. librime-lua already does one when
+            // each of its translations is released and a full collection every 256, so this one only costs time:
+            // 2026-11-17 host engine, exact instruction counts over 546 keys: 4.8% of a key; the Lua heap goes from
+            // 0.78 to 0.98 MB, the process +0.4 MB (median), the candidates are the same on every key.
+            .also { check(it.contains("\n    - lua_translator@*force_gc")) { "Upstream rime_ice translator list changed" } }
+            .lineSequence().filterNot { it.contains("- lua_filter@*long_word_filter") || it.contains("- lua_translator@*force_gc") }
             .flatMap { if (it.contains("- lua_filter@*autocap_filter")) sequenceOf(it, "    - lua_filter@*cyime_shortcut_order", "    - lua_filter@*cyime_acronym_filter",
                 "    - lua_filter@*cyime_single_syllable", "    - lua_filter@*cyime_en_memory")
                 else if (it == "    - script_translator") sequenceOf(it, "    - lua_translator@*cyime_mixed_input",
@@ -719,11 +779,20 @@ val prepareChineseDictionaries by tasks.registering {
             // never passes the committed text, so the first word is not scored as a sentence start.
             "\nt9:\n  sentence_rescore: true\n  joint_decoder: false\n  joint_requires_ngram: true\n  source_budget: 16\n  pool_budget: 16\n" +
             "  dictionary_beam: 64\n  sentence_beam: 8\n  result_budget: 12\n  display_sentences: 1\n" +
+            // 2026-11-23: still one whole sentence (asked 10-10: a long input recommends one sentence), then the
+            // first sentence cut at its word boundaries, longest first, so a wrong tail is fixed by picking the
+            // right head instead of character by character. 2000 real SMS clauses, ten characters and more
+            // four or more actions 22.8% -> 18.6%; the first candidate is the same at every key.
+            // menu_sentences / menu_sentence_margin (more whole sentences when unsure) wait for the user.
+            "  menu_prefixes: 3\n" +
             "  spelling_penalty: 0\n  word_penalty: 8.0\n  correction_penalty: -9.2\n  whole_input_phrases: 16\n" +
             "  prefer_user_entries: true\n  ngram_model: t9_ngram\n" +
             // rescore_rime_weight: share of Rime's own sentence weight added to the word model's score (0 = model alone).
             // 0.3: 11-10 sweep fixed 又发现一个问题; B站 and SMS together +3, homophone set +37, 26-key must-pass none lost.
-            "  ngram_sentence_start: false\n  rescore_rime_weight: 0.3\n  ngram_eos_weight: 0\n  ngram_user_weight: 0.3\n" +
+            // 0.15 since 2026-11-17: of 363 wrong first choices on 2000 real SMS clauses, 29% were the word model's
+            // choice overturned by a fixed rule, Rime's weight the largest of them. 6457 clauses, this alone: 45 fixed,
+            // 16 broken; with sixteen sentences 141 / 47.
+            "  ngram_sentence_start: false\n  rescore_rime_weight: 0.15\n  ngram_eos_weight: 0\n  ngram_user_weight: 0.3\n" +
             // tail_correction_margin: a slip in the last syllable (nihso 你好, jintisn 今天, xiexir 谢谢) leads the typed
             // abbreviations when the corrected sentence beats them by this margin (ln units; ln 20 like the other typo gates).
             // 11-11 tablet: the typed readings 你受 / 近体是你 / 歇息人 came first. To be swept on the computer (0 = off).
@@ -737,6 +806,23 @@ val prepareChineseDictionaries by tasks.registering {
             // 能找到, tuolaile 拖来了 -> 过来了). Swept on the short-sentence patches: ln 2000 broke 7 of them
             // (zaipushang 再铺上 -> 在路上) for 528 clauses, ln 100000 none for 509. 0 = off.
             "  slip_correction_margin: 9.2\n" +
+            // Among corrected sentences every correction after the first pays the margin too (stray-initial input chose
+            // by the word model alone, and a sentence that also dropped a doubled letter led for being a word shorter:
+            // ...butinghuaa 不听话 over 不听话啊). Only matters with translator/cyime_extra_letter_sentences.
+            "  extra_corrections_pay_margin: true\n" +
+            // stray_correction_margin: with an initial standing alone before the last syllable
+            // (translator/cyime_stray_initial_correction above) the corrected sentence led whatever the word model
+            // said, so a word typed by its initials inside full pinyin (l for 了, g for 个, d for 打) lost to a
+            // neighbour-key reading of those initials, more often with the word model than without. Now it leads only
+            // when its score (word model + rescore_rime_weight of Rime's weight) beats the typed choice's by this
+            // margin (ln units; unset: always, as before). correction_lead_bias does not shift it: the never-first
+            // level's note (TypoStrength) relies on corrections still leading where the letters do not read in full by
+            // normal spellings. 2026-11-24 cloud engine (107 + this), bundled model, chosen on 2000 held-out real
+            // clauses: one word typed by its initials 34 -> 62 of 160, real typing 1142 -> 1152 (10 fixed, none
+            // broken), touch and clean typing unchanged; real slips break from 3 on (2 at 3, 25 at 9.2). Confirmed on
+            // 6457 others: initials 122 -> 180 of 600, real typing 3680 -> 3697 (22 fixed, 5 broken), touch 4615 ->
+            // 4613, clean typing and the 1193 must-pass unchanged; the tablet's full model alike.
+            "  stray_correction_margin: 2\n" +
             // correction_lead_bias: the keyboard's 邻键纠错强度 (TypoStrength.Lead; ln units), added to the three margins a
             // corrected reading must win by before it leads what was typed: the 2000 times of a corrected word
             // (candidate_policy.cc), slip_correction_margin and tail_correction_margin above. Not applied on the
@@ -759,7 +845,9 @@ val prepareChineseDictionaries by tasks.registering {
             // without those sentences, as before. 2026-11-15 cloud engine, 14k cases with public sentences added:
             // 2.0 lost three right first choices (看到他 -> 看到她, 偷一个 -> 头一个, 实战 -> 施展), 3.0 one, 3.5 pushed
             // one slip correction out of the first three, 4.0 none; 42 first choices gained (我妈/我吗, 又/有, 再/在).
-            "  near_homophone_penalty: 4.0\n" +
+            // 3.0 since 2026-11-17, with sixteen sentences and rescore_rime_weight 0.15: 6457 real SMS clauses 149 fixed
+            // and 46 broken (4.0: 141 / 47; 0: 185 / 72); 26-key must-pass 1193: 996 pass (993 before), none broken.
+            "  near_homophone_penalty: 3.0\n" +
             // final_g_word_margin: a dictionary word read with the final g added (cyime_final_g_correction) leads the
             // sentence of the typed letters when the word model finds it more likely by this margin (ln 100, the
             // weight of a correction): 已安装 -14.8 against 一按转 -22.2. Of 68843 correctly typed short phrases 12
@@ -897,6 +985,13 @@ val prepareChineseDictionaries by tasks.registering {
             "  sentence_position_initial_only: [把, 被]\n" +
             "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n")
             .replace("  filters:\n", "  filters:\n    - cyime_candidate_policy\n")
+            // No force_gc translator, as in full pinyin above.
+            .also { check(it.contains("\n    - lua_translator@*force_gc")) { "Upstream double_pinyin_flypy translator list changed" } }
+            .also { check(it.contains("\n    - lua_filter@*autocap_filter")) { "Upstream double_pinyin_flypy filter list changed" } }
+            // English memory as in full pinyin (11-25 他：双拼里打过的 Abc123 也要能补全): the letters typed are the word's.
+            .lineSequence().filterNot { it.contains("- lua_translator@*force_gc") }
+            .flatMap { if (it.contains("- lua_filter@*autocap_filter")) sequenceOf(it, "    - lua_filter@*cyime_en_memory") else sequenceOf(it) }
+            .joinToString("\n")
             .let { withUserPhraseForms(withGreekLetters(withSymbolNames(withDatetimeHints(it)))) }
             // 生僻字 also for double pinyin (GitHub #72, same default-off switch): the Lua translator maps the two keys
             // through this scheme's preedit_format; DoublePinyinScheme copies both lines into every generated scheme.

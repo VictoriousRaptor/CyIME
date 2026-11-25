@@ -56,6 +56,13 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     private val omissionPause = OmissionPause()
     /** 上一帧九键编码属于哪个输入框和方案；只有同一个才能借上一帧的字母编码，见 [com.kingzcheung.xime.rime.t9RawPreedit]。 */
     private var t9PreeditOwner: Pair<Long, String>? = null
+
+    /**
+     * 最近一次交给界面的引擎原始输入（九键是数字串）。九键的 candidateState.inputText 是回显（hua），
+     * 九键滑行要按前面已打的数字挑同形编码（先打 hua 再划 xing），得用这个（11-23 平板实测出 华中）。
+     */
+    @Volatile var engineInput: String = ""
+        private set
     private val t9DigitPreeditLog = T9DigitPreeditLog()
 
     private fun scheduleOmission(ascii: Boolean) {
@@ -83,7 +90,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
             state.inputText.length !in 4..80 || !pauseInputLetters(state.inputText, merged14)) return
         // 停顿后只补漏键和打反两种读法（双拼、14 键还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
-        if (!pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
+        // 14 键全拼停一下后引擎还要拿词组模型拼的整句和首选比一次（方案里的 t9/model_sentences_on_pause），纠错都关了也要算。
+        if (!merged14 && !pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
                 com.kingzcheung.xime.settings.SpellingPatches.typo(service, it)
             }) return
         val length = state.inputText.length
@@ -236,6 +244,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        engineInput = inputText
         service.candidateState.value = service.candidateState.value.copy(
             traceEventId = composition.traceEventId,
             engineRevision = composition.engineRevision,
@@ -406,6 +415,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        engineInput = result.inputText
         service.candidateState.value = service.candidateState.value.copy(
             engineRevision = result.engineRevision,
             inputText = if (isT9Schema) displayText else result.inputText,
@@ -756,6 +766,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val state = service.uiState.value
         if (!service.editorInputPolicy.directInput || state.inputTarget.isInternal) return false
         service.uiState.value = state.copy(isAsciiMode = true)
+        engineInput = ""
         val candidates = service.candidateState.value
         if (!candidates.isShowingRecentClipboard) service.candidateState.value = CandidateState()
         return true

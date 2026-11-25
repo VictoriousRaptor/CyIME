@@ -113,8 +113,8 @@ object SetupMore {
             add(if (to.reverseSwipe) "打开了「反转上下滑方向」：上滑出上角标、下滑出下角标，删除键也反过来。"
                 else "关掉了「反转上下滑方向」：下滑出上角标、上滑出下角标。")
         if (to.cancelButton != from.cancelButton)
-            add(if (to.cancelButton) "打开了「候选栏取消按钮」：打字时候选栏最左边有左箭头，点它取消输入。"
-                else "关掉了「候选栏取消按钮」：候选词从最左边开始。")
+            add(if (to.cancelButton) "打开了「显示 ‹ 取消键」：打字时候选栏最左边有左箭头，点它取消输入。"
+                else "关掉了「显示 ‹ 取消键」：候选词从最左边开始。")
         if (to.spaceHold != from.spaceHold) add("长按空格改成「${to.spaceHold.label}」。")
         if (to.deleteSkipsAssociation != from.deleteSkipsAssociation)
             add(if (to.deleteSkipsAssociation) "打开了「退格直接删字」：有联想词时第一下删除键就删字。"

@@ -43,6 +43,49 @@ class EnglishWordMemoryTest {
     }
 
     @Test
+    fun digitsTypedAfterAWordAreKeptWithIt() {
+        val dir = tempDir.root
+        EnglishWordMemory.remember(dir, "Abc")
+        // Abc, then 1 2 3 on the number row: one line grows instead of three.
+        listOf("见 Abc1", "见 Abc12", "见 Abc123").forEach { before ->
+            val (word, digits) = EnglishWordMemory.wordWithDigits(before)!!
+            EnglishWordMemory.rememberWithDigits(dir, word, digits)
+        }
+        assertEquals(listOf("Abc", "Abc123"), words(dir))
+        // Another word with digits later is its own line; the same token again adds nothing.
+        EnglishWordMemory.rememberWithDigits(dir, "Model", "3")
+        EnglishWordMemory.rememberWithDigits(dir, "Model", "3")
+        assertEquals(listOf("Abc", "Abc123", "Model3"), words(dir))
+        assertEquals(listOf("Abc", "Abc123", "Model3"), EnglishWordMemory.compact(words(dir)))
+        assertTrue(EnglishWordMemory.forget(dir, "abc123"))
+        assertEquals(listOf("Abc", "Model3"), words(dir))
+    }
+
+    @Test
+    fun wordsTypedStraightIntoTheDocumentAreKept() {
+        val dir = tempDir.root
+        // English letters typed straight in (no Rime), then digits and a space: Abc123 is one line.
+        listOf("hi Abc1", "hi Abc12", "hi Abc123", "hi Abc123 ").forEach { EnglishWordMemory.rememberTyped(dir, it) }
+        assertEquals(listOf("Abc123"), words(dir))
+        // A capital inside, or digits: kept at a space or mark. A plain word or a sentence-initial capital: not.
+        listOf("I like iPhone,", "see GPT4.", "The ", "hello ", "我 CyIME ", "ab1 ").forEach { EnglishWordMemory.rememberTyped(dir, it) }
+        assertEquals(listOf("Abc123", "iPhone", "GPT4", "CyIME"), words(dir))
+        // Enter after Abc123 typed in Rime keeps the digits too.
+        EnglishWordMemory.remember(dir, "Zed42")
+        assertEquals("Zed42", words(dir).last())
+    }
+
+    @Test
+    fun wordWithDigitsNeedsAWordWorthRemembering() {
+        assertEquals("Abc" to "123", EnglishWordMemory.wordWithDigits("Abc123"))
+        assertEquals("test" to "1", EnglishWordMemory.wordWithDigits("a test1"))
+        // Short lowercase (a jianpin slip), digits only, letters glued to digits in front, Chinese: nothing.
+        listOf("abc1", "123", "x2y34", "你好1", "Abc", "Abc 1").forEach {
+            assertEquals(it, null, EnglishWordMemory.wordWithDigits(it))
+        }
+    }
+
+    @Test
     fun compactKeepsLatestOrder() {
         assertEquals(listOf("Notion", "Obsidian"), EnglishWordMemory.compact(listOf("Obsidian", "Notion", "Obsidian", "x y")))
     }

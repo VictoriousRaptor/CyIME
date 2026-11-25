@@ -143,7 +143,7 @@ fun ModelLocalContent(
                         ModelSectionNote("正在检查已下载的模型…")
                     }
                     ModelRowDivider()
-                    ModelSectionNote("本地模型在手机上运行，会占用 CPU、增加耗电，可能让手机发热。")
+                    ModelSectionNote("模型在手机上运行，会耗电、发热。")
                 }
             }
             item(key = "model-auto-update") {
@@ -191,7 +191,7 @@ internal fun ModelDeleteDialog(
         onDismissRequest = onDismiss,
         title = { Text("删除模型") },
         text = {
-            Text("确定删除「${item.model.name}」？模型文件将被删除，此操作不可撤销。" +
+            Text("删除「${item.model.name}」？删除后不能恢复。" +
                 (note?.let { "\n$it" } ?: ""))
         },
         confirmButton = {
@@ -237,7 +237,7 @@ private fun DownloadRegionSection(
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(if (option == DownloadRegion.AUTO)
-                            "${option.label}(当前判断：${if (detectedChina) "中国大陆" else "海外"})" else option.label,
+                            "${option.label}(当前：${if (detectedChina) "中国大陆" else "海外"})" else option.label,
                             style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         Text(option.description, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)

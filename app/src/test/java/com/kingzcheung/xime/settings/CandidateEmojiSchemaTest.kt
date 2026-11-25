@@ -26,4 +26,17 @@ class CandidateEmojiSchemaTest {
         assertTrue(File(root, "opencc/emoji.txt").isFile)
         assertTrue(File(root, "opencc/others.txt").isFile)
     }
+
+    /** #496：表情开关只出表情。others.txt（月份英文、偏旁、数学符号）不再挂在表情上，表情表里也没有货币和 © ® ™。 */
+    @Test fun emojiFilterGivesOnlyEmoji() {
+        val root = File("build/generated/chinese-assets/rime_ice/opencc")
+        val config = File(root, "emoji.json").readText()
+        assertTrue(config.contains("emoji.txt") && !config.contains("others.txt"))
+        val rows = File(root, "emoji.txt").readLines().filter { '\t' in it }.associate { row ->
+            row.substringBefore('\t') to row.substringAfter('\t').split(' ').drop(1)
+        }
+        assertTrue(rows.getValue("开心").isNotEmpty())
+        assertTrue("人民币" !in rows && "版权符号" !in rows)
+        assertTrue(rows.values.flatten().none { it in setOf("¥", "$", "€", "£", "©", "®", "™") })
+    }
 }

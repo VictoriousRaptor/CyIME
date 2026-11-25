@@ -241,6 +241,73 @@ object PersonalDictManager {
         }
         // Migrate our old table binding, never retarget a user's private table.
         if (dictName != configured) retargetCustomPhraseDict(customFile, dictName)
+        // 字母开头、带数字的短语编码（dz1）：打字中按的数字进编码，不当选词键，见 [applyPhraseDigitPattern]。
+        val prefixes = if (PhraseKeys.of(schemaId) == PhraseKeys.T9) emptySet() else phraseDigitPrefixes(rimeDir, keys)
+        digitPrefixCache[schemaId] = prefixes
+        optionalPhrasePatch(customFile) { applyPhraseDigitPattern(customFile, prefixes) }
+    }
+
+    /** recognizer 规则名，也是短语翻译器多认的那个标签（[applyCustomPhraseTranslator] 的 tags）。 */
+    internal const val PHRASE_DIGITS_TAG = "cyime_phrase_digits"
+
+    private val digitPrefixCache = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
+    /**
+     * 这个方案下所有「字母开头、带数字」的短语编码里，从第一个数字起的每个前缀（dz12 → dz1、dz12）。
+     * 九键不算：九键的数字键本来就是编码。纯数字和数字开头的编码走「数字出短语」，不在这里。
+     */
+    internal fun phraseDigitPrefixes(rimeDir: File, keys: KeyedPhrases?): Set<String> {
+        val source = File(rimeDir, CUSTOM_PHRASE_FILE).takeIf { it.isFile }?.readText(Charsets.UTF_8).orEmpty()
+        return phraseDigitPrefixes(parseStableDbEntries(source).flatMap { entry ->
+            keys?.codes?.invoke(entry.code) ?: listOf(entry.code.trim().filterNot { it == ' ' || it == '\'' })
+        })
+    }
+
+    internal fun phraseDigitPrefixes(codes: List<String>): Set<String> = buildSet {
+        for (code in codes) {
+            if (code.isEmpty() || !code[0].isAsciiLetter() || code.any { !it.isAsciiLetter() && it !in '0'..'9' }) continue
+            val first = code.indexOfFirst { it in '0'..'9' }
+            if (first < 0) continue
+            for (end in first + 1..code.length) add(code.substring(0, end))
+        }
+    }
+
+    private fun Char.isAsciiLetter() = this in 'a'..'z' || this in 'A'..'Z'
+
+    /**
+     * 打字中再按 [digit] 是不是在接着打某条短语的编码（已经打了 dz，有 dz1 这条短语）：是的话这个数字送进 Rime 当编码，
+     * 不在 Kotlin 这边当选词（实体键盘数字、插件候选的数字选词都先问这里）。
+     */
+    internal fun continuesPhraseCode(context: Context, schemaId: String, input: String, digit: Char): Boolean {
+        if (input.isEmpty() || digit !in '0'..'9') return false
+        val prefixes = digitPrefixCache[schemaId] ?: run {
+            val doublePinyin = DoublePinyinSchemes.find(schemaId) ?: if (DoublePinyinSchemes.isGenerated(schemaId))
+                DoublePinyinSchemes.load(context).let { DoublePinyinSchemes.find(schemaId) } else null
+            (if (PhraseKeys.of(schemaId) == PhraseKeys.T9) emptySet()
+                else phraseDigitPrefixes(SchemaManager.getRimeDir(context), keyedPhrases(schemaId, doublePinyin)))
+                .also { digitPrefixCache[schemaId] = it }
+        }
+        return (input + digit) in prefixes
+    }
+
+    /**
+     * 26 键、双拼、14 键里数字是选词键，打字中按 1 就选了第一个，带数字的短语编码打不进去。给 recognizer 加一条
+     * 只认这些编码前缀的规则：打了 dz 再按 1，输入变成 dz1，matcher 把这一段标成 [PHRASE_DIGITS_TAG]，短语翻译器认这个标签。
+     * 只有对得上某条短语的前缀才这样，别的输入按数字照旧选词；dz 之后要选第一个用空格。没有这类短语时把规则删掉。
+     */
+    internal fun applyPhraseDigitPattern(customFile: File, prefixes: Set<String>) {
+        val text = customFile.takeIf { it.isFile }?.readText(Charsets.UTF_8).orEmpty()
+        val line = Regex("""(?m)^  ["']?recognizer/patterns/$PHRASE_DIGITS_TAG["']?:[^\n]*(?:\n|$)""")
+        val wanted = if (prefixes.isEmpty()) "" else
+            "  \"recognizer/patterns/$PHRASE_DIGITS_TAG\": \"^(?:${prefixes.sortedWith(compareBy({ it.length }, { it })).joinToString("|")})$\"\n"
+        val updated = when {
+            line.containsMatchIn(text) -> line.replace(text) { wanted }
+            wanted.isEmpty() -> text
+            else -> insertUnderPatch(text, wanted)
+        }
+        if (updated == text) return
+        SchemaManager.yaml.parseToYamlNode(updated)
+        CellDictionaryStore.writeAtomic(customFile, updated)
     }
 
     /**
@@ -253,12 +320,17 @@ object PersonalDictManager {
         /** A pair key taps its capital (qw→Q, er→E …; l and m stay); letters swiped one by one stay as written. */
         MERGED14("custom_phrase_k14");
 
+        /**
+         * 编码里的数字照原样留着（dz1、wx2 这类快捷短语码，用户 11-24：数字短语打不出）。九键上 2～9 就是那个数字键，
+         * 照打就对得上；0、1 在九键是分词/空格键，打不进编码，这类编码九键没法打，不进九键副本。
+         */
         fun codes(code: String): List<String> {
             val letters = code.lowercase().filterNot { it == ' ' || it == '\'' }
-            if (letters.isEmpty() || letters.any { it !in 'a'..'z' }) return emptyList()
+            if (letters.isEmpty() || letters.any { it !in 'a'..'z' && it !in '0'..'9' }) return emptyList()
             return when (this) {
-                T9 -> listOf(letters.map { T9_DIGITS[it - 'a'] }.joinToString(""))
-                MERGED14 -> listOf(letters.map { MERGED14_KEYS[it - 'a'] }.joinToString(""), letters).distinct()
+                T9 -> if (letters.any { it == '0' || it == '1' }) emptyList()
+                    else listOf(letters.map { if (it in 'a'..'z') T9_DIGITS[it - 'a'] else it }.joinToString(""))
+                MERGED14 -> listOf(letters.map { if (it in 'a'..'z') MERGED14_KEYS[it - 'a'] else it }.joinToString(""), letters).distinct()
             }
         }
 
@@ -298,7 +370,7 @@ object PersonalDictManager {
         val phrase = """table_translator@custom_phrase"""
         val translator = Regex("""(?m)^  ["']?engine/translators/(?:@before 0+|\+|@next|@after last)["']?:[ \t]*""" +
             """(?:$phrase|\[[ \t]*$phrase[ \t]*\]|\r?\n    - $phrase)[ \t]*(?:\r?\n|$)""")
-        val defaults = """(?:dictionary: ""|user_dict: custom_phrase|db_class: stabledb|enable_completion: false|enable_sentence: false|initial_quality: 99)"""
+        val defaults = """(?:dictionary: ""|user_dict: custom_phrase|db_class: stabledb|enable_completion: false|enable_sentence: false|initial_quality: 99|tags: \[abc, cyime_phrase_digits\])"""
         val block = Regex("""(?m)^  ["']?custom_phrase["']?:[ \t]*\r?\n(?:    $defaults[ \t]*(?:\r?\n|$))+""")
         val updated = block.replace(translator.replace(text, ""), "")
         if (updated != text) CellDictionaryStore.writeAtomic(customFile, updated)
@@ -345,16 +417,19 @@ object PersonalDictManager {
      * 拆法不唯一时（fangan = fang'an / fan'gan）几种都给，' 和空格是用户写的分隔。拆不成拼音的编码（符号快捷码等）不换。
      */
     internal fun doublePinyinCodes(scheme: DoublePinyinScheme, code: String): List<String> {
+        // 数字段照原样接在双拼码后面（dianhua1 → 小鹤 dmhx1）。
         val parts = code.lowercase().split('\'', ' ').filter { it.isNotEmpty() }
+            .flatMap { part -> DIGIT_RUNS.findAll(part).map { it.value }.toList() }
         if (parts.isEmpty()) return emptyList()
         return parts.fold(listOf("")) { heads, part ->
-            val tails = doublePinyinPart(scheme, part)
+            val tails = if (part[0] in '0'..'9') listOf(part) else doublePinyinPart(scheme, part)
             if (tails.isEmpty()) return emptyList()
             heads.flatMap { head -> tails.map { head + it } }.take(MAX_PHRASE_READINGS)
         }
     }
 
     private const val MAX_PHRASE_READINGS = 4
+    private val DIGIT_RUNS = Regex("[0-9]+|[^0-9]+")
 
     /** 一段连续字母的双拼编码：音节越少越好，整音节优先于单个声母。 */
     private fun doublePinyinPart(scheme: DoublePinyinScheme, letters: String): List<String> {
@@ -391,6 +466,8 @@ object PersonalDictManager {
         val content = try { source.readText(Charsets.UTF_8) } catch (_: java.io.IOException) { return emptyMap() }
         return buildMap {
             for (entry in parseStableDbEntries(content)) {
+                // 编码里带数字的（34、dz2）没有完整的字母读音，编码栏照常用引擎的。
+                if (entry.code.any { it in '0'..'9' }) continue
                 val digits = PhraseKeys.T9.codes(entry.code).singleOrNull() ?: continue
                 putIfAbsent(entry.word to digits, entry.code.lowercase().replace(' ', '\''))
             }
@@ -485,7 +562,9 @@ object PersonalDictManager {
         } == true
         val existing = patch?.get<YamlMap>(namespace)
         val defaults = mapOf("dictionary" to "\"\"", "user_dict" to dictName, "db_class" to "stabledb",
-            "enable_completion" to "false", "enable_sentence" to "false", "initial_quality" to "99")
+            "enable_completion" to "false", "enable_sentence" to "false", "initial_quality" to "99",
+            // 带数字的短语编码那一段只带 [PHRASE_DIGITS_TAG]（abc 段不收数字），短语表也要认它。
+            "tags" to "[abc, $PHRASE_DIGITS_TAG]")
         val options = if (existing == null) {
             "  \"$namespace\":\n" + defaults.entries.joinToString("") { (key, value) -> "    $key: $value\n" }
         } else defaults.entries.filter { (key, _) ->

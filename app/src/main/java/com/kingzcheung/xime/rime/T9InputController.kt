@@ -62,6 +62,8 @@ class T9InputController(
         val digitLength: Int,
         val spelling: String = pinyin,
         val near: Boolean = false,
+        /** 滑行带出的读音（#582）：点了先把数字串换成这一串，见 [offerGlideLine]。 */
+        val glideCode: String? = null,
     )
 
     internal var fuzzyReadings: com.kingzcheung.xime.settings.NineKeyFuzzyReadings? = null
@@ -72,6 +74,10 @@ class T9InputController(
         }
     private var lastRailPanel: LeftPanelInfo? = null
     private var lastRailOptions: List<Pair<String, Int>> = emptyList()
+
+    /** 刚滑出的一笔：打入的 [typed] 和同一条线的其他读音；打下一个键、点读音、上屏后作废。 */
+    private class GlideLine(val typed: String, val readings: List<com.kingzcheung.xime.glide.T9Glide.LineReading>)
+    @Volatile private var glideLine: GlideLine? = null
 
     // ── 异步执行模型 ──
     private val ownsQueue = inputCommands == null
@@ -200,6 +206,7 @@ class T9InputController(
     /** An accepted commit ends the old composition, not the editor or already queued next keys. */
     internal fun resetDisplayAfterCommit() {
         uiGeneration.incrementAndGet()
+        glideLine = null
         _selectionHistory = emptyList()
         firstOptions = emptyList()
         leftPanelState = LeftPanelState.IDLE
@@ -362,10 +369,11 @@ class T9InputController(
     private fun updateReadings(panel: LeftPanelInfo, options: List<Pair<String, Int>>) {
         val fuzzy = fuzzyReadings
         val base = if (fuzzy?.scheme == null) options.map { SyllableOption(it.first, it.second) } else emptyList()
-        firstOptions = if (fuzzy == null) base else {
+        val rail = if (fuzzy == null) base else {
             val readings = fuzzy.options(panel.panelDigits).map { SyllableOption(it.pinyin, it.digits, it.spelling, it.near) }
             if (readings.isEmpty()) base else (base + readings).distinctBy { it.pinyin to it.digitLength }.sortedByDescending { it.digitLength }
         }
+        firstOptions = withGlideLine(rail, panel)
 
         selectedOption = if (panel.selectedPinyin.isNotEmpty()) {
             firstOptions.firstOrNull { it.spelling == panel.selectedPinyin && it.digitLength == panel.selectedDigitLength }
@@ -373,6 +381,30 @@ class T9InputController(
         } else {
             null
         }
+    }
+
+    /**
+     * 一笔滑行打入的数字串还原样在左栏时，加上同一条线其他编码的读音（#582），
+     * 排在第一个更短的读音前面（xiong、xing、xin）。
+     */
+    private fun withGlideLine(options: List<SyllableOption>, panel: LeftPanelInfo): List<SyllableOption> {
+        val line = glideLine?.takeIf { panel.state == LeftPanelState.INPUT && panel.panelDigits == it.typed } ?: return options
+        val shown = options.mapTo(HashSet()) { it.pinyin }
+        val result = options.toMutableList()
+        for (reading in line.readings) {
+            if (!shown.add(reading.pinyin)) continue
+            val option = SyllableOption(reading.pinyin, reading.digits, reading.spelling, glideCode = reading.code)
+            val at = result.indexOfFirst { it.glideCode == null && it.digitLength < reading.digits }
+            if (at < 0) result.add(option) else result.add(at, option)
+        }
+        return result
+    }
+
+    /** 滑行打入 [typed] 之后登记同一笔的其他编码 [codes]（主线程）。 */
+    fun offerGlideLine(typed: String, codes: List<String>, doublePinyin: com.kingzcheung.xime.settings.DoublePinyinScheme?) {
+        val readings = com.kingzcheung.xime.glide.T9Glide.lineReadings(typed, codes, doublePinyin)
+        glideLine = readings.takeIf { it.isNotEmpty() }?.let { GlideLine(typed, it) }
+        if (leftPanelState != LeftPanelState.IDLE) lastRailPanel?.let { updateReadings(it, lastRailOptions) }
     }
 
     /** C++ 左侧面板状态（t9GetLeftPanelState 解析结果） */
@@ -414,6 +446,7 @@ class T9InputController(
 
     fun onDigitPressed(digit: String) {
         if (inputAdmissionTicket() == null) return
+        glideLine = null
         val code = digit[0].code
         val traceId = InputLatencyTrace.begin()
         // Read before queuing: the engine uses it only if this digit starts a composition.
@@ -442,6 +475,7 @@ class T9InputController(
         // 左栏是处理完才刷新的快照：刚点的数字还在队列里时它仍是 IDLE。这时拂出的字母也要并进
         // 数字串，否则按普通字母进 RIME，下一个数字一到就被顶掉（用户 11-03：单击一下前功尽弃）。
         if (!letterJoinsDigits(leftPanelState == LeftPanelState.IDLE, queuedT9Keys.get())) return false
+        glideLine = null
         val context = leftContext()
         enqueueT9Key("t9-fix-letter") { admission, epoch ->
             val result = rimeEngine.fixQueuedT9Letter(letter)
@@ -454,6 +488,19 @@ class T9InputController(
     }
 
     fun onChoiceSelected(option: SyllableOption) {
+        glideLine = null
+        val glideCode = option.glideCode
+        if (glideCode != null) {
+            // 滑行带出的读音：打入的数字串换成它所在的编码，再选它，后面的键照这串编码拼（#582）。
+            val context = leftContext()
+            enqueueInput("t9-syllable") { admission, epoch ->
+                rimeEngine.clearQueuedT9Composition()
+                for (digit in glideCode) rimeEngine.processQueuedT9KeyAndGetResult(digit.code, context) ?: return@enqueueInput
+                val result = rimeEngine.selectQueuedT9Pinyin(option.spelling, option.digitLength) ?: return@enqueueInput
+                refreshOnBackground(result = result, admission = admission, epoch = epoch)
+            }
+            return
+        }
         enqueueInput("t9-syllable") { admission, epoch ->
             val result = rimeEngine.selectQueuedT9Pinyin(option.spelling, option.digitLength) ?: return@enqueueInput
             refreshOnBackground(result = result, admission = admission, epoch = epoch)
@@ -597,6 +644,7 @@ class T9InputController(
      */
     fun clearAll() {
         inputEpoch.incrementAndGet()
+        glideLine = null
         uiGeneration.incrementAndGet()
         firstOptions = emptyList()
         leftPanelState = LeftPanelState.IDLE

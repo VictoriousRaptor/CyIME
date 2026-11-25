@@ -30,6 +30,10 @@ class ClipboardSyncBridge(
     val pluginId: String = "",
     foregroundPollIntervalMs: Long = 0,
     private val maxTextBytes: Int = 0,
+    /** 其他同步服务（WebDAV 等）的自动拉取间隔，用户在设置里选（#45），默认 30 秒。 */
+    pullIntervalMs: Long = DEFAULT_PULL_INTERVAL_MS,
+    /** 键盘开着时按 [pullIntervalMs] 一直拉（#45），默认关。 */
+    keepPulling: Boolean = false,
 ) {
     private val systemClipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as AndroidClipboardManager
     private val appContext = context.applicationContext
@@ -37,7 +41,8 @@ class ClipboardSyncBridge(
     private var failing = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wake = Channel<Unit>(Channel.CONFLATED)
-    private val pollInterval = if (foregroundPollIntervalMs > 0) foregroundPollIntervalMs.coerceIn(2_000, 60_000) else 0
+    private val pollInterval = foregroundPollMs(foregroundPollIntervalMs, pluginId == WindowsDevices.ID, keepPulling, pullIntervalMs)
+    private val openThrottle = clampPullInterval(pullIntervalMs)
     private var visible = false
     private var requested = false
     private var worker: Job? = null
@@ -159,8 +164,8 @@ class ClipboardSyncBridge(
                 val due = WindowsDevices.setKeyboardShown(true)
                 if (meshCatchUpDue(due, failing, lastContactAt, now)) { session?.retryNow(); requested = true }
             }
-            // Legacy WebDAV services retain their 30s visibility-triggered throttle.
-            else if (pollInterval > 0 || lastPullAt == Long.MIN_VALUE || now - lastPullAt >= 30_000) requested = true
+            // 其他同步服务（WebDAV 等）：打开键盘时距上次拉取满所选间隔（默认 30 秒）才再拉。
+            else if (pollInterval > 0 || lastPullAt == Long.MIN_VALUE || now - lastPullAt >= openThrottle) requested = true
         } else if (mesh) WindowsDevices.setKeyboardShown(false)
         wake.trySend(Unit)
     }
@@ -189,6 +194,22 @@ class ClipboardSyncBridge(
         /** A wait this long means the session waits for an event, not a timer. */
         const val MAX_TIMER_MS = 24 * 60 * 60 * 1_000L
     }
+}
+
+/** 其他同步服务的自动拉取间隔可选值（秒，#45）；默认 30 秒和以前一样。 */
+internal val PULL_INTERVAL_CHOICES_S = intArrayOf(5, 10, 30, 60)
+internal const val DEFAULT_PULL_INTERVAL_MS = 30_000L
+
+internal fun clampPullInterval(ms: Long): Long = ms.coerceIn(5_000, 60_000)
+
+/**
+ * 键盘开着时定时拉取的间隔，0 表示不定时拉。插件自己声明了间隔（电脑同步固定 2 秒）照旧用它；
+ * 其他服务只有用户打开「键盘开着时一直拉取」才按所选间隔拉。电脑同步不受这两个设置影响。
+ */
+internal fun foregroundPollMs(pluginPollMs: Long, mesh: Boolean, keepPulling: Boolean, pullIntervalMs: Long): Long = when {
+    pluginPollMs > 0 -> pluginPollMs.coerceIn(2_000, 60_000)
+    !mesh && keepPulling -> clampPullInterval(pullIntervalMs)
+    else -> 0
 }
 
 /** 距上次联系上多久，打开键盘时再找对方补一次。 */

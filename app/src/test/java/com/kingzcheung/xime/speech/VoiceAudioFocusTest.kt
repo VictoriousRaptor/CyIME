@@ -102,9 +102,9 @@ class VoiceAudioFocusTest {
         val focus = VoiceAudioFocus(context)
         val owner = Any()
         focus.acquire(owner)
-        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 3, 0)
         assertEquals(10, SettingsPreferences.getSttMusicVolumeBeforeVoice(app))
-        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(2)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(3)
         focus.release(owner)
         verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 10, 0)
         assertEquals(-1, SettingsPreferences.getSttMusicVolumeBeforeVoice(app))
@@ -114,16 +114,42 @@ class VoiceAudioFocusTest {
     }
 
     @Test fun duckRestoresWhenTheSystemLandsOnAnotherStep() {
-        // #322：要 2 档，系统换算后落在 3 档；关麦时读到 3 不能当成用户自己调过。
+        // #322：要 3 档，系统换算后落在 4 档；关麦时读到 4 不能当成用户自己调过。
         SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.DUCK)
         focusAnswers(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
-        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(10, 3)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(10, 4)
+        val focus = VoiceAudioFocus(context)
+        val owner = Any()
+        focus.acquire(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 3, 0)
+        focus.release(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 10, 0)
+    }
+
+    /** 11-24 反馈「说完话之后并不会恢复」：立刻读回还是原音量，过一会儿系统才落到另一档，关麦时照样还原。 */
+    @Test fun duckRestoresWhenTheSystemSettlesLater() {
+        SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.DUCK)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(8, 8, 4)
         val focus = VoiceAudioFocus(context)
         val owner = Any()
         focus.acquire(owner)
         verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
         focus.release(owner)
-        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 10, 0)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 8, 0)
+    }
+
+    /** 11-24 反馈「统一把手机音量变成最低档」：压到三分之一，至少留 1 档，不压成静音。 */
+    @Test fun duckKeepsAtLeastOneStep() {
+        SettingsPreferences.setSttOtherAudio(app, VoiceOtherAudio.DUCK)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(2)
+        val focus = VoiceAudioFocus(context)
+        val owner = Any()
+        focus.acquire(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 1, 0)
+        whenever(audio.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(1)
+        focus.release(owner)
+        verify(audio).setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
     }
 
     @Test fun duckLeavesMutedOrFixedVolumeAlone() {

@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.model.ModelDownloadState
 import com.kingzcheung.xime.settings.InputLanguage
+import com.kingzcheung.xime.speech.AsrModelManager
+import com.kingzcheung.xime.ui.settings.OfflineModelCard
 import com.kingzcheung.xime.speech.SpeechModelCatalog
 import com.kingzcheung.xime.ui.settings.SpeechModelPicker
 import com.kingzcheung.xime.ui.theme.XimeTheme
@@ -27,6 +29,33 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SpeechModelPickerTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun cantoneseDetectionIsOnlyOfferedForChineseSenseVoice() {
+        val models = AsrModelManager(rule.activity)
+        val language = InputLanguage.CHINESE
+        models.setModel(SpeechModelCatalog.SENSEVOICE, language)
+        val revision = mutableIntStateOf(0)
+        rule.setContent { XimeTheme { key(revision.intValue) { OfflineModelCard() } } }
+        val toggle = rule.onNodeWithText("自动识别语音语言")
+        toggle.assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(SpeechModelCatalog.SENSEVOICE_AUTO, models.getSelectedModelId(language))
+            System.getenv("CYIME_RENDER_OUT")?.let { dir ->
+                val view = rule.activity.window.decorView
+                val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                view.draw(Canvas(image))
+                File(dir, "sensevoice-cantonese.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                image.recycle()
+            }
+        }
+        toggle.performClick()
+        rule.runOnIdle {
+            assertEquals(SpeechModelCatalog.SENSEVOICE, models.getSelectedModelId(language))
+            models.setModel(SpeechModelCatalog.PARAFORMER, language)
+            revision.intValue++
+        }
+        toggle.assertDoesNotExist()
+    }
 
     @Test fun providerPresetIsEditableAndDoesNotTransferAnotherProvidersKey() {
         val api = com.kingzcheung.xime.speech.OnlineSpeechApi

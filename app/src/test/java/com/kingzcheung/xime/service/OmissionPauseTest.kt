@@ -44,15 +44,37 @@ class OmissionPauseTest {
         assertEquals(450L, pause.delayMs())
     }
 
-    /** 某个长度补算超时，之后这么长和更长的拼音不再补算；短的照常；过了重试时间再试。 */
+    /** 某个长度的补算连续两次超时，之后这么长和更长的拼音不再补算；短的照常；过了重试时间再试。 */
     @Test fun slowRefineSkipsThisAndLongerInputsForAWhile() {
         val pause = OmissionPause(budgetMs = 100L, retryMs = 60_000L)
         assertTrue(pause.withinBudget(40, 0L))
-        pause.onRefined(40, 400L, 10_000L)
+        pause.onRefined(40, 400L, 9_000L)
+        pause.onRefined(42, 400L, 10_000L)
         assertFalse(pause.withinBudget(40, 10_001L))
         assertFalse(pause.withinBudget(60, 10_001L))
         assertTrue(pause.withinBudget(20, 10_001L))
         assertTrue(pause.withinBudget(40, 70_001L))
+    }
+
+    /** 偶尔一次超时不停：同样长度下一次不慢就当没发生过，中间隔着一次不慢的两次超时不算连续。 */
+    @Test fun aSingleSlowRefineDoesNotSkip() {
+        val pause = OmissionPause()
+        pause.onRefined(34, 124L, 1_000L)
+        assertTrue(pause.withinBudget(34, 1_001L))
+        assertTrue(pause.withinBudget(60, 1_001L))
+        pause.onRefined(36, 28L, 2_000L)
+        pause.onRefined(33, 110L, 3_000L)
+        assertTrue(pause.withinBudget(34, 3_001L))
+    }
+
+    /** 各档各算各的：平板实测的四次超时（102～128 ms）长度都不在同一档，一次也不该停。 */
+    @Test fun slowRefinesOfDifferentLengthsDoNotAddUp() {
+        val pause = OmissionPause()
+        pause.onRefined(34, 124L, 1_000L)
+        pause.onRefined(28, 110L, 2_000L)
+        pause.onRefined(13, 102L, 3_000L)
+        pause.onRefined(41, 128L, 4_000L)
+        for (length in 4..80) assertTrue(pause.withinBudget(length, 4_001L))
     }
 
     /** 快的机器测不到超时，什么都不跳过。 */
@@ -62,13 +84,28 @@ class OmissionPauseTest {
         for (length in 4..80) assertTrue(pause.withinBudget(length, 100L))
     }
 
-    /** 过了重试时间再测得不慢，就恢复补算。 */
+    /** 过了重试时间再测得不慢，就恢复补算，之后要再连续两次超时才停。 */
     @Test fun aLaterFastRefineClearsTheBucket() {
-        val pause = OmissionPause()
+        val pause = OmissionPause(retryMs = 60_000L)
         pause.onRefined(33, 300L, 5L)
-        assertFalse(pause.withinBudget(33, 6L))
-        pause.onRefined(35, 20L, 7L)
-        assertTrue(pause.withinBudget(33, 8L))
+        pause.onRefined(33, 300L, 6L)
+        assertFalse(pause.withinBudget(33, 7L))
+        pause.onRefined(35, 20L, 60_007L)
+        assertTrue(pause.withinBudget(33, 60_008L))
+        pause.onRefined(33, 300L, 60_009L)
+        assertTrue(pause.withinBudget(33, 60_010L))
+    }
+
+    /** 过了重试时间再测还是慢，马上接着停，不用再等第二次（真慢的机器每个重试时间只多等一次）。 */
+    @Test fun aStillSlowRefineAfterTheRetrySkipsAgainAtOnce() {
+        val pause = OmissionPause(retryMs = 60_000L)
+        pause.onRefined(33, 300L, 5L)
+        pause.onRefined(33, 300L, 6L)
+        assertTrue(pause.withinBudget(33, 60_006L))
+        pause.onRefined(33, 300L, 60_007L)
+        assertFalse(pause.withinBudget(33, 60_008L))
+        assertFalse(pause.withinBudget(33, 120_006L))
+        assertTrue(pause.withinBudget(33, 120_007L))
     }
 
     /** 停顿后要不要让引擎补查：全拼看漏键、顺序两个开关；双拼少打一个键跟漏键，多按一下、打反要先开着邻键纠错。 */

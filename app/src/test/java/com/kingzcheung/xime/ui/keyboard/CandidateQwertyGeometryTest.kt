@@ -23,7 +23,15 @@ class CandidateQwertyGeometryTest {
         assertEquals(merged.enterFraction, merged.deleteFraction, 0f)
         val custom = candidateQwertyGeometry(listOf(List(12) { "a" }), false, true, false)
         assertEquals(12f, custom.columns, 0f)
-        assertEquals(QwertyBottomRowWeights.Legacy.mode / QwertyBottomRowWeights.Legacy.total, custom.modeFraction, 0f)
+        assertEquals(QwertyBottomRowWeights.Standard.mode / QwertyBottomRowWeights.Standard.total, custom.modeFraction, 0f)
+    }
+
+    @Test fun everyLetterLayoutUsesTheTwentySixKeyBottomRow() {
+        // 乱序十七 6/6/5、俄语 11 键、自建 6 列：底排和 26 键同一套宽度，只有空格让位（用户 11-23）。
+        val lxsq17 = listOf(listOf("h", "s", "z", "b", "x", "m"), listOf("l", "d", "y", "w", "j", "n"), listOf("c", "q", "g", "f", "t"))
+        val russian = listOf("йцукенгшщзх", "фывапролджэ", "ячсмитьбю").map { it.map(Char::toString) }
+        for (layout in listOf(lxsq17, russian, listOf(List(6) { "a" }), rows))
+            assertEquals(QwertyBottomRowWeights.Standard, letterKeyboardBottomRow(layout, false))
     }
 
     @Test fun splitRowsIncludePanelFractionAndDeleteStaggerWithoutUsingScreenWidth() {

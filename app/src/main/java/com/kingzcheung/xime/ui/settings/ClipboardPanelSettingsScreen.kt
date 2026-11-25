@@ -55,6 +55,7 @@ import com.kingzcheung.xime.clipboard.ClipboardRecentImageCounts
 import com.kingzcheung.xime.clipboard.clipboardRecentImageCount
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_MAX_LINES_KEY
 import com.kingzcheung.xime.ui.menubar.CLIPBOARD_CLOSE_AFTER_PASTE_KEY
+import com.kingzcheung.xime.ui.menubar.CLIPBOARD_PASTE_TO_TOP_KEY
 import com.kingzcheung.xime.ui.menubar.clipboardCardMaxLines
 import com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste
 
@@ -117,6 +118,8 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     var lines by remember { mutableStateOf(clipboardCardMaxLines(prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))) }
+    var textPercent by remember { mutableStateOf(com.kingzcheung.xime.ui.menubar.clipboardCardTextPercent(
+        prefs.getInt(com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_TEXT_SIZE_KEY, 100))) }
     var imageHeight by remember { mutableStateOf(clipboardImageHeight(prefs.getString(CLIPBOARD_IMAGE_HEIGHT_KEY, null))) }
     var imageCount by remember { mutableStateOf(clipboardRecentImageCount(prefs.getInt(CLIPBOARD_RECENT_IMAGE_COUNT_KEY, 4))) }
     val groups by remember(context) { ClipboardGroupStore.getInstance(context) }.state.collectAsState()
@@ -137,7 +140,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
             Text("卡片显示行数", style = MaterialTheme.typography.titleSmall)
             Text("每条记录最多显示几行文字", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            listOf(2, 4, 8).forEach { option ->
+            com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_LINE_CHOICES.forEach { option ->
                 Row(Modifier.fillMaxWidth().testTag("clipboard-card-lines:$option")
                     .selectable(lines == option, role = Role.RadioButton) {
                         lines = option
@@ -146,6 +149,23 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
                     RadioButton(selected = lines == option, onClick = null)
                     Spacer(Modifier.width(12.dp))
                     Text("$option 行", style = MaterialTheme.typography.titleSmall)
+                }
+            }
+        }
+        // #497：给老人用时卡片的字太小。只放大卡片里的字，候选、按键的字不变。
+        Column(Modifier.settingsSearchAnchor("卡片文字大小").fillMaxWidth().padding(16.dp)) {
+            Text("卡片文字大小", style = MaterialTheme.typography.titleSmall)
+            Text("只改剪贴板记录里的字，候选和按键不变", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_TEXT_SIZE_CHOICES.forEach { option ->
+                Row(Modifier.fillMaxWidth().testTag("clipboard-card-text:$option")
+                    .selectable(textPercent == option, role = Role.RadioButton) {
+                        textPercent = option
+                        prefs.edit().putInt(com.kingzcheung.xime.ui.menubar.CLIPBOARD_CARD_TEXT_SIZE_KEY, option).apply()
+                    }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = textPercent == option, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(if (option == 100) "标准" else "$option%", style = MaterialTheme.typography.titleSmall)
                 }
             }
         }
@@ -173,7 +193,7 @@ private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
         // 用户 11-17：一打开剪贴板全是图片。「全部」只放最新几张，其余在「图片」里。
         Column(Modifier.settingsSearchAnchor("显示几张图片").fillMaxWidth().padding(16.dp)) {
             Text("显示几张图片", style = MaterialTheme.typography.titleSmall)
-            Text("「全部」里显示的图片数，截图、相册照片、复制的图各至少一张，其余在「图片」里", style = MaterialTheme.typography.bodySmall,
+            Text("「全部」里显示几张，其余在「图片」里", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ClipboardRecentImageCounts.forEach { option ->
                 Row(Modifier.fillMaxWidth().testTag("clipboard-image-count:$option")
@@ -223,12 +243,13 @@ private fun ClipboardPasteSettings() {
     // Same switch as the clipboard's own ⋯ menu (same preference).
     var closeAfterPaste by remember { mutableStateOf(clipboardClosesAfterPaste(prefs)) }
     var showInBar by remember { mutableStateOf(clipboardShowsInCandidateBar(context)) }
+    var pasteToTop by remember { mutableStateOf(prefs.getBoolean(CLIPBOARD_PASTE_TO_TOP_KEY, false)) }
     SettingsSection(title = "粘贴", content = {
         // 用户 11-20 转来的反馈：最新复制的内容要能选不显示。默认开，和以前一样。
         SettingsToggleItem(
             icon = Icons.TwoTone.ContentPaste,
             title = "候选栏显示刚复制的内容",
-            subtitle = "复制后打开键盘，候选栏先放刚复制的文字和图片；验证码不受影响",
+            subtitle = "复制后打开键盘，候选栏先给出刚复制的内容",
             checked = showInBar,
             onCheckedChange = {
                 showInBar = it
@@ -243,6 +264,17 @@ private fun ClipboardPasteSettings() {
             onCheckedChange = {
                 closeAfterPaste = it
                 prefs.edit().putBoolean(CLIPBOARD_CLOSE_AFTER_PASTE_KEY, it).apply()
+            },
+        )
+        // #299：点选上屏后这条排回最前。默认关，顺序照复制时间。
+        SettingsToggleItem(
+            icon = Icons.TwoTone.ContentPaste,
+            title = "粘贴后移到最前",
+            subtitle = "点一条记录上屏后，这条排到最前面",
+            checked = pasteToTop,
+            onCheckedChange = {
+                pasteToTop = it
+                prefs.edit().putBoolean(CLIPBOARD_PASTE_TO_TOP_KEY, it).apply()
             },
         )
     })

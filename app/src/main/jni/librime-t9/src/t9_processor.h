@@ -184,6 +184,11 @@ private:
     // 音节完全无法解析时返回 false（如英文/符号，放弃调频）。
     bool BuildEntryForPinyin(const std::string& text, const std::string& pinyin,
                              DictEntry* entry);
+    // 词典之外的候选（lua 给的生僻字、粤语字，cyime_rare_chars.lua）没有码可取：九键上它们的注释就是读音，
+    // 按读音（一字一个音节）建码，选中后和别的字一样记进用户词库（11-24：原来取不到码，整句什么都学不进去）。
+    // capture 已有码、注释对不上字数或不全是汉字时不动。
+    void CaptureFromReading(const std::optional<std::string>& candidate_pinyin,
+                            const std::string& candidate_text, T9CommitCapture* capture);
     // 通过方案 Prism（含 speller algebra：xlit 声调消除 / 简拼派生）将拼音音节
     // 解析为词典原生 SyllableId，解决带声调词典（如带声调方案 běn）与无声调调频拼音
     // （ben）的格式差异。返回覆盖整个输入的单音节 id；无法解析返回 nullopt。

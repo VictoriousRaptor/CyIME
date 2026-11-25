@@ -68,4 +68,14 @@ class KeyboardModeNavigationTest {
             }
         }
     }
+
+    /** #499：对调后主键盘 123 在左；进了数字页，左边那个键就是返回，和点进去的是同一个位置。默认不变。 */
+    @Test fun swappedModeKeysKeepTheReturnKeyWhereItWasPressed() {
+        org.junit.Assert.assertEquals(listOf(1, 2), modeSlotOrder(false))
+        org.junit.Assert.assertFalse(com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences().swapModeKeys)
+        val order = modeSlotOrder(true)
+        org.junit.Assert.assertEquals(listOf("123", "!@#"), order.map { modeSlotTarget(KeyboardInputPage.TEXT, it, "中").label })
+        org.junit.Assert.assertEquals("abc", modeSlotTarget(KeyboardInputPage.NUMBERS, order.first(), "中").action)
+        org.junit.Assert.assertEquals("abc", modeSlotTarget(KeyboardInputPage.SYMBOLS, order.last(), "中").action)
+    }
 }

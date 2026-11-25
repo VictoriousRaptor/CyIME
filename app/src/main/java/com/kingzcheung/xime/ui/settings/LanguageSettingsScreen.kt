@@ -55,9 +55,8 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
     var remembered by remember { mutableStateOf(InputModes.rememberedModes(context)) }
     val availableProfiles = InputModes.ordered(context, profilesState.allSchemas
         .filter { it.schemaId in profilesState.enabledSchemas }.map { it.toSchemaInfo() })
-    // 一步选方案（用户 11-01 批准）：关着的内置方案（全拼 14 键、内置双拼）和它们的组合（如小鹤 14 键）也列在
-    // 布局、方案里，点了自动启用并部署，不用先去「已安装的方案」打开再回来。
     // 键盘里的方案面板用同一个 [SchemaPicking.offered]，两边列的方案一样（11-22）。
+    // 只列启用的方案（用户 11-23：关了的还显示、多出用不到的方案）；关着的在「方案管理」里打开。
     val pickableProfiles = InputModes.ordered(context,
         SchemaPicking.offered(profilesState.allSchemas.map { it.toSchemaInfo() }, profilesState.enabledSchemas))
     val dragOrder = rememberDragOrder(orderedLanguages.map { it.id }) { ids ->
@@ -183,8 +182,8 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                             ImeSchemaRequests.pick(entry.schemaId)
                                         }
                                     }
-                                    message = "已打开并选好：${language.displayName} · ${entry.selectionLabel}，正在部署，几秒后好；" +
-                                        if (active) "好了键盘自动换上" else "下次切换到该语言时使用"
+                                    message = "已打开：${language.displayName} · ${entry.selectionLabel}，" +
+                                        if (active) "几秒后键盘自动换上" else "下次切换到该语言时使用"
                                 } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                                 catch (error: Exception) { message = error.message ?: "打开方案失败，请稍后再试" }
                                 finally { saving = false }
@@ -204,7 +203,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                     SettingsItem(Icons.TwoTone.Download, "导入方案", "选 Rime 方案文件或压缩包导入",
                         onClick = onImportSchema, showArrow = true)
                     SettingsItem(Icons.TwoTone.Inventory, "已安装的方案",
-                        "启用、停用和排序语言、方案与布局的组合", onClick = onOpenSchemaResources, showArrow = true)
+                        "启用、停用和排序输入方案", onClick = onOpenSchemaResources, showArrow = true)
                     SettingsItem(Icons.TwoTone.ViewModule, "双拼方案",
                         "选择双拼方案，或自建方案", onClick = onOpenDoublePinyin, showArrow = true)
                 }
@@ -216,7 +215,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                 SettingsSection(title = "导入方案的语言") {
                     unlabeled.forEachIndexed { index, schema ->
                         if (index > 0) HorizontalDivider()
-                        SettingsItem(Icons.TwoTone.Translate, schema.name, "方案没写语言，点开选一次",
+                        SettingsItem(Icons.TwoTone.Translate, schema.name, "方案没标语言，点开选择",
                             onClick = { picking = schema }, showArrow = true,
                             status = if (schema.languageChosen || schema.language == InputLanguage.UNSPECIFIED) schema.language.displayName
                                 else "${schema.language.displayName}(自动)",

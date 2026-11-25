@@ -96,15 +96,24 @@ object InputProfileSelection {
         return (offered.map { it.first() } + offered.flatten()).distinctBy { it.id }
     }
 
-    fun switchHint(layout: InputLayout, current: SchemaInfo, target: SchemaInfo): String =
-        "${layout.displayName}没有${current.schemeLabel}，已换成${target.schemeLabel}"
+    /**
+     * 自建的合并键布局只有 CyIME 给它生成过的方案（中文26键的副本、内置和自建双拼、写明双拼的导入方案的布局版本），
+     * 说一句原因（#160：用户以为自己方案写错了）。
+     */
+    fun switchHint(layout: InputLayout, current: SchemaInfo, target: SchemaInfo,
+        mergedCustom: Boolean = CustomKeyboardLayouts.find(layout.id)?.mergedGroups?.isNotEmpty() == true): String =
+        "${layout.displayName}没有${current.schemeLabel}，已换成${target.schemeLabel}" +
+            if (mergedCustom) "\n$MERGED_LAYOUT_NOTE" else ""
+
+    /** 合并键布局能用哪些方案。 */
+    const val MERGED_LAYOUT_NOTE = "合并键布局只能用中文26键和双拼方案"
 
     /**
      * 灰着的布局卡片上直接写的原因（用户 11-22：选了五笔点别的布局像被弹回去，以为坏了）。
      * 第二行是点了会怎样；卡片矮时只显示第一行。
      */
     fun unavailableNote(current: SchemaInfo, target: SchemaInfo): String =
-        "不能用${current.schemeLabel}\n点了换成${target.schemeLabel}"
+        "不能用${current.schemeLabel}\n点击切换${target.schemeLabel}"
 
     /** 布局一行里每张灰卡片的原因，键是布局 ID。 */
     fun unavailableNotes(current: SchemaInfo, switches: Map<String, LayoutSwitch?>): Map<String, String> =

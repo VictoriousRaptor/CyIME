@@ -37,7 +37,7 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
             Text("工具快捷键", style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.settingsSearchAnchor("工具快捷键", bleed = 8.dp, bleedVertical = 4.dp).fillMaxWidth())
             HardwareOption("Ctrl / Alt 组合键", "关闭后下面这些组合键交给应用", options.toolShortcuts) { save("tool_shortcuts", it) }
-            Text("Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：发送。\nAlt + V：打开或关闭剪贴板，方向键选择，回车粘贴并关闭，Esc 取消。\nAlt + H：开始或停止语音输入。", style = MaterialTheme.typography.bodyMedium)
+            Text("Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：发送。\nAlt + V：打开或关闭剪贴板，方向键选择，回车粘贴并关闭，Esc 取消。\nAlt + H：开始或停止语音输入。\nSYM 键（有的全键盘手机）：打开或关闭符号页。", style = MaterialTheme.typography.bodyMedium)
             Text("候选翻页", style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.settingsSearchAnchor("候选翻页", bleed = 8.dp, bleedVertical = 4.dp).fillMaxWidth())
             Text("有候选时用这些键翻页，可多选",
@@ -60,7 +60,7 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
                 options = HardwareKeyboardPreferences.read(context)
             }
             HardwareOption("候选跟随光标", "候选窗显示在光标旁边", options.followCursor) { save("follow_cursor", it) }
-            // 中文联想词只在「智能联想」开着时才有，但英文直接输入的补全也按这项放，与智能联想无关，所以不置灰（#526）。
+            // 联想词和英文直接输入的补全都只在「智能联想」开着时才有（11-23 起补全也归它管）；「英文出短语」、邮箱后缀照样按这项放，所以不置灰（#526）。
             HardwareOption("联想也显示在候选窗", "联想词和英文补全也显示在候选浮窗里",
                 options.associationInWindow) { save("association_in_window", it) }
             HardwareOption("自动避开输入区域", "浮窗不挡住正在输入的地方", options.avoidEditor) { save("avoid_editor", it) }
@@ -81,6 +81,10 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
             Text("游戏", style = MaterialTheme.typography.titleMedium)
             HardwareOption("游戏直通", "在游戏里不弹键盘，按键直接给游戏",
                 options.gamePassthrough) { save("game_passthrough", it) }
+            PassthroughAppsSection(options.passthroughApps) { app, on ->
+                HardwareKeyboardPreferences.setPassthroughApp(context, app, on)
+                options = HardwareKeyboardPreferences.read(context)
+            }
         }
     }
 }
@@ -96,7 +100,7 @@ private fun FloatingBarEdgeOption(selected: com.kingzcheung.xime.settings.Hardwa
         Column(Modifier.settingsSearchAnchor("浮窗位置", bleed = 8.dp, bleedVertical = 4.dp).fillMaxWidth()
             .padding(16.dp)) {
             Text("浮窗位置", style = MaterialTheme.typography.titleSmall)
-            Text("固定后工具条停在这一边、不能拖；候选照样出现在正在打字的那一行旁边，不挡这一行。",
+            Text("固定后工具条停在这一边，不能拖动",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val choices = listOf<Pair<com.kingzcheung.xime.settings.HardwareToolbarEdge?, String>>(null to "自由拖动") +
                 com.kingzcheung.xime.settings.HardwareToolbarEdge.entries.map { it to "固定在${it.label}" }
@@ -156,6 +160,44 @@ private fun HardwareOption(title: String, detail: String, checked: Boolean,
         }
     }
 }
+
+/**
+ * 按应用直通（#265）：游戏直通认不出的应用（远程桌面、没标成游戏的模拟器）单独打开。
+ * 列出最近用实体键盘打字的那个应用和已经打开直通的应用，每个一行开关；不读手机上装了哪些应用。
+ */
+@Composable
+private fun PassthroughAppsSection(selected: Set<String>, onChange: (String, Boolean) -> Unit) {
+    val context = LocalContext.current
+    // 进这一页时记下的最近应用；开关以后行不挪位置。
+    val last = remember { HardwareKeyboardPreferences.lastApp(context) }
+    val apps = remember(selected) { (listOfNotNull(last) + selected.sorted()).distinct() }
+    Text("按应用直通", style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.settingsSearchAnchor("按应用直通", bleed = 8.dp, bleedVertical = 4.dp).fillMaxWidth())
+    Text("打开的应用里不弹键盘，按键直接给应用。先在那个应用里用实体键盘打几个字，再回到这里打开。",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    apps.forEach { app ->
+        val checked = app in selected
+        val label = remember(app) { passthroughAppLabel(context, app) }
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) {
+            Row(Modifier.fillMaxWidth().testTag("hardware-passthrough-app:$app")
+                .toggleable(checked, role = Role.Switch) { onChange(app, it) }
+                .padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    androidx.compose.material3.Text(label, style = MaterialTheme.typography.titleSmall)
+                    androidx.compose.material3.Text(app, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = checked, onCheckedChange = null)
+            }
+        }
+    }
+}
+
+/** 应用名；查不到（看不到这个应用、已卸载）时用包名。 */
+private fun passthroughAppLabel(context: android.content.Context, packageName: String): String = runCatching {
+    val pm = context.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+}.getOrDefault(packageName)
 
 @Composable
 private fun CandidatePageOption(title: String, detail: String, key: String, checked: Boolean, onChange: (Boolean) -> Unit) {

@@ -673,7 +673,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
      * 从布局选择里点了布局时为 false，回到所选键盘（平板复现：手写时点 26 键仍停在手写）。
      * [quiet]：设置页已经说了换成什么（[com.kingzcheung.xime.settings.ImeSchemaRequests]），不再弹「已切换输入方案」。
      */
-    internal fun switchSchema(schemaId: String, stayInHandwriting: Boolean = true, quiet: Boolean = false) {
+    internal fun switchSchema(schemaId: String, stayInHandwriting: Boolean = true, quiet: Boolean = false,
+                              fromPending: Boolean = false) {
         if (service.editorInputPolicy.locksNativeInput) return
         if (schemaId == com.kingzcheung.xime.settings.InputModes.ENGLISH) {
             service.keyRouter.postRimeJob {
@@ -724,6 +725,12 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
             service.sessionController.updateSchemaName()
             return
         }
+        // 部署还在跑：切换会卡在引擎锁上，等部署完才动，中间什么都不显示（11-23 平板实测点了 18 秒才换、没转圈）。
+        // 先转圈等着，部署完自动换上。
+        if (com.kingzcheung.xime.rime.SchemaChangeApplier.applying.value || service.rimeEngine.isMaintaining()) {
+            holdUntilPrepared(schemaId)
+            return
+        }
         // 显式选择语言方案与普通按键串行，成功后一次性更新引擎、页面和模式记忆。
         service.keyRouter.postRimeJob {
             try {
@@ -731,9 +738,17 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 if (targetLanguage !in LanguagePreferences.enabled(service)) return@postRimeJob
                 applyPageSizeSetting(schemaId)
                 if (!service.rimeEngine.switchSchema(schemaId)) {
+                    // 刚打开的方案还在部署（引擎在编译）：不是失败，记下来，好了自动换上。
+                    val preparing = service.rimeEngine.isMaintaining() ||
+                        com.kingzcheung.xime.rime.SchemaChangeApplier.applying.value
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(service, if (service.rimeEngine.isMaintaining())
-                            "词库部署中，请稍后再切换方案" else "方案还没应用好，请稍等再试；一直不行到「已安装的方案」点「重新部署(修复)」", Toast.LENGTH_SHORT).show()
+                        when {
+                            preparing -> holdUntilPrepared(schemaId)
+                            fromPending -> failPending(schemaId, RimeConfigHelper.deploymentProblem(service)
+                                .ifEmpty { "方案还没应用好" } + "；一直不行到「已安装的方案」点「重新部署(修复)」")
+                            else -> Toast.makeText(service, "方案还没应用好，请稍等再试；一直不行到「已安装的方案」点「重新部署(修复)」",
+                                Toast.LENGTH_SHORT).show()
+                        }
                     }
                     return@postRimeJob
                 }
@@ -744,6 +759,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 // 同 switchInputMethod：长按语言列表从英文选别的语言时，名字和退出英文同一帧换上，不闪旧方案名。
                 val switchedName = SchemaManager.getSchemaDisplayName(service, schemaId) ?: schemaId
                 withContext(Dispatchers.Main) {
+                    // 换上了（等着的那个，或者用户改点了别的能用的方案）：去掉「正在准备」。
+                    clearPending()
                     val keepHandwriting = stayInHandwriting && handwritingOpen()
                     com.kingzcheung.xime.handwriting.HandwritingEngine.release()
                     val model = service.keyboardViewModel
@@ -772,6 +789,64 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         }
     }
     
+    /**
+     * 点了还在部署的方案（刚打开，引擎正在编译它）：记下来，部署完自动换上。等的时候键盘上方一行「正在准备…」带转圈，
+     * 当前键盘不盖住；部署失败或等太久就明说（用户 11-23：点了切换没反应，十几秒后才换过去，也不知道成没成）。
+     * 只在主线程读写。
+     */
+    private var pendingSchema: String? = null
+    private var pendingRevision = 0L
+    private var pendingTimeout: kotlinx.coroutines.Job? = null
+
+    private fun schemeName(schemaId: String) = SchemaManager.getSchemaDisplayName(service, schemaId) ?: schemaId
+
+    private fun deploymentRevision(): Long =
+        SettingsPreferences.getPrefsPublic(service).getLong(RimeConfigHelper.DEPLOYMENT_REVISION, 0L)
+
+    private fun holdUntilPrepared(schemaId: String) {
+        if (pendingSchema != schemaId) pendingRevision = deploymentRevision()
+        pendingSchema = schemaId
+        FileLogger.w(XimeInputMethodService.TAG, "switchSchema($schemaId) waits for deployment")
+        service.uiState.value = service.uiState.value.copy(schemePreparing = schemeName(schemaId))
+        pendingTimeout?.cancel()
+        pendingTimeout = service.serviceScope.launch {
+            kotlinx.coroutines.delay(PENDING_SWITCH_LIMIT_MS)
+            if (pendingSchema == schemaId) failPending(schemaId, "准备了 3 分钟还没好，稍后再点一次")
+        }
+    }
+
+    private fun clearPending() {
+        pendingSchema = null
+        pendingTimeout?.cancel()
+        pendingTimeout = null
+        if (service.uiState.value.schemePreparing != null) service.uiState.value = service.uiState.value.copy(schemePreparing = null)
+    }
+
+    private fun failPending(schemaId: String, reason: String) {
+        clearPending()
+        FileLogger.w(XimeInputMethodService.TAG, "pending switch to $schemaId failed: $reason")
+        Toast.makeText(service, "「${schemeName(schemaId)}」没换上：$reason", Toast.LENGTH_LONG).show()
+    }
+
+    /** 部署完、键盘重新准备好（[XimeInputMethodService.initRimeEngine] 末尾）：有等着的方案就换上。 */
+    internal fun resumePendingSwitch() {
+        val id = pendingSchema ?: return
+        clearPending()
+        if (service.uiState.value.currentSchemaId == id && !service.uiState.value.isAsciiMode) return
+        switchSchema(id, stayInHandwriting = false, fromPending = true)
+    }
+
+    /**
+     * 一次方案部署做完（[com.kingzcheung.xime.rime.SchemaChangeApplier.finished]）。失败：等着的方案换不上，说原因。
+     * 成功且没有叫键盘重新准备（部署版本号没变）：现在就换；变了的话等键盘准备好再换，免得和它抢着选方案。
+     */
+    internal fun deploymentFinished(usable: Boolean) {
+        val id = pendingSchema ?: return
+        if (!usable) failPending(id, RimeConfigHelper.deploymentProblem(service).ifEmpty { "部署没成功" } +
+            "；可到「已安装的方案」点「重新部署(修复)」")
+        else if (deploymentRevision() == pendingRevision && service.inputReadiness.ticket() != null) resumePendingSwitch()
+    }
+
     private fun downloadSchema(schemaId: String) {
         service.serviceScope.launch(Dispatchers.IO) {
             service.notifyDeploymentStatus(true, "正在下载 $schemaId...")
@@ -806,4 +881,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         service.restoreKeyboardDisplayMode(enabled, navBarDp, persist)
     }
 
+    private companion object {
+        /** 等部署最多这么久；首次编译大词库也就一两分钟。 */
+        const val PENDING_SWITCH_LIMIT_MS = 180_000L
+    }
 }

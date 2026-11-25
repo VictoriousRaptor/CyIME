@@ -4,7 +4,7 @@ import android.view.KeyEvent
 import com.kingzcheung.xime.settings.HardwareKeyboardOptions
 import com.kingzcheung.xime.settings.LanguageSwitchMode
 
-internal enum class HardwareToolShortcut { PUNCTUATION, CLIPBOARD, MICROPHONE }
+internal enum class HardwareToolShortcut { PUNCTUATION, CLIPBOARD, MICROPHONE, SYMBOL }
 
 internal data class HardwareShortcutResult(val consume: Boolean = false, val switchMode: LanguageSwitchMode? = null,
     val tool: HardwareToolShortcut? = null) {
@@ -34,6 +34,8 @@ internal class HardwareLanguageShortcuts {
             ctrl && !alt && key == KeyEvent.KEYCODE_PERIOD -> HardwareToolShortcut.PUNCTUATION
             alt && !ctrl && !altTypesChar && key == KeyEvent.KEYCODE_V -> HardwareToolShortcut.CLIPBOARD
             alt && !ctrl && !altTypesChar && key == KeyEvent.KEYCODE_H -> HardwareToolShortcut.MICROPHONE
+            // 全键盘手机的 SYM 键（keycode 63）：打开符号页（GitHub #434）。
+            !ctrl && !alt && key == KeyEvent.KEYCODE_SYM -> HardwareToolShortcut.SYMBOL
             else -> null
         } else null
         if (tool != null) {

@@ -47,6 +47,7 @@ import com.kingzcheung.xime.settings.*
 import com.kingzcheung.xime.ui.keyboard.japaneseKanaKeys
 import com.kingzcheung.xime.ui.keyboard.letterKeyboardFrame
 import com.kingzcheung.xime.ui.keyboard.letterKeySpan
+import com.kingzcheung.xime.ui.keyboard.numberPadRows
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 import com.kingzcheung.xime.ui.theme.liquidGlassEdge
 import kotlin.math.roundToInt
@@ -111,7 +112,9 @@ internal fun LayoutPreviewChoices(
     onSelect: (String) -> Unit,
 ) {
     val revision by KeysConfigHelper.configVersion.collectAsState()
-    val evenMergedKeys = rememberKeyboardInputPreferences().evenMergedKeys
+    val inputPreferences = rememberKeyboardInputPreferences()
+    val evenMergedKeys = inputPreferences.evenMergedKeys
+    val numberPadTop789 = inputPreferences.numberPadTop789
     val scroll = rememberChoiceRowScroll(layouts.indexOfFirst { it.id == selectedId }, layouts)
     val list = scroll.list
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
@@ -138,7 +141,7 @@ internal fun LayoutPreviewChoices(
                 items(layouts, key = { it.id }) { layout ->
                     val chosen = layout.id == selectedId
                     // Custom layouts are observable; do not cache their rows across an edit.
-                    val rows = previewRows(layout, language, revision)
+                    val rows = previewRows(layout, language, revision, numberPadTop789)
                     val custom = CustomKeyboardLayouts.find(layout.id)?.takeIf { it.widths.isNotEmpty() }
                     val widthOf = custom?.let { l -> { key: String -> l.widthOf(key) } }
                     Box(Modifier.choiceRowSlideIn(scroll)) {
@@ -219,12 +222,13 @@ private fun UnavailableNote(note: String, contentColor: Color, modifier: Modifie
     }
 }
 
-private fun previewRows(layout: InputLayout, language: InputLanguage, @Suppress("UNUSED_PARAMETER") revision: Int): List<List<String>> =
+private fun previewRows(layout: InputLayout, language: InputLanguage, @Suppress("UNUSED_PARAMETER") revision: Int,
+    numberPadTop789: Boolean): List<List<String>> =
     when (layout.kind) {
         LayoutKind.T9 -> listOf(listOf("分词", "ABC", "DEF"), listOf("GHI", "JKL", "MNO"), listOf("PQRS", "TUV", "WXYZ"))
         LayoutKind.KANA_KEYPAD -> japaneseKanaKeys.take(9).map { it.center.label }.chunked(3)
         LayoutKind.STROKE_KEYPAD -> listOf(listOf("一", "丨", "丿"), listOf("丶", "乛", "*"), listOf("分词", "，", "。"))
-        LayoutKind.NUMBER -> (1..9).map(Int::toString).chunked(3)
+        LayoutKind.NUMBER -> numberPadRows(numberPadTop789)
         else -> KeysConfigHelper.previewKeyRows(layout, language)
     }
 

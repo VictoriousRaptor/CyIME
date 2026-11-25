@@ -55,9 +55,9 @@ internal data class KeyboardSquareSnap(val columns: Float, val split: Boolean, v
 
     companion object {
         fun forLayout(kind: LayoutKind, split: Boolean, gapFraction: Float = 0.1f,
-            wideKeys: Boolean = false, numberRow: Boolean = false): KeyboardSquareSnap? = when (kind) {
+            wideKeys: Boolean = false, numberRow: Boolean = false, numberRowFullHeight: Boolean = false): KeyboardSquareSnap? = when (kind) {
             LayoutKind.ALPHABETIC -> KeyboardSquareSnap(10f, split, false, gapFraction, wideKeys,
-                rows = 4f + if (numberRow) NUMBER_ROW_HEIGHT_WEIGHT else 0f)
+                rows = 4f + if (numberRow) numberRowHeightWeight(numberRowFullHeight) else 0f)
             LayoutKind.T9 -> KeyboardSquareSnap(5f * 3f / 3.4f, false, true, wideKeys = wideKeys)
             else -> null
         }

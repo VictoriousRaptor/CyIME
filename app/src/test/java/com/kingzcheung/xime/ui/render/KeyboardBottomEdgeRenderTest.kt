@@ -125,7 +125,7 @@ class KeyboardBottomEdgeRenderTest {
             rule.waitForIdle()
             save("bottom-recovery-settings")
         }
-        rule.onNodeWithText("恢复默认（自动、留白 0）").performClick()
+        rule.onNodeWithTag("bottom-calibration-reset").performClick()
         assertEquals(SettingsPreferences.KeyboardBottomPosition.AUTO, SettingsPreferences.keyboardBottomPosition(app))
         assertEquals(true, SettingsPreferences.edgeToEdgeKeyboard(app))
         assertEquals(0, SettingsPreferences.getKeyboardBottomAdjustmentDp(app))

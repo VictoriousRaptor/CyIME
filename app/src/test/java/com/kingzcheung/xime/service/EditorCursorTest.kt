@@ -221,6 +221,17 @@ class EditorCursorTest {
         verify(ic, never()).sendKeyEvent(any())
     }
 
+    @Test fun `drag at the text end stops even when the host refuses the selection and hides the text after`() {
+        // #403：小米笔记滑到句末收起键盘。宿主不收原地设光标、光标后面读出 null 时也不能发方向键。
+        val ic = editor(4, text = "abcd")
+        doReturn(false).whenever(ic).setSelection(any(), any())
+        doReturn(null).whenever(ic).getTextAfterCursor(any(), any())
+        var ticks = 0
+        EditorCursor().moveWithFeedback(ic, 3) { ticks++ }
+        assertEquals(0, ticks)
+        verify(ic, never()).sendKeyEvent(any())
+    }
+
     @Test fun `rejected editor operations do not report cursor feedback`() {
         val ic = editor(1)
         doReturn(false).whenever(ic).setSelection(any(), any())

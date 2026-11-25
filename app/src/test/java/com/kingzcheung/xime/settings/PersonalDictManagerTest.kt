@@ -41,6 +41,9 @@ class PersonalDictManagerTest {
                 assertEquals(code, com.kingzcheung.xime.service.rawCompositionCommitText("426", preedit, true))
             }
             org.junit.Assert.assertNull(readings["……" to "42"])
+            // 编码就是数字的短语没有字母读音，不进这张表（编码栏照常用引擎的）。
+            File(dir, "custom_phrase.txt").writeText("13800138000\t34\n")
+            org.junit.Assert.assertTrue(PersonalDictManager.t9PhraseReadings(dir).isEmpty())
         } finally { dir.deleteRecursively() }
     }
 
@@ -108,7 +111,13 @@ class PersonalDictManagerTest {
         assertEquals(listOf("lm"), PersonalDictManager.PhraseKeys.MERGED14.codes("lm"))
         assertEquals(listOf("QEATUCQZTZ", "wrstuvwxyz"), PersonalDictManager.PhraseKeys.MERGED14.codes("wrstuvwxyz"))
         assertEquals(listOf("39"), PersonalDictManager.PhraseKeys.T9.codes("D'Z"))
+        // 编码里的数字照原样留着（11-24 数字短语打不出）；0、1 是九键的分词、空格键，九键打不进，不进九键副本。
         assertEquals(emptyList<String>(), PersonalDictManager.PhraseKeys.T9.codes("a1"))
+        assertEquals(listOf("392"), PersonalDictManager.PhraseKeys.T9.codes("dz2"))
+        // 九键用户直接填按的数字（dh 填 34）。
+        assertEquals(listOf("34"), PersonalDictManager.PhraseKeys.T9.codes("34"))
+        assertEquals(listOf("DZ1", "dz1"), PersonalDictManager.PhraseKeys.MERGED14.codes("dz1"))
+        assertEquals(emptyList<String>(), PersonalDictManager.PhraseKeys.MERGED14.codes("a-1"))
         assertEquals(PersonalDictManager.PhraseKeys.T9, PersonalDictManager.PhraseKeys.of("t9_pinyin"))
         assertEquals(PersonalDictManager.PhraseKeys.MERGED14, PersonalDictManager.PhraseKeys.of("pinyin_14jian"))
         assertEquals(PersonalDictManager.PhraseKeys.MERGED14, PersonalDictManager.PhraseKeys.of("double_pinyin_flypy_14jian"))
@@ -155,7 +164,32 @@ class PersonalDictManagerTest {
         assertEquals(listOf("x;"), PersonalDictManager.doublePinyinCodes(DoublePinyinScheme.MICROSOFT, "xing"))
         // 拆不成拼音的不换。
         assertEquals(emptyList<String>(), PersonalDictManager.doublePinyinCodes(flypy, "wifi"))
-        assertEquals(emptyList<String>(), PersonalDictManager.doublePinyinCodes(flypy, "a1"))
+        assertEquals(emptyList<String>(), PersonalDictManager.doublePinyinCodes(flypy, "wifi1"))
+        // 数字段照原样接在后面。
+        assertEquals(listOf("dmhx1"), PersonalDictManager.doublePinyinCodes(flypy, "dianhua1"))
+    }
+
+    // ── 字母开头、带数字的短语编码（dz1）：26 键、双拼、14 键打字中的数字进编码 ──
+
+    @Test
+    fun `digit phrase codes get a recognizer rule for exactly their prefixes`() {
+        assertEquals(setOf("dz1", "dz12", "a1", "a1b"),
+            PersonalDictManager.phraseDigitPrefixes(listOf("dz12", "abc", "1a", "dz1", "a1b", "x.1")))
+        val dir = createTempDir()
+        File(dir, "custom_phrase.txt").writeText("# Rime table\n#@/db_name\tcustom_phrase\n电话\tdh1\n地址\tdz\n")
+        val patch = File(dir, "rime_ice.custom.yaml")
+        PersonalDictManager.applyCustomPhraseTranslator(dir, "rime_ice", "custom_phrase")
+        assertTrue(patch.readText().contains("tags: [abc, cyime_phrase_digits]"))
+        val prefixes = PersonalDictManager.phraseDigitPrefixes(dir, null)
+        assertEquals(setOf("dh1"), prefixes)
+        PersonalDictManager.applyPhraseDigitPattern(patch, prefixes)
+        assertTrue(patch.readText().contains("  \"recognizer/patterns/cyime_phrase_digits\": \"^(?:dh1)$\"\n"))
+        // 14 键副本的编码是合并键大写，规则跟着副本走。
+        val k14 = PersonalDictManager.keyedPhrases("pinyin_14jian", null)
+        assertEquals(setOf("DG1", "dh1"), PersonalDictManager.phraseDigitPrefixes(dir, k14))
+        PersonalDictManager.applyPhraseDigitPattern(patch, emptySet())
+        assertTrue(!patch.readText().contains("recognizer/patterns"))
+        assertTrue(patch.readText().contains("table_translator@custom_phrase"))
     }
 
     @Test

@@ -99,6 +99,13 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     config->GetInt("t9/initials_choices", &t9_initials_choices_);
     config->GetDouble("t9/initials_lead_margin", &t9_initials_lead_margin_);
     config->GetDouble("t9/near_homophone_penalty", &t9_near_homophone_penalty_);
+    config->GetInt("t9/menu_sentences", &t9_menu_sentences_);
+    config->GetDouble("t9/menu_sentence_margin", &t9_menu_sentence_margin_);
+    config->GetInt("t9/menu_prefixes", &t9_menu_prefixes_);
+    config->GetInt("t9/model_sentences", &t9_model_sentences_);
+    config->GetBool("t9/model_sentences_on_pause", &t9_model_sentences_on_pause_);
+    config->GetDouble("t9/model_sentences_rime_weight", &t9_model_sentences_rime_weight_);
+    config->GetDouble("t9/model_sentences_fuzzy_penalty", &t9_model_sentences_fuzzy_penalty_);
     config->GetDouble("t9/final_g_word_margin", &t9_final_g_word_margin_);
     int keys_per_syllable = 0;
     config->GetInt("t9/rescore_keys_per_syllable", &keys_per_syllable);
@@ -113,7 +120,12 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
       t9_readings_ = T9LoadReadings(T9ResolveOnce("t9_readings", ".txt", readings));
     }
   }
-  if (t9_joint_) {
+  // t9/model_sentences: the joint decoder runs beside the sentence rescoring and needs its settings too. A translation
+  // is created for every key and every helper prism, so with t9/model_sentences_on_pause they are read only where the
+  // decoder runs, in the refresh after a pause (26 keys: reading them for every translation cost 0.1 ms a key).
+  const bool model_sentences = t9_model_sentences_ > 0 && t9_sentence_rescore_ && !t9_joint_ && t9_ngram_;
+  if (!model_sentences) t9_model_sentences_ = 0;
+  if (t9_joint_ || (model_sentences && (!t9_model_sentences_on_pause_ || T9RefiningSentences()))) {
     auto budget = [&](const char* key, size_t& value, int minimum, int maximum) {
       int configured = static_cast<int>(value);
       config->GetInt(key, &configured);
@@ -130,19 +142,21 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
       t9_more_sentences_min_keys_ = static_cast<size_t>(std::max(0, keys)); }
     config->GetBool("t9/cache_with_correction", &t9_cache_with_correction_);
     t9_display_sentences_ = static_cast<size_t>(std::max(0, display));
+    if (model_sentences) t9_display_sentences_ = static_cast<size_t>(t9_model_sentences_);
     config->GetDouble("t9/spelling_penalty", &t9_spelling_penalty_);
     config->GetDouble("t9/word_penalty", &t9_word_penalty_);
     config->GetDouble("t9/tail_completion_weight", &t9_tail_completion_weight_);
     config->GetString("t9/sentence_model", &t9_sentence_model_);
     config->GetDouble("t9/sentence_weight", &t9_sentence_weight_);
     string ngram_model;
-    if (config->GetString("t9/ngram_model", &ngram_model) && !ngram_model.empty()) {
+    if (!model_sentences && config->GetString("t9/ngram_model", &ngram_model) && !ngram_model.empty()) {
       // Not .bin: Rime cleanup moves *.bin in the user directory to trash.
       t9_ngram_ = T9NgramModel::Open(T9ResolveOnce("t9_ngram", ".lm", ngram_model));
     }
     config->GetDouble("t9/ngram_user_weight", &t9_ngram_user_weight_);
     config->GetDouble("t9/ngram_user_input_weight", &t9_ngram_user_input_weight_);
     config->GetDouble("t9/ngram_dictionary_prior", &t9_ngram_dictionary_prior_);
+    config->GetDouble("t9/whole_word_weight_margin", &t9_whole_word_weight_margin_);
     config->GetBool("t9/ngram_sentence_start", &t9_ngram_sentence_start_);
     config->GetDouble("t9/ngram_eos_weight", &t9_ngram_eos_weight_);
     config->GetDouble("t9/particle_eos_weight", &t9_particle_eos_weight_);
@@ -170,7 +184,9 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
       }
       if (!pairs->empty()) t9_ngram_typo_bigrams_ = std::move(pairs);
     }
-    config->GetDouble("t9/correction_penalty", &t9_correction_penalty_);
+    // Not with t9/model_sentences: the sentence rescoring pays back the corrector's own credibility with this value
+    // (ScriptTranslation, the corrected n-best), and the decoder's sentences that hold a correction are not used.
+    if (!model_sentences) config->GetDouble("t9/correction_penalty", &t9_correction_penalty_);
     config->GetBool("t9/prefer_user_entries", &t9_prefer_user_entries_);
     { int whole = 0; config->GetInt("t9/whole_input_phrases", &whole); t9_whole_input_phrases_ = static_cast<size_t>(std::max(0, whole)); }
     // 26-key uses the decoder only with the word model; without the model file it keeps
@@ -188,7 +204,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
           t9_gram_db_ = component->GetDb(language);
       }
     }
-    T9SetGrammarStatus(t9_gram_db_ != nullptr || t9_ngram_ != nullptr);
+    if (!model_sentences) T9SetGrammarStatus(t9_gram_db_ != nullptr || t9_ngram_ != nullptr);
   }
 }
 

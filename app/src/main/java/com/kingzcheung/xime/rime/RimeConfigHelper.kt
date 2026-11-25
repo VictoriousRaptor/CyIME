@@ -432,6 +432,8 @@ object RimeConfigHelper {
             val storedHash = SettingsPreferences.getDeploymentHash(context)
             val hashMs = android.os.SystemClock.elapsedRealtime() - hashStartedAt
             if (damaged.isEmpty() && currentHash.isNotEmpty() && currentHash == storedHash && deploymentUsable(context)) {
+                // 升级前部署的还没有分方案摘要：补存一次，下次启停方案就能走快路。
+                if (storedDeploymentParts(context) == null) storeDeploymentParts(context)
                 SettingsPreferences.setDeploymentDone(context, true)
                 return true
             }
@@ -445,16 +447,28 @@ object RimeConfigHelper {
                 PreparationProgress.enabledDictionaries(File(context.filesDir, "rime"), SchemaManager.getEnabledSchemas(context)))
             try {
             var deployed: Boolean
+            // 只启停了方案：快路只重编方案列表和新开的方案，几秒内完；不行再走下面原来的部署。
+            val quick = if (buildExists && damaged.isEmpty()) quickSchemaListChange(context) else null
+            val quickStartedAt = android.os.SystemClock.elapsedRealtime()
+            val quickDone = quick != null && engine.deploySchemaListChange(quick.added) &&
+                quick.added.all { missingBuildArtifact(buildDir, it) == null }
+            if (quick != null) FileLogger.w(TAG, "Quick schema list update +${quick.added} -${quick.removed} " +
+                "${if (quickDone) "done" else "failed, falling back"} in ${android.os.SystemClock.elapsedRealtime() - quickStartedAt} ms")
             // 编译出的方案列表少了启用的方案：librime 按秒级修改时间判断 default.yaml 要不要重编，
             // 列表旧了它可能一直认为不用编（11-15 首道双拼一直「不在部署结果的方案列表里」）。删掉编译出的列表再部署。
-            val staleList = buildExists && damaged.isEmpty() && dropStaleSchemaList(context)
-            if (staleList) {
+            val staleList = !quickDone && buildExists && damaged.isEmpty() && dropStaleSchemaList(context)
+            if (quickDone) {
+                deployed = true
+            } else if (staleList) {
                 deployed = engine.deploy()
             } else if (buildExists && damaged.isEmpty()) {
                 // build 已就位但配置有变化：增量维护，只编译变更的 schema/dict，
                 // 避免 custom.yaml 补丁等小幅改动触发 60MB 词库全量重编译（持锁 30s+）。
                 FileLogger.w(TAG, "Build exists, running incremental maintenance")
+                val compileStartedAt = android.os.SystemClock.elapsedRealtime()
                 if (engine.deployIncremental()) {
+                    // 进共享日志：打开一个方案后要等多久（用户 11-23「等十几秒才切过去」），编译占了几秒。
+                    FileLogger.w(TAG, "Incremental maintenance done in ${android.os.SystemClock.elapsedRealtime() - compileStartedAt} ms")
                     deployed = true
                 } else {
                     FileLogger.w(TAG, "Incremental maintenance failed, falling back to full deploy")
@@ -560,6 +574,7 @@ object RimeConfigHelper {
         val hash = computeDeploymentHash(context)
         if (hash.isNotEmpty()) {
             SettingsPreferences.setDeploymentHash(context, hash)
+            storeDeploymentParts(context)
             SettingsPreferences.getPrefsPublic(context).edit().putLong(DEPLOYMENT_HASH_AT, System.currentTimeMillis()).apply()
         }
     }
@@ -690,6 +705,124 @@ object RimeConfigHelper {
                 while (dis.read(buffer) != -1) { }
             }
         }
+    }
+
+    /** 只启停了方案时：新开的（要编译）和关掉的（只从列表拿掉）。 */
+    internal data class SchemaListChange(val added: List<String>, val removed: List<String>)
+
+    private const val DEPLOYMENT_PARTS = "rime_deployment_parts"
+    /** [deploymentParts] 里方案以外的部分（内置资源版本、全部词典、default 里方案列表以外的内容）。 */
+    internal const val SHARED_PART = ""
+
+    /**
+     * 部署输入按方案拆开的摘要，和部署哈希同时存（[storeDeploymentHash]）：下次哈希变了时比一比，
+     * 看是不是只启停了方案（[schemaListChange]）。方案列表本身不算进去。
+     */
+    private fun deploymentParts(context: Context): Map<String, String> {
+        val rimeDir = File(context.filesDir, "rime")
+        fun hex(digest: java.security.MessageDigest) = digest.digest().joinToString("") { String.format("%02x", it) }
+        val shared = java.security.MessageDigest.getInstance("SHA-256")
+        fileUpdateDigest(shared, File(rimeDir, ".cyime-bundled-revision"))
+        rimeDir.listFiles()?.filter { it.isFile && it.name.endsWith(".dict.yaml") }?.sortedBy { it.name }?.forEach {
+            shared.update(it.name.toByteArray())
+            fileUpdateDigest(shared, it)
+        }
+        rimeDir.walkTopDown().onEnter { it == rimeDir || it.name !in setOf("build", "market") }
+            .filter { it.isFile && it.parentFile != rimeDir && it.name.endsWith(".dict.yaml") }
+            .sortedBy { it.relativeTo(rimeDir).path }.forEach {
+                shared.update("${it.relativeTo(rimeDir).invariantSeparatorsPath}:${it.length()}:${it.lastModified()}".toByteArray())
+            }
+        for (name in listOf("default.yaml", "default.custom.yaml")) {
+            val file = File(rimeDir, name)
+            if (file.isFile) shared.update("$name\n${withoutSchemaList(file.readText())}".toByteArray())
+        }
+        val parts = linkedMapOf(SHARED_PART to hex(shared))
+        for (id in SchemaManager.getEnabledSchemas(context).sorted()) {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            for (file in listOf("$id.schema.yaml", "$id.custom.yaml")) {
+                digest.update(file.toByteArray())
+                fileUpdateDigest(digest, File(rimeDir, file))
+            }
+            parts[id] = hex(digest)
+        }
+        return parts
+    }
+
+    private fun storeDeploymentParts(context: Context) {
+        val json = org.json.JSONObject().apply { deploymentParts(context).forEach { (key, value) -> put(key, value) } }
+        SettingsPreferences.getPrefsPublic(context).edit().putString(DEPLOYMENT_PARTS, json.toString()).apply()
+    }
+
+    private fun storedDeploymentParts(context: Context): Map<String, String>? = runCatching {
+        val text = SettingsPreferences.getPrefsPublic(context).getString(DEPLOYMENT_PARTS, null) ?: return null
+        val json = org.json.JSONObject(text)
+        json.keys().asSequence().associateWith { json.getString(it) }
+    }.getOrNull()
+
+    /** 哈希变了但只启停了方案：返回要做的；还有别的变化（词典、方案文件、default 的其他设置）返回 null，走原来的部署。 */
+    private fun quickSchemaListChange(context: Context): SchemaListChange? {
+        val stored = storedDeploymentParts(context) ?: return null
+        val rimeDir = File(context.filesDir, "rime")
+        val build = File(rimeDir, "build")
+        // 依赖的方案（如英文混输、反查）不在启用列表里也行，只要已经编译过、源文件没比编译结果新。
+        fun compiled(id: String): Boolean {
+            val output = File(build, "$id.schema.yaml")
+            val newestSource = listOf("$id.schema.yaml", "$id.custom.yaml").maxOf { File(rimeDir, it).lastModified() }
+            return output.isFile && output.lastModified() >= newestSource && missingBuildArtifact(build, id) == null
+        }
+        return schemaListChange(stored, deploymentParts(context), { id ->
+            File(rimeDir, "$id.schema.yaml").takeIf { it.isFile }?.let { schemaDependencies(it.readText()) }.orEmpty()
+        }, ::compiled)
+    }
+
+    /**
+     * 纯判断，可单测：上次部署时的 [before] 和现在的 [now]（[deploymentParts]）只差在开了/关了哪些方案时返回差别。
+     * 共用部分或任何留着的方案变了、新开的方案依赖的方案没编译好（[compiled]），都返回 null（交给原来的部署，它会把依赖一起编）。
+     */
+    internal fun schemaListChange(before: Map<String, String>, now: Map<String, String>,
+                                  dependenciesOf: (String) -> List<String>, compiled: (String) -> Boolean): SchemaListChange? {
+        if (before[SHARED_PART] == null || before[SHARED_PART] != now[SHARED_PART]) return null
+        val beforeIds = before.keys - SHARED_PART
+        val nowIds = now.keys - SHARED_PART
+        if ((beforeIds intersect nowIds).any { before[it] != now[it] }) return null
+        val added = (nowIds - beforeIds).sorted()
+        val removed = (beforeIds - nowIds).sorted()
+        if (added.isEmpty() && removed.isEmpty()) return null
+        if (added.any { id -> dependenciesOf(id).any { (it !in beforeIds || it !in nowIds) && !compiled(it) } }) return null
+        return SchemaListChange(added, removed)
+    }
+
+    /** 纯函数：方案文件 schema 段里的 dependencies（块或 [a, b] 两种写法）。 */
+    internal fun schemaDependencies(schemaText: String): List<String> {
+        val inline = Regex("""(?m)^\s+dependencies:\s*\[([^\]]*)]""").find(schemaText)
+        if (inline != null) return inline.groupValues[1].split(',').map { it.trim().trim('"', '\'') }.filter { it.isNotEmpty() }
+        val lines = schemaText.lines()
+        val header = lines.indexOfFirst { Regex("""^\s+dependencies:\s*(#.*)?$""").matches(it) }
+        if (header < 0) return emptyList()
+        val indent = lines[header].takeWhile { it == ' ' }.length
+        return lines.drop(header + 1).takeWhile { it.isBlank() || it.takeWhile { c -> c == ' ' }.length > indent ||
+            it.trimStart().startsWith("-") && it.takeWhile { c -> c == ' ' }.length >= indent }
+            .mapNotNull { Regex("""^\s*-\s*["']?([^"'#\s]+)""").find(it)?.groupValues?.get(1) }
+    }
+
+    /**
+     * 纯函数：去掉 default(.custom).yaml 里的方案列表，其余原样（[SchemaManager] 写的块写法、行内 schema_list: [...] 两种都去）。
+     * 菜单、开关等别的设置变了照样算变化，走原来的部署（每个方案都要重编进新设置）。
+     */
+    internal fun withoutSchemaList(text: String): String {
+        val inline = Regex("""schema_list\s*:\s*\[[^\]]*]\s*,?\s*""")
+        val out = mutableListOf<String>()
+        var skipIndent = -1
+        for (line in text.lines()) {
+            val indent = line.takeWhile { it == ' ' }.length
+            if (skipIndent >= 0) {
+                if (line.isBlank() || indent > skipIndent || (indent == skipIndent && line.trimStart().startsWith("-"))) continue
+                skipIndent = -1
+            }
+            if (Regex("""^\s*schema_list:\s*(#.*)?$""").matches(line)) { skipIndent = indent; continue }
+            out += inline.replace(line, "")
+        }
+        return out.joinToString("\n")
     }
 
     private fun computeDeploymentHash(context: Context): String {

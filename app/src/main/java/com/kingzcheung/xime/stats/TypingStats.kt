@@ -44,17 +44,19 @@ object TypingStats {
         val app = context.applicationContext
         appContext = app
         enabled = prefs(app).getBoolean(PREF_ENABLED, true)
+        TouchStatsStore.init(app)
         io.execute { ensureLoaded() }
     }
 
     private fun prefs(context: Context) =
         com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context)
 
-    private fun recording(): Boolean = enabled && appContext != null && !IncognitoState.active
+    internal fun recording(): Boolean = enabled && appContext != null && !IncognitoState.active
 
     /** 屏幕键盘按下一个键（含删除键）。 */
     fun onKeyDown(key: String) {
         if (!recording()) return
+        TouchStats.keyDown(key)
         val today = today()
         synchronized(lock) {
             data.add(today, Day.KEYS, 1)
@@ -71,6 +73,7 @@ object TypingStats {
     fun onCommit(text: String, isPaste: Boolean, source: TypingStatsData.Source, softKeyboard: Boolean = true,
         combo: TypingStatsCombo? = null) {
         if (!recording()) return
+        if (softKeyboard && !isPaste) TouchStats.committed(combo?.id)
         val chars = TypingStatsText.countChars(text)
         if (chars == 0L) return
         val now = System.currentTimeMillis()
@@ -117,6 +120,7 @@ object TypingStats {
     /** 点选了第 [index] 个候选；[correction] 是这个候选的纠错标记（没纠错为空）。 */
     fun onCandidatePicked(index: Int, correction: String) {
         if (!recording()) return
+        TouchStats.picked(correction)
         val today = today()
         synchronized(lock) {
             data.recordPick(today, index, correction)
@@ -137,6 +141,7 @@ object TypingStats {
 
     /** 键盘收起：结算这一段速度，后台写盘。 */
     fun flush() {
+        TouchStatsStore.flush()
         zone = TimeZone.getDefault()
         synchronized(lock) {
             finishBurstLocked()

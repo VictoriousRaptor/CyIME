@@ -56,6 +56,8 @@ $lexiconPython = 'D:/CyIME-Data/lexicon-generation/.venv/Scripts/python.exe'
 
 把导出的 `*.cyime-dict.json` 传到手机，在“设置 → 词库管理 → 分类词库 → 导入词库（SCEL / JSON）”导入，选用后应用。App 校验格式版本、中文/拼音声明、词码及文件大小，仍使用现有词库独立开关，不自动改语言、布局或个人学习。新内容再次导出后作为新的本地词库导入，可关闭旧集合；当前不自动推送或替换手机上已启用的旧版本。
 
+2026-11-22 起不再调用 DeepSeek：由 Claude 线程按上面的提示和 [lexicon-reply.schema.json](lexicon-reply.schema.json) 直接写回复，用下面的 `ingest` 入库（`--source` 写实际生成者），待审校条目同样逐条 `review` 写明依据；不使用、不保存任何 API 密钥。`collect` 保留，不再默认使用。
+
 离线处理已经保存的模型回复：
 
 ```powershell

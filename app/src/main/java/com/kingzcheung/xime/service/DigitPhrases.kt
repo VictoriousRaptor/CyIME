@@ -6,12 +6,15 @@ import com.kingzcheung.xime.settings.PersonalDictManager
 import java.io.File
 
 /**
- * 打数字出短语（别人请求，11-03，默认关）：「我的短语」里编码是数字的短语（邮箱、网址、自己的号码），
+ * 打数字出短语（别人请求，11-03；11-24 起默认开）：「我的短语」里编码是数字的短语（邮箱、网址、自己的号码），
  * 打的数字对得上编码开头时放到候选栏，点一下把光标前这串数字换成短语。数字照常先上屏，不点和以前一样。
  * 只看光标前的那串数字和本机的短语表，不联网，不学习。数字键盘、数字行和角标打的数字都算；实体键盘不给（数字键要选候选）。
  */
 internal object DigitPhrases {
-    /** 设置键，默认关。 */
+    /**
+     * 设置键。11-24 起默认开：编码是数字的短语不开这个就哪里都打不出来（群里：数字短语不出，文字短语可以）；
+     * 没有数字编码的短语时什么都不给，和关着一样。
+     */
     const val PREF_KEY = "digit_phrase_candidates"
 
     /** 读光标前多少个字：够放下一串号码，也不少于联想上下文（25）。 */
@@ -21,7 +24,7 @@ internal object DigitPhrases {
     const val LIMIT = 20
 
     fun isEnabled(context: Context): Boolean =
-        com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).getBoolean(PREF_KEY, false)
+        com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).getBoolean(PREF_KEY, true)
 
     fun setEnabled(context: Context, on: Boolean) {
         com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context).edit().putBoolean(PREF_KEY, on).apply()

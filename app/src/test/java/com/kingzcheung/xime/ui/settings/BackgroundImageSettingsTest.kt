@@ -57,7 +57,7 @@ class BackgroundImageSettingsTest {
         assertTrue(backgroundImageHint(1, imageOn = true, motionOn = false).contains("＋"))
         assertTrue(backgroundImageHint(3, imageOn = true, motionOn = false).contains("「动态背景」"))
         assertTrue(backgroundImageHint(3, imageOn = true, motionOn = true).contains("换下一张"))
-        assertTrue(backgroundImageHint(3, imageOn = false, motionOn = true).contains("图片留着"))
+        assertTrue(backgroundImageHint(3, imageOn = false, motionOn = true).contains("图片保留"))
     }
 
     @Test fun everyImageHasItsOwnRemoveAndTheFirstOneAdjustsOrReplaces() {
@@ -82,7 +82,7 @@ class BackgroundImageSettingsTest {
         rule.onNodeWithTag("background-image-replace").performClick()
         rule.waitForIdle()
         assertEquals(listOf("remove:themes/custom-keyboard-bg-slide-b.jpg", "remove-main", "add", "adjust", "replace"), calls)
-        rule.onNodeWithText("共 3 张，打开下面的「动态背景」才会轮流换").assertExists()
+        rule.onNodeWithText("共 3 张，打开「动态背景」后轮流显示").assertExists()
     }
 
     @Test fun noAddTileOnceNineImagesAreSet() {
@@ -118,7 +118,7 @@ class BackgroundImageSettingsTest {
             .forEach { rule.onNodeWithTag("background-slide:$it").assertExists() }
         rule.onNodeWithTag("background-slides-add").assertExists()
         // 图片开着、动态背景开着时的提示；不对说明页面拿到的主题不是「我的图片」。
-        rule.onNodeWithText("共 3 张，背景每动完一圈换下一张；点哪张就调哪张的位置").assertExists()
+        rule.onNodeWithText("共 3 张，背景动完一圈换下一张").assertExists()
         listOf("遮罩", "动态背景", "组合").forEach { rule.onNodeWithText(it).assertExists() }
         rule.onNodeWithTag("background-motion-speed:FAST").assertExists()
         listOf("使用背景图片", "调整图片", "删除图片", "清空", "动态与轮播", "轮换").forEach {

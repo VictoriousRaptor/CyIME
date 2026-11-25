@@ -33,6 +33,9 @@ import com.kingzcheung.xime.ui.keyboard.CandidateBarVisuals
 import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.LocalKeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.LocalPreeditLineCorrections
+import com.kingzcheung.xime.ui.keyboard.LocalPreeditStripRow
+import com.kingzcheung.xime.ui.keyboard.PREEDIT_STRIP_ROW_DP
+import com.kingzcheung.xime.ui.keyboard.preeditStripRowDp
 import com.kingzcheung.xime.ui.keyboard.PreeditPopupBoundsKey
 import androidx.compose.ui.unit.toRect
 import com.kingzcheung.xime.ui.keyboard.LocalPreeditToneData
@@ -154,6 +157,69 @@ class PreeditTabTest {
         // 拼音在弹窗里：自己的 boundsInWindow 是弹窗里的坐标，和弹窗宽比。
         assertEquals("顶上一行里拼音居中", tab().width / 2f, text.center.x, px)
         render("preedit-strip-center.png")
+    }
+
+    /**
+     * 「整行」（11-23 他：开了以后高度没变、圆角突兀、背景没延伸）：键盘留了这一行时，拼音排在候选栏上面那一行里，
+     * 和候选栏同一块（没有弹窗），候选栏连这一行一共 44+26dp；不打字时这一行照样留着，高度不跳。
+     */
+    @Test fun stripIsARowOfTheKeyboard() {
+        KeyboardThemes.initFromConfig(context)
+        val state = mutableStateOf<CandidateBarState>(typing)
+        val align = mutableStateOf(SettingsPreferences.PREEDIT_ALIGN_LEFT)
+        var edits = 0
+        rule.setContent {
+            val palette = resolveKeyboardPalette("soft_blue", false)
+            Column(Modifier.fillMaxWidth()) {
+                Box(Modifier.fillMaxWidth().height(200.dp))
+                Box(Modifier.width(400.dp).background(Color.White).testTag("card")) {
+                    CompositionLocalProvider(LocalKeyboardPalette provides palette,
+                        LocalKeyboardInputPreferences provides KeyboardInputPreferences(
+                            preeditStyle = SettingsPreferences.PREEDIT_STYLE_STRIP, preeditAlign = align.value),
+                        LocalPreeditStripRow provides PREEDIT_STRIP_ROW_DP.dp) {
+                        CandidateBar(state = state.value,
+                            visuals = CandidateBarVisuals(Color.Transparent, palette.candidateText, Color.Gray, palette.accent, palette.selectedText),
+                            callbacks = CandidateBarCallbacks(onCandidateSelect = {}, onCancelInput = {}, onShowMoreCandidates = {}),
+                            onEditPreedit = { edits++ }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        val px = { dp: Float -> with(rule.density) { dp.dp.toPx() } }
+        val card = rule.onNodeWithTag("card").fetchSemanticsNode().boundsInWindow
+        val row = rule.onNodeWithTag("preedit-strip-row").fetchSemanticsNode().boundsInWindow
+        assertEquals("候选栏连拼音行一共 70dp：键盘加高一行", px(70f), card.height, 1f)
+        assertEquals("拼音行在最上面", card.top, row.top, 1f)
+        assertEquals("拼音行和键盘一样宽", card.width, row.width, 1f)
+        assertEquals("拼音行 26dp", px(PREEDIT_STRIP_ROW_DP.toFloat()), row.height, 1f)
+        rule.onNodeWithTag("preedit-tab", true).assertDoesNotExist()
+        fun text() = rule.onNodeWithTag("preedit-tab-text", true).fetchSemanticsNode().boundsInWindow
+        assertTrue("拼音在这一行里（不是浮在键盘外面）", text().top >= row.top - 1f && text().bottom <= row.bottom + 1f)
+        assertEquals("靠左，从候选栏留的边起", row.left + px(16f), text().left, px(2f))
+        render("preedit-strip-row-left.png")
+        rule.onNodeWithTag("preedit-strip").performClick()
+        rule.runOnIdle { assertEquals("整行点得开拼音编辑", 1, edits) }
+
+        rule.runOnIdle { align.value = SettingsPreferences.PREEDIT_ALIGN_RIGHT }
+        rule.waitForIdle()
+        assertEquals("靠右，到候选栏留的边止", row.right - px(16f), text().right, px(2f))
+
+        rule.runOnIdle { state.value = CandidateBarState.Idle }
+        rule.waitForIdle()
+        assertEquals("不打字时这一行还在，键盘不跳", px(70f),
+            rule.onNodeWithTag("card").fetchSemanticsNode().boundsInWindow.height, 1f)
+        rule.onNodeWithTag("preedit-tab-text", true).assertDoesNotExist()
+    }
+
+    /** 留不留这一行：只有选了整行、拼音显示在候选栏、这时排得进键盘时才留。 */
+    @Test fun stripRowOnlyForTheFullRowStyle() {
+        val strip = KeyboardInputPreferences(preeditStyle = SettingsPreferences.PREEDIT_STYLE_STRIP)
+        assertEquals(PREEDIT_STRIP_ROW_DP, preeditStripRowDp(strip, available = true))
+        assertEquals("悬浮转了角度、手写全屏等排不进时不留", 0, preeditStripRowDp(strip, available = false))
+        assertEquals("小标签不留", 0, preeditStripRowDp(
+            KeyboardInputPreferences(preeditStyle = SettingsPreferences.PREEDIT_STYLE_LINE), available = true))
+        assertEquals("气泡（默认）不留", 0, preeditStripRowDp(KeyboardInputPreferences(), available = true))
+        assertEquals("关了拼音编辑栏不留", 0, preeditStripRowDp(strip.copy(showPreeditPreview = false), available = true))
     }
 
     /** 「拼音显示声调」（11-20）：开着时小签和气泡都按首选的读音标调；关着（没给读音表）照原样。 */

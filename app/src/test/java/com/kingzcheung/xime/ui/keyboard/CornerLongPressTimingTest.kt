@@ -23,6 +23,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -198,29 +199,32 @@ class CornerLongPressTimingTest {
         com.kingzcheung.xime.glide.chineseGlideSupported(com.kingzcheung.xime.settings.InputProfiles.current(board.schema, false), board.schema))
 
     /**
-     * 滑行时长按：到点弹出上下两个角标，不出字；不动松手出 [top]，[slide] 往右挪大半个键松手出 [bottom]。
+     * 滑行时长按：到点弹出上下两个角标，不出字；不动松手出 [top]，[slide] 往键盘中间挪大半个键松手出 [bottom]。
      */
     private fun pickAndCheck(id: String, tag: String, top: String, bottom: String, slide: Boolean) {
         val before = typed.size
         val key = rule.onNodeWithTag(tag, true)
+        // 下角标排在往键盘中间那一侧（11-24 长按方案）：左半边的键往右挪，右半边的键往左挪。弹出前量，弹出后会多一个根。
+        val rootWidth = rule.onRoot().fetchSemanticsNode().size.width
+        val toward = if (key.fetchSemanticsNode().boundsInRoot.center.x > rootWidth / 2f) -1f else 1f
         rule.mainClock.autoAdvance = false
         key.performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy((delaySeconds * 1000).toLong() + 100)
         assertEquals("$id 到点只弹出两格，不出字", before, typed.size)
         popup().assertExists("$id 长按到点应弹出上下两个角标")
-        if (slide) key.performTouchInput { moveTo(center + Offset(width * 0.75f, 0f)) }
+        if (slide) key.performTouchInput { moveTo(center + Offset(toward * width * 0.75f, 0f)) }
         rule.mainClock.advanceTimeBy(50)
         key.performTouchInput { up() }
         rule.mainClock.advanceTimeBy(100)
         rule.mainClock.autoAdvance = true
         rule.waitForIdle()
-        assertEquals("$id ${if (slide) "往右挪" else "不动"}松手", listOf(if (slide) bottom else top), typed.drop(before))
+        assertEquals("$id ${if (slide) "往中间挪" else "不动"}松手", listOf(if (slide) bottom else top), typed.drop(before))
         popup().assertDoesNotExist()
     }
 
     @Test fun glideLettersOfferBothCornersOnLongPress() {
         // 用户 11-11「关闭数字行，滑行输入打不出 !@#$%^&*()」：滑行锁住字母键的滑动后，长按弹出上下两个角标，
-        // 不动松手出上角标、往右挪一格松手出下角标；存的仍是「滑动输入」的老用户也一样。
+        // 不动松手出上角标、往键盘中间挪一格松手出下角标（11-24 起右半边的键往左挪）；存的仍是「滑动输入」的老用户也一样。
         // 滑行管不到的键（14/17/18 键的字母对等）存「长按输入」时照旧到点立刻输入上角标。
         for (stored in listOf(SymbolInputMode.LONG_PRESS, SymbolInputMode.SWIPE_UP)) {
             preferences = KeyboardInputPreferences(symbolInputMode = stored, symbolLongPressSeconds = delaySeconds,

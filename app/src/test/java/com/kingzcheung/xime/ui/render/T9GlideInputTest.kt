@@ -111,13 +111,16 @@ class T9GlideInputTest {
         org.junit.Assert.assertTrue(input, input == "95249524" || input == "95245249")
     }
 
-    @Test fun leavingDigitsCancellingOrChangingEditorDropsTheStroke() {
+    @Test fun cancellingOrChangingEditorDropsTheStroke() {
         show(true)
         val five = centerOf("JKL"); val six = centerOf("MNO")
         val rail = rule.onNodeWithTag("t9-left-rail").fetchSemanticsNode().boundsInRoot.center -
             board.fetchSemanticsNode().boundsInRoot.topLeft
+        // 他 11-23：稍微出界一点点就被直接中断。划到左栏抬手照样出字（出界的点按数字区的边算）。
         board.performTouchInput { down(five); moveTo(six); moveTo(rail); up() }
-        assertEquals("left digit grid", "", input)
+        rule.waitUntil(5000) { input.isNotEmpty() }
+        org.junit.Assert.assertTrue("left digit grid still glides: $input", input.startsWith("5"))
+        input = ""
         board.performTouchInput { down(five); moveTo(six); cancel() }
         assertEquals("cancelled", "", input)
         board.performTouchInput { down(five); moveTo(six) }

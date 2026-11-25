@@ -26,7 +26,7 @@ class UnavailableLayoutNoteTest {
         val switches = layouts.associate { it.id to InputProfileSelection.switchLayout(entries, wubi, it.id) }
         val notes = InputProfileSelection.unavailableNotes(wubi, switches)
         assertFalse("五笔能用 26 键，不该标灰", InputLayout.QWERTY.id in notes)
-        assertEquals("不能用${wubi.schemeLabel}\n点了换成拼音", notes[InputLayout.T9.id])
+        assertEquals("不能用${wubi.schemeLabel}\n点击切换拼音", notes[InputLayout.T9.id])
         assertTrue(notes.toString(), InputLayout.MERGED14.id in notes)
     }
 }

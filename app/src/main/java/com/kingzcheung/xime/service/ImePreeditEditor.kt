@@ -34,9 +34,11 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
             val t9 = isT9Schema(state.currentSchemaId)
             val rawText = if (t9) snapshot.getOrNull(4).orEmpty() else input.drop(confirmed)
             val semicolon = !t9 && PinyinEditBuffer.keepsSemicolon(state.currentSchemaId)
-            val normalized = PinyinEditBuffer.normalized(rawText, PinyinEditBuffer.keepsCase(state.currentSchemaId), semicolon)
+            // 笔画编码里的通配符 * 是编码，留着（打开编辑条不能把它删掉）。
+            val wildcard = !t9 && PinyinEditBuffer.isStrokeCode(state.currentSchemaId)
+            val normalized = PinyinEditBuffer.normalized(rawText, PinyinEditBuffer.keepsCase(state.currentSchemaId), semicolon, wildcard)
             val unsupportedCode = rawText.any { it !in 'a'..'z' && it !in 'A'..'Z' && it != '\'' && !it.isWhitespace() && it != 'ü' &&
-                !(semicolon && it == ';') }
+                !(semicolon && it == ';') && !(wildcard && it == '*') }
             val prefix = if (t9) service.t9PartialSegments.joinToString("") { it.text }
                 else snapshot.getOrNull(3).orEmpty()
             val display = PinyinEditDisplay(normalized, snapshot.getOrNull(4).orEmpty().removePrefix(prefix).trim(), t9, isMerged14 = com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).layout == com.kingzcheung.xime.settings.InputLayout.MERGED14, groups = com.kingzcheung.xime.settings.CustomKeyboardLayouts.forSchema(state.currentSchemaId)?.rows?.flatten() ?: if (com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).layout == com.kingzcheung.xime.settings.InputLayout.MERGED14) com.kingzcheung.xime.rime.merged14Groups else emptyList())
@@ -106,7 +108,7 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
             } else if (replacement != null) {
                 text = if (session.isT9) PinyinEditBuffer.normalizedT9(replacement)
                     else PinyinEditBuffer.normalized(replacement, PinyinEditBuffer.keepsCase(session.schemaId),
-                        PinyinEditBuffer.keepsSemicolon(session.schemaId))
+                        PinyinEditBuffer.keepsSemicolon(session.schemaId), PinyinEditBuffer.isStrokeCode(session.schemaId))
                 keys = keys?.let { text }
                 caret = text.length
             } else if (key?.startsWith("preedit_cursor:") == true) {
@@ -114,7 +116,14 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
                 caret = when (movement) {
                     "start" -> 0
                     "end" -> text.length
-                    else -> if (movement.startsWith("inline:")) {
+                    // 点气泡、小签、整行打开编辑时点在第几个字母后面（11-23 用户反馈：原来总在最后）：
+                    // 按屏上显示的拼音对到编辑缓冲里，对不上（纠错读音、别的方案）就留在原处。
+                    else -> if (movement.startsWith("letters:")) {
+                        val code = service.candidateState.value.shownPreedit(service.uiState.value.inputProfile)
+                        movement.removePrefix("letters:").toIntOrNull()
+                            ?.let { session.editOffset(code, com.kingzcheung.xime.rime.offsetAfterPreeditLetters(code, it)) }
+                            ?.let { snapDoublePinyin(session, it.coerceIn(0, text.length), 0) } ?: caret
+                    } else if (movement.startsWith("inline:")) {
                         val code = service.inlinePinyinText()
                             ?: service.candidateState.value.shownPreedit(service.uiState.value.inputProfile)
                         movement.removePrefix("inline:").toIntOrNull()?.let { session.editOffset(code, it) }
@@ -144,7 +153,8 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
                 text = text.take(caret) + insertion + text.drop(caret)
                 caret += insertion.length
             }
-            if (text != session.text) {
+            // 笔画编码的分词号连打、打在开头都算一个字（11-18），不合并、不去掉。
+            if (text != session.text && !PinyinEditBuffer.isStrokeCode(session.schemaId)) {
                 val merged = PinyinEditBuffer.mergeSeparators(text, caret)
                 keys = keys?.let { PinyinEditBuffer.mergeSeparators(it, caret).first }
                 text = merged.first

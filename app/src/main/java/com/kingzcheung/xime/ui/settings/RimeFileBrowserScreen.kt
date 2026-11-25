@@ -277,9 +277,9 @@ fun RimeFileBrowserContent(onBack: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         if (exportMode == ExportMode.CONFIG_ONLY)
-                            "排除 build/ 目录和 .bin/.gram 等编译产物"
+                            "不含编译生成的文件"
                         else
-                            "包含 Rime 目录下所有文件和子目录",
+                            "包含全部文件",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -382,7 +382,7 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("删除文件") },
-            text = { Text("确定删除「${file.name}」？此操作不可撤销。") },
+            text = { Text("删除「${file.name}」？删除后不能恢复。") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false

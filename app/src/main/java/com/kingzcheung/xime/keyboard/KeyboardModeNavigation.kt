@@ -22,6 +22,16 @@ fun modeSlotTarget(page: KeyboardInputPage, slot: Int, textLabel: String, cycleE
     }
 }
 
+/**
+ * 两个模式键从左往右的排法：默认 !@# 在左、123 在右；开了「123 和 !@# 对调」（#499，默认关）就反过来。
+ * 主键盘、符号页、数字页同一个排法，所以点哪个键进去，返回键就在同一个位置。
+ */
+fun modeSlotOrder(swapped: Boolean, cycleEnabled: Boolean = false): List<Int> = when {
+    cycleEnabled -> listOf(1)
+    swapped -> listOf(2, 1)
+    else -> listOf(1, 2)
+}
+
 /** Secondary pages never become the text destination, including nested tool overlays. */
 fun KeyboardPage.textMainType(): MainType = when (this) {
     is KeyboardPage.Main -> type

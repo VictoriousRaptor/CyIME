@@ -77,7 +77,7 @@ internal class EnglishAutoSpace {
 /** 选中的联想/补全候选对应的词（英文有原词时第 0 个是原词）；越界返回 null。 */
 internal fun associationWordAt(state: CandidateState, index: Int): String? {
     val pending = state.pendingEnglishText
-    val hasOriginal = pending.isNotEmpty() && state.englishReplaceSupported
+    val hasOriginal = state.showsTypedEnglishWord
     val words = if (hasOriginal) listOf(pending) + state.associationCandidates else state.associationCandidates
     return words.getOrNull(index)
 }

@@ -29,7 +29,7 @@ internal fun CaptionSettingsSection() {
     SettingsSection(title = "字幕") {
         // CaptionController.chineseMode：字幕自己挑模型，和语音输入的选择分开，这里写明，免得两处看起来矛盾。
         Text(
-            text = "字幕按已下载的模型自动选择识别模型。",
+            text = "自动使用已下载的模型。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)
@@ -122,7 +122,7 @@ internal fun CaptionSettingsSection() {
                 )
             }
             Text(
-                text = "别人说到下面的名字时振动提醒，多个叫法用空格隔开",
+                text = "别人说到这些名字时振动，多个用空格隔开",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

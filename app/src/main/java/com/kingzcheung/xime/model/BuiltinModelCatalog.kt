@@ -38,7 +38,7 @@ object BuiltinModelCatalog {
                 )))),
         // 拍照识别：PP-OCRv5 mobile 检测和识别模型（PaddlePaddle，RapidAI/RapidOCR v3.9.2 的 ONNX，Apache-2.0，未改动）；
         // 字符表从识别模型元数据原样取出。国内走魔搭（RapidAI 原仓库、CyIME 仓库），海外走 CyIME Release 转存。
-        ModelInfo(OCR_MODEL, "拍照识别模型", "拍照识字用的中英文识别模型，约 21 MB。轻量版第一次拍照识别时下载，完整版已内置。", ModelCategory.OTHER,
+        ModelInfo(OCR_MODEL, "拍照识别模型", "拍照识字用。轻量版第一次用时下载，完整版已内置。", ModelCategory.OTHER,
             versions = listOf(ModelVersion(version = "v5-mobile", size = "20.5 MB",
                 files = listOf(
                     ModelFile("ch_PP-OCRv5_det_mobile.onnx", "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx", "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae", 4819576L,
@@ -52,7 +52,7 @@ object BuiltinModelCatalog {
         // 拍照识别引擎：OpenCV 4.12.0 的 libopencv_java4.so，原样取自 Maven 上 org.opencv:opencv:4.12.0 的 AAR（Apache-2.0），
         // 每个 ABI 打成一个 tar.bz2 传到 Release `models` 和魔搭。轻量版不带，第一次拍照识别时和识别模型一起下载；
         // 完整版、离线包仍在安装包里（app/build.gradle.kts）。按这台手机跑的 ABI 选一份（[NativeAbi]）。
-        ModelInfo(OCR_ENGINE, "拍照识别引擎", "拍照识字时处理图片用的程序库（OpenCV）。轻量版第一次拍照识别时和识别模型一起下载，完整版已内置。", ModelCategory.OTHER,
+        ModelInfo(OCR_ENGINE, "拍照识别引擎", "拍照识字时处理图片（OpenCV）。轻量版第一次用时下载，完整版已内置。", ModelCategory.OTHER,
             versions = listOf(when (NativeAbi.current) {
                 "armeabi-v7a" -> ModelVersion(version = "4.12.0", size = "7.4 MB",
                     archiveUrl = RELEASE + "ocr-engine-opencv-4.12.0-armeabi-v7a.tar.bz2", sha256 = "004ac5715c05070d44c3878cedc4b66cc1c32a783eb338c3bb4fbf7e0e1bd3f2",
@@ -73,7 +73,7 @@ object BuiltinModelCatalog {
             })),
         // 手写生僻字模板、日语手写模板：app/src/main/assets/handwriting 里的原文件（scripts/packs/make_packs.py 打包，
         // 换了文件重跑它并改这里，HandwritingPackCatalogTest 对得上才过）。轻量版不带，完整版、离线包仍在安装包里。
-        ModelInfo(HANDWRITING_RARE, "手写生僻字", "手写时认字表外的生僻字用的笔顺模板。轻量版下载手写模型时一起下载，完整版已内置。", ModelCategory.OTHER,
+        ModelInfo(HANDWRITING_RARE, "手写生僻字", "手写认生僻字用。轻量版随手写模型下载，完整版已内置。", ModelCategory.OTHER,
             versions = listOf(ModelVersion(version = "c2f28f4e", size = "3.8 MB",
                 archiveUrl = RELEASE + "handwriting-rare-c2f28f4e.tar.bz2", sha256 = "c2f28f4eefede9b70f844d2db84083b26ddbd76e9ec3f85525d559e98826438d",
                 archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "handwriting-rare-c2f28f4e.tar.bz2"),
@@ -81,7 +81,7 @@ object BuiltinModelCatalog {
                     ModelFile("hanzi_rare_och.bin", "", "b901f5d89eedcd6614adb606a08926af2c035281e384964376e79595ac6dc26c", 4797590L),
                     ModelFile("hanzi_rare_och.json", "", "f31e0a2396092aea18d0440f5911d8cce2e64cdbbb13f44c94dd74e221f2356b", 60370L),
                 )))),
-        ModelInfo(JAPANESE_HANDWRITING, "日语手写", "日语手写认假名和日本汉字用的模板。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
+        ModelInfo(JAPANESE_HANDWRITING, "日语手写", "日语手写认假名和汉字用。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
             versions = listOf(ModelVersion(version = "ae50e784", size = "3.0 MB",
                 archiveUrl = RELEASE + "japanese-handwriting-ae50e784.tar.bz2", sha256 = "ae50e7840fead3b94733f5fd9f50fedf682d9a342799dda510de979cc4b76150",
                 archiveMirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "japanese-handwriting-ae50e784.tar.bz2"),
@@ -113,7 +113,7 @@ object BuiltinModelCatalog {
                     ModelFile("formula_meta.json", RELEASE + "formula-handwriting-v1-meta.json", "2ad149afaa9f3872f872e1d4bf9560dfb67be21d08d69ec1a0fa05441cff7541", 205L, mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "formula-handwriting-v1-meta.json")),
                 )))),
         // 候选注释“释义”用的词典（tools/dictionaries/glossary/build_glossary.py 生成）；id 与 CandidateGlossary.MODEL_ID 一致。
-        ModelInfo("candidate-gloss", "候选中英释义词典", "设置里“候选注释内容”选释义后，中文候选旁显示英文，中文键盘里的英文候选旁显示中文。英→中取自 ECDICT，中→英取自 CC-CEDICT（MDBG）；常见的日常短语也显示英文。", ModelCategory.OTHER,
+        ModelInfo("candidate-gloss", "候选中英释义词典", "候选注释选「释义」时用：中文候选旁显示英文，英文候选旁显示中文。英→中取自 ECDICT，中→英取自 CC-CEDICT（MDBG）。", ModelCategory.OTHER,
             // v8：去掉俚语／粗口义项，多音字按 Rime 常用读音、义项按英文反查来选（v1 有 几号 → heroin）；补齐常用单字和词组；
             // 常见的说话用短语用电脑上离线翻译翻好、且译回中文一致的才收，不收带地名人名的（带 “+”，只显示）。
             // v10：单字只给常用且意思明确的（公开语料最常用约 870 字人工看过），生僻字不显示；公开聊天语料最常用的词组人工补齐、改正错义项；v11 常用实词不再被过严的筛子挡掉，补“X的”形容词；v12 不用截断的长释义，常用动词加“了”给过去式。
@@ -132,7 +132,7 @@ object BuiltinModelCatalog {
                 )))),
         // 2026-11-03 起不再提供下载：中文边说边出字用 Paraformer，定稿用 SenseVoice / X-ASR（效果更好）。
         // 已经下载、正在用的照旧能用；条目留着，模型管理里可以删。
-        ModelInfo("zipformer-zh-int8", "Zipformer · 中文", "中文流式语音识别，可使用 SenseVoice 二次校正。", ModelCategory.ASR,
+        ModelInfo("zipformer-zh-int8", "Zipformer · 中文", "中文语音识别，边说边出字。", ModelCategory.ASR,
             versions = listOf(ModelVersion(version = "v1.0", size = "132.63MB", retired = true,
                 archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2", sha256 = "5a2832047ea1f97dd0dc595b816c230c4bafad65cfc0341fa57517cadc50afd0",
                 // 魔搭上的同一归档（2026-10-12 核对哈希一致），国内线路优先用它。
@@ -147,7 +147,7 @@ object BuiltinModelCatalog {
         // Mozilla Firefox 翻译模型，取自 storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data
         // 的 db/models.json（2026-11-08），解压后原样转存到 Release `models` 和魔搭，文件名前加 translate-<方向>-v1-。
         // 中译英：Firefox「Release Android」版 models/zh-en/cjk_retrain_base-memory_cNY_yaJCStGwnTeXgW8A5w，两边共用一个词表。
-        ModelInfo("translate-zh-en", "离线翻译 · 中译英", "翻译插件没填 API 时，在手机上把中文翻成英文，不联网。Mozilla Firefox 的翻译模型。", ModelCategory.OTHER,
+        ModelInfo("translate-zh-en", "离线翻译 · 中译英", "不联网把中文翻成英文。Mozilla Firefox 的翻译模型。", ModelCategory.OTHER,
             versions = listOf(ModelVersion(version = "v1", size = "52.0 MB",
                 files = listOf(
                     ModelFile("model.zhen.intgemm.alphas.bin", RELEASE + "translate-zh-en-v1-model.zhen.intgemm.alphas.bin", "5cd149601802fc8a18124a1c1306144dbbedc058630c4ddb2d53aa76fa9c7c06", 43977787L,
@@ -158,7 +158,7 @@ object BuiltinModelCatalog {
                         mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "translate-zh-en-v1-lex.50.50.zhen.s2t.bin")),
                 )))),
         // 英译中：Firefox「Release」版 models/en-zh/llmaat_finetune10M_qe8_f2_ByQcSxGXQRqGi-UTxYE43g，源、目标各一个词表。
-        ModelInfo("translate-en-zh", "离线翻译 · 英译中", "翻译插件没填 API 时，在手机上把英文翻成中文，不联网。Mozilla Firefox 的翻译模型。", ModelCategory.OTHER,
+        ModelInfo("translate-en-zh", "离线翻译 · 英译中", "不联网把英文翻成中文。Mozilla Firefox 的翻译模型。", ModelCategory.OTHER,
             versions = listOf(ModelVersion(version = "v1", size = "48.7 MB",
                 files = listOf(
                     ModelFile("model.enzh.intgemm.alphas.bin", RELEASE + "translate-en-zh-v1-model.enzh.intgemm.alphas.bin", "ce4486f728641a36269a245248dcb53405e76d96d9eba68dcb4172f29521e092", 42992955L,
@@ -204,7 +204,7 @@ object BuiltinModelCatalog {
         // 每个 ABI 一个 tar.bz2。Swift 不支持 32 位 x86，那里没有这一项（日语照旧只显示罗马字）。
         // 日语翻译器（jni/cyime_azookey）先找安装包里的，再找这里下载的 files/models/japanese-engine。
     ) + listOfNotNull(if (NativeAbi.current == "x86") null else
-        ModelInfo(JAPANESE_ENGINE, "日语转换引擎", "把罗马字、假名转换成日语汉字假名的程序库（azooKey）。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
+        ModelInfo(JAPANESE_ENGINE, "日语转换引擎", "把假名转换成汉字（azooKey）。轻量版装「日语」插件时下载，完整版已内置。", ModelCategory.OTHER,
             versions = listOf(when (NativeAbi.current) {
                 "armeabi-v7a" -> ModelVersion(version = "01f5b76a", size = "5.8 MB",
                     archiveUrl = RELEASE + "japanese-engine-azookey-01f5b76a-armeabi-v7a.tar.bz2", sha256 = "67508e978a5f5344fd2df0f729342aa0b364b06ab765052a38ebcf55a53af4c7",

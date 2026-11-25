@@ -61,4 +61,14 @@ class NumberRowTest {
         // 多一排数字，字母键要方就得更高。
         assertTrue(b > a)
     }
+
+    @Test fun fullHeightNumberRowIsOffByDefaultAndMatchesLetterRows() {
+        assertFalse(KeyboardInputPreferences().numberRowFullHeight)
+        assertEquals(NUMBER_ROW_HEIGHT_WEIGHT, numberRowHeightWeight(false))
+        assertEquals(1f, numberRowHeightWeight(true))
+        val full = KeyboardSquareSnap.forLayout(LayoutKind.ALPHABETIC, false, numberRow = true, numberRowFullHeight = true)!!
+        assertEquals(5f, full.rows)
+        // 只开「一样高」没开数字行：什么都不变。
+        assertEquals(4f, KeyboardSquareSnap.forLayout(LayoutKind.ALPHABETIC, false, numberRowFullHeight = true)!!.rows)
+    }
 }

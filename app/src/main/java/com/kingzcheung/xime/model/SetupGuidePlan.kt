@@ -111,6 +111,10 @@ data class SetupFacts(
     val memorySaver: Boolean = false,
     /** 现在开着、关掉能省内存的功能（[SetupGuidePlanner.memoryExtras] 里列的）。 */
     val memoryExtras: List<MemoryExtra> = emptyList(),
+    /** 现在候选栏右边的键用哪一套。 */
+    val candidateRightKey: com.kingzcheung.xime.settings.CandidateRightKey = com.kingzcheung.xime.settings.CandidateRightKey.EXPAND,
+    /** 系统导航：true 全面屏手势，false 三键（两键）导航，读不到为 null。只用来在候选栏那题说一句哪套顺手。 */
+    val gestureNav: Boolean? = null,
 )
 
 data class SetupAnswers(
@@ -130,6 +134,8 @@ data class SetupAnswers(
     val wubi: String = SetupGuidePlanner.WUBI,
     /** 有内存焦虑时另外选了要关掉的功能（[MemoryExtra.id]）；默认一个不选，点了才关。 */
     val memoryOff: Set<String> = emptySet(),
+    /** 候选栏右边的键用哪一套（11-25 他：很重要，新手引导里要问）；默认照现在的。 */
+    val candidateRightKey: com.kingzcheung.xime.settings.CandidateRightKey = com.kingzcheung.xime.settings.CandidateRightKey.EXPAND,
 ) {
     companion object { const val FLYPY = "double_pinyin_flypy" }
 }
@@ -245,6 +251,7 @@ object SetupGuidePlanner {
         doublePinyin = facts.doublePinyin ?: facts.doublePinyinChoices.firstOrNull()?.id ?: SetupAnswers.FLYPY,
         fuzzy = FuzzyHabit.entries.filterTo(linkedSetOf()) { habit -> habit.fuzzyIds.any { it in facts.fuzzy } },
         memorySaver = facts.memorySaver,
+        candidateRightKey = facts.candidateRightKey,
     )
 
     /** 有内存焦虑时语音模型空闲多久卸掉：和低配档一样 1 分钟。 */

@@ -1,6 +1,7 @@
 package com.kingzcheung.xime.ui.keyboard
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -108,6 +109,8 @@ fun KeyboardLayoutScreen(
     // 键内部的长按/按下协程会继续执行并继续上报，导致气泡/按下状态残留。
     // 这里用 key() 让整个活动键盘在 cancel（epoch 变化）时 remount：
     // 所有键的 remember 状态重置、所有进行中手势协程被 Compose 取消，彻底清干净。
+    // 「按键抬起震动」：各布局里自己没接 onRelease 的键（九键、笔画、假名、数字、常用符号、Shift、符号键……）松手走这里（用户 11-23）。
+    CompositionLocalProvider(LocalKeyReleaseFeedback provides callbacks.onKeyRelease) {
     key(keyboardState) {
         key(uiState.swipeCancelEpoch) {
             when (keyboardState) {
@@ -230,6 +233,7 @@ fun KeyboardLayoutScreen(
                     candidateState = candidateState,
                     callbacks = callbacks,
                     inputProfile = uiState.inputProfile,
+                    enterKeyText = uiState.enterKeyText,
                 )
             }
 
@@ -267,5 +271,6 @@ fun KeyboardLayoutScreen(
             }
         }
         }
+    }
     }
 }

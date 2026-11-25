@@ -32,6 +32,13 @@ class UiTranslationsTest {
         assertNull(table.lookup("没有这一句"))
     }
 
+    @Test fun `very long user text is returned at once`() {
+        val pasted = "没有找到“" + "设置\n九键、方案。".repeat(20_000) + "”"
+        val start = System.nanoTime()
+        assertEquals(pasted, table.translate(pasted))
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 200)
+    }
+
     @Test fun `text without Chinese is untouched`() {
         assertEquals("Rime 0.9", table.translate("Rime 0.9"))
     }

@@ -259,7 +259,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                 if (problems.isNotEmpty() || collisions.isNotEmpty()) SettingsSection(title = "检查") {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         problems.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-                        if (collisions.isNotEmpty()) Text("同码音节(由词库区分候选)：" + collisions.entries.joinToString("；") { (code, syllables) ->
+                        if (collisions.isNotEmpty()) Text("同码音节：" + collisions.entries.joinToString("；") { (code, syllables) ->
                             "${code.uppercase()} = ${syllables.joinToString(" / ")}" }, style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -269,7 +269,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                     scope.launch {
                         runCatching { withContext(Dispatchers.IO) { DoublePinyinSchemes.save(context, saving); DoublePinyinSchemes.all(context) } }
                             .onSuccess { schemes = it; draft = null; enabled = enabled + saving.id
-                                message = "已保存，正在应用；之后可在「语言与方案」的方案一栏选择" }
+                                message = "已保存，正在应用" }
                             .onFailure { message = "保存失败：${it.message}" }
                         busy = false
                     }

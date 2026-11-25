@@ -200,10 +200,10 @@ internal fun BackgroundImageStrip(
 
 /** 图片排下面那行字：按现在的状态只说下一步该做什么。 */
 internal fun backgroundImageHint(count: Int, imageOn: Boolean, motionOn: Boolean): String = when {
-    !imageOn -> "上面的开关关着：键盘用配色方案的底色，这些图片留着"
+    !imageOn -> "开关关着，键盘用配色的底色，图片保留"
     count < 2 -> "点图片调整位置或换一张；点 ＋ 加几张，轮流显示"
-    motionOn -> "共 $count 张，背景每动完一圈换下一张；点哪张就调哪张的位置"
-    else -> "共 $count 张，打开下面的「动态背景」才会轮流换"
+    motionOn -> "共 $count 张，背景动完一圈换下一张"
+    else -> "共 $count 张，打开「动态背景」后轮流显示"
 }
 
 private const val THUMBS_PER_ROW = 4

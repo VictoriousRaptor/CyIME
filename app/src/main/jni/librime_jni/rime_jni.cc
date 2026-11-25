@@ -779,7 +779,7 @@ public:
         auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
         return session && cyime::pinyin_selection::Select(session->context(), session->schema(), session->engine(),
             expectedInput, expectedSchema, static_cast<size_t>(start),
-            static_cast<size_t>(end), static_cast<rime::SyllableId>(syllable));
+            static_cast<size_t>(end), static_cast<rime::SyllableId>(syllable), /* keep_fuzzy = */ true);
     }
 
     int pinyinSyllablesChosen() {
@@ -1224,7 +1224,28 @@ public:
         return userDictionary->RestoreExact(rime::path(file));
     }
 
+    // 长按删除：忘掉学习记录（forgetLearning），这个词在当前编码下固定过的也一起取消（11-24：固定的词删了还排在
+    // 原位，看着像删不掉）。返回值同 forgetLearning；取消了固定时至少是 1（仍在候选里）或 3（不再出现）。
     int forgetCandidate(int index, bool global) {
+        if (!rime || !session_id_ || index < 0) return 0;
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        auto* context = session ? session->context() : nullptr;
+        if (!context || context->composition().empty() || !context->composition().back().menu) return 0;
+        const auto& seg = context->composition().back();
+        const auto pageSize = std::max(1, session->schema()->page_size());
+        const size_t nativeIndex = global ? static_cast<size_t>(index) : seg.selected_index / pageSize * pageSize + index;
+        const auto shown = seg.menu->GetCandidateAt(nativeIndex);
+        if (!shown) return 0;
+        const std::string text = shown->text();
+        const std::string code = cyime::pins::ActiveCode(context);
+        const bool pinned = !code.empty() && cyime::pins::IsPinned(code, text);
+        const int result = forgetLearning(index, global);
+        if (!pinned || !cyime::pins::UnpinCode(code, text)) return result;
+        context->RefreshNonConfirmedComposition();
+        return stillOffered(context, text) ? 1 : 3;
+    }
+
+    int forgetLearning(int index, bool global) {
         if (!rime || !session_id_ || index < 0) return 0;
         auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
         if (!session) return 0;
@@ -1665,6 +1686,39 @@ public:
         return true;
     }
     
+    // 只启停了方案（其他部署输入都没变，Kotlin 侧 RimeConfigHelper.schemaListChange 判定）：不进维护状态、
+    // 不把列表里每个方案的词典都读一遍算校验和（11-23 平板实测那样要 19–21 秒），只重编方案列表和新开的方案。
+    // 编译会原地改写 build 里的文件（mapped_file.cc Resize），所以照旧先关会话、编完再开。任何一步失败返回 false，
+    // 由调用方退回原来的维护部署。
+    bool deploySchemaListChange(const std::vector<std::string>& added) {
+        if (!rime || rime->is_maintenance_mode()) return false;
+        rime::LoadModules(rime::kDeployerModules);
+        std::vector<std::string> sources;
+        for (const auto& id : added) {
+            const std::string user = user_data_dir_ + "/" + id + ".schema.yaml";
+            const std::string shared = shared_data_dir_ + "/" + id + ".schema.yaml";
+            if (access(user.c_str(), F_OK) == 0) sources.push_back(user);
+            else if (access(shared.c_str(), F_OK) == 0) sources.push_back(shared);
+            else {
+                LOGE("deploySchemaListChange: no source for %s", id.c_str());
+                return false;
+            }
+        }
+        releaseSessionForMaintenance();
+        // 方案列表按秒级修改时间判断要不要重编（11-15 首道双拼一直不在列表里）：删掉编出的列表，保证重编。
+        const std::string compiled_list = user_data_dir_ + "/build/default.yaml";
+        remove(compiled_list.c_str());
+        bool ok = rime->deploy_config_file("default.yaml", "config_version");
+        if (!ok) LOGE("deploySchemaListChange: default.yaml failed");
+        for (const auto& source : sources) {
+            if (!ok) break;
+            ok = rime->deploy_schema(source.c_str());
+            if (!ok) LOGE("deploySchemaListChange: %s failed", source.c_str());
+        }
+        const bool reloaded = reloadSessionAfterMaintenance();
+        return ok && reloaded;
+    }
+
     bool deploySchema(const char* schemaId) {
         if (!rime) {
             LOGE("deploySchema: rime not available");
@@ -3508,6 +3562,23 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeStartMaintenance(
 JNIEXPORT void JNICALL
 Java_com_kingzcheung_xime_rime_RimeEngine_nativeJoinMaintenance(JNIEnv*, jobject) {
     rime_get_api()->join_maintenance_thread();
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeDeploySchemaListChange(JNIEnv* env, jobject, jobjectArray added) {
+    std::vector<std::string> ids;
+    const jsize count = added ? env->GetArrayLength(added) : 0;
+    for (jsize i = 0; i < count; ++i) {
+        auto item = static_cast<jstring>(env->GetObjectArrayElement(added, i));
+        if (!item) continue;
+        const char* chars = env->GetStringUTFChars(item, nullptr);
+        if (chars) {
+            ids.emplace_back(chars);
+            env->ReleaseStringUTFChars(item, chars);
+        }
+        env->DeleteLocalRef(item);
+    }
+    return Rime::Instance().deploySchemaListChange(ids) ? JNI_TRUE : JNI_FALSE;
 }
 
 // 更新 last_build_time 为当前时间，避免下次增量检测误判

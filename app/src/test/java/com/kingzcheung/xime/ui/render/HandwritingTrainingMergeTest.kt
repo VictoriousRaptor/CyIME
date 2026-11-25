@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.render
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -76,6 +77,26 @@ class HandwritingTrainingMergeTest {
     }
 
     /** 用户 11-12：贡献样本要能自己选写什么——随机、只写某一类，或者自己输入的字词。 */
+    /** 回归（11-12「残废」）：画板空着时「下一题」不能是灰的，点了说要先写或点跳过，不前进、不存样本。 */
+    @Test fun emptyBoardNextExplainsInsteadOfGreyedOut() {
+        HandwritingContribution.setConsented(context)
+        rule.setContent { MaterialTheme { HandwritingTrainingScreen(onBack = {}, contribute = true, devTools = false) } }
+        rule.waitForIdle()
+        // 电脑上读不到随机题库，自己输入一道题（同 contributeLetsWriterChooseWhatToWrite）。
+        rule.onNodeWithTag("contribute-choice").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("自己输入").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("contribute-own-input").performTextInput("龘 你好")
+        rule.onNodeWithText("开始").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("下一题").assertIsEnabled().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("再点下一题", substring = true).assertExists()
+        // 空画板点了不保存、不换题。
+        rule.onNodeWithText("第 1 题").assertExists()
+    }
+
     @Test fun contributeLetsWriterChooseWhatToWrite() {
         HandwritingContribution.setConsented(context)
         rule.setContent { MaterialTheme { HandwritingTrainingScreen(onBack = {}, contribute = true, devTools = false) } }

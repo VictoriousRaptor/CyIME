@@ -490,6 +490,20 @@ private fun AnswerSection(facts: SetupFacts, answers: SetupAnswers, onAnswers: (
             }
         }
     }
+    // 11-25 他：候选栏右边的键很重要，新手引导里一定要问。和设置页同三张卡、同一个顺序，默认照现在的。
+    GuideHeading("候选栏右边的键怎么用？")
+    Text(when (facts.gestureNav) {
+        true -> "你的${facts.device}用全面屏手势，返回不好按，「经典」或「右侧收起」收键盘更顺手。"
+        false -> "你的${facts.device}用三键导航，有返回键收键盘，用「默认」就好。"
+        null -> "有返回键的用「默认」；全面屏手势返回不好按，选「经典」或「右侧收起」。"
+    } + "以后在 设置 → 候选词 里随时能换。", style = GuideText.body(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(com.kingzcheung.xime.settings.CandidateRightKey.EXPAND, com.kingzcheung.xime.settings.CandidateRightKey.CLOSE,
+            com.kingzcheung.xime.settings.CandidateRightKey.HIDE).forEach { mode ->
+            CandidateModeCard(mode, candidateRightKeyName(mode), answers.candidateRightKey == mode,
+                onClick = { onAnswers(answers.copy(candidateRightKey = mode)) }, standalone = true)
+        }
+    }
     // 选了九键就不再问一遍。全拼、双拼不管用不用九键都要词组模型（26 键整句也用它，11-15），这题只定新下哪一档。
     if (keyboard != KeyboardWay.T9) GuideQuestion("也用九键打字吗？", listOf(
         Triple(true, "用九键", "九键按整句常用说法组词，长句更容易一次打对；需要整句组词模型"),

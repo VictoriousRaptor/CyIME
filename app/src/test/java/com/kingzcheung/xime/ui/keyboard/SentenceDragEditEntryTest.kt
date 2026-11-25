@@ -41,4 +41,14 @@ class SentenceDragEditEntryTest {
         assertNull(sentenceEditKey("delete", merged14 = true))
         assertNull(sentenceEditKey("1", merged14 = true))
     }
+
+    /** 拖选默认关；开着也只给超过 6 个字的首选，短句长按照旧出调词频的卡片（11-24）。 */
+    @Test fun dragEditOnlyWhenOnAndForLongSentences() {
+        assertFalse(sentenceDragApplies(null, enabled = true))
+        assertFalse(sentenceDragApplies("甲".repeat(2), enabled = true))
+        assertFalse(sentenceDragApplies("甲".repeat(6), enabled = true))
+        assertTrue(sentenceDragApplies("甲".repeat(7), enabled = true))
+        assertFalse(sentenceDragApplies("甲".repeat(12), enabled = false))
+        assertEquals(7, SENTENCE_DRAG_MIN_CHARS)
+    }
 }

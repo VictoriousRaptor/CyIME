@@ -131,7 +131,7 @@ fun SmartPredictionSettingsContent(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "上屏后接着给出下一个词",
+                                text = "上屏后接着给出下一个词；英文直接输入时补全单词",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -264,7 +264,7 @@ fun SmartPredictionSettingsContent(
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Edit,
                         title = "显示自造词角标",
-                        subtitle = "学到的词在候选右上角显示小铅笔；关掉只是不显示，照常学习",
+                        subtitle = "学到的词在候选右上角显示小铅笔",
                         checked = showLearnedMark,
                         onCheckedChange = {
                             showLearnedMark = it

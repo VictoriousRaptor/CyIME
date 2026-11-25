@@ -27,6 +27,10 @@ object NativeAbi {
 internal fun packagedPacks(context: Context): Set<String> = buildSet {
     val libraries = context.applicationInfo.nativeLibraryDir?.let(::File)
     if (libraries != null && File(libraries, "libopencv_java4.so").isFile) add(BuiltinModelCatalog.OCR_ENGINE)
+    // 拍照识别模型也一样（11-23 他以为完整版没带拍照模型：模型市场里它还显示「下载」）。
+    // 以前下载过一份的不藏，好让那份还能删；已安装页另有一行「内置」（ModelLocalScreen）。
+    if (com.kingzcheung.xime.ocr.OcrModelFiles.bundled(context) &&
+        !ModelManager.isModelDownloaded(context, BuiltinModelCatalog.OCR_MODEL)) add(BuiltinModelCatalog.OCR_MODEL)
     if (libraries != null && File(libraries, "libCyAzooKey.so").isFile) add(BuiltinModelCatalog.JAPANESE_ENGINE)
     if (com.kingzcheung.xime.settings.JapanesePack.dictionaryBundled(context)) add(BuiltinModelCatalog.JAPANESE_DICTIONARY)
     if (com.kingzcheung.xime.handwriting.HandwritingAssets.bundled(context, "kana_default_och.bin")) add(BuiltinModelCatalog.JAPANESE_HANDWRITING)

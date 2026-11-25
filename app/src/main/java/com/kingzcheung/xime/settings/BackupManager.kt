@@ -25,6 +25,7 @@ import java.util.zip.ZipOutputStream
  * - 包根的 rime 文件：`*.custom.yaml`、自定义布局方案、themes/ 背景图；
  *   勾选个人数据时另含 userdb（自造词与调频）、自定义短语与个人词库
  * - v1 的插件条目（plugin_configs/、plugins.xml、plugins/）仍可恢复，本地备份不再生成
+ * - 以后的版本换了前缀和几个名字（[NewerBackupNames]）：读备份包的地方都先经过 [incomingEntry]，那样的备份包这一版也恢复得了
  *
  * 恢复走 [BackupRestoreTransaction]：先完整校验再落盘，失败回滚。
  */
@@ -34,6 +35,10 @@ object BackupManager {
 
     /** 备份包内元数据条目前缀（保留字，rime 目录不应有同名顶层文件）。 */
     const val META_PREFIX = "_xime_backup/"
+
+    /** 备份包里的条目名：以后的版本用新前缀（[NewerBackupNames.META_PREFIX]）写的元数据条目当成 [META_PREFIX] 的，别的原样。读备份包的地方都先经过它。 */
+    internal fun incomingEntry(name: String): String =
+        if (name.startsWith(NewerBackupNames.META_PREFIX)) META_PREFIX + name.removePrefix(NewerBackupNames.META_PREFIX) else name
 
     const val FORMAT_VERSION = 2
 
@@ -109,7 +114,7 @@ object BackupManager {
 
     /** 备份包里的剪贴板记录；没有（旧备份）或太大时为 null。 */
     internal fun clipboardEntry(bytes: ByteArray): String? = ZipInputStream(bytes.inputStream()).use { input ->
-        generateSequence { input.nextEntry }.firstOrNull { it.name == CLIPBOARD_ENTRY } ?: return null
+        generateSequence { input.nextEntry }.firstOrNull { incomingEntry(it.name) == CLIPBOARD_ENTRY } ?: return null
         val out = java.io.ByteArrayOutputStream()
         val chunk = ByteArray(64 * 1024)
         while (true) {
@@ -250,7 +255,7 @@ object BackupManager {
 
     internal fun isCyimeBackup(bytes: ByteArray): Boolean = runCatching {
         ZipInputStream(bytes.inputStream()).use { input ->
-            generateSequence { input.nextEntry }.any { it.name == META_PREFIX + "settings.json" }
+            generateSequence { input.nextEntry }.any { incomingEntry(it.name) == META_PREFIX + "settings.json" }
         }
     }.getOrDefault(false)
 

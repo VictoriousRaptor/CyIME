@@ -1414,7 +1414,7 @@ private fun ModelDetailBody(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "本地模型会占用内存和 CPU，手机可能发热。",
+                        "模型在手机上运行，会耗电、发热。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -1843,7 +1843,7 @@ fun PluginDetailContent(
 
 /** 已下架插件在详情页的一句说明：功能去了哪里。 */
 internal fun retiredPluginNote(id: String): String = when (id.substringAfterLast('.')) {
-    "ai_translate" -> "已不再提供：翻译已并入「AI 改写」，可以卸载。键盘上方的翻译栏是插件市场里的「翻译」"
+    "ai_translate" -> "已并入「AI 改写」，可以卸载。翻译栏是插件市场里的「翻译」"
     "ai_write" -> "已并入「AI 改写」，可以卸载"
     "online_asr" -> "已内置：语音转文本 › 在线语音，可以卸载"
     "typing_stats" -> "已内置：打字统计，可以卸载"

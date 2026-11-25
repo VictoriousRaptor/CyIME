@@ -165,7 +165,7 @@ private fun ThemeSettingsPage(
             item {
                 SettingsSection(title = "材质效果") {
                     SettingsToggleItem(icon = Icons.TwoTone.BlurOn, title = "玻璃效果",
-                        subtitle = "沿用当前配色，切换主题时保持", checked = glass.dark.enabled,
+                        subtitle = "键盘变成半透明玻璃，换主题时保留", checked = glass.dark.enabled,
                         onCheckedChange = { enabled ->
                             changeAppearance(context, onThemeChanged) {
                                 FrostedGlassPreferences.saveProfiles(context, glass.withEnabled(enabled))

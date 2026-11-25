@@ -7,6 +7,8 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.unit.dp
+import com.kingzcheung.xime.stats.TouchStats
+import com.kingzcheung.xime.stats.TouchStatsData.Outcome
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -39,6 +41,19 @@ internal data class KeyGestureActions(
      * 没给时按键宽均分（旧算法）。参数是项数、是不是图标项。
      */
     val longPressMenuCells: ((Int, Boolean) -> LongPressMenuCells)? = null,
+    /**
+     * 长按到点时要排在手指底下、默认选中的项，按先后（26 键字母键：先大写、再小写，见 [letterMenuCenterItems]）。
+     * 第一项放在手指下那格并选中，后面的挨着放，其余项按原顺序从左往右填剩下的格（[arrangeLongPressMenu]）。空的照旧。
+     */
+    val longPressCenterItems: List<String> = emptyList(),
+    /** 文字长按菜单原样排、不按左右半边翻转（九键「J K L 5 j k l」数字居中），默认项是 [longPressCenterItems] 第一项。 */
+    val longPressFixedOrder: Boolean = false,
+    /**
+     * 文字长按菜单怎么排、每格多宽（[KeyboardKeyMetrics.longPressMenuOrder]、[KeyboardKeyMetrics.longPressTextMenuCells]），
+     * 和气泡画的同一份。参数：原始项、离手指从近到远的项、是否原样排。给了就按「默认项正对按键、手指挪一格换一格」选；
+     * 图标菜单和没给时照旧（[longPressMenuCells]）。
+     */
+    val longPressTextMenu: ((List<String>, List<String>, Boolean) -> LongPressTextMenu)? = null,
     val onLongPress: (() -> Unit)? = null,
     val onLongPressSelect: ((String) -> Unit)? = null,
     val onLongPressFeedback: () -> Unit = {},
@@ -138,7 +153,13 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
         val swipeThreshold = actions.verticalThresholdDp.dp.toPx()
         val horizontalThreshold = actions.horizontalThresholdDp.dp.toPx()
         down.consume()
+        // 按键落点统计（只有自用包在记，见 [TouchStats]）：落点在按下回调之前给，回调里报了键名才有这一下的号。
+        TouchStats.landing(down.position.x, down.position.y, size.width, size.height, density, down.uptimeMillis)
         actions.onPress()
+        val touch = TouchStats.landed()
+        // 这一下最后的结果，只给统计用。长按动作已经执行、已经提前出字的，手指之后被上层拿走也不改。
+        var outcome = Outcome.NONE_LOST
+        var lastAt = down.uptimeMillis
         actions.onPreview(SwipeState(isPressed = true, pressedText = actions.text))
         var longPressed = false
         var moved = false
@@ -151,37 +172,89 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
         // 滑到哪个键按哪个键：手指已经滑出过这个键（[KeyGestureActions.slideOver]）。
         var slid = false
         var selectedIndex = 0
-        val items = actions.longPressItems
+        var items = actions.longPressItems
         // 三项以上的长按菜单（西欧字母、拼音声调，七八个变音）：每格按画出来的格宽算，起点是手指下的那格。
         // 以前整条挤在一个键宽里，八项时手指挪八分之一个键就换一格（用户 11-15）。两项（上下角标）照旧。
         val cellsFor = actions.longPressMenuCells?.takeIf { items.size > 2 }
         var menuCells: LongPressMenuCells? = null
+        // 文字长按菜单（[KeyGestureActions.longPressTextMenu]）：默认项第几格、每格多宽、长按到点时手指在哪。
+        var menuAnchor = 0
+        var menuCellWidth = 0f
+        var menuAnchorX = 0f
         var lastX = down.position.x
+        var lastY = down.position.y
         val longPressDelay = actions.longPressDelayMillis(viewConfiguration.longPressTimeoutMillis)
         val longPressJob = if (longPressDelay != null) gestureScope.launch {
             delay(longPressDelay)
             longPressed = true
             actions.onLongPressFeedback()
             if (items.isNotEmpty()) {
+                val textMenu = actions.longPressTextMenu?.takeIf { items.size > 1 && actions.longPressDrawableIds.isEmpty() }
+                    ?.invoke(items, actions.longPressCenterItems, actions.longPressFixedOrder)
+                if (textMenu != null) {
+                    // 默认项正对按键、先选中；之后按手指从这一刻起横着挪了几格选（11-24 长按方案）。
+                    items = textMenu.items
+                    menuAnchor = textMenu.anchor
+                    menuCellWidth = textMenu.cellWidth
+                    menuAnchorX = lastX
+                    selectedIndex = menuAnchor
+                } else {
                 menuCells = cellsFor?.invoke(items.size, actions.longPressDrawableIds.isNotEmpty())
                 menuCells?.let { selectedIndex = KeyboardKeyMetrics.longPressMenuIndex(lastX, it, items.size) }
+                }
+                if (textMenu == null && actions.longPressCenterItems.isNotEmpty()) {
+                    // 两项（[k, K]）没有分格、从第一项起选：大写排第一就是默认选中，往右滑选小写。
+                    items = arrangeLongPressMenu(items, actions.longPressCenterItems, selectedIndex)
+                    selectedIndex = items.indexOf(actions.longPressCenterItems.first()).coerceAtLeast(0)
+                }
                 actions.onPreview(SwipeState(isPressed = true, isLongPress = true,
                     longPressItems = items, selectedLongPressIndex = selectedIndex,
-                    longPressDrawableIds = actions.longPressDrawableIds))
+                    longPressDrawableIds = actions.longPressDrawableIds, longPressAnchorIndex = menuAnchor))
             } else {
+                outcome = Outcome.LONG
                 actions.onLongPress?.invoke()
                 actions.longPressBubbleText?.takeIf { it.isNotEmpty() }?.let { shown ->
                     actions.onPreview(SwipeState(isPressed = true, isLongPress = true, longPressItems = listOf(shown)))
                 }
             }
         } else null
+        // 后按下的键先抬手出字时，这一下已经提前按点按出过了：之后这根手指只等抬起，不再出字。
+        var settled = false
+        val press = KeyPressOrder.begin {
+            // 这一下还是点按（没到长按、没滑出方向、没滑到别的键）才提前出；别的照旧等它自己抬手。
+            // 留给滑行的键挪过了触摸阈值时，按手指现在的位置照抬手的算法判（[glideDriftIsTap]）：后一根手指按下时
+            // 滑行已经改跟后一根，这一根不会再变成滑行。
+            if (!settled && !longPressed && !slid && !crossedSwipeThreshold && verticalDrag == null && !flickClaimed &&
+                if (reserveDragForGlide && moved) glideDriftIsTap(down.position, Offset(lastX, lastY), size.width.toFloat(),
+                    size.height.toFloat(), viewConfiguration.touchSlop, letterGlide)
+                else actions.freeDirection || abs(lastX - down.position.x) < horizontalCancelThreshold) {
+                settled = true
+                outcome = Outcome.TAP_EARLY
+                longPressJob?.cancel()
+                TouchStats.early(touch)
+                actions.onTap()
+                actions.onPreview(SwipeState())
+            }
+        }
         try {
             while (true) {
                 val event = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (change.isConsumed) break
+                lastAt = change.uptimeMillis
+                if (settled) {
+                    // 字已经出过。同一个键上又按下一根手指时照旧换手，否则等这根手指抬起。
+                    change.consume()
+                    handover = event.changes.firstOrNull { it.id != down.id && it.changedToDown() && !it.isConsumed }
+                    if (!change.pressed || handover != null) break
+                    continue
+                }
+                if (change.isConsumed) {
+                    if (outcome != Outcome.LONG) outcome = Outcome.NONE_TAKEN
+                    break
+                }
                 val dx = change.position.x - down.position.x
                 lastX = change.position.x
+                lastY = change.position.y
                 val dy = change.position.y - down.position.y
                 if (!longPressed && (abs(dx) > viewConfiguration.touchSlop || abs(dy) > viewConfiguration.touchSlop)) {
                     moved = true
@@ -231,11 +304,13 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                 crossedSwipeThreshold = if (actions.freeDirection) outsideCentre
                     else crossedSwipeThreshold || up || downSwipe || left || right || blockedUp || blockedDown
                 if (longPressed && items.isNotEmpty()) {
-                    selectedIndex = menuCells?.let { KeyboardKeyMetrics.longPressMenuIndex(change.position.x, it, items.size) }
+                    selectedIndex = if (menuCellWidth > 0f)
+                        KeyboardKeyMetrics.longPressMenuStep(menuAnchor, change.position.x - menuAnchorX, menuCellWidth, items.size)
+                    else menuCells?.let { KeyboardKeyMetrics.longPressMenuIndex(change.position.x, it, items.size) }
                         ?: longPressIndexByKeyWidth(dx, actions.keyWidth, items.size)
                     actions.onPreview(SwipeState(isPressed = true, isLongPress = true,
                         longPressItems = items, selectedLongPressIndex = selectedIndex,
-                        longPressDrawableIds = actions.longPressDrawableIds))
+                        longPressDrawableIds = actions.longPressDrawableIds, longPressAnchorIndex = menuAnchor))
                 } else if (!longPressed) {
                     val hint = if (up) actions.upText else if (downSwipe) actions.downText else if (left) actions.leftText else if (right) actions.rightText else null
                     actions.onPreview(SwipeState(isSwiping = hint != null, swipeText = hint,
@@ -257,17 +332,22 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                 if (!change.pressed || nextDown != null) {
                     change.consume()
                     handover = nextDown
-                    when {
-                        longPressed -> items.getOrNull(selectedIndex)?.let { actions.onLongPressSelect?.invoke(it) }
-                        slid -> actions.slideRelease?.invoke()
-                        up -> actions.onUp?.invoke(actions.upText.orEmpty())
-                        downSwipe -> actions.onDown?.invoke(actions.downText.orEmpty())
-                        left -> actions.onLeft?.invoke()
-                        right -> actions.onRight?.invoke()
+                    KeyPressOrder.settleOlderThan(press)
+                    val tap = if (nextDown != null) Outcome.TAP_HANDOVER else Outcome.TAP
+                    outcome = when {
+                        longPressed -> { items.getOrNull(selectedIndex)?.let { actions.onLongPressSelect?.invoke(it) }; Outcome.LONG }
+                        slid -> { actions.slideRelease?.invoke(); Outcome.SLIDE }
+                        up -> { actions.onUp?.invoke(actions.upText.orEmpty()); Outcome.SWIPE }
+                        downSwipe -> { actions.onDown?.invoke(actions.downText.orEmpty()); Outcome.SWIPE }
+                        left -> { actions.onLeft?.invoke(); Outcome.SWIPE }
+                        right -> { actions.onRight?.invoke(); Outcome.SWIPE }
                         reserveDragForGlide && moved ->
                             if (glideDriftIsTap(down.position, change.position, size.width.toFloat(), size.height.toFloat(),
-                                    viewConfiguration.touchSlop, letterGlide)) actions.onTap()
-                        !crossedSwipeThreshold && (actions.freeDirection || abs(dx) < horizontalCancelThreshold) -> actions.onTap()
+                                    viewConfiguration.touchSlop, letterGlide)) { actions.onTap(); tap } else Outcome.NONE_DRIFT
+                        !crossedSwipeThreshold && (actions.freeDirection || abs(dx) < horizontalCancelThreshold) -> { actions.onTap(); tap }
+                        // 没出字：滑过了阈值（那个方向没有动作），或者横着拖出了取消的距离。
+                        crossedSwipeThreshold -> Outcome.NONE_BLOCKED
+                        else -> Outcome.NONE_FAR
                     }
                     break
                 }
@@ -279,17 +359,48 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                     // 父层光标/滚动手势可能在 Main 后半段消费；取消后不得补出普通字符。
                     val finalChange = awaitPointerEvent(PointerEventPass.Final)
                         .changes.firstOrNull { it.id == down.id }
-                    if (finalChange == null || finalChange.isConsumed) break
+                    if (finalChange == null || finalChange.isConsumed) {
+                        if (finalChange != null) outcome = Outcome.NONE_TAKEN
+                        break
+                    }
                 }
             }
         } finally {
+            KeyPressOrder.end(press)
             longPressJob?.cancel()
             if (slid) actions.slideCancel()
+            TouchStats.finish(touch, outcome, lastX - down.position.x, lastY - down.position.y, density, lastAt)
             actions.onRelease()
             actions.onPreview(SwipeState())
         }
     } }
 }
+
+/**
+ * 把 [center] 里的项排到 [fingerCell] 附近：第一项正好在 [fingerCell]，后面的按离它近的格先右后左放；
+ * 其余项保持原来的先后，从左往右填空着的格。[center] 里没出现在 [items] 的项跳过；排不出来时原样返回。
+ * 例：o O ō ó ǒ ò ô õ ö ø，手指在第 8 格、center = [O, o] → ō ó ǒ ò ô õ ö ø O o（群友 11-23：长按离手指最近的是大小写字母）。
+ */
+internal fun arrangeLongPressMenu(items: List<String>, center: List<String>, fingerCell: Int): List<String> {
+    val wanted = center.filter { it in items }.distinct()
+    if (wanted.isEmpty() || items.size != items.distinct().size) return items
+    val n = items.size
+    val slots = arrayOfNulls<String>(n)
+    var placed = 0
+    val start = fingerCell.coerceIn(0, n - 1)
+    for (item in wanted) {
+        val cell = if (placed == 0) start else (1 until n).asSequence()
+            .flatMap { d -> sequenceOf(start + d, start - d) }.firstOrNull { it in 0 until n && slots[it] == null } ?: return items
+        slots[cell] = item
+        placed++
+    }
+    val rest = items.filter { it !in wanted }.iterator()
+    for (i in 0 until n) if (slots[i] == null) slots[i] = rest.next()
+    return slots.map { it!! }
+}
+
+/** 文字长按菜单排好的样子：从左到右的项、默认项第几格、每格多宽（像素）。 */
+internal data class LongPressTextMenu(val items: List<String>, val anchor: Int, val cellWidth: Float)
 
 /** 旧算法：整条按键宽均分，从第一项起（两项的上下角标还用它，手感不变）。 */
 internal fun longPressIndexByKeyWidth(dx: Float, keyWidth: Float, count: Int): Int {

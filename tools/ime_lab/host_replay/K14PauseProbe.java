@@ -9,10 +9,13 @@ import java.util.List;
  * 14-key full pinyin after a pause (cyime_pause_14jian): one key left out, one key pressed twice and two keys typed
  * in the wrong order inside one syllable gain the intended word after nativeRefineOmission; correctly typed input
  * keeps its menu; the first two candidates never move. A slip whose word the typing already offers (abbreviations,
- * sentence parts) only has to keep the first two. Arguments: LIB USER [CASES.tsv]. USER is a disposable user
+ * sentence parts) only has to keep the first two. One exception (t9/model_sentences_on_pause): the sentence the word
+ * model builds in the same refresh may take the first place, and the candidate that led while typing then follows it.
+ * Arguments: LIB USER [CASES.tsv]. USER is a disposable user
  * directory listing pinyin_14jian; CASES.tsv rows are "slip<TAB>input<TAB>target", "keep<TAB>input" (a slip whose
- * target must not be added, or correctly typed input: the menu stays) or "off<TAB>omission|extra|swap|none" (the
- * keyboard's 漏键, 多键, 顺序 switches as the session options the app sets; none turns all three back on) or
+ * target must not be added, or correctly typed input: the menu stays), "lead<TAB>input<TAB>target" (after the pause
+ * the target leads and the candidate that led while typing is second) or "off<TAB>omission|extra|swap|all|none" (the
+ * keyboard's 漏键, 多键, 顺序 switches as the session options the app sets; all turns the three off, none back on) or
  * "trace<TAB>input" (lists the pause prism's own readings of the whole input, in its order, with no gate: it patches
  * an engine into cyime_pause_14jian in USER before deploying, so use a disposable copy).
  */
@@ -78,6 +81,10 @@ public final class K14PauseProbe {
           boolean ok = changed && at >= 0 && Integer.parseInt(after[at][6]) == input.length() && protectedKept(before, after);
           result = (ok ? "PASS" : "FAIL") + " slip " + input + " -> " + c[2] + " rank " + (at + 1);
           if (!ok) ++failed;
+        } else if (c[0].equals("lead")) {
+          boolean ok = changed && sentenceLed(before, after) && after[0][0].equals(c[2]);
+          result = (ok ? "PASS" : "FAIL") + " lead " + input + " -> " + c[2];
+          if (!ok) ++failed;
         } else {
           boolean ok = !changed;
           result = (ok ? "PASS" : "FAIL") + " keep " + input;
@@ -97,7 +104,7 @@ public final class K14PauseProbe {
     e.nativeSetOption("ascii_mode", false);
     // Options starting with _ are cleared on a schema switch; the app sets them again after one.
     for (String kind : new String[]{"omission", "extra", "swap"})
-      e.nativeSetOption("_cyime_pause_" + kind + "_off", off.equals(kind));
+      e.nativeSetOption("_cyime_pause_" + kind + "_off", off.equals(kind) || off.equals("all"));
     for (char ch : code.toCharArray()) if (!e.nativeProcessKey(ch, 0)) throw new Exception("unhandled key " + ch);
     if (!code.equals(e.nativeGetInput())) throw new Exception("input changed: " + e.nativeGetInput());
   }
@@ -116,7 +123,13 @@ public final class K14PauseProbe {
     System.out.println("TRACE " + code + " whole-input readings of the pause prism: " + whole);
   }
 
+  /** The sentence the word model built after the pause leads; the candidate that led while typing follows it. */
+  static boolean sentenceLed(String[][] before, String[][] after) {
+    return before.length > 0 && after.length > 1 && !before[0][0].equals(after[0][0]) && before[0][0].equals(after[1][0]);
+  }
+
   static boolean protectedKept(String[][] before, String[][] after) {
+    if (sentenceLed(before, after)) return true;
     for (int i = 0; i < 2 && i < before.length; ++i)
       if (after.length <= i || !before[i][0].equals(after[i][0])) return false;
     return true;

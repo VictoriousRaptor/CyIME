@@ -312,6 +312,7 @@ private fun CandidatePageContent(
                                     accentColor = state.railAccentColor,
                                     isPinyin = isPinyinRail,
                                     approximate = isPinyinRail && state.railPinyinNear.getOrNull(index) == true,
+                                    fitTo = if (isPinyinRail) railItems else emptyList(),
                                 )
                             }
                         } else {
@@ -336,6 +337,7 @@ private fun CandidatePageContent(
                                         accentColor = state.railAccentColor,
                                         isPinyin = isPinyinRail,
                                         approximate = isPinyinRail && state.railPinyinNear.getOrNull(index) == true,
+                                        fitTo = if (isPinyinRail) railItems else emptyList(),
                                     )
                                 }
                             }
@@ -768,6 +770,8 @@ private fun CandidateRailSymbolKey(
     accentColor: Color = Color.Unspecified,
     isPinyin: Boolean = false,
     approximate: Boolean = false,
+    /** 同一栏的全部读音，整栏一个字号（见 [FittedRailText]）。 */
+    fitTo: List<String> = emptyList(),
 ) {
     val cornerRadius = LocalKeyCornerRadius.current
     val shape = RoundedCornerShape(
@@ -812,12 +816,12 @@ private fun CandidateRailSymbolKey(
                         .padding(horizontal = 3.dp, vertical = 1.dp)
                 ) {
                     FittedRailText(text, pillColor, 13.sp, FontWeight.Medium, approximate,
-                        if (isPinyin) railWidth - 12.dp else null)
+                        if (isPinyin) railWidth - 12.dp else null, fitTo = fitTo)
                 }
             } else {
                 FittedRailText(text, if (approximate) approximateRailColor(textColor) else textColor,
                     if (isPinyin) 13.sp else 16.sp, FontWeight.Normal, approximate,
-                    if (isPinyin) railWidth - 6.dp else null, meaning)
+                    if (isPinyin) railWidth - 12.dp else null, meaning, fitTo = fitTo)
             }
         }
     }
@@ -925,6 +929,7 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
                         fontSize = if (pinyin) metrics.pinyinFontSizeSp.sp else font,
                         isSelected = index == state.railSelectedPinyinIndex,
                         approximate = state.railPinyinNear.getOrNull(index) == true, fitWidth = pinyin,
+                        fitTo = if (pinyin) items else emptyList(),
                         modifier = Modifier.fillMaxWidth().height(rowHeight))
                 }
             }

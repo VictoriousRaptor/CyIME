@@ -8,6 +8,7 @@ import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.twotone.OpenWith
 import androidx.compose.material.icons.twotone.SpaceBar
 import androidx.compose.material.icons.twotone.ContentCut
+import androidx.compose.material.icons.twotone.KeyboardCapslock
 import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.Abc
 import androidx.compose.material.icons.twotone.Spellcheck
@@ -88,7 +89,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 // 邻键纠错、模糊音 11-01 搬到「语言与方案」（跟着方案走，九键和 26 键页不再各放一份）。
                 SettingsSection(title = "大小写", content = {
                     SettingsToggleItem(Icons.TwoTone.Abc, "首字母大写",
-                        "英文等拉丁字母键盘上，句首字母自动大写",
+                        "英文等键盘句首字母自动大写",
                         checked = settings.englishSentenceCaps, onCheckedChange = {
                             settings = settings.copy(englishSentenceCaps = it); settings.save(context)
                         })
@@ -105,6 +106,12 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     HorizontalDivider()
                     SettingsItem(Icons.TwoTone.SwapHoriz, "26 键底栏", "调整底栏顺序，添加或移除逗号、句号",
                         onClick = { onNavigate(SettingsRoutes.QwertyBottomRow) }, showArrow = true)
+                    HorizontalDivider()
+                    SettingsToggleItem(Icons.TwoTone.SpaceBar, "123 和 !@# 对调",
+                        "底排 123 在左、!@# 在右，符号页和数字页跟着对调",
+                        checked = settings.swapModeKeys, onCheckedChange = {
+                            settings = settings.copy(swapModeKeys = it); settings.save(context)
+                        })
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "底排标点固定上滑",
                         "底栏的逗号、句号键和数字键盘的点键：上滑或长按输入右上角的符号。关闭后跟随全局角标设置。",
@@ -132,6 +139,13 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings, com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)
                             ?.takeIf { !settings.shiftSyllableSplit }?.message)
                     ShiftSyllableSplitLegend(settings.shiftSyllableSplit)
+                    HorizontalDivider()
+                    // 用户 11-23 转群友：想点一下 Shift 就一直大写。默认关，关着照旧（点一下大写一个字母，连点两下锁定）。
+                    SettingsToggleItem(Icons.TwoTone.KeyboardCapslock, "点一下 Shift 锁定大写",
+                        if (settings.shiftTapLocks) "点一下一直大写，再点一下回小写" else "现在点一下只大写一个字母，连点两下才锁定",
+                        checked = settings.shiftTapLocks, onCheckedChange = {
+                            settings = settings.copy(shiftTapLocks = it); settings.save(context)
+                        })
                     // 长音键只有日语 26 键用：没开日语不显示（用户 11-22）。
                     if (com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)) {
                         HorizontalDivider()
@@ -172,7 +186,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                             com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_FLICK_LETTERS, true)
                         SettingsToggleItem(Icons.TwoTone.OpenWith, "拂动选字母",
-                            "向不同方向拂动直接输入键上的字母，长按输入数字",
+                            "往不同方向滑输入键上的字母，长按输入数字",
                             checked = settings.t9FlickLetters && glideLock == null, onCheckedChange = {
                                 settings = settings.copy(t9FlickLetters = it); settings.save(context)
                             },
@@ -180,6 +194,8 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             lockMessage = glideLock?.message ?: com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                                 com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_FLICK_LETTERS, false)
                                 ?.takeIf { settings.t9FlickLetters }?.message)
+                        HorizontalDivider()
+                        T9SwipeActionEditor(settings.reverseSymbolSwipe, settings.t9FlickLetters || settings.t9GlideTyping)
                         HorizontalDivider()
                         Column(Modifier.settingsSearchAnchor("拖到候选选词的距离").padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text("拖到候选选词的距离：键盘的 ${settings.candidateDragPercent.toInt()}%", style = MaterialTheme.typography.titleSmall)
@@ -241,7 +257,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                     ExternalGlideSchemeItems(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行",
-                        "在九键上一笔划过几个键输入词语。开着时 2～9 键的拖动归滑行，这些键的角标改为长按输入",
+                        "在九键上一笔划过几个键输入词语，2～9 键的角标改为长按输入",
                         checked = settings.t9GlideTyping, onCheckedChange = {
                             settings = settings.copy(t9GlideTyping = it); settings.save(context)
                         },
@@ -497,7 +513,7 @@ internal fun FuzzyPinyinSection() {
                         doublePinyin = on
                         scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
                     })
-                if (usingDoublePinyin && !doublePinyin) Text("你在用双拼，打开上面的开关后模糊音才对双拼生效",
+                if (usingDoublePinyin && !doublePinyin) Text("打开上面的开关后，双拼才用模糊音",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp).testTag("fuzzy-double-pinyin-hint"))
             }
@@ -611,8 +627,8 @@ internal fun t9MergeZeroSubtitle(cornerSymbolInput: Boolean, reverseSymbolSwipe:
 
 /** 「空格上滑输入 0」的说明：去掉了 0 键时没有右边那个键，只说空格。 */
 internal fun t9SpaceUpZeroSubtitle(mergeZero: Boolean): String =
-    if (mergeZero) "九键空格往上滑打 0，打字时不接"
-    else "九键空格往上滑打 0，打字时不接；0 键一直是「→」，没有候选时点它光标右移、左滑左移"
+    if (mergeZero) "九键空格上滑打 0"
+    else "九键空格上滑打 0；0 键变成「→」，没有候选时点它移动光标"
 
 /**
  * 笔画编码显示成 一丨丿丶乛（默认关，显示 h s p n z；11-18 贡献者偏向全用字母）。
@@ -639,3 +655,63 @@ internal fun StrokeGlyphPreeditToggle() {
             scope.launch(Dispatchers.IO) { runCatching { SpellingPatches.apply(context) } }
         })
 }
+
+/**
+ * 九键数字键另一方向滑动做的事（#297，森林集那种下滑全选、复制、粘贴）。上方角标那一滑是数字，不动；
+ * 这里设的是下方角标那一滑（默认上滑，「反转上下滑方向」时下滑），存在 [com.kingzcheung.xime.settings.LetterSwipeBindings.T9]。
+ * 默认都不设，和以前一样。
+ */
+@Composable
+private fun T9SwipeActionEditor(reverseSymbolSwipe: Boolean, gestureTaken: Boolean) {
+    val context = LocalContext.current
+    val bindings = com.kingzcheung.xime.settings.LetterSwipeBindings
+    var swipes by remember { mutableStateOf(bindings.loadT9(context)) }
+    var digit by remember { mutableStateOf("2") }
+    var chooseDigit by remember { mutableStateOf(false) }
+    var chooseAction by remember { mutableStateOf(false) }
+    val direction = bindings.directions.getValue(bindings.lowerDirection(reverseSymbolSwipe))
+    val slot = "$digit.lower"
+    Column(Modifier.settingsSearchAnchor("九键滑动动作").padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("九键滑动动作", style = MaterialTheme.typography.titleSmall)
+        Text(t9SwipeActionSubtitle(direction, gestureTaken),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box {
+                OutlinedButton(onClick = { chooseDigit = true }, modifier = Modifier.testTag("t9-swipe-digit")) { Text(digit) }
+                DropdownMenu(chooseDigit, onDismissRequest = { chooseDigit = false }) {
+                    bindings.t9Digits.forEach { d ->
+                        DropdownMenuItem(text = { Text(d) }, onClick = { digit = d; chooseDigit = false })
+                    }
+                }
+            }
+            Box {
+                OutlinedButton(onClick = { chooseAction = true }, modifier = Modifier.testTag("t9-swipe-action")) {
+                    Text(bindings.actions[swipes[slot]] ?: "不设")
+                }
+                DropdownMenu(chooseAction, onDismissRequest = { chooseAction = false }) {
+                    (mapOf("" to "不设") + bindings.actions).forEach { (id, title) ->
+                        DropdownMenuItem(text = { Text(title) }, onClick = {
+                            swipes = if (id.isEmpty()) swipes - slot else swipes + (slot to id)
+                            bindings.saveT9(context, swipes)
+                            chooseAction = false
+                        })
+                    }
+                }
+            }
+        }
+        t9SwipeActionSummary(swipes)?.let {
+            androidx.compose.material3.Text(it, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+internal fun t9SwipeActionSubtitle(direction: String, gestureTaken: Boolean): String =
+    if (gestureTaken) "拂动选字母或九键滑行开着时，这一滑可能被字母或滑行占用"
+    else "选一个数字键，设${direction}做什么；数字照旧在另一个方向"
+
+/** 已设的动作，一行写完，如「2 复制　3 粘贴」；都没设时为 null。 */
+internal fun t9SwipeActionSummary(swipes: Map<String, String>): String? =
+    com.kingzcheung.xime.settings.LetterSwipeBindings.t9Digits.mapNotNull { d ->
+        swipes["$d.lower"]?.let { com.kingzcheung.xime.settings.LetterSwipeBindings.actions[it] }?.let { "$d $it" }
+    }.takeIf { it.isNotEmpty() }?.joinToString("　")

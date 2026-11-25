@@ -121,7 +121,7 @@ internal fun WindowsDevicesPanelContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("同步剪贴板")
-                    Text("自动同步复制的文字；图片暂不支持跨设备同步。", style = MaterialTheme.typography.bodySmall)
+                    Text("自动同步复制的文字，暂不同步图片。", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(checked = enabled, onCheckedChange = onEnabled)
             }

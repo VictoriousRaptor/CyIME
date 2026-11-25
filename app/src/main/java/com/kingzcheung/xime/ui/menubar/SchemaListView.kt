@@ -42,9 +42,8 @@ fun SchemaListView(
     val all = InputModes.available((schemas + availableSchemas).distinctBy { it.schemaId })
         .filter { it.profile.mode == InputMode.KEYBOARD }
     val current = all.firstOrNull { it.schemaId == currentSchemaId }
-    val entries = all.filter { current != null && it.profile.language == current.profile.language }
     var layoutId by remember(currentSchemaId, current?.profile) { mutableStateOf(current?.profile?.layout?.id) }
-    // 方案一行和设置页同一个来源、同一个函数：每种方案一张卡片，当前布局没有的方案（注音、笔画）用它自己的布局。
+    // 方案一行和设置页同一个来源、同一个函数：只列当前布局能打字的方案；别的布局才有的方案（注音、笔画）从布局一行进。
     val switchable = (schemas + availableSchemas).map { it.schemaId }.toSet()
     val installed by produceState<Pair<List<SchemaInfo>, List<String>>?>(null, listInstalled) {
         if (listInstalled) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -55,6 +54,18 @@ fun SchemaListView(
         SchemaPicking.offered((all + found).distinctBy { it.schemaId }, enabled + switchable)
     } ?: all)
     val schemes = current?.let { SchemaPicking.schemeRow(pool, it) }.orEmpty()
+    // 布局一行也按同一份方案列（只有启用的方案），和设置页一样。
+    val poolEntries = pool.filter { current != null && it.profile.mode == InputMode.KEYBOARD && it.profile.language == current.profile.language }
+    // 关着的方案：和设置页一样启用并部署，好了键盘自动换上；面板先收起，不用等。
+    val enableOff: (SchemaInfo) -> Unit = { entry ->
+        android.widget.Toast.makeText(context, "正在启用${entry.schemeLabel}，几秒后自动换上",
+            android.widget.Toast.LENGTH_SHORT).show()
+        SchemaPicking.enableAndPick(context, entry.schemaId, entry.profile.language) { ok ->
+            if (!ok) android.widget.Toast.makeText(context, "方案部署失败，到「已安装的方案」点「重新部署(修复)」可看原因",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
+        onClose()
+    }
     BoxWithConstraints(modifier.fillMaxWidth().keyboardPanelBackground(backgroundColor).testTag("input-profile-panel")) {
     val density = LocalDensity.current
     val display = LocalView.current.display
@@ -86,8 +97,8 @@ fun SchemaListView(
             Text("正在读取当前输入方式…", color = keyTextColor)
         } else {
             val menu = LayoutMenuPreferences.observe(current.profile.language)
-            val layouts = menu.shown(menu.ordered(InputProfileSelection.layoutRow(entries, all)))
-            val switches = layouts.associate { it.id to InputProfileSelection.switchLayout(entries, current, it.id, all) }
+            val layouts = menu.shown(menu.ordered(InputProfileSelection.layoutRow(poolEntries, pool)))
+            val switches = layouts.associate { it.id to InputProfileSelection.switchLayout(poolEntries, current, it.id, pool) }
             LayoutPreviewChoices(layouts, current.profile.language, layoutId,
                 "profile-layout-list", itemTagPrefix = "panel-layout:",
                 unavailableIds = switches.filterValues { it?.keepsScheme == false }.keys,
@@ -110,7 +121,7 @@ fun SchemaListView(
                             android.widget.Toast.LENGTH_LONG).show()
                     }
                     LetterLayouts.selectFor(context, switch.entry, id)
-                    onSelectLayout(switch.entry.schemaId)
+                    if (switch.entry.schemaId in switchable) onSelectLayout(switch.entry.schemaId) else enableOff(switch.entry)
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 2.dp), color = keyTextColor.copy(alpha = .15f))
@@ -127,16 +138,7 @@ fun SchemaListView(
                         com.kingzcheung.xime.ui.settings.SettingsRoutes.Schema))
                 }) { id ->
                 if (id in switchable) onSelectSchema(id)
-                else schemes.firstOrNull { it.schemaId == id }?.let { entry ->
-                    // 关着的方案：和设置页一样启用并部署，好了键盘自动换上；面板先收起，不用等。
-                    android.widget.Toast.makeText(context, "正在启用${entry.schemeLabel}，几秒后自动换上",
-                        android.widget.Toast.LENGTH_SHORT).show()
-                    SchemaPicking.enableAndPick(context, id, entry.profile.language) { ok ->
-                        if (!ok) android.widget.Toast.makeText(context, "方案部署失败，到「已安装的方案」点「重新部署(修复)」可看原因",
-                            android.widget.Toast.LENGTH_LONG).show()
-                    }
-                    onClose()
-                }
+                else schemes.firstOrNull { it.schemaId == id }?.let(enableOff)
             }
         }
     }

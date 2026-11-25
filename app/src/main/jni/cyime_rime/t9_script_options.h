@@ -63,6 +63,10 @@ struct T9ScriptOptions {
   double t9_ngram_user_input_weight_ = 0;
   double t9_ngram_dictionary_prior_ = 0;
   bool t9_ngram_sentence_start_ = false;
+  // t9/whole_word_weight_margin (ln units, 0 = off): when the first sentence is one dictionary word spelling the whole
+  // input, a word of the same input whose dictionary weight is higher by more than this comes first (744468: 时候
+  // over 事后). 2026-11-25 他：「你直接改词权」.
+  double t9_whole_word_weight_margin_ = 0;
   double t9_ngram_eos_weight_ = 0;
   // Sentence-final particles (t9/final_particles: 吗, 呢, 吧…) and t9/particle_eos_weight: when one of
   // the first whole-input sentences ends with such a particle, every finished sentence is ordered with
@@ -101,6 +105,36 @@ struct T9ScriptOptions {
   // t9/near_homophone_penalty (ln units): what a sentence pays for each word that is only the second dictionary
   // word of its letters (translator/sentence_near_homophone_margin lets those in). See T9RescoreSentences.
   double t9_near_homophone_penalty_ = 0.0;
+  // t9/menu_sentences (26 keys, t9/sentence_rescore): how many whole sentences lead the menu, in the order of the
+  // computed score. 1: the chosen one alone, as before.
+  int t9_menu_sentences_ = 1;
+  // t9/menu_sentence_margin (ln units): a sentence that lost is listed only when its score is within this of the
+  // best one (0: no limit). Keeps out the readings nobody means (尼上课了嘛 under 你上课了嘛).
+  double t9_menu_sentence_margin_ = 0.0;
+  // t9/menu_prefixes: after the whole sentences, the first sentence cut at its word boundaries, longest first, at
+  // most this many (0: none, as before). Picking one keeps the words that were right; the rest is made again.
+  int t9_menu_prefixes_ = 0;
+  // t9/model_sentences (letters with t9/sentence_rescore; 2026-11-23): Rime's n-best is made from the first
+  // dictionary word of every span, so the sentence the word model would choose is often not among it. With this many
+  // (> 0) the joint decoder also builds sentences with the word model, and those typed out in full are compared with
+  // the typed choice (T9RescoreSentences, `built`). 0: none, as before. The decoder reads its own t9/* settings
+  // (source_budget … ngram_dictionary_prior, reading_table); t9/joint_decoder stays false.
+  int t9_model_sentences_ = 0;
+  // t9/model_sentences_on_pause: the decoder's run costs as much as the whole key (14 keys: every tenth key took
+  // 16 ms instead of 7), so with this on it runs only in the refresh after a pause (RefineOmission sets
+  // T9SetRefiningSentences, as the nine-key refinement does) and no key waits for it.
+  bool t9_model_sentences_on_pause_ = false;
+  // t9/model_sentences_rime_weight: a sentence built with the word model is made of more and shorter words than
+  // the typed choice, and on the word model alone it leads too often where t9/rescore_rime_weight is 0 (14 keys): a
+  // word the dictionary holds and the model does not know loses to common words of the same keys. When a built
+  // sentence is compared with the typed choice, this share of Rime's own sentence weight is added on both sides. The
+  // choice among the typed sentences does not use it.
+  double t9_model_sentences_rime_weight_ = 0.0;
+  // t9/model_sentences_fuzzy_penalty (ln units, 2026-11-24): built sentences with syllables read only through a fuzzy
+  // spelling (模糊音, the user's fuzz/ rules) join too, on places of their own, and pay this for each such syllable.
+  // Negative (unset): they do not join, as before. 14 keys with fuzzy pinyin on: a sentence with an accent typo (lao
+  // typed nao) was never rebuilt by the word model after a pause.
+  double t9_model_sentences_fuzzy_penalty_ = -1.0;
   // t9/final_g_word_margin (ln units): a dictionary word that reads the whole input with the final g added
   // (translator/cyime_final_g_correction; yianzhuan: 已安装) leads the sentence of the typed letters (一按转) when the
   // word model finds its text more likely by more than this; 0 keeps the typed sentence first. Uses

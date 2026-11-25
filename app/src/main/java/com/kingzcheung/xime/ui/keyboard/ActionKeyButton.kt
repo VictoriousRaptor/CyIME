@@ -33,6 +33,8 @@ fun ActionKeyButton(
     shadowEnabled: Boolean = true,
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
+    /** 长按做的事；为空时长按照旧算点一下。 */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val icon = actionKeyIcon(text)
     val enter = if (text == "删除") LocalFunctionKeyColors.current else LocalEnterKeyColors.current
@@ -42,8 +44,17 @@ fun ActionKeyButton(
         shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
         shadowShapeRadius = shadowShapeRadius,
         // 键缝动效：删除往里收；其余都是回车（发送、搜索、完成……），点一下整排往上扫。
-        gapLight = if (text == "删除") GapLightKind.PULL else GapLightKind.SWEEP)
+        gapLight = if (text == "删除") GapLightKind.PULL else GapLightKind.SWEEP,
+        onLongClick = onLongClick)
 }
+
+/**
+ * 「回车发送」开着、键面写着发送时，长按回车换行（#169：短按发送，长按换行）。
+ * 只看键面：键面写发送就是 [com.kingzcheung.xime.service.EnterKeyAction.label] 判定了回车会发送；
+ * 其他时候返回 null，长按回车和以前一样算点一下。
+ */
+internal fun enterLongPressNewline(enterKeyText: String, newline: (() -> Unit)?): (() -> Unit)? =
+    newline?.takeIf { enterKeyText == "发送" }
 
 /**
  * 回车键现在按下去实际做什么，就写什么（用户 11-14：按住 Ctrl 回车一直没提示）。

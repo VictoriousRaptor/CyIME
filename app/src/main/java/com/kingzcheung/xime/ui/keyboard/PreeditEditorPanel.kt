@@ -7,6 +7,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -26,6 +28,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -50,6 +53,69 @@ internal data class PreeditOrigin(val bounds: IntRect, val color: Color, val fon
 
 /** 气泡、小签点开编辑前写进来，编辑条打开时读一次；键盘视图提供，没有时编辑条直接出现。 */
 internal val LocalPreeditOrigin = compositionLocalOf<MutableState<PreeditOrigin?>?> { null }
+
+/**
+ * 点拼音时手指落点对到哪个光标位置（11-23 用户反馈：音节之间的空隙太窄，手指容易点错）：离某个音节分界（隔音符两边、
+ * 开头、末尾）不到 [slopPx] 就落在那个分界上，否则照字落点。看得到的间距不变，只是分界两边的可点范围放宽。
+ * [isSeparator] 是这段字里的分隔符（编辑条里是隔音符，屏上拼音还有空格、零宽空格）。
+ */
+internal fun snapPreeditTap(layout: TextLayoutResult, position: Offset, slopPx: Float,
+    isSeparator: (Char) -> Boolean): Int {
+    val text = layout.layoutInput.text.text
+    val exact = layout.getOffsetForPosition(position)
+    if (text.isEmpty()) return exact
+    val line = layout.getLineForVerticalPosition(position.y)
+    val start = layout.getLineStart(line)
+    val end = layout.getLineEnd(line)
+    var best = exact
+    var bestDistance = Float.MAX_VALUE
+    for (offset in start..end) {
+        val boundary = offset == 0 || offset == text.length ||
+            isSeparator(text[offset - 1]) || isSeparator(text[offset])
+        if (!boundary) continue
+        val distance = kotlin.math.abs(layout.getHorizontalPosition(offset, true) - position.x)
+        if (distance < bestDistance) { bestDistance = distance; best = offset }
+    }
+    return if (bestDistance <= slopPx) best else exact
+}
+
+/** 编辑条里音节分界两边各放宽多少（约半个指尖）。 */
+internal val PreeditTapSlop = 10.dp
+
+/** 屏上拼音（气泡、小签、整行）里的分隔符。 */
+internal fun isShownPreeditSeparator(c: Char): Boolean = c == ' ' || c == '\'' || c == '\u200B'
+
+/**
+ * 记下点屏上拼音时手指落在哪个字母后面，打开编辑时光标放在那里（11-23 用户反馈：原来点开光标总在最后）。
+ * 外层可点的块用 [record]，里面的字用 [text]；点开时 [lettersBefore] 给出落点前面有几个字母，算不出来是 null（光标照旧）。
+ */
+internal class PreeditTapPoint {
+    private var box: androidx.compose.ui.layout.LayoutCoordinates? = null
+    private var textCoordinates: androidx.compose.ui.layout.LayoutCoordinates? = null
+    private var textLayout: TextLayoutResult? = null
+    private var down: Offset? = null
+
+    /** 外层可点的块：记下它的坐标和手指按下的位置（不吃掉点按，点开照旧由它的 clickable 管）。 */
+    fun record(): Modifier = Modifier
+        .onGloballyPositioned { box = it }
+        .pointerInput(this) {
+            awaitEachGesture { down = awaitFirstDown(requireUnconsumed = false).position }
+        }
+
+    /** 里面那段字：记下它的坐标；排版结果交给 [layout]。 */
+    fun textModifier(): Modifier = Modifier.onGloballyPositioned { textCoordinates = it }
+
+    fun layout(result: TextLayoutResult) { textLayout = result }
+
+    fun lettersBefore(slopPx: Float): Int? {
+        val point = down ?: return null
+        val outer = box?.takeIf { it.isAttached } ?: return null
+        val inner = textCoordinates?.takeIf { it.isAttached } ?: return null
+        val result = textLayout ?: return null
+        val offset = snapPreeditTap(result, inner.localPositionOf(outer, point), slopPx, ::isShownPreeditSeparator)
+        return com.kingzcheung.xime.rime.preeditLettersBefore(result.layoutInput.text.text, offset)
+    }
+}
 
 /** 编辑条从气泡、小签处长成原样的时长。 */
 internal const val PREEDIT_GROW_MS = 180
@@ -77,7 +143,10 @@ internal fun PreeditEditorBar(
     val scroll = rememberScrollState()
     val currentCaret by rememberUpdatedState(onCaret)
     val display = remember(session.text, session.isT9, session.protectedText, preedit) { PinyinEditDisplay(session.text, preedit.removePrefix(session.protectedText).trim(), session.isT9, includeAutomaticBoundaries = false) }
-    val code = display.text.ifEmpty { " " }
+    val stroke = remember(session.schemaId) { com.kingzcheung.xime.rime.PinyinEditBuffer.isStrokeCode(session.schemaId) }
+    // 笔画编码：组字区显示成笔画时编辑条也显示笔画（一个字母换一个笔画，光标、点按位置不变）。
+    val code = (if (stroke) com.kingzcheung.xime.rime.strokeEditorText(display.text,
+        preedit.removePrefix(session.protectedText)) else display.text).ifEmpty { " " }
     val displayCaret = display.displayOffset(session.caret)
     LaunchedEffect(session.caret, code, layout) {
         layout?.takeIf { it.layoutInput.text.text == code }?.getCursorRect(displayCaret.coerceIn(0, code.length))?.let {
@@ -161,7 +230,8 @@ internal fun PreeditEditorBar(
                         else Modifier.heightIn(min = PreeditStyle.SurfaceHeight).padding(horizontal = 8.dp))
                     .testTag("preedit-editor-surface"),
                     contentAlignment = Alignment.CenterStart) {
-                    Text(code, color = codeColor, fontSize = origin?.let { (it.fontSp + (PreeditStyle.FontSize.value - it.fontSp) * t).sp } ?: PreeditStyle.FontSize, maxLines = 1, softWrap = false,
+                    // 笔画编码自己画，粗细、大小统一（11-23）；显示的字符不变，光标、点按位置照旧。
+                    Text(code.withDrawnStrokes(stroke), color = codeColor, inlineContent = strokeInlineContent(codeColor), fontSize = origin?.let { (it.fontSp + (PreeditStyle.FontSize.value - it.fontSp) * t).sp } ?: PreeditStyle.FontSize, maxLines = 1, softWrap = false,
                         onTextLayout = { layout = it }, modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)
                             .testTag("preedit-editor-code")
                             .then(caretBoundsModifier)
@@ -174,7 +244,11 @@ internal fun PreeditEditorBar(
                                 setText { onReplace(it.text); true }
                             }
                             .pointerInput(code) {
-                                detectTapGestures { point -> layout?.let { currentCaret(display.rawOffset(it.getOffsetForPosition(point))) } }
+                                // 点：靠近音节分界就落在分界上（11-23 用户反馈：分词间隔小，容易点错）；拖：照字走，细调用。
+                                val slop = PreeditTapSlop.toPx()
+                                detectTapGestures { point -> layout?.let {
+                                    currentCaret(display.rawOffset(snapPreeditTap(it, point, slop) { c -> c == '\'' }))
+                                } }
                             }
                             .pointerInput(code) {
                                 detectDragGestures { change, _ ->

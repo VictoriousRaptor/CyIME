@@ -115,6 +115,19 @@ class SpellingPatchesTest {
         }
     }
 
+    /** 11-23 群里：导入的 18 键全拼开了模糊音不生效。认得出的中文全拼（不是九键、不是查表用的）也写模糊音。 */
+    @Test fun importedFullPinyinSchemasAlsoGetFuzzyRules() {
+        InputProfiles.updateInstalled(emptyList())
+        val dir = kotlin.io.path.createTempDirectory("spelling").toFile()
+        try {
+            for (id in listOf("rime_ice", "pinyin_18jian", "luna_pinyin", "t9_pinyin", "cyime_cn_en", "wubi86", "my_import"))
+                java.io.File(dir, "$id.schema.yaml").writeText("schema:\n  schema_id: $id\n")
+            assertEquals(listOf("luna_pinyin", "pinyin_18jian"), SpellingPatches.otherFullPinyinSchemas(dir, setOf("rime_ice")))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test fun anAndAngLeaveIanAndUanToTheirOwnGroups() {
         val toAn = Regex("(^|[^iu])ang$")
         val toAng = Regex("(^|[^iu])an$")

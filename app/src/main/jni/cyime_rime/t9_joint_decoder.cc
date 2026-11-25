@@ -74,7 +74,10 @@ static void T9Collect(map<int, DictEntryList>& destination,
 }
 }  // namespace
 
-struct T9Path { Sentence sentence; double prior; double coverage; };
+// displaced: the model's first sentence when a learned word took its place (t9/ngram_user_input_weight). Only one
+// sentence is shown before the dictionary words, which list every learned word of the spelling first, so it is shown
+// right behind (9464 after picking 鹰: 行 fell from first to ninth, behind 英 银行 信号 星 赢 影 音高).
+struct T9Path { Sentence sentence; double prior; double coverage; bool displaced = false; };
 struct T9JointFrame {
   EdgeMap edges;
   size_t total = 0, bytes = 0;
@@ -95,7 +98,7 @@ struct T9JointCache {
   hash_set<string> blacklist;
   using Options = std::tuple<size_t, size_t, size_t, size_t, size_t,
                             double, double, double, string, bool, bool, bool,
-                            const void*, double, bool, double, bool, double, double>;
+                            const void*, double, bool, double, bool, double, double, double>;
   Options options;
 };
 
@@ -119,8 +122,11 @@ size_t T9SentenceBytes(const Sentence& sentence) {
 // Tail pass (t9/tail_completion_weight): words looked at for each start, and lines extended from each start.
 constexpr size_t kTailWordsPerStart = 4;
 constexpr size_t kTailLinesPerStart = 8;
-// A completed word from the first key needs this many syllables: 一段时间 for yi duan shi jia, not 时间 for 史嘉.
-constexpr size_t kTailFirstWordSyllables = 3;
+// A completed word from the first key needs this many syllables: 一段时间 for yi duan shi jia. 2026-11-25 two (was
+// three, so 时间 never came for 史嘉): 54684 jin ti showed 近体 and 546842 吉姆哈 while 今天 was being typed, 94432
+// 直达 for 知道; chat replay: 27 typing states turn to the word being typed, no first choice after the last key
+// changes, +0.004% lookups. 常用词被冷门词压住 (他：「这个必须进107修好」).
+constexpr size_t kTailFirstWordSyllables = 2;
 
 bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_numeric_input)(const string&),
                    Dictionary* dict, UserDictionary* user_dict, deque<an<Sentence>>* sentences) {
@@ -214,7 +220,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       const auto& item = order[position];
       const auto& path = paths[item.first];
       bool extra = false;
-      const bool kept_vowel = position == demoted;
+      const bool kept_vowel = position == demoted || path.displaced;
       // t9/display_sentences: whole-input sentences shown before the dictionary words
       // (1 = the best sentence, then shorter words, as stock Rime; 0 = all decoded).
       // When a sentence ending in a particle (吗, 呢, 吧…) is among the first three, one more sentence is
@@ -267,7 +273,8 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
         o.t9_sentence_weight_, o.t9_sentence_model_, q.translator->enable_completion(),
         q.translator->enable_word_completion(), q.translator->complete_short_prefix(),
         o.t9_ngram_.get(), o.t9_ngram_user_weight_, o.t9_ngram_sentence_start_, o.t9_ngram_eos_weight_,
-        o.t9_ngram_merge_segmentations_, o.t9_ngram_dictionary_prior_, o.t9_ngram_user_input_weight_};
+        o.t9_ngram_merge_segmentations_, o.t9_ngram_dictionary_prior_, o.t9_ngram_user_input_weight_,
+        o.t9_whole_word_weight_margin_};
     if (cache->dict_checksum != prism->dict_file_checksum() ||
         cache->schema_checksum != prism->schema_file_checksum() ||
         cache->user_revision != revision || cache->user_tick != tick ||
@@ -712,8 +719,10 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     for (const auto& row : syllables.edges) {
       const auto last = row.second.find(total);
       const size_t length = total - row.first;
-      if (row.first == 0 || last == row.second.end() || length < 2 || length > 5) continue;
-      if (std::none_of(last->second.begin(), last->second.end(),
+      if (row.first == 0 || length < 2 || length > 5) continue;
+      // Digits that spell no syllable yet (842: tia, only the start of tian/tiao) are completed too: 546842 showed
+      // 吉姆哈 while 今天 was being typed (2026-11-25).
+      if (last != row.second.end() && std::none_of(last->second.begin(), last->second.end(),
                        [](const auto& spelling) { return spelling.second.type == kNormalSpelling; })) continue;
       vector<Prism::Match> keys;
       prism->ExpandSearch(input.substr(row.first, length), &keys, 64);
@@ -799,6 +808,50 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     final.emplace_back(rank, line);
   }
   std::stable_sort(final.begin(), final.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  // One word typed as the whole input (t9/whole_word_weight_margin): the word model scores it as a sentence start,
+  // where 事后 (often as 事 + 后) is likelier than 时候 and 王子 than 样子, though the dictionary has 时候 ten times
+  // more often. When the first sentence reads as a dictionary word of the whole input and another dictionary word of
+  // the same input has a weight higher by more than the margin, that word comes first. Sentences that are no
+  // dictionary word (several words) keep the model's order.
+  if (o.t9_whole_word_weight_margin_ > 0 && !final.empty() && states.count(0) && !states.at(0).empty()) {
+    const auto& top = final.front().second;
+    const auto row = graph.find(0);
+    const DictEntryList* whole = nullptr;
+    if (row != graph.end()) {
+      const auto at_end = row->second.find(static_cast<int>(total));
+      if (at_end != row->second.end()) whole = &at_end->second;
+    }
+    auto system_word = [&](const an<DictEntry>& entry) {
+      return entry && !entry->IsPredictiveMatch() && entry->commit_count <= 0 && std::isfinite(entry->weight) &&
+             entry->quality_len + 1e-9 >= static_cast<double>(total) &&
+             utf8::distance(entry->text.begin(), entry->text.end()) >= 2;
+    };
+    an<DictEntry> shown, best;
+    if (whole && utf8::distance(top->text.begin(), top->text.end()) >= 2)
+      for (const auto& entry : *whole) {
+        if (!system_word(entry)) continue;
+        if (entry->text == top->text) { if (!shown || entry->weight > shown->weight) shown = entry; }
+        else if (!best || entry->weight > best->weight) best = entry;
+      }
+    // The beam seldom keeps 时候 itself (its places at the end go to likelier pairs such as 是 后): the line is made here.
+    if (shown && best && best->weight - shown->weight > o.t9_whole_word_weight_margin_) {
+      auto line = New<T9Line>();
+      line->previous = states.at(0).front();
+      line->entry = best;
+      line->matched_length = best->quality_len;
+      line->end = total;
+      line->text = best->text;
+      line->code = best->code;
+      line->prior = T9WholeTextPrior(o.t9_gram_db_, line->text);
+      line->lm_prev = o.t9_ngram_ && o.t9_ngram_sentence_start_ ? o.t9_ngram_->Bos() : ::T9NgramModel::kUnseen;
+      if (o.t9_ngram_) line->lm_id = lm_entry_of(best).id;
+      // Just above the first sentence: equal weights are ordered by the gram prior, which kept 事后 first.
+      line->score = final.front().first + 1e-3;
+      final.erase(std::remove_if(final.begin(), final.end(),
+                                 [&](const auto& ranked) { return ranked.second->text == line->text; }), final.end());
+      final.insert(final.begin(), {line->score, line});
+    }
+  }
   // Words typed as the whole input (指导 for 944326, 是要) that the user has committed lately: 26 keys order such words by
   // the user dictionary, nine keys only through the small user layer (λ), so 指导 needed four picks to pass 知道
   // and fell back after a few hundred other words. Among the whole-input words of two or more characters, spelled
@@ -810,6 +863,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
   // every 200 commits), without its long-run commit rate: a word picked 13 times 10,000 commits ago (食补 over
   // 是不) is not what the user is choosing now. A pick just made gets nearly κ, an old one next to nothing; with
   // nothing picked lately nothing changes. It reorders the finished lines only: no lookup, the beam is untouched.
+  const T9Line* displaced_line = nullptr;
   if (o.t9_ngram_user_input_weight_ > 0 && o.t9_ngram_user_input_weight_ < 1 && learned_whole.count(total)) {
     // librime's user dictionary: p = m + (0.5 - m)·dee/kM for dee < 20, m = commits/T·(1 - e^(-T/10000))^10 at
     // tick T, 1/kM = 1 - e^(-0.005). The recent part 0.5·dee/kM; one pick 300 commits ago has dee = e^(-1.5).
@@ -826,8 +880,11 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       if (!std::isfinite(b)) return a;
       return std::max(a, b) + std::log1p(std::exp(-std::fabs(a - b)));
     };
+    // Single characters count too (2026-11-24, his「选多少次都调不了」: a picked character, 粤语字 and 生僻字 among them,
+    // never moved on nine keys; the user layer λ alone gives a pick 5%). One syllable typed in full is a whole input
+    // like a word is.
     auto spelled_word = [&](const an<DictEntry>& entry) {
-      return utf8::distance(entry->text.begin(), entry->text.end()) >= 2 &&
+      return utf8::distance(entry->text.begin(), entry->text.end()) >= 1 &&
              entry->quality_len + 1e-9 >= static_cast<double>(total);
     };
     // A learned word may be shown through words of the model (是要 = 是 + 要, the better segmentation of the same
@@ -852,15 +909,21 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
       sum += user[i];
     }
     if (sum > 0 && std::isfinite(mass)) {
+      const T9Line* model_top = final.front().second.get();
       const double kappa = o.t9_ngram_user_input_weight_ * sum / (kOldPick + sum);
       const double most = *std::max_element(user.begin(), user.end());
       const double winners = static_cast<double>(std::count(user.begin(), user.end(), most));
       for (size_t i = 0; i < final.size(); ++i) {
         if (!eligible(final[i].second)) continue;
-        final[i].first = log_add(std::log(1 - kappa) + final[i].first,
+        // A single character not picked keeps its score (a whole syllable has dozens of them), so the model's best
+        // character stays next in line behind the picked one and is shown second (T9Path::displaced).
+        const auto& text = final[i].second->text;
+        const bool single = utf8::distance(text.begin(), text.end()) == 1;
+        final[i].first = log_add((single ? 0.0 : std::log(1 - kappa)) + final[i].first,
             user[i] == most ? std::log(kappa / winners) + mass : -std::numeric_limits<double>::infinity());
       }
       std::stable_sort(final.begin(), final.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      if (final.front().second.get() != model_top) displaced_line = model_top;
     }
   }
   // Input that can end in a sentence-final particle (吗, 呢, 吧…: one of the first sentences ends with one) is
@@ -896,7 +959,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     // Chinese stream (e.g. two keys), without a forced language/source slot.
     sentence->set_quality(coverage + 0.1 *
                            (0.5 + std::atan(rank / 10.0) / 3.141592653589793));
-    paths.push_back({*sentence, line->prior, coverage});
+    paths.push_back({*sentence, line->prior, coverage, line.get() == displaced_line});
     if (paths.size() >= o.t9_result_budget_) break;
   }
   restore(paths);

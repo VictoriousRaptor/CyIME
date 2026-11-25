@@ -25,9 +25,10 @@ class DoublePinyinSentenceTest {
         val fullTranslator = section(full, "translator")
         val flypyTranslator = section(flypy, "translator")
         for (key in listOf("sentence_char_homophones", "sentence_position_penalty", "sentence_position_final_only",
-                "sentence_position_initial_only", "max_sentences", "sentence_cutoff_threshold")) {
+                "sentence_position_initial_only", "sentence_cutoff_threshold")) {
             assertEquals(key, line(fullTranslator, key), line(flypyTranslator, key))
         }
+        // max_sentences 不要求一致：全拼 11-23 改成 16，是给换位、多按一下这些纠错用的，双拼没开这些纠错，保持 4。
         assertEquals("4", line(flypyTranslator, "max_sentences"))
         val t9 = section(flypy, "t9")
         assertEquals("true", line(t9, "sentence_rescore"))

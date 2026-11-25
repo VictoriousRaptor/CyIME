@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +72,13 @@ fun SpaceKeyButton(
      */
     onSwipeUp: (() -> Unit)? = null,
     swipeUpLabel: String? = null,
+    /**
+     * [onSwipeUp] 那一滑改成往下拉（11-25 他：空格出 0 要和别的数字键同方向）：九键数字键的上角标跟「反转上下滑方向」，
+     * 「底排标点固定上滑」开着时底排一律上滑。由调用方按这两个设置算好传进来。
+     */
+    swipeDownward: Boolean = false,
+    /** 右上角的角标，如九键开了「空格上滑输入 0」时的「0」；null 时不画。 */
+    cornerLabel: String? = null,
 ) {
     val settings = LocalKeyboardInputPreferences.current
     val actions = LocalKeyboardInputActions.current
@@ -99,7 +107,7 @@ fun SpaceKeyButton(
     var spaceBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val currentClick by rememberUpdatedState(onClick)
     val currentPress by rememberUpdatedState(onPress)
-    val currentRelease by rememberUpdatedState(onRelease)
+    val currentRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
     val currentSwipeUp by rememberUpdatedState(onSwipeUp)
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -213,7 +221,11 @@ fun SpaceKeyButton(
                     pressed = true
                     // 刚移完光标的这一下不输入空格，也就不该有按键音和振动（按住照常进入移动光标）。
                     val guarded = SpaceAfterCursorGuard.blocksSpace(down.uptimeMillis)
+                    // 按键落点统计（只有自用包在记）：空格只记落点，不跟手势。
+                    com.kingzcheung.xime.stats.TouchStats.landing(down.position.x, down.position.y, size.width, size.height,
+                        1.dp.toPx(), down.uptimeMillis, tracked = false)
                     if (!guarded) currentPress?.invoke()
+                    com.kingzcheung.xime.stats.TouchStats.landed()
                     // 已锁定在听：这一下（点或按住都算）就是结束，松手结束并上屏，不输入空格、不再长按。
                     val endsLock = voiceLock?.locked == true && voiceOn
                     // 这一下按下时有没有上滑动作：整个手势按按下时的算，中途候选变了也不换。
@@ -251,10 +263,27 @@ fun SpaceKeyButton(
                             }
                         }
                     }
+                    // 和字母键排同一队（[KeyPressOrder]）：空格还按着、后按的键先抬手出字时，这一下还是点按就先输入空格
+                    // （以前字母先进了正在打的拼音，空格后到），之后只等手指抬起。
+                    var settled = false
+                    val press = KeyPressOrder.begin {
+                        if (!settled && !endsLock && !guarded && !held && !movedBeforeHold && !(swipeUp != null && swipeUpArmed)) {
+                            settled = true
+                            timer.cancel()
+                            com.kingzcheung.xime.stats.TouchStats.count(com.kingzcheung.xime.stats.TouchStatsData.Count.EARLY_SPACE)
+                            gapLightTrigger.tap()
+                            currentClick()
+                        }
+                    }
                     try {
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (settled) {
+                                change.consume()
+                                if (!change.pressed) break
+                                continue
+                            }
                             if (change.isConsumed) break
                             if (held && holdAction == SpaceHoldAction.REPEAT &&
                                 (change.position.x < 0f || change.position.x > size.width ||
@@ -292,7 +321,7 @@ fun SpaceKeyButton(
                             // 空格上滑：长按还没开始时，往上比往旁边多、超过点击容差就到位；滑回来或往旁边偏多了就不算。
                             // 长按一开始（光标、语音、连续空格）就不再是上滑，照旧交给长按。
                             if (swipeUp != null) {
-                                val up = down.position.y - change.position.y
+                                val up = if (swipeDownward) change.position.y - down.position.y else down.position.y - change.position.y
                                 val vertical = !held && up > abs(change.position.x - down.position.x)
                                 swipeUpProgress = if (vertical) (up / tapTolerance).coerceIn(0f, 1f) else 0f
                                 val armed = vertical && up > tapTolerance
@@ -321,6 +350,8 @@ fun SpaceKeyButton(
                             }
                             change.consume()
                             if (!change.pressed) {
+                                // 比空格早按下、还没抬的键先出字（按着最后一个字母就点了空格）。
+                                KeyPressOrder.settleOlderThan(press)
                                 if (endsLock) {
                                     voiceLock?.locked = false
                                     onVoiceHoldEnd?.invoke()
@@ -335,6 +366,7 @@ fun SpaceKeyButton(
                             }
                         }
                     } finally {
+                        KeyPressOrder.end(press)
                         if (cursorActive) {
                             SpaceAfterCursorGuard.mark(android.os.SystemClock.uptimeMillis())
                             SpaceCursorShift.end()
@@ -381,9 +413,6 @@ fun SpaceKeyButton(
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
             .background(cancelColors?.background ?: keyFill)
             .drawBehind {
-                // 空格上滑：往上走时一层强调色跟着变深（键内渐变，不弹气泡），到位时最深。
-                val up = swipeUpProgress
-                if (up > 0f) drawRect(accentColor.copy(alpha = (if (swipeUpArmed) 0.24f else 0.12f) * up))
                 // 开始说话：强调色从按住的地方铺满整个空格，之后随音量轻轻变深；上滑时一点点让给删除色。
                 val spread = voiceSpread.value * (1f - cancelProgress)
                 if (spread > 0f) {
@@ -435,13 +464,15 @@ fun SpaceKeyButton(
                 }
             }
         } else if (swipeUpLabel != null && swipeUpProgress > 0f) {
-            // 往上滑时空格上写要打的字（如「0」），越往上越清楚；到位时用强调色。
+            // 和九键数字键滑出数字同一个动画（11-25 他：上滑动画也没）：右上角的「0」边滑边移到键中央、由小变大。
+            val cornerSize = 10f * adaptiveHintScale(keyContentScale(maxWidth.value, maxHeight.value))
             val size = (maxHeight.value * 0.5f / density.fontScale).coerceIn(10f, 24f)
-            Text(swipeUpLabel, color = if (swipeUpArmed) accentColor else textColor,
-                fontSize = size.sp, lineHeight = (size * 1.2f).sp, maxLines = 1, softWrap = false,
-                fontFamily = AppFonts.keyFontFamily,
-                modifier = Modifier.graphicsLayer { alpha = 0.35f + 0.65f * swipeUpProgress }
-                    .testTag("space-swipe-up-label").semantics { contentDescription = "空格" })
+            val keyW = maxWidth.value
+            val keyH = maxHeight.value
+            Box(Modifier.matchParentSize().testTag("space-swipe-up-label").semantics { contentDescription = "空格" }) {
+                KeyFlickLabel(KeyFlickPreview(swipeUpLabel, swipeUpProgress, KeyFlickOrigin.TOP_END), textColor,
+                    keyW, keyH, cornerSize, size)
+            }
         } else if (cursorActive) {
             SpaceCursorHint(textColor, maxWidth.value, maxHeight.value, density.fontScale, !settings.hideFunctionKeyHints)
         } else if (!settings.hideFunctionKeyHints && SpaceLanguageFlash.isLanguageName(displayName) && labelSize >= 8f) {
@@ -463,6 +494,16 @@ fun SpaceKeyButton(
                     fontFamily = AppFonts.keyFontFamily,
                     modifier = Modifier.testTag("space-language-flash").graphicsLayer { alpha = flashAlpha.value })
             }
+        }
+        // 角标（11-24 他：开了「空格上滑输入 0」空格上要看得到 0）：和字母键的角标同位置、同字号、同颜色；
+        // 按住说话、上滑写出大字、按住移光标时让开。
+        if (cornerLabel != null && !showVoiceHold && swipeUpProgress == 0f && !cursorActive) {
+            val cornerSize = 10f * adaptiveHintScale(keyContentScale(maxWidth.value, maxHeight.value))
+            Text(cornerLabel, color = keyHintColor(textColor, frostedGlass, 0.5f, settings.cornerHintOpacity),
+                fontSize = cornerSize.sp, lineHeight = (cornerSize * 1.2f).sp, maxLines = 1, softWrap = false,
+                fontFamily = AppFonts.keyFontFamily,
+                modifier = Modifier.align(Alignment.TopEnd)
+                    .padding(top = 2.dp, end = 5.dp).testTag("space-corner-label"))
         }
     }
 }

@@ -87,7 +87,11 @@ class CellDictionaryViewModel(application: Application) : AndroidViewModel(appli
             DictionaryExportSources.packWords(store, source)
         require(words.isNotEmpty()) { "没有可导出的词" }
         val result = DictionaryExport.write(format, name, words)
-        require(result.written > 0) { "没有能导出的词：只导出两个字以上、带拼音的词" }
+        require(result.written > 0) {
+            if (words.any { it.code.isBlank() } && !DictionaryExport.keepsEnglish(format))
+                "没有能导出的词：英文词请导出成「文本」或「Rime 词典」"
+            else "没有能导出的词：只导出两个字以上、带拼音的词"
+        }
         requireNotNull(context.contentResolver.openOutputStream(uri, "wt")) { "无法写入文件" }.use { it.write(result.bytes) }
         val skipped = if (result.skipped > 0) "，跳过 ${result.skipped} 条（单字、整句或拼音对不上）" else ""
         "已导出 ${result.written} 个词$skipped"

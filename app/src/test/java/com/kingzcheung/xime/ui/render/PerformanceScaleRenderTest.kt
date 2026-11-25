@@ -8,11 +8,19 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.runtime.adaptation.PerformanceTier
 import com.kingzcheung.xime.settings.FrostedGlassPreferences
 import com.kingzcheung.xime.settings.PerformanceProfile
+import com.kingzcheung.xime.settings.InputLanguage
+import com.kingzcheung.xime.settings.SettingsPreferences
+import com.kingzcheung.xime.model.ModelStorage
+import com.kingzcheung.xime.speech.AsrModelManager
+import com.kingzcheung.xime.speech.SpeechModelCatalog
 import com.kingzcheung.xime.ui.settings.PerformanceSettingsContent
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.ui.theme.XimeTheme
@@ -33,6 +41,34 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PerformanceScaleRenderTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
+
+    @Test fun automaticSenseVoiceShowsIdleControlOnlyWithInstalledXasrFinalizer() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        KeyboardThemes.initFromConfig(context)
+        SettingsPreferences.setSttEnabled(context, true)
+        SettingsPreferences.setSttWholeSentence(context, true)
+        SettingsPreferences.setSttWholeFinalizer(context, SpeechModelCatalog.XASR)
+        val models = AsrModelManager(context)
+        models.setModel(SpeechModelCatalog.SENSEVOICE_AUTO, InputLanguage.CHINESE)
+        models.setModel(SpeechModelCatalog.PARAFORMER, InputLanguage.ENGLISH)
+        models.setModel(SpeechModelCatalog.ZIPFORMER_JA_INT8, InputLanguage.JAPANESE)
+        val installed = mutableIntStateOf(0)
+        rule.setContent {
+            XimeTheme { key(installed.intValue) { PerformanceSettingsContent(onBack = {}) } }
+        }
+        val slider = rule.onNodeWithTag("speech-refiner-idle-slider")
+        rule.onNodeWithTag("speech-engine-idle-slider").performScrollTo().assertIsDisplayed()
+        slider.assertDoesNotExist()
+        rule.runOnIdle {
+            val dir = ModelStorage.getModelDir(context, SpeechModelCatalog.XASR)
+            dir.mkdirs()
+            models.getAsrModels().single { it.id == SpeechModelCatalog.XASR }.files.forEach {
+                File(dir, it).writeBytes(byteArrayOf(1))
+            }
+            installed.intValue++
+        }
+        slider.performScrollTo().assertIsDisplayed()
+    }
 
     @Test fun renderScaleStates() {
         val out = System.getenv("CYIME_RENDER_OUT")

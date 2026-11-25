@@ -27,6 +27,8 @@ internal interface LocalSpeechEngine : AutoCloseable {
     fun refine(samples: FloatArray): String
     /** 整句定稿：同 [refine]，但保留模型的句末、逗号、问号等标点。 */
     fun refinePunctuated(samples: FloatArray): String = refine(samples)
+    /** SenseVoice first pass supplies language tags for a single X-ASR decision at stop. */
+    val checkXasrLanguagesAtStop: Boolean get() = false
     /** Captions keep punctuation and the event label; dictation keeps using [refine]. */
     fun refineRich(samples: FloatArray): RichTranscript = RichTranscript(refine(samples))
     /** Decoding is pinned to Chinese: a second pass that still comes back as kana is rejected. */
@@ -90,6 +92,8 @@ internal class LocalSpeechSession(
     // the same end-of-input re-read; its segments stay at the engine's 6 s so text still appears while speaking.
     private val wholeSentenceActive = wholeSentence &&
         (engine.hasRefinement && engine.isStreaming || !engine.isStreaming && !engine.hasRollingPreview)
+    // Written by the serial first-pass worker; read only after that worker has drained.
+    private var xasrSupportsRecording: Boolean? = null // No language evidence until the first speech result.
     /**
      * 整句定稿时保留模型标点，但不保留停顿处的：第二遍只听到这一段，段尾总会补一个标点，说话停一下就是一个逗号、句号。
      * 说话中只显示段内的标点，结束时整段重识别按整句的意思重新加。
@@ -101,7 +105,9 @@ internal class LocalSpeechSession(
         else engine.decodeTimeoutMs
     private fun worker(name: String, capacity: Int) = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
         ArrayBlockingQueue(capacity), { task -> Thread(task, name).apply { isDaemon = true } })
-    private val audio = worker("CyIME-Speech", 100) // 10 s of 100 ms PCM, bounded on low-end CPUs
+    // 60 s of 100 ms PCM (about 1.9 MB): a slow phone may fall behind while a model loads or the previous input is
+    // re-read; 10 s used to stop the recording with an error.
+    private val audio = worker("CyIME-Speech", 600)
     private val refinement = worker("CyIME-Refinement", 2)
     private val lifecycle = Any()
     private val outputLock = Any()
@@ -123,8 +129,10 @@ internal class LocalSpeechSession(
     private var sessionSamples = 0
     private var sessionOverflow = false
     private val sessionPauses = mutableListOf<Int>()
-    /** VAD 至少打开过一段。一段都没有就是没说话：整段重识别不跑，SenseVoice 在近乎静音上会编出「我。」。 */
+    /** VAD 至少打开过一段。一段都没有时多半没说话：SenseVoice 在近乎静音上会编出「我。」。 */
     @Volatile private var heardSpeech = false
+    /** VAD 没开段时的后备：整次输入够响才整段重识别（[SpeechLift]，平板上的短句 VAD 会漏）。 */
+    private val lift = SpeechLift()
     // The re-read runs on the finishing thread after both workers stop: a successor must wait for
     // it (awaitIdle) before resetting or reusing the engine. Released by finish or cancel.
     private val wholeLock = Any()
@@ -191,7 +199,7 @@ internal class LocalSpeechSession(
                     if (!abandoned.get() && !failed.get()) try {
                         if (wholeSentenceActive && !sessionOverflow) {
                             if (sessionSamples + samples.size > WHOLE_SESSION_MAX_SAMPLES) { sessionOverflow = true; sessionAudio.clear() }
-                            else { sessionAudio.add(samples); sessionSamples += samples.size }
+                            else { sessionAudio.add(samples); sessionSamples += samples.size; lift.accept(samples) }
                         }
                         segmenter.accept(samples)
                         previewLatestAudio()
@@ -226,7 +234,14 @@ internal class LocalSpeechSession(
                     if (abandoned.get()) return@execute
                     try {
                         check(System.nanoTime() < deadline) { "离线识别积压" }
-                        val second = guarded(preview, keepChinese(preview, if (wholeSentenceActive) engine.refinePunctuated(samples) else engine.refine(samples), engine.lockedChinese))
+                        val decoded = when {
+                            wholeSentenceActive && engine.checkXasrLanguagesAtStop -> {
+                                senseVoiceFirstPass(samples)
+                            }
+                            wholeSentenceActive -> engine.refinePunctuated(samples)
+                            else -> engine.refine(samples)
+                        }
+                        val second = guarded(preview, keepChinese(preview, decoded, engine.lockedChinese))
                         val text = if (engine.isStreaming && secondPassLostText(preview, second)) preview else second
                         check(System.nanoTime() < deadline) { "离线识别超时" }
                         synchronized(outputLock) { pending.remove(id); publish(id, text, boundary, confirmed = true) }
@@ -240,6 +255,15 @@ internal class LocalSpeechSession(
                 fail(if (engine.hasRefinement) "第二遍识别队列已满，请在语音设置里把「说完后」改成「不校正」再试" else "离线识别跟不上录音，请缩短录音后重试")
             }
         }
+    }
+
+    private fun senseVoiceFirstPass(samples: FloatArray): String {
+        val first = engine.refineRich(samples)
+        val text = cleanSenseVoiceText(first.text, first.language, keepMarks = true)
+        if (text.isNotEmpty() || first.language.isNotBlank() && !isSenseVoiceNoSpeech(first.text, first.language)) {
+            xasrSupportsRecording = xasrSupportsRecording != false && SpeechModelCatalog.xasrSupportsLanguage(first.language)
+        }
+        return text
     }
 
     /** 第二遍文字过把关；没有流式预览、不是中文或把关出错时原样采用第二遍。 */
@@ -276,8 +300,13 @@ internal class LocalSpeechSession(
     private fun wholeSessionText(deadline: Long): String? = synchronized(wholeLock) {
         val startedAt = System.nanoTime()
         fun skip(reason: String): String? { wholeOutcome = "$reason after ${(System.nanoTime() - startedAt) / 1_000_000} ms"; return null }
-        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech)
+        // VAD 一段都没开：整次够响（像说了一句短话）才整段重识别，否则当作没说话。
+        val loudWithoutVad = !heardSpeech && lift.liftDb() >= SPEECH_LIFT_DB
+        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech && !loudWithoutVad)
             return skip(if (sessionOverflow) "overflow" else if (!heardSpeech) "no-speech" else "nothing")
+        val needsSenseVoice = engine.checkXasrLanguagesAtStop && loudWithoutVad
+        if (engine.checkXasrLanguagesAtStop && !needsSenseVoice && xasrSupportsRecording != true)
+            return skip("unsupported-language")
         val pcm = FloatArray(sessionSamples)
         var offset = 0
         sessionAudio.forEach { it.copyInto(pcm, offset); offset += it.size }
@@ -287,7 +316,8 @@ internal class LocalSpeechSession(
         for ((start, end) in wholeSessionChunks(sessionSamples, sessionPauses)) {
             if (abandoned.get() || failed.get() || System.nanoTime() > budgetEnd)
                 return skip(if (System.nanoTime() > budgetEnd) "over-budget(${sessionSamples / 16000}s audio)" else "cancelled")
-            val part = engine.refinePunctuated(pcm.copyOfRange(start, end))
+            val samples = pcm.copyOfRange(start, end)
+            val part = if (needsSenseVoice) senseVoiceFirstPass(samples) else engine.refinePunctuated(samples)
             if (engine.lockedChinese && hasForeignScript(part)) return skip("foreign-script")
             whole.update(++id, part, SpeechBoundary.PAUSE)
         }
@@ -297,6 +327,8 @@ internal class LocalSpeechSession(
         // 整段重识别的字数不到已显示的一半（噪音里常见）：保留按停顿定稿和预览的文字。
         if (secondPassLostText(shown, merged)) return skip("lost-text")
         if (merged.isEmpty()) return skip("empty")
+        // VAD 没听到、只靠响度放行时，只认出一个字（敲桌、咳嗽上编出的「我。」）不算数。
+        if (loudWithoutVad && spokenUnits(merged) < 2) return skip("no-speech-short")
         wholeOutcome = "used in ${(System.nanoTime() - startedAt) / 1_000_000} ms"
         return merged
     }

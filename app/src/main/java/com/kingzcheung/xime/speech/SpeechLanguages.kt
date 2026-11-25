@@ -8,7 +8,7 @@ object SpeechLanguages {
         SpeechModelCatalog.ZIPFORMER -> language == InputLanguage.CHINESE
         SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> language == InputLanguage.JAPANESE
         SpeechModelCatalog.PARAFORMER -> language in setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH)
-        SpeechModelCatalog.SENSEVOICE -> language in InputLanguage.speech
+        SpeechModelCatalog.SENSEVOICE -> if (mode == SpeechModelCatalog.SENSEVOICE_AUTO) language == InputLanguage.CHINESE else language in InputLanguage.speech
         else -> false
     }
 
@@ -24,6 +24,7 @@ object SpeechLanguages {
             InputLanguage.CHINESE -> listOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.ZIPFORMER, SpeechModelCatalog.SENSEVOICE)
             InputLanguage.ENGLISH -> listOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE)
             InputLanguage.JAPANESE -> listOf(SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.SENSEVOICE)
+            in InputLanguage.senseVoiceOnly -> listOf(SpeechModelCatalog.SENSEVOICE)
             else -> emptyList()
         }
         // A selected two-pass mode may already have a suitable multilingual second recognizer.

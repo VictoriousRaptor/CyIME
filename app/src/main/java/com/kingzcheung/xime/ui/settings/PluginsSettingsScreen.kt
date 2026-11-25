@@ -457,8 +457,8 @@ private fun ExtensionItem(
                 // 入口说明、联网授权、设置、卸载都在点进去的那一页（11-03 一个插件一页）。
                 if (!hostCompatible) {
                     Text(
-                        text = "该插件不支持当前主应用版本，已跳过加载" +
-                            if (hostRange.isNotEmpty()) "(要求 $hostRange)" else "。请更新主应用后重试。",
+                        text = "插件和当前版本不兼容，没有加载" +
+                            if (hostRange.isNotEmpty()) "(要求 $hostRange)" else "。请更新 CyIME。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                     )

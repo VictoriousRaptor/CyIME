@@ -63,4 +63,14 @@ class HardwarePagingKeysTest {
                 HardwareKeyboardOptions(pageCommaPeriod = false)))
         }
     }
+
+    /** #549：关掉的翻页键不进翻页分支，和别的符号键一样交给方案标点表；外层判定要看用户设置。 */
+    @Test fun theOuterPagingCheckReadsTheUsersOptions() {
+        val src = java.io.File("src/main/java/com/kingzcheung/xime/service/XimeInputMethodService.kt").readText()
+        val outer = src.substringAfter("val pagingKey = hardwareCandidatePageDirection(").substringBefore("!= 0")
+        org.junit.Assert.assertTrue(outer, "options = uiState.value.hardwareOptions" in outer)
+        val off = HardwareKeyboardOptions(pageCommaPeriod = false)
+        assertEquals(0, hardwareCandidatePageDirection(KeyEvent.KEYCODE_COMMA, true, false, off))
+        assertEquals(0, hardwareCandidatePageDirection(KeyEvent.KEYCODE_PERIOD, true, false, off))
+    }
 }

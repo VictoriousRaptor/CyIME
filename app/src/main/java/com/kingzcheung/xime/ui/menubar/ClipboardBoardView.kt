@@ -109,6 +109,7 @@ internal fun ConnectedClipboardBoard(
     // Older history is read page by page while open; closing returns to the first page.
     DisposableEffect(manager) { onDispose { manager.resetHistoryWindow() } }
     val cardMaxLines = remember(prefs) { clipboardCardMaxLines(prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4)) }
+    val cardTextPercent = remember(prefs) { clipboardCardTextPercent(prefs.getInt(CLIPBOARD_CARD_TEXT_SIZE_KEY, 100)) }
     val imageHeight = remember(prefs) { clipboardImageHeight(prefs.getString(CLIPBOARD_IMAGE_HEIGHT_KEY, null)) }
     val recentImageCount = remember(prefs) { clipboardRecentImageCount(prefs.getInt(CLIPBOARD_RECENT_IMAGE_COUNT_KEY, 4)) }
     // 平铺 / 列表，顶栏按钮切换，记住上次选的（用户 11-14）。
@@ -184,7 +185,7 @@ internal fun ConnectedClipboardBoard(
             // Clearing means all unfixed history in the database, not only the pages read so far.
             manager.clearAll()
             store.removeImages(images.filterIsInstance<ClipboardCard.Image>().map { it.item.uri }.toSet())
-        }, cardMaxLines = cardMaxLines, imageHeight = imageHeight, recentImageCount = recentImageCount,
+        }, cardMaxLines = cardMaxLines, cardTextPercent = cardTextPercent, imageHeight = imageHeight, recentImageCount = recentImageCount,
         listLayout = listLayout,
         onListLayoutChange = { value ->
             listLayout = value
@@ -244,7 +245,16 @@ internal fun clipboardSectionKeys(cards: List<ClipboardCard>, pins: Set<String>,
 internal fun toggleClipboardSection(selected: Set<String>, section: Set<String>): Set<String> =
     if (section.isNotEmpty() && selected.containsAll(section)) selected - section else selected + section
 
-internal fun clipboardCardMaxLines(stored: Int): Int = if (stored in setOf(2, 4, 8)) stored else 4
+internal fun clipboardCardMaxLines(stored: Int): Int = if (stored in CLIPBOARD_CARD_LINE_CHOICES) stored else 4
+
+/** 剪贴板卡片字号（#497，默认 100 = 和现在一样）：给老人看的放大几档，只放大卡片里的字。 */
+internal const val CLIPBOARD_CARD_TEXT_SIZE_KEY = "card_text_percent"
+internal val CLIPBOARD_CARD_TEXT_SIZE_CHOICES = listOf(100, 115, 130, 150)
+
+internal fun clipboardCardTextPercent(stored: Int): Int = if (stored in CLIPBOARD_CARD_TEXT_SIZE_CHOICES) stored else 100
+
+/** 卡片显示行数能选的几档；1 行是 #300 要的像搜狗那样一条一行（默认仍是 4 行）。 */
+internal val CLIPBOARD_CARD_LINE_CHOICES = listOf(1, 2, 4, 8)
 
 /**
  * Preference (board prefs): close the clipboard after a text record is put into the text. On by
@@ -252,11 +262,29 @@ internal fun clipboardCardMaxLines(stored: Int): Int = if (stored in setOf(2, 4,
  */
 internal const val CLIPBOARD_CLOSE_AFTER_PASTE_KEY = "close_after_paste"
 
+/**
+ * 卡片上只画得下几行，交给 Text 的只取开头一段。整段长文（几万字的复制）每次排版都要量完整段，
+ * 主线程一量几秒，按键排队超时（#536 ColorOS 17 ANR，栈在剪贴板瀑布流测量文字）。点了照样用完整内容。
+ */
+internal fun clipboardPreviewText(text: String, limit: Int = CLIPBOARD_PREVIEW_CHARS): String {
+    if (text.length <= limit) return text
+    val end = if (Character.isHighSurrogate(text[limit - 1])) limit - 1 else limit
+    return text.substring(0, end) + "…"
+}
+
+internal const val CLIPBOARD_PREVIEW_CHARS = 400
+
 internal fun clipboardClosesAfterPaste(prefs: android.content.SharedPreferences): Boolean =
     prefs.getBoolean(CLIPBOARD_CLOSE_AFTER_PASTE_KEY, true)
 
 internal fun clipboardClosesAfterPaste(context: Context): Boolean =
     clipboardClosesAfterPaste(context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE))
+
+/** 「粘贴后移到最前」（#299）：点一条历史记录上屏后，这条排回最前面。默认关，顺序照复制时间。 */
+internal const val CLIPBOARD_PASTE_TO_TOP_KEY = "paste_to_top"
+
+internal fun clipboardMovesPastedToTop(context: Context): Boolean =
+    context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE).getBoolean(CLIPBOARD_PASTE_TO_TOP_KEY, false)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -279,6 +307,8 @@ internal fun ClipboardBoardView(
     /** Clears all unfixed history; receives the unfixed images to remove. Null deletes [textItems] only. */
     onClearUnpinned: ((List<ClipboardCard>) -> Unit)? = null,
     cardMaxLines: Int = 4,
+    /** 记录卡片的字号，100 = 跟键盘一样（#497）。只放大卡片里的字，顶栏、分栏不变。 */
+    cardTextPercent: Int = 100,
     imageHeight: ClipboardImageHeight = ClipboardImageHeight.STANDARD,
     /** 「全部」shows only this many of the newest unfixed pictures; 0 shows them all. */
     recentImageCount: Int = 0,
@@ -642,6 +672,9 @@ internal fun ClipboardBoardView(
                 @Composable
                 fun RecordCard(card: ClipboardCard, fixedRecords: Boolean, previewHeight: Dp?, modifier: Modifier) {
                     val chosen = card.key in selected
+                    val cardDensity = if (cardTextPercent == 100) density
+                        else androidx.compose.ui.unit.Density(density.density, density.fontScale * cardTextPercent / 100f)
+                    androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides cardDensity) {
                     ClipboardRecordCard(card = card, pinned = card.key in pins, chosen = chosen, maxLines = cardMaxLines,
                         masked = card is ClipboardCard.Text && card.item.sensitive && card.key !in revealed,
                         selecting = selecting, keyboardFocused = keyboard?.active == true && card.key == focused,
@@ -660,6 +693,7 @@ internal fun ClipboardBoardView(
                                 selected = if (chosen) selected - card.key else selected + card.key
                             } else openItemMenu(card, fixedRecords)
                         })
+                    }
                 }
                 // 多选时在自定义分组里：记录排成「排列」面板那样的一条一行，点选、长按拖动排序（用户 11-14）。
                 val sortGroup = (tab as? ClipboardTab.Group)?.group?.id?.takeIf { selecting && onReorderGroup != null }
@@ -955,7 +989,8 @@ private fun ClipboardRecordCard(
             onClick = onClick, onLongClick = onLongClick,
             onLongClickLabel = if (selecting) "切换选择" else "更多操作")) {
         when (card) {
-            is ClipboardCard.Text -> Text(if (masked) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK else card.item.text,
+            is ClipboardCard.Text -> Text(if (masked) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK
+                else clipboardPreviewText(card.item.text),
                 // A one-line record is as tall as a pinned row and its line sits in the middle; the old
                 // 48dp floor left a strip under the text (user 10-30). Longer text grows the card.
                 Modifier.align(Alignment.CenterStart).fillMaxWidth()
@@ -1073,7 +1108,7 @@ private fun ClipboardGroupSortList(cards: List<ClipboardCard>, chosenKeys: Set<S
                 when (card) {
                     is ClipboardCard.Text -> Text(
                         if (card.item.sensitive && card.key !in revealed) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK
-                        else card.item.text.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty(),
+                        else clipboardPreviewText(card.item.text).lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty(),
                         Modifier.weight(1f), color = colors.onSurface, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     is ClipboardCard.Image -> {
                         AsyncImage(card.item.uri, card.item.label, Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)),

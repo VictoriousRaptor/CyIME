@@ -56,6 +56,7 @@ import com.kingzcheung.xime.model.ModelDownloadState
 import com.kingzcheung.xime.model.ModelManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -308,7 +309,12 @@ fun HandwritingKeyboardLayout(
                     }
                 }
             }
-        }, onNewCharacter = { newCharacter?.invoke() },
+        }, onNewCharacter = {
+            // 落笔就先把模型加载上（已加载时只是两次判断）：键盘收起后模型会卸载，
+            // 以前要等这个字写完、停顿到了才在识别里现加载，横屏游戏里要等几秒（11-23）。公式用自己的模型，不加载。
+            if (!formulaActive) scope.launch(Dispatchers.IO) { HandwritingEngine.warmUp(context, recognitionLanguage) }
+            newCharacter?.invoke()
+        },
             // 按键（空格、回车、标点…）在本段笔迹认完之后才执行：从这里起下一段不再补空格
             onRecognition = { result?.invoke(it) }, onKey = { wordSpacing.reset(); keyAction(it) }, keepInk = { formulaActive },
             // 边写边识别只给中文、日语：英文要按停顿分词（有状态），公式整段重认，都不能提前认

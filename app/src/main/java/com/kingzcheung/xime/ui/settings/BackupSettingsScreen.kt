@@ -155,7 +155,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Person,
                         title = "包含个人词库与学习数据",
-                        subtitle = "自造词、词频和个人词库，属于隐私数据",
+                        subtitle = "自造词、词频和个人词库",
                         checked = includePersonal,
                         onCheckedChange = { includePersonal = it; BackupChoices.setIncludePersonal(context, it) }
                     )
@@ -167,7 +167,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                         onCheckedChange = { includeClipboardHistory = it; BackupChoices.setIncludeClipboardHistory(context, it) }
                     )
                     Text(
-                        text = "总会备份设置、主题、布局和固定的剪贴板记录；不含插件、模型、剪贴板图片和密码。",
+                        text = "设置、主题、布局和固定的剪贴板记录总会备份；不含插件、模型、图片和密码。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)

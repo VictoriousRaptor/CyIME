@@ -222,7 +222,10 @@ class PredictionManager(
             val letters = com.kingzcheung.xime.settings.LetterLanguage.of(completionLanguage())
             // 带撇号的词（l'e、what'）：法语、意大利语按撇号后面那段补，英文出缩写，见 ApostropheCompletion。
             // 马来语：叠词 kanak- 补 kanak-kanak，马来语词不够时补英文，见 MalayCompletion。
+            // 「智能联想」关着：英文和各字母语言也不补词（用户 11-23：关了联想英文还出），也不去读补全词表。
+            // 「英文出短语」是单独的开关，照它自己的。
             val words = when {
+                !SettingsPreferences.isSmartPredictionEnabled(context) -> emptyList()
                 letters == null -> AssociationService.getAssociations(context, text, true, limit)
                 letters == com.kingzcheung.xime.settings.LetterLanguage.MALAY && '\'' !in text ->
                     com.kingzcheung.xime.association.MalayCompletion.complete(text, limit,

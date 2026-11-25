@@ -36,6 +36,62 @@ internal object KeyboardKeyMetrics {
         return LongPressMenuCells(left, bodyWidth, bodyWidth / n)
     }
 
+    /**
+     * 文字长按菜单一格的宽：贴着最宽的那一项（单个字母约 34dp），不再按键宽撑开（11-24 他：长按 H 气泡中间一大块空）。
+     * [dpPx] 是 1dp 的像素数。画气泡和手指选格都用它。
+     */
+    fun longPressTextCellWidthPx(items: List<String>, dpPx: Float): Float {
+        val units = items.maxOfOrNull { s -> s.sumOf { if (it.code < 0x2E80) 1.0 else 1.6 } }?.toFloat() ?: 1f
+        return maxOf(34f * dpPx, units * 11f * dpPx + 14f * dpPx)
+    }
+
+    /**
+     * 文字长按菜单的位置：第 [anchor] 格（默认项）正对按键中心，格宽见 [longPressTextCellWidthPx]；
+     * 整排放不下时先把格子收窄，碰到键盘边就整排往里挪（这时默认项照样选中，手指按挪了几格选，见 [longPressMenuStep]）。
+     */
+    fun longPressTextMenuCells(keyLeft: Float, keyWidth: Float, items: List<String>, anchor: Int,
+        keyboardWidth: Float?, margin: Float, dpPx: Float): LongPressMenuCells {
+        val n = items.size.coerceAtLeast(1)
+        val a = anchor.coerceIn(0, n - 1)
+        val center = keyLeft + keyWidth / 2f
+        val room = keyboardWidth?.let { (it - 2f * margin).coerceAtLeast(1f) }
+        var cell = longPressTextCellWidthPx(items, dpPx)
+        if (room != null && cell * n > room) cell = room / n
+        if (keyboardWidth != null) {
+            // 默认项对准按键时两头都要在键盘里：放不下先收窄格子（不窄过 22dp），每一格都画在手指够得着的地方。
+            val leftFit = (center - margin) / (a + 0.5f)
+            val rightFit = (keyboardWidth - margin - center) / (n - a - 0.5f)
+            val fit = minOf(leftFit, rightFit)
+            if (fit < cell) cell = maxOf(fit, minOf(cell, 22f * dpPx))
+        }
+        val width = cell * n
+        val wanted = center - (a + 0.5f) * cell
+        val left = if (keyboardWidth == null) wanted else wanted.coerceIn(margin, maxOf(margin, keyboardWidth - width - margin))
+        return LongPressMenuCells(left, width, cell)
+    }
+
+    /** 从默认项 [anchor] 起手指横着挪了 [dx]，现在选第几格：每挪一格宽换一格，挪到头停在最后一项。 */
+    fun longPressMenuStep(anchor: Int, dx: Float, cellWidth: Float, count: Int): Int {
+        if (count <= 1 || cellWidth <= 0f) return 0
+        return (anchor + kotlin.math.round(dx / cellWidth).toInt()).coerceIn(0, count - 1)
+    }
+
+    /**
+     * 文字长按菜单从左到右怎么排、默认项在第几格。
+     * [nearFirst] 是离手指从近到远的顺序（第一项是默认项）。键在键盘左半边时其余项往右排，右半边往左排：
+     * 都往键盘中间那侧展开，边上的键不用往屏幕外挪（11-24 他：右边缘 P 选不到另一个）。
+     * [fixedOrder] 时原样排、默认项是 [nearFirst] 的第一项所在格（九键「J K L 5 j k l」照参照图数字居中）。
+     */
+    fun longPressMenuOrder(items: List<String>, nearFirst: List<String>, fixedOrder: Boolean,
+        keyCenterX: Float, keyboardWidth: Float?): Pair<List<String>, Int> {
+        if (items.isEmpty()) return items to 0
+        val lead = nearFirst.filter { it in items }.distinct()
+        if (fixedOrder) return items to (lead.firstOrNull()?.let { items.indexOf(it) } ?: 0).coerceAtLeast(0)
+        val outward = lead + items.filter { it !in lead }
+        val rightHalf = keyboardWidth != null && keyCenterX > keyboardWidth / 2f + 0.5f
+        return if (rightHalf) outward.reversed() to outward.size - 1 else outward to 0
+    }
+
     /** 手指在 [x]（和 [cells] 同一坐标）时落在第几格。 */
     fun longPressMenuIndex(x: Float, cells: LongPressMenuCells, count: Int): Int {
         if (count <= 1 || cells.cellWidth <= 0f) return 0

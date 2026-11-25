@@ -15,6 +15,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -77,6 +78,13 @@ internal fun highestSurfaceTop(tops: Collection<Float>): Float? = tops.minOrNull
 /** The fixed card and every surface on it must sit inside the frame. */
 internal fun backdropCoverTop(cardTop: Float?, surfaceTop: Float?): Float? =
     listOfNotNull(cardTop, surfaceTop).minOrNull()
+
+/**
+ * 在画的阶段读动态背景的地方（玻璃键的透镜和折射、候选栏和面板的玻璃底）前面加一层：背景每动一帧只重录这一小块，
+ * 不连带重录它所在的整块键盘。没开动态背景时什么也不加。只多一个渲染节点，不离屏、不改透明度，样子不变。
+ */
+internal fun motionRedrawIsolation(motion: KeyboardBackgroundMotion?): androidx.compose.ui.Modifier =
+    if (motion == null) androidx.compose.ui.Modifier else androidx.compose.ui.Modifier.graphicsLayer()
 
 /** 共用背景图放在本层 [offset] 处时，按动态背景当前的样子画；没开动态背景时原样。 */
 internal inline fun androidx.compose.ui.graphics.drawscope.DrawScope.withSharedBackdropMotion(

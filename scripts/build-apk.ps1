@@ -60,6 +60,12 @@ try {
     if ($RunLayoutGate) { $buildTasks += @(':app:assembleDebug', ':app:assembleDebugAndroidTest') }
     & ./gradlew.bat @buildTasks --no-daemon @editionArguments @GradleArguments
     if ($LASTEXITCODE -ne 0) { throw "Build failed. Previous packages remain in $archive" }
+    # User rule (2026-11-24): keep only the previous build's archive; older timestamped archives are deleted after a successful build.
+    $archiveRoot = Join-Path $apkRoot 'archive'
+    if (Test-Path -LiteralPath $archiveRoot) {
+        Get-ChildItem -LiteralPath $archiveRoot -Directory | Where-Object { $_.Name -match '^\d{8}-\d{6}-\d{3}$' } |
+            Sort-Object Name -Descending | Select-Object -Skip 1 | Remove-Item -Recurse -Force
+    }
     $output = Join-Path $apkRoot $kind
     # AGP can leave assemble outputs at its APK artifact location (intermediates).
     # Resolve the generated locator and copy verified artifacts to our delivery folder.

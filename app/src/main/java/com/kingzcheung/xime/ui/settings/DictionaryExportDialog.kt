@@ -49,7 +49,8 @@ internal fun DictionaryExportDialog(
                 source = null
             }
             installed.forEach { pack ->
-                ExportChoice(pack.name, "导入的词库，${pack.count} 个词", source == pack.id,
+                // 英文词另存，一起算（#560：只有英文的词库以前显示 0 个词）；笔画词导不出，不算。
+                ExportChoice(pack.name, "导入的词库，${pack.count + pack.english} 个词", source == pack.id,
                     "dictionary-export-source:${pack.id}") { source = pack.id }
             }
             Text("导出成", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
@@ -58,7 +59,7 @@ internal fun DictionaryExportDialog(
                 ExportChoice("${option.label} (.${option.extension})", option.note, format == option,
                     "dictionary-export-format:${option.name}") { format = option }
             }
-            Text("只导出两个字以上、带拼音的词。",
+            Text("只导出两个字以上、带拼音的词；英文词只在「文本」和「Rime 词典」里。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp))
         }

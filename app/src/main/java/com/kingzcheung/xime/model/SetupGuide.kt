@@ -139,7 +139,19 @@ object SetupGuide {
             }.getOrNull()?.takeIf { it > 0 },
             memorySaver = SettingsPreferences.getPrefsPublic(context).getBoolean(KEY_MEMORY_SAVER, false),
             memoryExtras = memoryExtras(context),
+            candidateRightKey = SettingsPreferences.candidateRightKey(context),
+            gestureNav = gestureNavigation(context),
         )
+    }
+
+    /** 厂商自己的手势开关优先（和键盘底部留位同一套判断），读不到再看 navigation_mode（2 = 手势）。 */
+    private fun gestureNavigation(context: Context): Boolean? {
+        val resolver = context.contentResolver
+        fun read(global: Boolean, key: String): Int? = runCatching {
+            if (global) android.provider.Settings.Global.getInt(resolver, key) else android.provider.Settings.Secure.getInt(resolver, key)
+        }.getOrNull()
+        return com.kingzcheung.xime.service.vendorGestureNavigationOn(AndroidPlatform.vendor, ::read)
+            ?: read(false, "navigation_mode")?.let { it == 2 }
     }
 
     /** 现在开着、关掉能省内存的功能；开没开和省多少都问「性能与省电」那张代价表，两页说同一个数。 */
@@ -231,7 +243,12 @@ object SetupGuide {
             PerformanceCosts.Item.byId(extra.id)?.let { runCatching { PerformanceCosts.set(app, it, false) } }
         }
         val inputFailed = applyInput(app, plan.input, hideDoublePinyin, facts.online)
-        val inputDone = (plan.input.lines + listOfNotNull(plan.input.hideLine?.takeIf { hideDoublePinyin },
+        // 候选栏右边的键：和设置页选卡片写同一处；没改就不动（不把记下的左右滑开关冲掉）。
+        val rightKeyLine = plan.answers.candidateRightKey.takeIf { it != SettingsPreferences.candidateRightKey(app) }?.let {
+            SettingsPreferences.setCandidateRightKey(app, it)
+            "候选栏右边的键改成「${com.kingzcheung.xime.ui.settings.candidateRightKeyName(it)}」。"
+        }
+        val inputDone = (plan.input.lines + listOfNotNull(rightKeyLine, plan.input.hideLine?.takeIf { hideDoublePinyin },
             plan.turnOff.takeIf { it.isNotEmpty() }?.let { off -> "为省内存关掉了：${off.joinToString("、") { it.title }}。" }))
             .filterNot { it.startsWith("打字方式还是") }
             .filterNot { line -> "五笔" in line && inputFailed.any { "五笔" in it } }

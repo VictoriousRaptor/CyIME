@@ -102,6 +102,8 @@ fun StrokeKeyboardLayout(
     candidateState: State<CandidateState>? = null,
     callbacks: KeyboardCallbacks? = null,
     inputProfile: InputProfile? = null,
+    /** 回车键的动作名（[EnterKeyAction.label]）；键面照旧写「确定」，只用来判断长按回车换行（#418）。 */
+    enterKeyText: String = "确定",
 ) {
     KeyboardKeySpacingScope(modifier, columns = 5f * 3f / 3.4f,
         policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
@@ -127,6 +129,7 @@ fun StrokeKeyboardLayout(
         candidateState = candidateState,
         callbacks = callbacks,
         inputProfile = inputProfile,
+        enterKeyText = enterKeyText,
     )
     }
 }
@@ -155,6 +158,7 @@ onKeyPressDown: ((String) -> Unit)?,
     candidateState: State<CandidateState>? = null,
     callbacks: KeyboardCallbacks? = null,
     inputProfile: InputProfile? = null,
+    enterKeyText: String = "确定",
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = !isFloatingMode && configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -232,6 +236,7 @@ onKeyPressDown: ((String) -> Unit)?,
                         candidateState = candidateState,
                         callbacks = callbacks,
                         inputProfile = inputProfile,
+                        enterKeyText = enterKeyText,
                     )
                 }
             }
@@ -264,6 +269,7 @@ onKeyPressDown: ((String) -> Unit)?,
                         candidateState = candidateState,
                         callbacks = callbacks,
                         inputProfile = inputProfile,
+                        enterKeyText = enterKeyText,
                     )
                 }
             }
@@ -366,6 +372,7 @@ private fun StrokeKeyboardContent(
     candidateState: State<CandidateState>? = null,
     callbacks: KeyboardCallbacks? = null,
     inputProfile: InputProfile? = null,
+    enterKeyText: String = "确定",
 ) {
     val strokeFontSize = if (compactMode) 13.sp else 16.sp
     val symbolFontSize = if (compactMode) 11.sp else 13.sp
@@ -687,6 +694,10 @@ private fun StrokeKeyboardContent(
             ) else ActionKeyButton(
                 text = "确定",
                 onClick = { onKeyPress("enter") },
+                // 「回车发送」开着、回车会发送时，长按回车换行，和 26 键、九键一样（#418 笔画用户在微信里换不了行）。
+                onLongClick = enterLongPressNewline(enterKeyText) {
+                    onGestureAction?.invoke(GestureAction.COMMAND, com.kingzcheung.xime.keyboard.CtrlShortcuts.SHIFT_ENTER_COMMAND)
+                },
                 backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor,
                 modifier = Modifier.weight(1f).testTag("stroke-enter-key"),
@@ -716,6 +727,8 @@ private fun StrokeSymbolItem(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     // 面板样式与九键左栏（CandidateItem）一致：条目自身透明、按压时垫底层加深，
     // 圆角/阴影由外层面板统一负责
     BoxWithConstraints(
@@ -731,6 +744,7 @@ private fun StrokeSymbolItem(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             },
         contentAlignment = Alignment.Center

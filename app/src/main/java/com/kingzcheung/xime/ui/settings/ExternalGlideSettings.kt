@@ -64,14 +64,14 @@ internal fun ExternalGlideSchemeItems(settings: KeyboardInputPreferences, onChan
         val current = settings.externalGlideEncodings[id]
         val label = current?.let { encoding -> choices.encodings.firstOrNull { it.first == encoding }?.second } ?: "不滑行"
         SettingsItem(Icons.TwoTone.Gesture, "$name 滑行",
-            if (settings.chineseGlideTyping) "导入方案，滑行时按所选编码出码" else "导入方案，需先打开「中文滑行」",
+            if (settings.chineseGlideTyping) "导入的方案，选它用的拼音规则" else "导入方案，需先打开「中文滑行」",
             onClick = { editing = id to name }, showArrow = true, status = label, searchKey = "导入方案滑行 $id")
     }
     editing?.let { (id, name) ->
         var selected by remember(id) { mutableStateOf(settings.externalGlideEncodings[id]) }
         AlertDialog(onDismissRequest = { editing = null }, title = { Text("$name 滑行") }, text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                Text("这个方案的编码按哪种拼音规则来，滑行就按哪种出码。选错了划出来的字会不对。",
+                Text("选这个方案用的拼音规则，选错了滑出的字不对。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ExternalGlideChoice("不滑行", selected == null) { selected = null }
                 choices.encodings.forEach { (encoding, title) ->

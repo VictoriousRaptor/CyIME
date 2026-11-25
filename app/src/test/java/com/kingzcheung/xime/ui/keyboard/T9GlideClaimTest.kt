@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.keyboard
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,11 +61,28 @@ class T9GlideClaimTest {
         assertTrue(stroke(listOf(Offset(five.center.x, five.top + 3f), center('2'))).claimed)
     }
 
-    @Test fun stayingInsideOneKeyOrLeavingTheGridNeverClaims() {
+    @Test fun stayingInsideOneKeyNeverClaims() {
         val five = keys.getValue('5')
         assertFalse("一个键里滑来滑去", stroke(listOf(center('5'), Offset(five.left + 5f, five.top + 5f), Offset(five.right - 5f, five.bottom - 5f))).claimed)
-        val out = stroke(listOf(center('5'), center('2'), Offset(center('2').x, -40f)))
-        assertFalse("滑出数字区作废", out.claimed)
+        // 从一个键直接拂出数字区（上滑出符号）：没进别的键，不算滑行，照旧交给按键。
+        assertFalse("拂出数字区", stroke(listOf(center('2'), Offset(center('2').x, -60f))).claimed)
+        assertFalse("拂进左栏", stroke(listOf(center('5'), Offset(-80f, center('5').y))).digits.length > 2)
+    }
+
+    /** 他 11-23：只能在九宫格里滑，稍微出界一点点就直接中断。出了数字区接着算，抬手才结束。 */
+    @Test fun leavingTheGridKeepsTheGlide() {
+        val out = stroke(listOf(center('5'), center('2'), Offset(center('2').x, -40f), center('3')))
+        assertTrue("滑出上沿再回来仍是滑行", out.claimed)
+        assertEquals("出界那段不进任何键", "523", out.digits.toString())
+        // 2 斜着划到 4 擦过 1 键（不是滑行键）的位置；以前当成出界作废。
+        val corner = stroke(listOf(center('2'), Offset(keys.getValue('2').left - 2f, keys.getValue('4').top - 2f), center('4')))
+        assertTrue(corner.claimed)
+        assertEquals("24", corner.digits.toString())
+        // 贴着左栏往下：拉回到 4、7 的左边，不进键的中间，不多出数字。
+        val rail = stroke(listOf(center('5'), center('4'), Offset(-50f, center('4').y), Offset(-50f, center('7').y)))
+        assertEquals("54", rail.digits.toString())
+        assertEquals(Offset(0f, center('7').y), rail.clamp(Offset(-50f, center('7').y)))
+        assertEquals("区内的点照原样", center('5'), rail.clamp(center('5')))
     }
 
     /** 用户 11-10：没成滑行的那一下键自己要按点按算（[glideDriftIsTap]），和上面的滑行判定接得上。 */

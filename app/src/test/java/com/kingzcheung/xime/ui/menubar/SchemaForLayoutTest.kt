@@ -6,6 +6,7 @@ import com.kingzcheung.xime.settings.InputProfileSelection
 import com.kingzcheung.xime.settings.InputProfiles
 import com.kingzcheung.xime.settings.InputLayout
 import com.kingzcheung.xime.settings.KeysConfigHelper
+import com.kingzcheung.xime.settings.LayoutKind
 import com.kingzcheung.xime.settings.SchemaInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,6 +47,16 @@ class SchemaForLayoutTest {
         assertFalse(result.keepsScheme)
         assertEquals("九键没有double_pinyin_flypy，已换成拼音",
             InputProfileSelection.switchHint(InputLayout.T9, entry("double_pinyin_flypy"), result.entry))
+    }
+
+    /** #160：自建合并键布局没有导入的方案时说明原因，别的布局不加。 */
+    @Test fun mergedCustomLayoutSaysWhichSchemesItHas() {
+        val layout = InputLayout("custom_pinyin_0123456789abcdef0123456789abcdef", "我的布局", LayoutKind.MERGED)
+        val imported = SchemaInfo("wanxiang", "万象拼音", "", "", "")
+        assertEquals("我的布局没有万象拼音，已换成double_pinyin_flypy\n${InputProfileSelection.MERGED_LAYOUT_NOTE}",
+            InputProfileSelection.switchHint(layout, imported, entry("double_pinyin_flypy"), mergedCustom = true))
+        assertFalse(InputProfileSelection.switchHint(InputLayout.T9, imported, entry("t9_pinyin"), mergedCustom = false)
+            .contains(InputProfileSelection.MERGED_LAYOUT_NOTE))
     }
 
     /** 微软双拼换到 14 键只有小鹤双拼 14 键：编码同类但变体不同，也要提示。 */

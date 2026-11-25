@@ -71,6 +71,41 @@ class OrientationLayoutsTest {
         assertEquals("rime_ice", OrientationLayouts.prepared(ctx, "rime_ice", entries))
     }
 
+    private fun outerScreen() = RuntimeEnvironment.setQualifiers("sw380dp-w380dp-h820dp-port")
+    private fun innerScreen() = RuntimeEnvironment.setQualifiers("sw650dp-w650dp-h820dp-port")
+
+    /** GitHub #396：折叠屏外屏九键、内屏 26 键，两块屏都是竖屏，开合后各是各的。 */
+    @Test fun foldableScreensKeepTheirOwnLayout() {
+        outerScreen()
+        OrientationLayouts.setEnabled(ctx, true)
+        assertEquals("rime_ice", OrientationLayouts.prepared(ctx, "rime_ice", entries))
+        InputModes.selectProfile(ctx, "t9_pinyin", zh)
+        // 展开到内屏：内屏还没记过，先不换；点 26 键记到内屏。
+        innerScreen()
+        assertEquals("t9_pinyin", OrientationLayouts.prepared(ctx, "t9_pinyin", entries))
+        InputModes.selectProfile(ctx, "rime_ice", zh)
+        assertEquals("rime_ice", OrientationLayouts.slot(ctx, zh, false))
+        // 合上回外屏是九键，再展开是 26 键。
+        outerScreen()
+        assertEquals("t9_pinyin", OrientationLayouts.slot(ctx, zh, false))
+        assertEquals("t9_pinyin", OrientationLayouts.prepared(ctx, "rime_ice", entries))
+        innerScreen()
+        assertEquals("rime_ice", OrientationLayouts.prepared(ctx, "t9_pinyin", entries))
+    }
+
+    /** 打开记忆后在外屏没选过布局：在内屏第一次换布局时，外屏补记成换之前用的。 */
+    @Test fun foldableOuterScreenIsBackfilledWithThePreviousLayout() {
+        outerScreen()
+        InputModes.selectProfile(ctx, "t9_pinyin", zh)
+        OrientationLayouts.setEnabled(ctx, true)
+        assertEquals("t9_pinyin", OrientationLayouts.prepared(ctx, "t9_pinyin", entries))
+        innerScreen()
+        assertEquals("t9_pinyin", OrientationLayouts.prepared(ctx, "t9_pinyin", entries))
+        InputModes.selectProfile(ctx, "rime_ice", zh)
+        outerScreen()
+        assertEquals("t9_pinyin", OrientationLayouts.prepared(ctx, "rime_ice", entries))
+    }
+
     /**
      * 用户 11-20：横竖屏选了自定义布局后转屏不换。双拼、码表、英文的字母排列不在方案 id 里，
      * 现在也按方向记：竖屏 Colemak、横屏 26 键，转回去各是各的。

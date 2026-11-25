@@ -247,6 +247,40 @@ t9:
   # 常见 20 倍以上（ln 20 ≈ 3）时排第一，整句退第二。2026-11-02「啊的权重太高」：都是、就是、我也是 排第一；
   # 真的啊、好啊、对啊、智商啊 不变。常用词 + A 键 2000 条里 179 条首选换成整词，原来的「X啊」都在第二位。
   merged_tail_word_margin: 3.0
+  # 停一下后再比一次整句（2026-11-23）：打字途中的整句是 Rime 按词库权重拼的，每一段拼音只用词库里排第一的那个词，
+  # 词组模型只能在这几句里挑，它自己会选的那句常常根本不在里面（JUABOABDEGAODUJETUZUJUTUAO 只有 键盘的高度课题组几条，
+  # 拼不出 键盘的高度可以自己调）。停手后让词组模型自己再拼最多 model_sentences 句，和打字途中的首选比，赢了才排第一，
+  # 原来的首选退到第二。只在停顿后算一次（model_sentences_on_pause），打字途中每个键的候选和耗时都不变。
+  # 只收每个音节都按键拼全的句子；简拼、纠错、「啊」那几条各走各的老路。
+  # model_sentences_rime_weight：这一步比的时候词库权重占的份量（只用在这一步，打字途中 14 键照旧不看词库权重）。
+  # 不加时词库里有、词组模型不认识的新词容易被同键的常见词顶掉；值同 26 键的 rescore_rime_weight。
+  # 云端 2026-11-23（1.15.105 的引擎和词库）：旧 2000 句首选对 66.6% → 73.8%（修好 162 句、改坏 22 句；不加这个权重是
+  # 修好 180、改坏 37），新测试句 343 句 48.7% → 54.8%，必过 19 条不变；停顿那一步云端中位多 7 毫秒。
+  # joint_requires_ngram 到 reading_table 是拼句用的设置，值同 26 键 t9 段里的同名项。
+  model_sentences: 4
+  model_sentences_on_pause: true
+  model_sentences_rime_weight: 0.15
+  # model_sentences_fuzzy_penalty（2026-11-24）：开了模糊音时，停手这一步也让词组模型拼经过模糊音读法的句子，另占 model_sentences
+  # 个名额（不挤按键拼全的那几句），比的时候每个模糊音节扣这么多分（ln 分）；这种句子排第一时，原来停手后排第一的那句跟在第二。
+  # 不写或写负数 = 只收按键拼全的句子（以前的做法）；没开模糊音时没有模糊音读法，结果不变；打字途中每个键的候选也不变。以前开了
+  # 模糊音，带口音、平翘舌打的句子停手后拼不出来，14 键只保住约八成（其他布局 95% 以上）。云端（1.15.107 的引擎和词库、自带模型，
+  # 开发集 B）：南方口音保住 85.6% → 93.7%、平翘舌 83.9% → 93.5%；全部打对的 2000 句南方口音那组少对 3 句、平翘舌那组少对 6 句
+  # （模糊音本身分不清、词组模型偏向另一种读法的，打对的那句在第二）。开发集 A 扫过 0、1、2、4：扣 0 保住 95–96%，但打对的句子
+  # 少对的多一倍；扣 2 只到 90%。停手那一步云端中位多约 0.4 毫秒，每个键的耗时不变。
+  model_sentences_fuzzy_penalty: 1
+  joint_requires_ngram: true
+  source_budget: 16
+  pool_budget: 16
+  dictionary_beam: 64
+  sentence_beam: 8
+  result_budget: 12
+  spelling_penalty: 0
+  word_penalty: 8.0
+  whole_input_phrases: 16
+  prefer_user_entries: true
+  ngram_user_weight: 0.3
+  ngram_dictionary_prior: 0.02
+  reading_table: cyime_readings
 
 # 停一下后的纠错（2026-11-20，原来 14 键完全没有纠错）：同一个音节里少按一个键、一个键多按一下、两个键打反。
 # 纠错索引 cyime_pause_14jian 由 tasks-chinese.gradle.kts 生成（只按合并键拼写）；只在停顿后查一次，打字途中不增加耗时。

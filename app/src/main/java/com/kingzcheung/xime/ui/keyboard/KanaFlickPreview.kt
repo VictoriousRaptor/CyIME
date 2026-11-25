@@ -69,12 +69,8 @@ internal fun DirectionDiscPreview(labels: Map<KanaFlickDirection, String>, direc
     val position = remember(margin, correction) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
-                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = placement.place(IntOffset(
-                (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(margin,
-                    (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)),
-                (anchorBounds.top - popupContentSize.height - margin).coerceIn(margin,
-                    (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin)),
-            ))
+                layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset =
+                placement.place(directionDiscPosition(anchorBounds, windowSize, popupContentSize, margin))
         }
     }
     // 方向盘悬在上一排键上：只显示不接触摸，另一只手快速点上一排的键不被它吃掉。
@@ -110,6 +106,15 @@ internal fun DirectionDiscPreview(labels: Map<KanaFlickDirection, String>, direc
         }
     }
 }
+
+/**
+ * 方向盘摆在按键正上方，左右、上下都不出键盘窗口（#60：九键 PQRS、WXYZ 往下拂的 R、Y 曾画到屏幕外）。
+ * 窗口顶上放不下时贴着顶边，宁可盖住按键也不出界。
+ */
+internal fun directionDiscPosition(anchor: IntRect, window: IntSize, content: IntSize, margin: Int) = IntOffset(
+    (anchor.center.x - content.width / 2).coerceIn(margin, (window.width - content.width - margin).coerceAtLeast(margin)),
+    (anchor.top - content.height - margin).coerceIn(margin, (window.height - content.height - margin).coerceAtLeast(margin)),
+)
 
 private fun kanaDirectionAlignment(direction: KanaFlickDirection): Alignment = when (direction) {
     KanaFlickDirection.TAP -> Alignment.Center

@@ -76,10 +76,30 @@ object TxtCellDictionary {
 
     private val latin = Regex("[A-Za-z0-9][A-Za-z0-9 '._&+-]{0,62}")
 
+    /** 搜狗格式的编码一列：每个字母前一个撇号（`'a'b'o'u't`）。 */
+    private val spelledCode = Regex("(?:'[A-Za-z0-9]+)+")
+
+    /**
+     * 英文词带着搜狗格式的编码（#560，深蓝词库转换的 `'a'b'o'u't about`，或词在前 `about 'a'b'o'u't`）：
+     * 编码的字母和词一样时只要词，不把编码当成词的一部分。别的行原样返回。
+     */
+    internal fun withoutSpelledCode(line: String): String {
+        val parts = line.trim().split(Regex("[ \t]+"), limit = 2)
+        if (parts.size != 2) return line
+        val (code, word) = when {
+            spelledCode.matches(parts[0]) -> parts[0] to parts[1]
+            else -> parts[1].substringAfterLast(' ').let { tail ->
+                if (!spelledCode.matches(tail)) return line
+                tail to (parts[0] + " " + parts[1]).removeSuffix(tail).trim()
+            }
+        }
+        return word.takeIf { it.isNotEmpty() && CellDictionaryEnglish.letters(code) == CellDictionaryEnglish.letters(it) } ?: line
+    }
+
     /** The English word of a line without Chinese characters, or null. A bare number or one letter is no word. */
     internal fun englishWord(line: String): String? {
         if (line.any { it.code > 0x7f }) return null
-        val text = line.substringBefore('\t').trim().replace(Regex(" +"), " ")
+        val text = withoutSpelledCode(line).substringBefore('\t').trim().replace(Regex(" +"), " ")
         if (!latin.matches(text) || text.none(Char::isLetter)) return null
         return text.takeIf { CellDictionaryEnglish.letters(it).length >= 2 }
     }

@@ -146,7 +146,8 @@ private fun liquidLens33(radius: Dp, dark: Boolean, held: androidx.compose.runti
     val backdrop = LocalSharedKeyboardBackdrop.current?.takeIf { it.windowRoot === root && it.opacity >= .99f }
     val image = backdrop?.image
     var origin by remember { mutableStateOf<Offset?>(null) }
-    val located = if (image != null) Modifier.onGloballyPositioned { origin = it.positionInRoot() } else Modifier
+    val located = if (image != null) Modifier.onGloballyPositioned { origin = it.positionInRoot() }
+        .then(motionRedrawIsolation(backdrop?.motion)) else Modifier
     return located.drawWithCache {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val bitmap = image?.asAndroidBitmap()
@@ -346,7 +347,7 @@ private fun Modifier.liquidRefraction33(radius: Dp, strength: LiquidGlassStrengt
     val image = backdrop.image ?: return@composed this
     val shader = LiquidRefractionShader.shared ?: return@composed this
     var origin by remember { mutableStateOf<Offset?>(null) }
-    onGloballyPositioned { origin = it.positionInRoot() }.drawWithCache {
+    onGloballyPositioned { origin = it.positionInRoot() }.then(motionRedrawIsolation(backdrop.motion)).drawWithCache {
         val bitmap = image.asAndroidBitmap()
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val imageShader = BitmapShader(bitmap, android.graphics.Shader.TileMode.DECAL, android.graphics.Shader.TileMode.DECAL)

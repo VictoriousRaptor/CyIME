@@ -105,7 +105,7 @@ class InputModesTest {
     @Test fun everyLanguageListSharesOneOrder() {
         val zh = InputLanguage.CHINESE; val en = InputLanguage.ENGLISH; val ja = InputLanguage.JAPANESE
         assertEquals(listOf(zh, en, ja), InputLanguage.supported.take(3))
-        assertEquals(listOf(zh, en, ja), InputLanguage.speech)
+        assertEquals(listOf(zh, en, ja, InputLanguage.KOREAN), InputLanguage.speech)
         val fresh = InputModes.languageRank(emptyList())
         assertEquals(listOf(zh, en, ja, InputLanguage.SPANISH, InputLanguage.UNSPECIFIED),
             listOf(InputLanguage.UNSPECIFIED, ja, InputLanguage.SPANISH, en, zh).sortedBy(fresh))

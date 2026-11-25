@@ -17,6 +17,9 @@ import java.util.zip.ZipOutputStream
  * - 百度电脑版 `你好<TAB>ni'hao'<TAB>次数`；百度手机版 `你好(ni|hao) 次数`；都是 UTF-16LE 带 BOM，CRLF。
  * - Gboard：zip 里一个 dictionary.txt，首行 `# Gboard Dictionary version:1`，每行 `nihao<TAB>你好<TAB>zh-CN`，UTF-8，LF。
  * 写不了的：搜狗 .bin 备份、搜狗 .scel、微软拼音 .dat 是各家的二进制格式；微软拼音 .dctx 要每个字带声调，词库里没有。
+ *
+ * 导入词库里的英文词（编码为空的 [DictEntry]，#560）只写进「文本」和「Rime 词典」：`about<TAB>about<TAB>1`，
+ * 编码是词的小写字母和数字（同 26 键英文候选），手机再导入时照样认成英文词。别的格式是拼音词库，英文词跳过。
  */
 object DictionaryExport {
     enum class Format(val label: String, val note: String, val extension: String) {
@@ -39,11 +42,23 @@ object DictionaryExport {
     private val pinyin = Regex("[a-z]{1,8}( [a-z]{1,8})*")
     private val gbk: Charset by lazy { Charset.forName("GBK") }
 
-    /** [words]：词、空格分开的拼音、次数（0 表示不知道）。按给的顺序写。 */
+    /** 英文词能写进的格式（见上）。 */
+    fun keepsEnglish(format: Format): Boolean = format == Format.TEXT || format == Format.RIME
+
+    private val english = Regex("[A-Za-z0-9][A-Za-z0-9 '._&+-]{0,62}")
+
+    /** [words]：词、空格分开的拼音、次数（0 表示不知道）；编码为空的是英文词。按给的顺序写，英文词在中文词后面。 */
     fun write(format: Format, name: String, words: List<DictEntry>): Result {
         val kept = LinkedHashMap<Pair<String, String>, Int>()
+        val englishWords = LinkedHashSet<String>()
         var skipped = 0
         for (entry in words) {
+            if (entry.code.isBlank()) {
+                val letters = CellDictionaryEnglish.letters(entry.word)
+                if (keepsEnglish(format) && english.matches(entry.word) && letters.length >= 2) englishWords += entry.word
+                else skipped++
+                continue
+            }
             val code = entry.code.trim().replace(Regex(" +"), " ")
             val ok = han.matches(entry.word) && pinyin.matches(code) && code.count { it == ' ' } + 1 == entry.word.length &&
                 (format != Format.SOGOU || gbk.newEncoder().canEncode(entry.word))
@@ -56,10 +71,12 @@ object DictionaryExport {
             skipped += rows.size - MAX_JSON_WORDS
             rows = rows.take(MAX_JSON_WORDS)
         }
+        val englishLines = englishWords.joinToString("") { "$it\t${CellDictionaryEnglish.letters(it)}\t1\n" }
         val bytes = when (format) {
             Format.CYIME -> json(name, rows).toByteArray(Charsets.UTF_8)
-            Format.TEXT -> lines(rows, "\n") { (w, p, c) -> "$w\t${p.joinToString(" ")}\t$c" }.toByteArray(Charsets.UTF_8)
-            Format.RIME -> (rimeHeader() + lines(rows, "\n") { (w, p, c) -> "$w\t${p.joinToString(" ")}\t$c" })
+            Format.TEXT -> (lines(rows, "\n") { (w, p, c) -> "$w\t${p.joinToString(" ")}\t$c" } + englishLines)
+                .toByteArray(Charsets.UTF_8)
+            Format.RIME -> (rimeHeader() + lines(rows, "\n") { (w, p, c) -> "$w\t${p.joinToString(" ")}\t$c" } + englishLines)
                 .toByteArray(Charsets.UTF_8)
             Format.SOGOU -> lines(rows, "\r\n") { (w, p, _) -> "'${p.joinToString("'")} $w" }.toByteArray(gbk)
             Format.QQ -> utf16(lines(rows, "\r\n") { (w, p, c) -> "${p.joinToString("'")} $w $c" })
@@ -68,7 +85,7 @@ object DictionaryExport {
             Format.GBOARD -> zip("dictionary.txt", ("# Gboard Dictionary version:1\n" +
                 lines(rows, "\n") { (w, p, _) -> "${p.joinToString("")}\t$w\tzh-CN" }).toByteArray(Charsets.UTF_8))
         }
-        return Result(bytes, rows.size, skipped)
+        return Result(bytes, rows.size + englishWords.size, skipped)
     }
 
     private inline fun lines(rows: List<Triple<String, List<String>, Int>>, end: String,

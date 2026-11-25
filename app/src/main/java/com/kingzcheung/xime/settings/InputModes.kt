@@ -74,6 +74,25 @@ object InputModes {
     fun ordered(context: Context, schemas: List<SchemaInfo>): List<SchemaInfo> =
         available(schemas, SettingsPreferences.getPrefsPublic(context).getString(ORDER_KEY, null)?.lines() ?: defaultModeOrder)
 
+    /**
+     * 新打开的方案排在已打开的方案最后，别的方案的先后不动（11-23：新打开的五笔86、仓颉速成插到用户导入的小鹤音形前面）。
+     * [fullOrder] 是装着的方案现在的先后（[ordered] 的结果），[enabledBefore] 是打开前已启用的方案。
+     */
+    fun orderWithNewLast(fullOrder: List<String>, enabledBefore: Collection<String>, newIds: List<String>): List<String> {
+        val added = newIds.filterNot { it in enabledBefore }.distinct()
+        if (added.isEmpty()) return fullOrder
+        val rest = fullOrder.filterNot { it in added }
+        val at = rest.indexOfLast { it in enabledBefore } + 1
+        return rest.take(at) + added + rest.drop(at)
+    }
+
+    /** 打开方案时调用：按 [orderWithNewLast] 存一份顺序；没有新打开的不写。 */
+    fun placeNewlyEnabledLast(context: Context, installed: List<SchemaInfo>, enabledBefore: Collection<String>, newIds: List<String>) {
+        val fullOrder = ordered(context, installed).map { it.schemaId }
+        val updated = orderWithNewLast(fullOrder, enabledBefore, newIds)
+        if (updated != fullOrder) saveOrder(context, updated)
+    }
+
     fun saveOrder(context: Context, ids: List<String>) {
         SettingsPreferences.getPrefsPublic(context).edit()
             .putString(ORDER_KEY, ids.distinct().joinToString("\n")).apply()

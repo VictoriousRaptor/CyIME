@@ -11,7 +11,12 @@
   （speller/algebra）把每个读音算成精确字母编码，合并键（大写，AU = as 键 + ui 键）逐位换成键上的字母再查，
   对得上几个读音就补几个读音的字（AU 补 ai、si、su，带读音注释）；侧滑选定的字母（小写）只对自己。
   简拼、模糊音、纠错和手动分词的规则不算：只在打满一个完整读音时补。
-  不进主词库：九键回放里整表导入让每键查词量翻了一倍多。开关关着时不读文件、不做任何事；选中的字不进用户词库。
+  不进主词库：九键回放里整表导入让每键查词量翻了一倍多。开关关着时不读文件、不做任何事。
+  学习（11-24，他：默认放后面靠降权重，选多了照样按学习往前调，不许用规则把它们排除在学习之外）：这里给的候选只是
+  默认的低权重（排在主词库同音字后面）；选中后按读音记进这个方案的用户词库，和别的词一样，主翻译器从用户词库按学习
+  权重给出它（选得多就往前，长按删除忘掉记录、固定照常）。原来的做法是另记一个小文件、按次数给固定分（1 次 2.2005、
+  2 次 1000），九键上屏不走 Rime 的提交，一次也没记过。旧文件里的次数在这个字下次出现时搬进用户词库，搬完删掉那一行。
+  九键的选字不经过这里的提交：九键按候选注释里的读音记（t9_processor），所以九键的候选注释都写读音。
   日文汉字、韩文汉字、粤语字（11-20，他：是什么就叫什么）：同样的查法，各自一张表、一个开关（默认关），候选注释
   加「日」「韩」「粤」（九键只写读音，右选和拂动筛选按注释里的拼音对）。日文汉字表里还有日本人名、地名
   （榎本武扬 jia ben wu yang），只在 26 键全拼和九键打满整个词时出。
@@ -19,7 +24,7 @@
   排在这个读音的生僻字前面；这些字本来就常用，上屏时不记次数（不然打一次 谜 mi，mei 下面的 谜 就提前了）。
   注音（11-20）同 14 键、双拼：按注音方案的拼写规则把读音算成大千键码再查。
 --]]
--- 排在同音字后面的先后：中文生僻字、日文汉字、韩文汉字、粤语字（选过的字照样提前，见 yield_rare）。
+-- 排在同音字后面的先后：中文生僻字、日文汉字、韩文汉字、粤语字（选过的字从用户词库按学习权重出，不在这里排）。
 local LISTS = {
   { option = "cyime_rare_chars", file = "/cyime_rare.txt", mark = "", readings = "/cyime_rare_readings.txt" },
   { option = "cyime_japanese_kanji", file = "/cyime_japanese.txt", mark = "日" },
@@ -28,23 +33,26 @@ local LISTS = {
 }
 local CANTONESE = LISTS[4]
 
--- 粤语常用字（GitHub #72）：开着粤语字时排在主词库所有同音字之后、生僻字之前，不沉到整表最后（11-20 起跟「粤语字」开关）。
--- 原来给了固定分 2.2005（本想排第 10 个左右），但同音字的分数随学习变化，有人小鹤双拼打 qu 时「佢」到了第 2
--- （2026-11-18），所以改成垫底。冇 在主词库里读 mao，这里补上粤语读音 mou。只在粤语字开着时出现，默认不变。
+-- 粤语常用字（GitHub #72）：开着粤语字时默认权重排在主词库所有同音字之后、生僻字之前（11-20 起跟「粤语字」开关）。
+-- 冇 在主词库里读 mao，这里补上粤语读音 mou。只在粤语字开着时出现；选过以后从用户词库按学习权重出。
 local COMMON = { qu = "佢", ge = "嘅", zuo = "咗", mou = "冇" }
 local COMMON_QUALITY = -999
-local rare_quality  -- defined below with the learned counts
+local migrate  -- defined below: moves an old pick count of the text into the user dictionary
 local function with_mark(comment, mark)
   if mark == "" then return comment end
   if comment == "" then return mark end
   return comment .. " " .. mark
 end
 
-local function yield_common(syllable, seg, comment, ctx)
+-- env.rare_readings：这一次给出的候选 字 → 读音（空格分开的音节），上屏时按它记进用户词库（见 remember_commit）。
+local function yield_common(env, syllable, seg, comment, ctx)
   local text = COMMON[syllable]
   if not text or not ctx:get_option(CANTONESE.option) then return nil end
-  local cand = Candidate("rare", seg.start, seg._end, text, with_mark(comment, CANTONESE.mark))
-  cand.quality = rare_quality(text, COMMON_QUALITY)
+  migrate(env, text, syllable)
+  env.rare_readings[text] = syllable
+  local cand = Candidate("rare", seg.start, seg._end, text,
+    env.rare_nine_key and syllable or with_mark(comment, CANTONESE.mark))
+  cand.quality = COMMON_QUALITY
   yield(cand)
   return text
 end
@@ -59,77 +67,89 @@ local EXTRA = { mo = "么" }
 -- 26 键整段候选的质量在 2 上下（2.2005 排在 mo 的第 16 个左右）；九键的在 1.000x，取同样的位置（沫 之后）。
 local EXTRA_QUALITY = 2.2005
 local EXTRA_T9_QUALITY = 1.0005
-local function yield_extra(input, seg, nine_key)
+local function yield_extra(env, input, seg, nine_key)
   local typed = input:lower()
   for syllable, text in pairs(EXTRA) do
     local keys = syllable:gsub("%l", function(c) local i = c:byte() - 96; return KEYPAD:sub(i, i) end)
     if typed == syllable or input == keys then
-      local cand = Candidate("rare", seg.start, seg._end, text, input == keys and syllable or "")
+      env.rare_readings[text] = syllable
+      local cand = Candidate("rare", seg.start, seg._end, text, (nine_key or input == keys) and syllable or "")
       cand.quality = nine_key and EXTRA_T9_QUALITY or EXTRA_QUALITY
       yield(cand)
     end
   end
 end
 
--- 用过的生僻字往前排（11-16 用户反馈：名字里的生僻字打多少次都上不了首位）。主词库的动态词频管不到这些字
--- （它们不进用户词库，见文件头），这里自己记：选过一次排到第一、二页，选过两次起排第一。
--- 记在用户目录的 cyime_rare_learned.txt（一行「字\t次数」），只在开关开着时读写；无痕模式不记。
+-- 旧版本记的次数（cyime_rare_learned.txt，一行「字\t次数」）：这个字下次出现、知道读音时搬进用户词库，搬完删掉那一行。
 local LEARNED_FILE = "/cyime_rare_learned.txt"
-local LEARNED_MAX = 2000
-local learned  -- 字 → 选过几次
-local function load_learned()
-  if learned then return learned end
-  learned = {}
+local legacy  -- 字 → 次数，还没搬的
+local function load_legacy()
+  if legacy then return legacy end
+  legacy = {}
   local dir = rime_api.get_user_data_dir()
   local f = dir and io.open(dir .. LEARNED_FILE, "r")
-  if not f then return learned end
+  if not f then return legacy end
   for line in f:lines() do
     local text, count = line:match("^([^\t]+)\t(%d+)$")
-    if text then learned[text] = tonumber(count) end
+    if text then legacy[text] = tonumber(count) end
   end
   f:close()
-  return learned
+  return legacy
 end
 
-local function save_learned()
+local function save_legacy()
   local dir = rime_api.get_user_data_dir()
-  if not dir or not learned then return end
-  local rows = {}
-  for text, count in pairs(learned) do rows[#rows + 1] = { text, count } end
-  table.sort(rows, function(a, b) return a[2] > b[2] end)
-  local tmp = dir .. LEARNED_FILE .. ".tmp"
+  if not dir or not legacy then return end
+  local path = dir .. LEARNED_FILE
+  if next(legacy) == nil then os.remove(path); return end
+  local tmp = path .. ".tmp"
   local f = io.open(tmp, "w")
   if not f then return end
-  for i = 1, math.min(#rows, LEARNED_MAX) do f:write(rows[i][1], "\t", rows[i][2], "\n") end
+  for text, count in pairs(legacy) do f:write(text, "\t", count, "\n") end
   f:close()
-  if not os.rename(tmp, dir .. LEARNED_FILE) then
-    os.remove(dir .. LEARNED_FILE)
-    os.rename(tmp, dir .. LEARNED_FILE)
+  if not os.rename(tmp, path) then
+    os.remove(path)
+    os.rename(tmp, path)
   end
 end
 
--- 选过一次进前两页（主词库同音字之后约第 10–16 个）。
-local LEARNED_ONCE_QUALITY = 2.2005
-local LEARNED_QUALITY = 1000
-
-function rare_quality(text, default)
-  local count = load_learned()[text]
-  if not count then return default end
-  return count >= 2 and LEARNED_QUALITY or math.max(default, LEARNED_ONCE_QUALITY)
-end
-
--- 上屏时数一下这次的生僻字（见下面 count_rare_text）。
-local count_rare_text
-local function any_on(ctx)
-  for _, list in ipairs(LISTS) do
-    if ctx:get_option(list.option) then return true end
+-- 记进这个方案主翻译器的用户词库（同一个库，排序、长按删除、固定都照常）。每次现开一个 Memory、用完就断开：
+-- 一直开着的 Memory 会在每次上屏时自己开一个事务，把主翻译器还没提交的学习提前提交，退格撤销学习就失效了。
+-- picks：{ { 字, 读音, 次数 }, ... }。
+local function learn(env, picks)
+  if #picks == 0 then return end
+  local ok, memory = pcall(Memory, env.engine, env.engine.schema)
+  if not ok or not memory then return end
+  if memory.user_dict then
+    for _, pick in ipairs(picks) do
+      local entry = DictEntry()
+      entry.text = pick[1]
+      entry.custom_code = pick[2] .. " "
+      memory:update_userdict(entry, pick[3], "")
+    end
   end
-  return false
+  memory:disconnect()
 end
 
-local function remember_commit(ctx)
-  if not any_on(ctx) or ctx:get_option("_cyime_incognito") then return end
-  if count_rare_text(ctx:get_commit_text()) then save_learned() end
+function migrate(env, text, reading)
+  local count = load_legacy()[text]
+  if not count or env.engine.context:get_option("_cyime_incognito") then return end
+  legacy[text] = nil
+  if count > 0 then learn(env, { { text, reading, count } }) end
+  save_legacy()
+end
+
+-- 上屏时选中的生僻字候选按读音各记一次（组词时先选常用字再选生僻字也算）。主词库的词由主翻译器自己记。
+local function remember_commit(env, ctx)
+  if ctx:get_option("_cyime_incognito") or not env.rare_readings then return end
+  local picks = {}
+  for _, seg in ipairs(ctx.composition:toSegmentation():get_segments()) do
+    local cand = seg:get_selected_candidate()
+    local genuine = cand and cand:get_genuine()
+    local reading = genuine and genuine.type == "rare" and env.rare_readings[genuine.text]
+    if reading then picks[#picks + 1] = { genuine.text, reading, 1 } end
+  end
+  learn(env, picks)
 end
 
 -- 分词符（' 和空格）不算读音：组词时先选了前面的字，剩下那一节从分词符开始（aaa'bbb 选完 aaa 剩 'bbb），
@@ -146,7 +166,7 @@ end
 -- list.counted: the characters whose commits are counted (not the common ones of list.readings), one string
 -- list.words: whole code without spaces → "词\n" rows (日文汉字的人名、地名；只有 26 键全拼和九键查)
 -- list.digits: nine-key digits → "字\tsyllable\n" rows in file order (words: "词\tjia ben wu yang\n")
-local loaded = 0  -- lists loaded so far (count_rare_text rebuilds its string when this grows)
+local loaded = 0  -- lists loaded so far
 local function read_rows(path, each)
   local f = io.open(rime_api.get_shared_data_dir() .. path, "r") or io.open(rime_api.get_user_data_dir() .. path, "r")
   if not f then return end
@@ -280,22 +300,19 @@ local function merged_syllables(map, input)
   return found
 end
 
--- 一个读音的生僻字按三遍出：选过两次起的、选过一次的、其余照文件顺序。Rime 合并几个翻译器时只比各自的下一个
--- 候选，照文件顺序出时选过的字分数再高也排在第一个没选过的字后面，打多少次都不动（#477）。
--- each(fn) 把这个读音的每个字和注释交给 fn；仍是边出边建候选，不一次建几百个。
-local function yield_rare(each, start, _end, skip)
-  local map = load_learned()
-  for pass = 1, 3 do
-    each(function(text, comment)
-      if text == skip then return end
-      local count = map[text] or 0
-      if (pass == 1 and count >= 2) or (pass == 2 and count == 1) or (pass == 3 and count == 0) then
-        local cand = Candidate("rare", start, _end, text, comment)
-        cand.quality = rare_quality(text, -1000)
-        yield(cand)
-      end
-    end)
-  end
+-- 一个读音的生僻字按文件顺序出，都是默认的低权重；选过的从用户词库出（主翻译器按学习权重排），这里再出一次的
+-- 由去重滤掉。each(fn) 把这个读音的每个字、注释和读音交给 fn；仍是边出边建候选，不一次建几百个。
+local function yield_rare(env, each, start, _end, skip)
+  each(function(text, comment, reading)
+    if text == skip then return end
+    if reading then
+      migrate(env, text, reading)
+      if not env.rare_readings[text] then env.rare_readings[text] = reading end
+    end
+    local cand = Candidate("rare", start, _end, text, comment)
+    cand.quality = -1000
+    yield(cand)
+  end)
 end
 
 -- 14 键、双拼：reading 能对上的读音各补一遍，开着的几张表一起（commons 是已经出过的粤语字）。没有对上的读音返回 false。
@@ -309,16 +326,16 @@ local function merged_yield(env, on, ctx, reading_text, start, _end)
   local commons = {}
   local yue = found[CANTONESE] or {}
   for _, syllable in ipairs(yue) do
-    local common = yield_common(syllable, { start = start, _end = _end }, #yue > 1 and syllable or "", ctx)
+    local common = yield_common(env, syllable, { start = start, _end = _end }, #yue > 1 and syllable or "", ctx)
     if common then commons[common] = true end
   end
-  yield_rare(function(fn)
+  yield_rare(env, function(fn)
     for _, list in ipairs(on) do
       local syllables = found[list]
       for _, syllable in ipairs(syllables) do
         local comment = with_mark(#syllables > 1 and syllable or "", list.mark)
         for text in (list.chars[syllable] or ""):gmatch(utf8.charpattern) do
-          if not commons[text] then fn(text, comment) end
+          if not commons[text] then fn(text, comment, syllable) end
         end
       end
     end
@@ -327,18 +344,21 @@ local function merged_yield(env, on, ctx, reading_text, start, _end)
 end
 
 -- 全拼 26 键、九键：reading 正好是一个读音（chan，或九键 242）或日文汉字表里一个整词时补；对不上返回 false。
-local function plain_yield(on, ctx, reading_text, start, _end)
+local function plain_yield(env, on, ctx, reading_text, start, _end)
   local key = reading_text:lower()
   local whole = (key:gsub("[' ]", ""))
-  local common = yield_common(key, { start = start, _end = _end }, "", ctx)
+  local common = yield_common(env, key, { start = start, _end = _end }, "", ctx)
   local hit = common ~= nil
   for _, list in ipairs(on) do
     if list.chars[key] or list.words[whole] then hit = true end
   end
   if hit then
-    yield_rare(function(fn)
+    -- 九键（左栏选定的拼音）注释写读音：九键按注释里的读音记学习。
+    yield_rare(env, function(fn)
       for _, list in ipairs(on) do
-        for text in (list.chars[key] or ""):gmatch(utf8.charpattern) do fn(text, list.mark) end
+        for text in (list.chars[key] or ""):gmatch(utf8.charpattern) do
+          fn(text, env.rare_nine_key and key or list.mark, key)
+        end
         for text in (list.words[whole] or ""):gmatch("([^\n]+)\n") do fn(text, list.mark) end
       end
     end, start, _end, common)
@@ -349,9 +369,9 @@ local function plain_yield(on, ctx, reading_text, start, _end)
     if list.digits[reading_text] then hit = true end
   end
   if not hit then return false end
-  yield_rare(function(fn)
+  yield_rare(env, function(fn)
     for _, list in ipairs(on) do
-      for text, code in (list.digits[reading_text] or ""):gmatch("([^\t]+)\t([%l ]+)\n") do fn(text, code) end
+      for text, code in (list.digits[reading_text] or ""):gmatch("([^\t]+)\t([%l ]+)\n") do fn(text, code, code) end
     end
   end, start, _end)
   return true
@@ -384,7 +404,8 @@ local function translator(input, seg, env)
       if processors:get_value_at(i).value == "t9_processor" then env.rare_nine_key = true end
     end
   end
-  if not env.rare_merged_keys then yield_extra(input, seg, env.rare_nine_key) end
+  env.rare_readings = {}
+  if not env.rare_merged_keys then yield_extra(env, input, seg, env.rare_nine_key) end
   local ctx = env.engine.context
   local on = lists_on(ctx)
   if #on == 0 then return end
@@ -392,38 +413,15 @@ local function translator(input, seg, env)
   if env.rare_merged_keys then
     try = function(text, start, _end) return merged_yield(env, on, ctx, text, start, _end) end
   else
-    try = function(text, start, _end) return plain_yield(on, ctx, text, start, _end) end
+    try = function(text, start, _end) return plain_yield(env, on, ctx, text, start, _end) end
   end
   if try(input, seg.start, seg._end) then return end
   local offset = #typed - #typed:gsub("^[' ]+", "")
   leading_yield(input, offset, seg.start, try)
 end
 
--- 上屏的文字里每个生僻字记一次（组词时先选常用字再选生僻字也算）。原来看每一节选中的候选是不是生僻字候选，
--- 九键的选字经过九键自己的处理，候选类型对不上，次数一直不涨（#477）。生僻字都不在主词库里，按字认就够了。
--- 日文汉字、韩文汉字、粤语字也一样（读进来的表都算）。
-local chars_all  -- every character of the loaded lists in one string, rebuilt when another list is loaded
-local chars_loaded = 0
-function count_rare_text(text)
-  if not chars_all or chars_loaded ~= loaded then
-    chars_loaded = loaded
-    local parts = {}
-    for _, list in ipairs(LISTS) do parts[#parts + 1] = list.counted end
-    for _, common in pairs(COMMON) do parts[#parts + 1] = common end
-    chars_all = table.concat(parts)
-  end
-  local map, changed = load_learned(), false
-  for ch in text:gmatch(utf8.charpattern) do
-    if #ch > 1 and chars_all:find(ch, 1, true) then
-      map[ch] = (map[ch] or 0) + 1
-      changed = true
-    end
-  end
-  return changed
-end
-
 local function init(env)
-  env.rare_commit = env.engine.context.commit_notifier:connect(remember_commit)
+  env.rare_commit = env.engine.context.commit_notifier:connect(function(ctx) remember_commit(env, ctx) end)
 end
 
 local function fini(env)

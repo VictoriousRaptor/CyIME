@@ -534,6 +534,7 @@ bool T9Processor::SelectCandidate(const std::string& candidate_pinyin,
     int rime_consumed =
         QueryRimeConsumedDigits(candidate_pinyin, candidate_text, &captured,
                                 &is_t9_user, &candidate_end);
+    CaptureFromReading(candidate_pinyin, candidate_text, &captured);
     if (rime_consumed >= 0 && !input_buffer_.selections.empty()) {
         // 双拼九键：选中段在 RIME input 里是双拼键位（一个字母一个键），按段换算成键数，
         // 只选了前半段的候选（选 gua、hao 后选「挂」）不能算成全消费。对不上时照旧。
@@ -669,6 +670,27 @@ bool T9Processor::BuildEntryForPinyin(const std::string& text,
     entry->text = text;
     entry->code = code;
     return true;
+}
+
+void T9Processor::CaptureFromReading(const std::optional<std::string>& candidate_pinyin,
+                                     const std::string& candidate_text, T9CommitCapture* capture) {
+    if (!capture || capture->valid() || candidate_text.empty() || !candidate_pinyin) return;
+    size_t chars = 0;
+    for (size_t i = 0; i < candidate_text.size();) {
+        const unsigned char lead = static_cast<unsigned char>(candidate_text[i]);
+        const size_t len = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+        if (len < 3 || i + len > candidate_text.size()) return;  // 汉字都在三、四字节区
+        uint32_t cp = len == 3 ? (lead & 0x0F) : (lead & 0x07);
+        for (size_t k = 1; k < len; ++k) cp = (cp << 6) | (static_cast<unsigned char>(candidate_text[i + k]) & 0x3F);
+        if (!((cp >= 0x3400 && cp <= 0x9FFF) || (cp >= 0x20000 && cp <= 0x323AF))) return;
+        ++chars;
+        i += len;
+    }
+    const std::string reading = NormalizePinyinComment(*candidate_pinyin);
+    if (ParseSyllables(reading).size() != chars) return;
+    DictEntry entry;
+    if (!BuildEntryForPinyin(candidate_text, reading, &entry) || entry.code.size() != chars) return;
+    *capture = {candidate_text, T9SyllableCode(entry.code.begin(), entry.code.end()), ""};
 }
 
 std::optional<SyllableId> T9Processor::ResolveSyllableViaPrism(
@@ -852,6 +874,7 @@ std::optional<bool> T9Processor::SelectLetterCandidate(const std::string& candid
     size_t end = 0;
     if (QueryRimeConsumedDigits(candidate_pinyin, candidate_text, &captured, nullptr, &end) < 0)
         return std::nullopt;
+    CaptureFromReading(candidate_pinyin, candidate_text, &captured);
     size_t rest = std::min(end, input.size());
     size_t code_end = rest;
     while (rest < input.size() && (input[rest] == manual_delimiter_ || input[rest] == ' ' || input[rest] == '\''))

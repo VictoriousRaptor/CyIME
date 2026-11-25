@@ -58,6 +58,47 @@ internal const val WHOLE_SESSION_BUDGET_MS = 15000L
 internal const val WHOLE_SESSION_MAX_SAMPLES = 5 * 60 * 16000
 
 /**
+ * VAD 一段都没打开时，整段重识别的后备判断：这次输入里最响的约 0.3 s（9 个 32 ms 帧的平均能量）比底噪
+ * （第 10 百分位的帧）高出 [SPEECH_LIFT_DB] 才算有人说话。2026-11-22 用他平板的录音核对：「手机上检查一样的」
+ * 「等着」「你这还属啥」三句 Silero 放大后也不开段，整次什么都不出，它们高出 29.7–35.2 dB；他平板 456 s 真实
+ * 底噪切成 3 s / 10 s 一段（196 段）最高 24.9 dB，一段都不过。安静房间里编出「我。」的那种近乎静音也过不了。
+ */
+internal const val SPEECH_LIFT_DB = 27f
+
+internal class SpeechLift {
+    private val frames = ArrayList<Float>()
+    private val pending = FloatArray(512)
+    private var size = 0
+
+    fun accept(samples: FloatArray) {
+        for (sample in samples) {
+            pending[size++] = sample
+            if (size == 512) {
+                var energy = 0.0
+                for (v in pending) energy += v.toDouble() * v
+                frames.add(10f * kotlin.math.log10(energy / 512 + 1e-18).toFloat())
+                size = 0
+            }
+        }
+    }
+
+    /** Loudest ~0.3 s over the 10th-percentile frame, in dB; 0 when there is under 0.3 s of audio. */
+    fun liftDb(): Float {
+        if (frames.size < 9) return 0f
+        val floor = frames.sorted()[((frames.size - 1) * .1).toInt()]
+        val power = DoubleArray(frames.size) { Math.pow(10.0, frames[it] / 10.0) }
+        var window = 0.0
+        var loudest = 0.0
+        for (i in power.indices) {
+            window += power[i]
+            if (i >= 9) window -= power[i - 9]
+            if (i >= 8) loudest = maxOf(loudest, window / 9)
+        }
+        return (10 * kotlin.math.log10(loudest + 1e-18)).toFloat() - floor
+    }
+}
+
+/**
  * Splits [total] samples into blocks of at most [maxSamples] for the end-of-input re-read: each
  * cut is the last real pause (a region end, from [pauses]) at least 8 s into the block, else a
  * hard cut at the limit. Blocks are contiguous and cover every sample once.
@@ -274,8 +315,7 @@ private fun cleanSpeechTextOnly(text: String): String {
 internal fun cleanSenseVoiceText(text: String, detectedLanguage: String = "", keepMarks: Boolean = false): String {
     // sherpa-onnx separates the language/event prefix from text. A no-speech classification
     // must be handled before tag cleanup; it is not a word-confidence score or a blacklist.
-    if (detectedLanguage.removePrefix("<|").removeSuffix("|>").equals("nospeech", ignoreCase = true) ||
-        text.contains("<|nospeech|>", ignoreCase = true)) return ""
+    if (isSenseVoiceNoSpeech(text, detectedLanguage)) return ""
     val plain = richTags.replace(text, "")
     fun cjk(c: Char) = c in '\u3040'..'\u30ff' || c in '\u3400'..'\u9fff'
     val joined = buildString {
@@ -295,6 +335,10 @@ internal fun cleanSenseVoiceText(text: String, detectedLanguage: String = "", ke
     }
     return cleanSpeechText(joined, keepMarks)
 }
+
+internal fun isSenseVoiceNoSpeech(text: String, language: String) =
+    language.removePrefix("<|").removeSuffix("|>").equals("nospeech", ignoreCase = true) ||
+        text.contains("<|nospeech|>", ignoreCase = true)
 
 /**
  * Identified regions allow late second-pass results to replace exactly their preview.

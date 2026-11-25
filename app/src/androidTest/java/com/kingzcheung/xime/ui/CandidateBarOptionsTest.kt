@@ -140,7 +140,7 @@ class CandidateBarOptionsTest {
             }
         }
         // 外层设置搜索定位修饰的 testTag 在前，同一节点上前面的生效，两个名字都认。
-        val tagged = hasTestTag("candidate-cancel-setting") or hasTestTag("settings-search-anchor:候选栏取消按钮")
+        val tagged = hasTestTag("candidate-cancel-setting") or hasTestTag("settings-search-anchor:显示 ‹ 取消键")
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(tagged)
         val setting = rule.onNode(tagged)
         setting.assertIsOn().performClick().assertIsOff()

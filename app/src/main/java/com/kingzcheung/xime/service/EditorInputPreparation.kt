@@ -2,7 +2,9 @@ package com.kingzcheung.xime.service
 
 import com.kingzcheung.xime.rime.RimeEngine
 import com.kingzcheung.xime.settings.InputModes
+import com.kingzcheung.xime.settings.InputLanguage
 import com.kingzcheung.xime.settings.LanguagePreferences
+import com.kingzcheung.xime.settings.LeaveEnglishOnOpen
 import com.kingzcheung.xime.settings.OrientationLayouts
 import com.kingzcheung.xime.settings.SchemaManager
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -52,6 +54,14 @@ internal class EditorInputPreparation(private val service: XimeInputMethodServic
                     service.sessionController::restorePersistedSchemaOptions)) {
                 FileLogger.w("InputLifecycle", "Editor preparation failed: schema unavailable")
                 return@postRimeJob
+            }
+            // #404「打开键盘时退出英文」（默认关）：进新输入框时从英文切回方案自己的语言，和按语言键切回去一样写回。
+            if (!handwriting && LeaveEnglishOnOpen.applies(LeaveEnglishOnOpen.enabled(service), restarting, policy.scoped,
+                    policy.engineAsciiOverride(), engine.isAsciiMode(),
+                    InputLanguage.forSchema(nativeTarget) in LanguagePreferences.enabled(service))) {
+                engine.setOption("ascii_mode", false)
+                service.sessionController.applyPunctuationWidth(false)
+                service.sessionController.persistSchemaOption("ascii_mode", false)
             }
             val ascii = engine.isAsciiMode()
             withContext(Dispatchers.Main) {

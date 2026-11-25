@@ -17,7 +17,6 @@ import androidx.compose.material.icons.twotone.Dialpad
 import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.FormatListNumbered
 import androidx.compose.material.icons.twotone.FormatColorFill
-import androidx.compose.material.icons.twotone.SwipeLeft
 import androidx.compose.material.icons.twotone.AspectRatio
 import androidx.compose.material.icons.twotone.DataObject
 import androidx.compose.material.icons.twotone.RecordVoiceOver
@@ -105,8 +104,12 @@ private fun LayoutDisplayPage(
 ) {
     val context = LocalContext.current
     val pageTitle = LayoutDisplayPages.firstOrNull { it.first == page }?.second
-    // 「候选滑到头回弹展开」放在这一层：「候选栏按钮」里开关它，「候选样式」里的「每页候选词数」跟着改说法（11-22 他：两个要配套）。
+    // 「左右滑展开候选」放在这一层：「候选栏按钮」里开关它，「候选样式」里的「每页候选词数」跟着改说法（11-22 他：两个要配套）。
     var swipeExpand by remember { mutableStateOf(SettingsPreferences.isCandidateSwipeExpand(context)) }
+    // 候选栏两种用法：默认（1.15.101）／经典（右边一格关）。存的还是两个旧开关，名字不改：经典 = 左右滑展开 + 关闭键放右边。
+    // 11-24 加第三种「收键盘」（= 1.15.103）。
+    var rightKey by remember { mutableStateOf(SettingsPreferences.candidateRightKey(context)) }
+    val rightKeyCloses = rightKey == com.kingzcheung.xime.settings.CandidateRightKey.CLOSE
 
     KeyboardSettingsScaffold(pageTitle ?: "键盘布局", { if (page != null) closePage() else onBack() },
         preview = true, example = if (page == "candidates") com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Candidates
@@ -142,7 +145,7 @@ private fun LayoutDisplayPage(
                         mutableStateOf(com.kingzcheung.xime.settings.OrientationLayouts.isEnabled(context))
                     }
                     SettingsToggleItem(Icons.TwoTone.ScreenRotation, "横竖屏分开记布局",
-                        "横屏和竖屏各用各的布局",
+                        "横屏、竖屏和折叠屏的两块屏各用各的布局",
                         checked = perOrientation, onCheckedChange = {
                             perOrientation = it; com.kingzcheung.xime.settings.OrientationLayouts.setEnabled(context, it)
                         })
@@ -178,9 +181,16 @@ private fun LayoutDisplayPage(
                             pairedSymbols = it; SettingsPreferences.setPairedSymbolsEnabled(context, it)
                         })
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    var symbolReturn by remember { mutableStateOf(SettingsPreferences.isSymbolReturnAfterPickEnabled(context)) }
+                    SettingsToggleItem(Icons.TwoTone.EmojiSymbols, "选完符号自动返回",
+                        "在符号页点一个符号后回到打字键盘",
+                        checked = symbolReturn, onCheckedChange = {
+                            symbolReturn = it; SettingsPreferences.setSymbolReturnAfterPickEnabled(context, it)
+                        })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     var enterSends by remember { mutableStateOf(SettingsPreferences.isEnterSendsEnabled(context)) }
                     SettingsToggleItem(Icons.AutoMirrored.TwoTone.Send, "回车发送",
-                        "应用支持时，回车直接发送消息",
+                        "应用支持时，回车直接发送消息，长按回车换行",
                         checked = enterSends, onCheckedChange = {
                             enterSends = it; SettingsPreferences.setEnterSendsEnabled(context, it)
                         })
@@ -281,6 +291,9 @@ private fun LayoutDisplayPage(
                         )
                     }
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 数字位置（11-22 群里有人要，默认 1 2 3 在上不变）：两张小键盘图点选，见 NumberPadOrderChoice.kt。
+                    NumberPadOrderChoice()
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     // 数字键盘左栏（用户 11-09）：进「按键符号 → 数字侧栏」改字、加减格子、调顺序。
                     SettingsItem(Icons.TwoTone.EmojiSymbols, "左栏符号",
                         "数字键盘左侧一列的符号",
@@ -289,7 +302,8 @@ private fun LayoutDisplayPage(
                         showArrow = true, searchKey = "数字键盘左栏符号")
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     // 数字行（默认关）：点开关打开，点这一行进「按键符号 → 数字行」改键和顺序。
-                    val numberRow = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences().numberRow
+                    val numberRowPrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                    val numberRow = numberRowPrefs.numberRow
                     SettingsToggleItem(Icons.TwoTone.FormatListNumbered, "数字行",
                         "在 26 键、14 键字母上方加一排数字",
                         checked = numberRow, onCheckedChange = { SettingsPreferences.setNumberRowEnabled(context, it) },
@@ -297,7 +311,15 @@ private fun LayoutDisplayPage(
                             com.kingzcheung.xime.ui.keyboard.SideSymbolTarget.NUMBER_ROW) },
                         showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    // 打数字出短语（别人请求，默认关）：见 service/DigitPhrases.kt。
+                    // 数字行和字母一样高（#444，默认关）：只在数字行开着时显示。
+                    if (numberRow) {
+                        SettingsToggleItem(Icons.TwoTone.FormatListNumbered, "数字行和字母一样高",
+                            "关着时数字行矮一点。键盘总高不变",
+                            checked = numberRowPrefs.numberRowFullHeight,
+                            onCheckedChange = { SettingsPreferences.setNumberRowFullHeight(context, it) })
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    }
+                    // 打数字出短语（别人请求；11-24 起默认开）：见 service/DigitPhrases.kt。
                     var digitPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.DigitPhrases.isEnabled(context)) }
                     SettingsToggleItem(Icons.TwoTone.Dialpad, "数字出短语",
                         "打数字时，候选里给出编码相符的「我的短语」",
@@ -380,7 +402,7 @@ private fun LayoutDisplayPage(
 
                     if (inputTextLocation == SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR) {
                         var showPreview by remember { mutableStateOf(SettingsPreferences.showPreeditPreview(context)) }
-                        SettingsToggleItem(Icons.TwoTone.DataObject, "显示拼音编辑栏", "打字时显示编码，支持编辑的方案可点按修改。",
+                        SettingsToggleItem(Icons.TwoTone.DataObject, "显示拼音编辑栏", "打字时显示拼音，部分方案可点按修改",
                             showPreview, { showPreview = it; SettingsPreferences.setShowPreeditPreview(context, it) })
                         if (showPreview) {
                             // 拼音位置三选一（11-19）：默认照旧浮在键盘上方的气泡；「紧贴候选上方」是贴在键盘边框上的小签（11-20 他按微信那张图定的）；
@@ -389,10 +411,10 @@ private fun LayoutDisplayPage(
                             var preeditStyle by remember { mutableStateOf(SettingsPreferences.preeditStyle(context)) }
                             var preeditAlign by remember { mutableStateOf(SettingsPreferences.preeditAlign(context)) }
                             val styles = listOf(
-                                Triple(SettingsPreferences.PREEDIT_STYLE_BUBBLE, "气泡", "拼音浮在键盘上面，会挡住一点输入框。透明度可调。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_LINE, "小标签", "拼音贴在键盘上边，只有拼音那么宽。输入框往上让开，不会被挡住。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_BLOCK, "方块", "和小标签一样贴着键盘，但更高、字更大，四角是直角。输入框往上让开，不会被挡住。"),
-                                Triple(SettingsPreferences.PREEDIT_STYLE_STRIP, "整行", "拼音占满键盘上面一整行。输入框往上让开，不会被挡住。"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_BUBBLE, "气泡", "浮在键盘上方，会挡住一点输入框"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_LINE, "小标签", "贴着键盘上边，和拼音一样宽，不挡输入框"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_BLOCK, "方块", "比小标签更高、字更大，不挡输入框"),
+                                Triple(SettingsPreferences.PREEDIT_STYLE_STRIP, "整行", "键盘加高一行放拼音，和键盘连成一块。"),
                             )
                             val aligns = listOf(
                                 SettingsPreferences.PREEDIT_ALIGN_LEFT to "靠左",
@@ -430,6 +452,13 @@ private fun LayoutDisplayPage(
                                     }
                                 }
                             }
+                            // 贴边拼音显示纠正读音（#586，默认开 = 原来的样子）：只在小标签、方块、整行时显示，气泡本来就照打的字母。
+                            if (preeditStyle != SettingsPreferences.PREEDIT_STYLE_BUBBLE) {
+                                var lineCorrected by remember { mutableStateOf(SettingsPreferences.preeditLineCorrected(context)) }
+                                SettingsToggleItem(Icons.TwoTone.Spellcheck, "拼音显示改正后的读音",
+                                    "首选是纠错来的词时，拼音换成改正后的读音，改动的字母标红。关掉时照打的字母显示",
+                                    lineCorrected, { lineCorrected = it; SettingsPreferences.setPreeditLineCorrected(context, it) })
+                            }
                             // 拼音气泡底色可调透明（用户 11-01「我就喜欢透明度」）；点开的编辑条用同一个值（11-16）。只在键盘上方会浮出气泡时显示。
                             val bubblePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
                             // 选「显示在输入框」时没有气泡；页面上的选择先于键盘偏好刷新，所以也看本页的选择。
@@ -463,7 +492,7 @@ private fun LayoutDisplayPage(
                             // 拼音标调（用户 11-20「能不能在拼音上显示声调」）：只改气泡／小签里的显示，默认关。
                             var preeditTones by remember { mutableStateOf(SettingsPreferences.preeditTones(context)) }
                             SettingsToggleItem(Icons.TwoTone.RecordVoiceOver, "拼音显示声调",
-                                "按首选字的读音标调，如 jiù'shì'zhè'yàng；只是显示，上屏的还是字母。简拼、双拼显示按键时不标。",
+                                "按首选字标调，如 jiù'shì'zhè'yàng，只改显示",
                                 preeditTones, { preeditTones = it; SettingsPreferences.setPreeditTones(context, it) })
                         }
                     }
@@ -551,7 +580,7 @@ private fun LayoutDisplayPage(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "超过 22 候选栏会整条变高",
+                            text = "超过 22 时候选栏会变高",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -598,7 +627,7 @@ private fun LayoutDisplayPage(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                    // 开了「候选滑到头回弹展开」：候选栏只排一屏，露全最后半截那个再往左拉就展开全部，用不上这个数（11-22 他：
+                    // 开了「左右滑展开候选」：候选栏只排一屏，露全最后半截那个再往左拉就展开全部，用不上这个数（11-22 他：
                     // 「一个屏幕就是一页」）。存的数不动，关掉开关后照旧按它。
                     val pageSizePref = SettingsPreferences.getPageSize(context)
                     val effectiveValue = if (pageSizePref == 0) 20f else pageSizePref.toFloat()
@@ -639,7 +668,7 @@ private fun LayoutDisplayPage(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = if (swipeExpand) "已开「候选滑到头回弹展开」：候选栏显示多少就是一页，把最后露半截的那个露全，再往左拉就展开全部。关掉那个开关后按这里的数"
+                            text = if (swipeExpand) "已开「左右滑展开候选」：候选栏显示多少就是一页，滑到头再往外拉就展开全部。关掉后按这里的数"
                                 else "下次打字时生效",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -647,126 +676,76 @@ private fun LayoutDisplayPage(
                     }
                 })
             }
-            // 候选栏左右的按钮（11-02 整理：原来 11 行挤在一张「候选词」卡片里，按用途拆成四组，各行原样不变）。
+            // 候选栏左右的按钮（11-02 整理：原来 11 行挤在一张「候选词」卡片里，按用途拆成四组）。
+            // 11-24 他：「当时不是让你这样做的吗，为什么做出来不一样」——照 11-23 他认可的效果图做（cand-mode-picker-1123/mock.png）：
+            // 卡片里一行名字＋标签＋圆点，下面是真样子的候选栏和说明；卡片下面三个开关没有图标。
+            // 和效果图不同的只有他后来自己要改的：名字「默认」「经典」、去掉小标题、开关叫「左右滑展开候选」、锁住时能点过去、
+            // 去掉「按压高亮」、两边都能拉（「左右拉」），以及第三张卡「收键盘」（= 1.15.103，同一个样子）。
             if (page == "candidates") item {
+                Column {
                 SettingsSection(title = "候选栏按钮", content = {
-                    // 回弹展开决定整条候选栏怎么用，放这一组最前（11-22 他：开关和图例放在候选词页靠前）。
-                    // 11-21 他：滑到头回弹展开只在打开这个开关后才有，默认关；关着时候选栏和 1.15.101 一样。
-                    SettingsToggleItem(Icons.TwoTone.SwipeLeft, "候选滑到头回弹展开",
-                        "候选栏只排一屏，露全最后一个再往左拉就展开，展开后往回划收起；右边那一格不再展开，用来关闭和收起键盘", swipeExpand, {
-                            swipeExpand = it
-                            SettingsPreferences.setCandidateSwipeExpand(context, it)
-                        })
-                    // 11-22 他：全面屏手势的人要「不管什么时候点右边同一个位置都能收起键盘」。开关打开后才有这两项：
-                    // 关闭键放左边（同 104）还是右边（「×」，和收起键盘同一格）。
-                    if (swipeExpand) {
-                        var closeRight by remember { mutableStateOf(SettingsPreferences.isCandidateCloseOnRight(context)) }
-                        Column(Modifier.settingsSearchAnchor("关闭键位置")) {
-                            Text("关闭键位置", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-                            Text("放右边时用「×」，和收起键盘同一个位置：上屏后点一下关掉联想，同一处再点一下收起键盘",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp))
-                            Row(Modifier.fillMaxWidth().choiceCardRowHeight(150.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                for (right in listOf(false, true)) {
-                                    IllustratedChoiceCard(if (right) "右边" else "左边", closeRight == right,
-                                        onClick = {
-                                            closeRight = right
-                                            SettingsPreferences.setCandidateCloseOnRight(context, right)
-                                        },
-                                        modifier = Modifier.weight(1f), tag = "candidate-close-side:${if (right) "right" else "left"}",
-                                        titleMaxLines = 1) {
-                                        CandidateCloseSideIllustration(right)
-                                    }
-                                }
-                            }
-                            // 11-23 他：四格「操作图例」太丑、也没让人看懂，不如不加，整块拿掉。
-                            Spacer(Modifier.height(8.dp))
+                    // 锚点名「候选栏右边的键」留着不显示，给搜索和「左右滑展开候选」锁定说明里的跳转用。
+                    Column(Modifier.settingsSearchAnchor("候选栏右边的键").fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // 11-25 他：「顺序不对」——默认、经典在前，后加的「右侧收起」放最后。
+                        for (mode in listOf(com.kingzcheung.xime.settings.CandidateRightKey.EXPAND,
+                            com.kingzcheung.xime.settings.CandidateRightKey.CLOSE,
+                            com.kingzcheung.xime.settings.CandidateRightKey.HIDE)) {
+                            CandidateModeCard(mode, candidateRightKeyName(mode), rightKey == mode, onClick = {
+                                // 「收键盘」「经典」右边不放 ▾/▴，展开只能靠滑，所以一并打开左右滑；选回「默认」时恢复成原来的样子。
+                                SettingsPreferences.setCandidateRightKey(context, mode)
+                                rightKey = SettingsPreferences.candidateRightKey(context)
+                                swipeExpand = SettingsPreferences.isCandidateSwipeExpand(context)
+                            })
                         }
                     }
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = 16.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
-                    var showCandidateCancel by remember {
-                        mutableStateOf(SettingsPreferences.shouldShowCandidateCancelButton(context))
-                    }
-                    // 图例放在开关下面，随开关实时变化；整块都可点。
-                    Column(
-                        modifier = Modifier.settingsSearchAnchor("候选栏取消按钮")
-                            .fillMaxWidth()
-                            .testTag("candidate-cancel-setting")
-                            .toggleable(
-                                value = showCandidateCancel,
-                                role = Role.Switch,
-                                onValueChange = {
-                                    showCandidateCancel = it
-                                    SettingsPreferences.setShowCandidateCancelButton(context, it)
-                                },
-                            )
-                            .padding(16.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("候选栏取消按钮", style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium)
-                                Text("候选栏左端显示取消按钮",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Switch(checked = showCandidateCancel, onCheckedChange = null)
+                    // 11-23 他选：左右滑单独一个开关，「默认」也能滑（▾/▴ 照旧在）；默认关。「收键盘」「经典」靠它展开，锁成开着。
+                    CandidateSwitchRow("左右滑展开候选", "滑到头再往外拉就展开，左右划都能收起", swipeExpand, {
+                        swipeExpand = it
+                        SettingsPreferences.setCandidateSwipeExpand(context, it)
+                    // 锁住时说清是谁锁的，「」里点一下跳到上面那张卡并高亮（11-24 他：找不着在哪改、也跳不过去）。
+                    }, lockMessage = if (rightKey != com.kingzcheung.xime.settings.CandidateRightKey.EXPAND)
+                        "选了「${candidateRightKeyName(rightKey)}」时只能靠滑展开候选，所以一直开着；点「${candidateRightKeyName(rightKey)}」去改回「默认」就能关" else null)
+                    // 首选上拖选改局部（11-24 他：默认打开，只给超过 6 个字的长句）；按住不拖、关着时长按首选照旧出固定、删除的卡片。
+                    var sentenceDragEdit by remember { mutableStateOf(SettingsPreferences.isSentenceDragEdit(context)) }
+                    CandidateSwitchRow("长句拖选改局部", "首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除",
+                        sentenceDragEdit, {
+                            sentenceDragEdit = it
+                            SettingsPreferences.setSentenceDragEdit(context, it)
+                        }, tag = "sentence-drag-edit-setting")
+                    // 这两个只管左边的键；「经典」时取消在右边，不显示。两个各管各的（11-24 用户反馈：取消键关了联想就没法关）：
+                    // 「显示 ‹ 取消键」只管打字时的「‹」，「关联想用 ⊗」开着时联想左边就是 ⊗，不看取消键开没开。存的键名不变。
+                    if (!rightKeyCloses) {
+                        var showCandidateCancel by remember {
+                            mutableStateOf(SettingsPreferences.shouldShowCandidateCancelButton(context))
                         }
-                        Spacer(Modifier.height(10.dp))
-                        CandidateCancelIllustration(showCandidateCancel)
-                    }
-                    // 联想关闭键用叉号（用户 11-03，默认关）：只在取消按钮开着时有用，关着就不显示。
-                    if (showCandidateCancel) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        )
                         var associationCancelCross by remember {
                             mutableStateOf(SettingsPreferences.isAssociationCancelCross(context))
                         }
-                        Row(
-                            modifier = Modifier.settingsSearchAnchor("联想关闭键用叉号")
-                                .fillMaxWidth()
-                                .testTag("association-cancel-cross-setting")
-                                .toggleable(
-                                    value = associationCancelCross,
-                                    role = Role.Switch,
-                                    onValueChange = {
-                                        associationCancelCross = it
-                                        SettingsPreferences.setAssociationCancelCross(context, it)
-                                    },
-                                )
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("联想关闭键用叉号", style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium)
-                                Text("联想词的关闭按钮显示为 ⊗",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Switch(checked = associationCancelCross, onCheckedChange = null)
-                        }
+                        CandidateSwitchRow("显示 ‹ 取消键", "", showCandidateCancel, {
+                            showCandidateCancel = it
+                            SettingsPreferences.setShowCandidateCancelButton(context, it)
+                        }, tag = "candidate-cancel-setting")
+                        CandidateSwitchRow("关联想用 ⊗", "联想时左边放 ⊗，点它关掉联想；取消键关着也有", associationCancelCross, {
+                            associationCancelCross = it
+                            SettingsPreferences.setAssociationCancelCross(context, it)
+                        }, tag = "association-cancel-cross-setting")
                     }
-                    val pressPrefs = remember(context) { SettingsPreferences.getPrefsPublic(context) }
-                    var pressHighlight by remember { mutableStateOf(
-                        pressPrefs.getBoolean(SettingsPreferences.KEY_CANDIDATE_PRESS_HIGHLIGHT, false)) }
-                    SettingsToggleItem(Icons.TwoTone.FormatColorFill, "候选栏按钮按压高亮",
-                        "按下候选栏按钮时显示高亮", pressHighlight, {
-                            pressHighlight = it
-                            pressPrefs.edit().putBoolean(SettingsPreferences.KEY_CANDIDATE_PRESS_HIGHLIGHT, it).apply()
-                        })
+                    Spacer(Modifier.height(4.dp))
+                    // 「候选栏按钮按压高亮」去掉（11-24 他：关着按下去也亮，有没有都一样）。按下时照旧有默认的高亮。
                 })
+                // 效果图卡片下面那一行小字。选了「收键盘」「经典」时开关上已经写着为什么锁住，不再重复。
+                if (rightKey == com.kingzcheung.xime.settings.CandidateRightKey.EXPAND) {
+                    GlyphText("左右滑展开候选默认关，开了也保留右边 ▾", Modifier.padding(start = 4.dp, top = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                }
             }
             if (page == "candidates") item {
                 SettingsSection(title = "注释", content = {
@@ -935,14 +914,15 @@ private fun FixedBottomCalibrationSettings() {
                     enabled = value < 80) { Text("抬高") }
             }
             TextButton(onClick = { SettingsPreferences.resetKeyboardBottomCalibration(context) },
-                enabled = bottomPosition != SettingsPreferences.KeyboardBottomPosition.AUTO || adjustment != 0) { Text("恢复默认（自动、留白 0）") }
+                modifier = Modifier.testTag("bottom-calibration-reset"),
+                enabled = bottomPosition != SettingsPreferences.KeyboardBottomPosition.AUTO || adjustment != 0) { Text("恢复默认") }
         }
         // 底部诊断（11-19）：反馈「被挡住」「底下有缝」时把这一行一起发来，就知道是哪种手机、系统报了什么、按哪一步判断的。
         diagnostic?.let { line ->
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))
             Column(Modifier.fillMaxWidth().settingsSearchAnchor("底部诊断").padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("底部诊断", style = MaterialTheme.typography.titleSmall)
-                Text("反馈底部被挡住或有缝时，把这一行复制一起发来。打开一次键盘后更新。",
+                Text("底部被挡住或有缝时，复制这一行发给作者",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     Text(line, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("bottom-diagnostic"))
@@ -1161,3 +1141,42 @@ internal fun HandwritingSettings() {
     InputExperienceSettings(setOf(InputExperiencePart.HANDWRITING), "手写")
 }
 
+/**
+ * 「候选栏按钮」下面三个开关的一行，照效果图：没有图标，名字和说明里的 ‹ ⊗ 画成候选栏上的图标。
+ * 被锁住（[lockMessage]）时开关拨不动，说明下面写原因，「」里点一下跳过去。
+ */
+@Composable
+private fun CandidateSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    tag: String? = null,
+    lockMessage: String? = null,
+) {
+    val locked = lockMessage != null
+    Row(
+        Modifier.settingsSearchAnchor(title).fillMaxWidth()
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier)
+            .then(if (locked) Modifier else Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            GlyphText(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium)
+            if (subtitle.isNotEmpty()) GlyphText(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall)
+            if (lockMessage != null) SettingsLockNote(lockMessage)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = null, enabled = !locked, colors = settingsSwitchColors())
+    }
+}
+
+/** 候选栏三种用法的卡片名（11-24 他定默认、经典；11-25 他嫌「收键盘」蠢，改「右侧收起」）。 */
+internal fun candidateRightKeyName(mode: com.kingzcheung.xime.settings.CandidateRightKey): String = when (mode) {
+    com.kingzcheung.xime.settings.CandidateRightKey.EXPAND -> "默认"
+    com.kingzcheung.xime.settings.CandidateRightKey.HIDE -> "右侧收起"
+    com.kingzcheung.xime.settings.CandidateRightKey.CLOSE -> "经典"
+}

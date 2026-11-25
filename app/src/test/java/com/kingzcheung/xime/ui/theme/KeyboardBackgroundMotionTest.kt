@@ -119,6 +119,44 @@ class KeyboardBackgroundMotionTest {
         assertEquals(step, motion.transform)
     }
 
+    @Test fun slowPartsSkipFramesThatMoveLessThanHalfAPixel() {
+        // 手机宽 1080、平板宽 2560：按新帧距走，每一帧仍在原来的轨迹上，相邻两帧最多挪半个像素
+        // （原来每 50 ms 一帧就超过半像素的地方照旧 50 ms 一帧），渐变那一段照旧 50 ms 一帧。
+        for (widthPx in listOf(1080f, 2560f)) for (effect in BackgroundMotionEffect.entries) for (speed in BackgroundMotionSpeed.entries) {
+            val cycle = BackgroundMotionPath.cycleMs(effect, speed.shotMs)
+            var t = 0L
+            var frames = 0
+            while (t < 2 * cycle) {
+                val interval = BackgroundMotionPath.nextFrameIntervalMs(effect, t, speed.shotMs, widthPx, widthPx)
+                assertTrue(interval in frameMs..BackgroundMotionPath.MAX_FRAME_INTERVAL_MS && interval % frameMs == 0L)
+                val a = BackgroundMotionPath.at(effect, t, speed.shotMs)
+                val b = BackgroundMotionPath.at(effect, t + interval, speed.shotMs)
+                if (interval > frameMs) {
+                    assertEquals("渐变中不拉长帧距", null, a.fadeTo)
+                    assertTrue("$effect $speed $widthPx @$t 挪太多",
+                        BackgroundMotionPath.maxCornerShiftPx(a, b, widthPx, widthPx) <= BackgroundMotionPath.MAX_STEP_PX)
+                }
+                t += interval
+                frames++
+            }
+            assertTrue("$effect $speed 不比原来出帧多", frames <= 2 * cycle / frameMs + 1)
+        }
+        // 慢速放大在手机上少出一半以上的帧。
+        val shot = BackgroundMotionSpeed.SLOW.shotMs
+        var t = 0L; var frames = 0
+        while (t < shot) { t += BackgroundMotionPath.nextFrameIntervalMs(BackgroundMotionEffect.ZOOM_IN, t, shot, 1080f, 1080f); frames++ }
+        assertTrue("frames=$frames", frames < shot / frameMs / 2)
+    }
+
+    @Test fun longerFramesAdvanceTheClockInFull() {
+        val shot = BackgroundMotionSpeed.SLOW.shotMs
+        val motion = KeyboardBackgroundMotion(BackgroundMotionEffect.ZOOM_IN, shot)
+        motion.advance(300, maxStepMs = 300 + KeyboardBackgroundMotion.STALL_ALLOWANCE_MS)
+        assertEquals(BackgroundMotionPath.at(BackgroundMotionEffect.ZOOM_IN, 300, shot), motion.transform)
+        motion.advance(5_000, maxStepMs = 300 + KeyboardBackgroundMotion.STALL_ALLOWANCE_MS)
+        assertEquals("卡住后照样只多走一点", BackgroundMotionPath.at(BackgroundMotionEffect.ZOOM_IN, 650, shot), motion.transform)
+    }
+
     @Test fun slidesChangeOncePerCycleAtItsStartingPose() {
         val shot = BackgroundMotionSpeed.NORMAL.shotMs
         for (effect in BackgroundMotionEffect.entries) {

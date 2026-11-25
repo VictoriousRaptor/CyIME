@@ -29,7 +29,7 @@ enum class VoiceOtherAudio(val id: String, val label: String) {
  * 会被系统拒绝，输入法可能也算在内；这时退回为临时静音媒体音量。系统给了焦点、播放器却不理（还在放）时
  * 同样退回静音（用户 11-12 转来：开了屏蔽，抖音照样出声）。接着放是播放器自己的事：抖音这类收到焦点回来
  * 也不接着放（同一条反馈），输入法没法替它点播放，设置里写明这类应用选压低音量。
- * 压低音量：直接把媒体音量临时调到原来的五分之一。原来用可压低的焦点让系统去压，用户 11-06 实测没用——
+ * 压低音量：直接把媒体音量临时调到原来的三分之一（至少留 1 档）。原来用可压低的焦点让系统去压，用户 11-06 实测没用——
  * 播放器是语音内容（播客、视频解说）或用 AAudio 时系统不压，交给应用自己处理，很多应用收到也不理。
  *
  * 关麦时只还原自己动过的那次，说话时用户自己调过音量就听用户的。动音量之前先落盘记一笔，进程中途被杀
@@ -43,8 +43,13 @@ internal class VoiceAudioFocus(
 ) {
     companion object {
         private const val TAG = "VoiceAudioFocus"
-        /** 压低音量时调到原音量的几分之一。 */
-        private const val DUCK_DIVISOR = 5
+        /**
+         * 压低音量时调到原音量的几分之一。原来是 5：三星媒体音量 0–15，常用的 8 档压到 1 档，
+         * 用户 11-24 转来「直接统一把手机音量变成最低档」。
+         */
+        private const val DUCK_DIVISOR = 3
+        /** 压低后隔这么久再读一次实际音量：有的系统（三星细调音量）过一会儿才落到最终的档。 */
+        private const val DUCK_SETTLE_MS = 600L
         /** 拿到焦点后等这么久还在放，算播放器不理焦点。播放器淡出、停下一般在 300 ms 内。 */
         internal const val IGNORED_FOCUS_CHECK_MS = 800L
     }
@@ -56,6 +61,8 @@ internal class VoiceAudioFocus(
     /** 压低前的媒体音量和压到的音量；-1 表示没压。 */
     private var volumeBefore = -1
     private var volumeLowered = -1
+    /** 压低后读到过的最高一档（要的、立刻读回的、隔一会儿读回的）；关麦时音量不高于它就算用户没动过。 */
+    private var volumeLoweredMax = -1
 
     private val audio: AudioManager? by lazy {
         try { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager } catch (_: Exception) { null }
@@ -146,7 +153,7 @@ internal class VoiceAudioFocus(
             return
         }
         val current = manager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val lowered = current / DUCK_DIVISOR
+        val lowered = (current / DUCK_DIVISOR).coerceAtLeast(1)
         if (current <= 0 || lowered >= current) return
         SettingsPreferences.setSttMusicVolumeBeforeVoice(context, current)
         manager.setStreamVolume(AudioManager.STREAM_MUSIC, lowered, 0)
@@ -154,10 +161,21 @@ internal class VoiceAudioFocus(
         // 有的系统会把音量档换算一下，实际落下的档和要的不一样（#322 压低后不恢复）：记实际读回来的档，
         // 关麦时拿它判断用户有没有自己调过。读回来还是原来的档（系统还没落下）就按要的档记。
         volumeLowered = manager.getStreamVolume(AudioManager.STREAM_MUSIC).takeIf { it != current } ?: lowered
+        volumeLoweredMax = maxOf(lowered, volumeLowered)
+        mainHandler.postDelayed({ noteSettledVolume(current) }, DUCK_SETTLE_MS)
         // 有的系统不让后台应用改音量：读回来没变就记一笔（关麦时照常按原音量还原）。
         if (volumeLowered != lowered) FileLogger.w(TAG, "duck: asked $current -> $lowered, system set $volumeLowered")
         else FileLogger.w(TAG, "duck: media volume $current -> $lowered")
     }
+
+    /** 压低后过一会儿系统落下的那一档也算「我们压的」（11-24：三星上读回的档和关麦时读到的不一样，音量一直不还原）。 */
+    private fun noteSettledVolume(before: Int) { synchronized(lock) {
+        if (volumeBefore != before) return
+        try {
+            val settled = audio?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: return
+            if (settled < before && settled > volumeLoweredMax) volumeLoweredMax = settled
+        } catch (_: Exception) { }
+    } }
 
     fun release(owner: Any) { synchronized(lock) {
         if (!owners.remove(owner) || owners.isNotEmpty()) return
@@ -184,15 +202,19 @@ internal class VoiceAudioFocus(
         }
         if (volumeBefore >= 0) {
             val before = volumeBefore
-            val lowered = volumeLowered
+            val lowered = maxOf(volumeLowered, volumeLoweredMax)
             volumeBefore = -1
             volumeLowered = -1
+            volumeLoweredMax = -1
             try {
-                // 说话时用户自己调过音量就听用户的，不再改回去。
+                // 说话时用户自己往上调过音量就听用户的，不再改回去；还在压低的档（或更低）就还原。
+                // 原来只认「正好等于压低时读到的那一档」，系统过一会儿换算成别的档时一直不还原（11-24 反馈）。
                 val manager = audio
-                if (manager != null && manager.getStreamVolume(AudioManager.STREAM_MUSIC) == lowered) {
+                val now = manager?.getStreamVolume(AudioManager.STREAM_MUSIC)
+                if (manager != null && now != null && now <= lowered) {
                     manager.setStreamVolume(AudioManager.STREAM_MUSIC, before, 0)
-                }
+                    FileLogger.w(TAG, "duck: media volume $now -> $before restored")
+                } else FileLogger.w(TAG, "duck: media volume is $now (lowered $lowered), user changed it, left alone")
                 SettingsPreferences.setSttMusicVolumeBeforeVoice(context, -1)
             } catch (error: Exception) {
                 Log.w(TAG, "Restoring media volume failed", error)

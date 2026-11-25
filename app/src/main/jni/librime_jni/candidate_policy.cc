@@ -30,6 +30,7 @@
 #include <rime/translation.h>
 #include <t9_ngram_model.h>
 #include <t9_pinyin_map.h>
+#include <t9_sentence_scorer.h>
 
 namespace cyime {
 namespace {
@@ -786,8 +787,18 @@ class CandidatePolicy : public Filter {
     string merged_neighbors;
     merged_corrections_ = engine_->schema()->config()->GetString("translator/cyime_merged_key_neighbors", &merged_neighbors) &&
                           !merged_neighbors.empty();
+    // t9/model_sentences_on_pause: the sentences the word model builds (t9/model_sentences) cost as much as a whole
+    // key, so the translator makes them only in the refresh after a pause; see RefineOmission.
+    {
+      int count = 0;
+      bool on_pause = false, rescore = false;
+      pause_sentences_ = engine_->schema()->config()->GetInt("t9/model_sentences", &count) && count > 0 &&
+                         engine_->schema()->config()->GetBool("t9/model_sentences_on_pause", &on_pause) && on_pause &&
+                         engine_->schema()->config()->GetBool("t9/sentence_rescore", &rescore) && rescore;
+    }
     // Registered for RefineOmission when there is anything to look up after a pause.
-    if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_) || !omission_id_.empty())
+    if (engine_->schema()->config()->GetString("cyime_edit_schema", &edit_id_) || !omission_id_.empty() ||
+        pause_sentences_)
       spelling_policies[engine_->context()] = this;
     engine_->schema()->config()->GetDouble("t9/correction_lead_bias", &correction_lead_bias_);
     // cyime_pause_correction (double pinyin, two keys a syllable): the pause prism (cyime_omission_schema) reads one
@@ -848,6 +859,8 @@ class CandidatePolicy : public Filter {
   }
   // Letters: whether a pause has anything to look up for input of this many keys.
   bool PauseLookup(size_t keys) const { return !edit_id_.empty() || OmissionLookup(keys); }
+  // Letters: the word model's sentences are made after a pause (t9/model_sentences_on_pause).
+  bool PauseSentences() const { return pause_sentences_; }
   bool EditLikely(const string& edited, const string& first) const { return Likely(edited, first, edit_margin_); }
   // sentence_start: the first word is scored as the start of a sentence (nine keys, double pinyin). 14 keys scores
   // it without (t9/ngram_sentence_start: false, its input rarely starts a sentence): from the start of a sentence
@@ -944,6 +957,7 @@ class CandidatePolicy : public Filter {
   bool pause_sentence_start_ = true;
   int pause_max_keys_ = 0;
   bool pause_letters_ = false;
+  bool pause_sentences_ = false;
   bool merged_corrections_ = false;
   // How much more common than 2000 times (ln units, either sign) a corrected word must be to lead the word as typed.
   double correction_lead_bias_ = 0.0;
@@ -979,8 +993,11 @@ bool RefineOmission(rime::Context* context) {
   an<Candidate> digit_edit;
   const bool numeric = context->input().front() >= '2' && context->input().front() <= '9';
   const auto registered = spelling_policies.find(context);
+  // Letters: the sentences the word model builds are made now when the scheme leaves them to the pause.
+  const bool sentences = !numeric && registered != spelling_policies.end() && registered->second->PauseSentences();
   // Letters: nothing to look up when the scheme has no pause prism, its switches are all off or the input is too long.
-  if (!numeric && (registered == spelling_policies.end() || !registered->second->PauseLookup(context->input().size())))
+  if (!numeric && !sentences &&
+      (registered == spelling_policies.end() || !registered->second->PauseLookup(context->input().size())))
     return false;
   const auto policy = numeric ? registered : spelling_policies.end();
   if (policy != spelling_policies.end()) {
@@ -1003,11 +1020,16 @@ bool RefineOmission(rime::Context* context) {
     if (!digit_edit && !policy->second->HasOmission()) return false;
   }
   struct Scope {
-    Scope(rime::Context* ctx, an<Candidate> digit_edit) {
+    Scope(rime::Context* ctx, an<Candidate> digit_edit, bool sentences) : sentences(sentences) {
       omission_context = ctx; omission_inserted = false; pending_digit_edit = std::move(digit_edit);
+      if (sentences) rime::T9SetRefiningSentences(true);
     }
-    ~Scope() { omission_context = nullptr; pending_digit_edit.reset(); }
-  } scope(context, digit_edit);
+    ~Scope() {
+      omission_context = nullptr; pending_digit_edit.reset();
+      if (sentences) rime::T9SetRefiningSentences(false);
+    }
+    const bool sentences;
+  } scope(context, digit_edit, sentences);
   if (!context->RefreshNonConfirmedComposition() || context->composition().empty()) return false;
   auto menu = context->composition().back().menu;
   if (!menu) return false;
@@ -1032,6 +1054,13 @@ bool RefineOmission(rime::Context* context) {
         break;
       }
     }
+  }
+  // The word model's sentence leads the refreshed menu: pause readings never take the first two places, so a new
+  // first candidate is the sentence made in this refresh. The menu is the refreshed one.
+  if (!keep && sentences) {
+    auto before = original.menu->GetCandidateAt(0);
+    auto after = menu->GetCandidateAt(0);
+    keep = before && after && before->text() != after->text();
   }
   if (!keep) context->composition().back() = original;
   return keep;

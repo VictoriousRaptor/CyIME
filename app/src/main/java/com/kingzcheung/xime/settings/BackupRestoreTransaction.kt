@@ -19,6 +19,7 @@ internal object BackupRestoreTransaction {
         val oldFiles = linkedMapOf<File, File?>()
         val settings = linkedMapOf<String, ByteArray>()
         val oldSettings = linkedMapOf<String, ByteArray>()
+        val newerCustomTargets = hashSetOf<File>()
         var preserveRecovery = false
         fun target(base: File, relative: String): File {
             require(relative.isNotBlank() && !relative.startsWith("/") && !relative.contains('\\') &&
@@ -37,7 +38,8 @@ internal object BackupRestoreTransaction {
                 while (true) {
                     val entry = input.nextEntry ?: break
                     if (entry.isDirectory) { input.closeEntry(); continue }
-                    val name = entry.name
+                    // 以后的版本写的备份包用新前缀，当成这一版的
+                    val name = BackupManager.incomingEntry(entry.name)
                     require(seen.add(name)) { "备份包包含重复条目: $name" }
                     val rel = name.removePrefix(BackupManager.META_PREFIX)
                     val metadata = name.startsWith(BackupManager.META_PREFIX)
@@ -58,10 +60,13 @@ internal object BackupRestoreTransaction {
                     if (prefsName != null) {
                         val data = input.readBytes()
                         preferences.validate(data)
-                        settings[prefsName] = data
+                        // 主设置的值里以后的版本换了名字的，换回这一版的
+                        settings[prefsName] = if (metadata && rel == "settings.json") NewerBackupNames.incomingSettings(data) else data
                     } else {
+                        // 以后的版本写的键盘配置文件（新文件名）落到这一版的名字上
+                        val newerCustom = !metadata && name == NewerBackupNames.KEYBOARD_CUSTOM_FILE
                         val destination = when {
-                            !metadata -> target(File(filesDir, "rime"), name)
+                            !metadata -> target(File(filesDir, "rime"), if (newerCustom) KeysConfigHelper.XIME_CUSTOM_CONFIG_FILE else name)
                             rel == "plugins.xml" -> File(filesDir, "plugins.xml")
                             rel.startsWith("plugins/") -> target(File(filesDir, "plugins"), rel.removePrefix("plugins/"))
                             rel.startsWith("files/") -> rel.removePrefix("files/").let { path ->
@@ -75,10 +80,16 @@ internal object BackupRestoreTransaction {
                             else -> null
                         }
                         if (destination != null) {
-                            require(changes.none { it.first == destination }) { "备份包目标重复" }
-                            val staged = File(staging, "new-$count")
-                            staged.outputStream().use { input.copyTo(it) }
-                            changes += destination to staged
+                            val clash = changes.indexOfFirst { it.first == destination }
+                            // 键盘配置新旧两个名字都在：这一版读的是自己名字的那个，留它，新名字的那个不收。
+                            require(clash < 0 || newerCustom || destination in newerCustomTargets) { "备份包目标重复" }
+                            if (clash < 0 || !newerCustom) {
+                                if (clash >= 0) changes.removeAt(clash)
+                                if (newerCustom) newerCustomTargets += destination
+                                val staged = File(staging, "new-$count")
+                                staged.outputStream().use { input.copyTo(it) }
+                                changes += destination to staged
+                            }
                         }
                     }
                     count++

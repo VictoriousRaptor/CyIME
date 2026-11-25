@@ -80,6 +80,14 @@ internal object BackgroundMotionPath {
     /** 最多每秒 20 帧：放大 12% 走 18 秒，每帧不到半个像素，再多帧也看不出更顺，只多耗电。 */
     const val FRAME_INTERVAL_MS = 50L
 
+    /**
+     * 动得慢的时候（每段开头结尾、慢速）不必每 50 ms 出一帧：画面上走得最快的那个角，在下一帧之前移不到
+     * [MAX_STEP_PX] 像素，就多等一会儿再出，最长 [MAX_FRAME_INTERVAL_MS]。每一帧的样子和原来一样（同一条轨迹），
+     * 只是少出那些挪不到半个像素、眼睛分不出的帧。用户 11-23：动态背景是键盘显示时的耗电大头，又不想看出变化。
+     */
+    const val MAX_STEP_PX = 0.5f
+    const val MAX_FRAME_INTERVAL_MS = 400L
+
     /** 放大、缩小走到头后渐变回起点的时长，和轮播换图的淡入一样长。 */
     const val RETURN_FADE_MS = 800L
 
@@ -118,6 +126,31 @@ internal object BackgroundMotionPath {
                 }
             }
         }
+    }
+
+    /**
+     * 现在走到 [elapsedMs]，下一帧隔多久出（[FRAME_INTERVAL_MS] 的整数倍）。[widthPx]、[heightPx] 是背景框的像素大小，
+     * 宁大勿小。渐变回起点那一段每帧透明度都在变，照旧每 [FRAME_INTERVAL_MS] 一帧。
+     */
+    fun nextFrameIntervalMs(effect: BackgroundMotionEffect, elapsedMs: Long, shotMs: Long, widthPx: Float, heightPx: Float): Long {
+        val now = at(effect, elapsedMs, shotMs)
+        if (now.fadeTo != null) return FRAME_INTERVAL_MS
+        var interval = FRAME_INTERVAL_MS
+        var next = 2 * FRAME_INTERVAL_MS
+        while (next <= MAX_FRAME_INTERVAL_MS) {
+            val then = at(effect, elapsedMs + next, shotMs)
+            if (then.fadeTo != null || maxCornerShiftPx(now, then, widthPx, heightPx) > MAX_STEP_PX) break
+            interval = next
+            next += FRAME_INTERVAL_MS
+        }
+        return interval
+    }
+
+    /** 两个样子之间，背景框四个角里挪得最远的那个挪了几个像素（以框中心缩放、再平移）。 */
+    fun maxCornerShiftPx(a: BackgroundMotionTransform, b: BackgroundMotionTransform, widthPx: Float, heightPx: Float): Float {
+        val ds = kotlin.math.abs(b.scale - a.scale)
+        return maxOf(ds * widthPx / 2f + kotlin.math.abs(b.shiftX - a.shiftX) * widthPx,
+            ds * heightPx / 2f + kotlin.math.abs(b.shiftY - a.shiftY) * heightPx)
     }
 
     private fun zoom(elapsed: Long, shot: Long, from: Float, to: Float): BackgroundMotionTransform {
@@ -176,16 +209,23 @@ internal class KeyboardBackgroundMotion(
     /** 只在画的阶段读（graphicsLayer 块或 draw 块），不引起重组。 */
     val transform: BackgroundMotionTransform get() = BackgroundMotionPath.at(effect, elapsed.longValue, shotMs)
 
-    internal fun advance(ms: Long) {
-        elapsed.longValue += ms.coerceIn(0L, MAX_STEP_MS)
+    /** 下一帧隔多久出，见 [BackgroundMotionPath.nextFrameIntervalMs]。 */
+    internal fun nextFrameIntervalMs(widthPx: Float, heightPx: Float): Long =
+        BackgroundMotionPath.nextFrameIntervalMs(effect, elapsed.longValue, shotMs, widthPx, heightPx)
+
+    /** [maxStepMs]：一步最多走多久，主线程卡了一下之后不一步跳过去；帧隔得长时由钟按帧距放宽。 */
+    internal fun advance(ms: Long, maxStepMs: Long = MAX_STEP_MS) {
+        elapsed.longValue += ms.coerceIn(0L, maxStepMs)
         // 只在换图时写，读 slideSource 的地方每圈重组一次。
         val index = BackgroundMotionPath.slideIndex(effect, elapsed.longValue, shotMs, slides.size)
         if (index != slide.intValue) slide.intValue = index
     }
 
-    private companion object {
-        /** 主线程卡了一下之后不一步跳过去。 */
+    internal companion object {
+        /** 主线程卡了一下之后不一步跳过去：每 50 ms 一帧时最多走 100 ms。 */
         const val MAX_STEP_MS = 100L
+        /** 比预定帧距多出这么多以内照实走（等垂直同步、主线程稍忙）。 */
+        const val STALL_ALLOWANCE_MS = MAX_STEP_MS - BackgroundMotionPath.FRAME_INTERVAL_MS
     }
 }
 
@@ -329,6 +369,8 @@ internal fun rememberKeyboardBackgroundMotion(
     slides: List<String> = emptyList(),
 ): KeyboardBackgroundMotion? {
     if (!allowed) return null
+    // 背景框的像素大小宁大勿小：取屏幕宽（键盘不会比屏幕宽），高也按宽算，算出的帧距只会偏短。
+    val framePx = LocalContext.current.resources.displayMetrics.widthPixels.toFloat().coerceAtLeast(1f)
     val motion = remember(settings.effect, settings.speed, slides, settings.slidePlacements) {
         KeyboardBackgroundMotion(settings.effect, settings.speed.shotMs, slides, settings.slidePlacements)
     }
@@ -337,12 +379,14 @@ internal fun rememberKeyboardBackgroundMotion(
         while (true) {
             snapshotFlow { motion.covered }.first { !it }
             var last = withFrameMillis { it }
+            var interval = motion.nextFrameIntervalMs(framePx, framePx)
             while (!motion.covered) {
                 // 先等到下一帧该出的时候再要一帧：两帧之间主线程和渲染线程都不为背景干活。
-                delay(BackgroundMotionPath.FRAME_INTERVAL_MS - VSYNC_SLACK_MS)
+                delay(interval - VSYNC_SLACK_MS)
                 val now = withFrameMillis { it }
-                motion.advance(now - last)
+                motion.advance(now - last, maxStepMs = interval + KeyboardBackgroundMotion.STALL_ALLOWANCE_MS)
                 last = now
+                interval = motion.nextFrameIntervalMs(framePx, framePx)
             }
         }
     }

@@ -60,7 +60,7 @@ class GlideLowerCornerSettingsTest {
         count("↓下滑", inLongPressCard = true).assertCountEquals(0)
         count("1", inLongPressCard = true).assertCountEquals(0)
         count("角标改为长按输入", substring = true).assertCountEquals(1)
-        count("右移一格出下角标", substring = true).assertCountEquals(1)
+        count("右移一格出下方的", substring = true).assertCountEquals(1)
         count("不显示下角标", substring = true).assertCountEquals(0)
         count("下角标不再显示", substring = true).assertCountEquals(0)
         rule.onNodeWithTag("settings-search-anchor:下方角标提示").assertIsOn()

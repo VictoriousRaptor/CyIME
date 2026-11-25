@@ -37,7 +37,7 @@ internal fun commitAssociationSelection(
     suffix: String = "",
 ): Boolean {
     val pending = state.pendingEnglishText
-    val hasOriginal = pending.isNotEmpty() && state.englishReplaceSupported
+    val hasOriginal = state.showsTypedEnglishWord
     val word = associationWordAt(state, index) ?: return false
     return when {
         pending.isEmpty() -> commit(word)

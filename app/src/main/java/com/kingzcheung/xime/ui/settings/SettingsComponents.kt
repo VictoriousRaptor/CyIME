@@ -872,11 +872,12 @@ fun PreeditStyleCard(
     val block = style == prefs.PREEDIT_STYLE_BLOCK
     val left = align == prefs.PREEDIT_ALIGN_LEFT
     val right = align == prefs.PREEDIT_ALIGN_RIGHT
-    // 贴在键盘上的靠边时，键盘那一角画成直角（实际键盘上那一角的圆角被补平）；顶上一行两角都跟着它走。
+    // 贴在键盘上的靠边时，键盘那一角画成直角（实际键盘上那一角的圆角被补平）。
+    // 整行是键盘自己多出来的一行（11-23），键盘照旧两角圆、整块加高，不另画一条。
     val keyboardCorner = 6.dp
     val keyboardShape = RoundedCornerShape(
-        topStart = if (strip || (!bubble && left)) 0.dp else keyboardCorner,
-        topEnd = if (strip || (!bubble && right)) 0.dp else keyboardCorner)
+        topStart = if (!strip && !bubble && left) 0.dp else keyboardCorner,
+        topEnd = if (!strip && !bubble && right) 0.dp else keyboardCorner)
     Column(modifier = modifier.testTag(testTag)) {
         Box(Modifier.fillMaxWidth().weight(1f)
             .then(if (isSelected) Modifier.border(2.dp, primary, RoundedCornerShape(12.dp)) else Modifier)) {
@@ -909,7 +910,7 @@ fun PreeditStyleCard(
                         right -> Alignment.End
                         else -> Alignment.CenterHorizontally
                     }
-                    Box(Modifier.align(horizontal)
+                    if (!strip) Box(Modifier.align(horizontal)
                         .padding(start = if (bubble && left) 4.dp else 0.dp, end = if (bubble && right) 4.dp else 0.dp,
                             bottom = if (bubble) 4.dp else 0.dp)
                         .then(if (strip) Modifier.fillMaxWidth() else Modifier)
@@ -930,9 +931,17 @@ fun PreeditStyleCard(
                         Text("shu'ru'fa", fontSize = if (block) 12.sp else if (bubble) 10.sp else 9.sp,
                             lineHeight = if (block) 13.sp else 11.sp, color = onSurface, maxLines = 1)
                     }
-                    // 键盘：候选栏 + 一排键
+                    // 键盘：（整行时多一行拼音）+ 候选栏 + 一排键
                     Column(Modifier.fillMaxWidth().clip(keyboardShape).background(keyboard)
                         .padding(horizontal = 4.dp, vertical = 3.dp)) {
+                        if (strip) Box(Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 2.dp),
+                            contentAlignment = when {
+                                left -> Alignment.CenterStart
+                                right -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }) {
+                            Text("shu'ru'fa", fontSize = 9.sp, lineHeight = 11.sp, color = onSurface, maxLines = 1)
+                        }
                         Row(Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.clip(RoundedCornerShape(4.dp)).background(primary.copy(alpha = 0.15f))
                                 .padding(horizontal = 3.dp)) {

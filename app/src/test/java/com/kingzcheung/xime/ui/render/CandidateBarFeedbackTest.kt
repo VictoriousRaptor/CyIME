@@ -128,10 +128,8 @@ class CandidateBarFeedbackTest {
     private fun count(description: String) =
         rule.onAllNodesWithContentDescription(description, useUnmergedTree = true).fetchSemanticsNodes().size
 
-    @Test fun optionalHighlightShowsWhileHoldingEitherEdgeAndClearsOnCancel() {
-        val prefs = SettingsPreferences.getPrefsPublic(context)
-        assertFalse(prefs.getBoolean(SettingsPreferences.KEY_CANDIDATE_PRESS_HIGHLIGHT, false))
-        prefs.edit().putBoolean(SettingsPreferences.KEY_CANDIDATE_PRESS_HIGHLIGHT, true).commit()
+    /** 「候选栏按钮按压高亮」开关去掉了（11-24）：不用开什么，按住两端按钮照样亮，松开或取消就回原样。 */
+    @Test fun highlightShowsWhileHoldingEitherEdgeAndClearsOnCancel() {
         SettingsPreferences.setAssociationCancelCross(context, true)
         var clicks = 0
         rule.setContent { Bar(association, onCancel = { clicks++ }) }
@@ -214,7 +212,7 @@ class CandidateBarFeedbackTest {
         var cancelled = 0
         rule.setContent { Column { Bar(association, onCancel = { cancelled++ }); Bar(composing) } }
         rule.waitForIdle()
-        // 打开「联想关闭键用叉号」：只有联想时换成 ⊗，打字时仍是「<」。
+        // 打开「关联想用 ⊗」：只有联想时换成 ⊗，打字时仍是「<」。
         assertEquals(1, countTag("association-cancel-cross"))
         assertEquals(0, countTag("association-cancel"))
         assertEquals(1, count("取消输入"))
@@ -255,6 +253,21 @@ class CandidateBarFeedbackTest {
         assertEquals(0, count("关闭联想"))
         assertEquals(0, countTag("toolbar-hide"))
         assertEquals(2, countTag("candidate-expansion"))
+    }
+
+    /** 11-24 用户反馈：关掉取消键后联想没法关。两个开关分开：取消键关着、「关联想用 ⊗」开着，联想左边照样有 ⊗，打字时左边不放键。 */
+    @Test fun crossWorksWithCancelKeyOff() {
+        SettingsPreferences.setShowCandidateCancelButton(context, false)
+        SettingsPreferences.setAssociationCancelCross(context, true)
+        var cancelled = 0
+        rule.setContent { Column { Bar(association, onCancel = { cancelled++ }); Bar(composing) } }
+        rule.waitForIdle()
+        assertEquals(1, countTag("association-cancel-cross"))
+        assertEquals(0, countTag("association-cancel"))
+        assertEquals(0, count("取消输入"))
+        assertEquals(2, countTag("candidate-expansion"))
+        rule.onNodeWithContentDescription("关闭联想", useUnmergedTree = true).performClick()
+        assertEquals(1, cancelled)
     }
 
     /** 相邻两个候选的起点距离（像素，留白算在候选里）：打字候选和联想各量一次。 */

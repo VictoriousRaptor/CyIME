@@ -45,7 +45,7 @@ internal fun CellDictionaryImportGuide(onDismiss: () -> Unit, onImport: () -> Un
             GuideHeading("怎么导入")
             GuideText("1. 先把词库文件存到手机上：搜狗词库网站下载的、微信或 QQ 收到的文件、用数据线从电脑拷过来的都可以。")
             GuideText("2. 点「导入文件」，在文件选择器里找到它。")
-            GuideText("3. 导入后这个词库会自动打开，点底部「应用更改」才生效。不用了可以关掉，关掉并应用后可以删除。")
+            GuideText("3. 导入后自动打开，点底部「应用更改」生效。")
 
             GuideHeading("支持的格式")
             GuideFormat("搜狗细胞词库(.scel)", "搜狗词库网站下载的文件，直接导入。")

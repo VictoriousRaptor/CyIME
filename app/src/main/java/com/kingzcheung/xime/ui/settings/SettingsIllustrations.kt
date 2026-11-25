@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -641,8 +639,8 @@ internal fun LiquidGlassStrengthChoice(
         Column {
             Text(when (current) {
                 com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STANDARD -> "原来的样子：按键一道细亮边。"
-                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG -> "按键边缘像透镜：图片背景会弯进边里、带一点彩虹色，高光随光照渐变。"
-                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST -> "透镜更宽、弯得更多，色散和高光更明显。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG -> "按键边缘像透镜，带一点彩虹色。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST -> "透镜更宽，彩虹色和高光更明显。"
             } + "模糊和透明度不跟着变。", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             when (current) {
@@ -738,42 +736,3 @@ internal fun JapaneseLongVowelIllustration(mode: com.kingzcheung.xime.ui.keyboar
     }
 }
 
-/**
- * 「关闭键位置」两张卡里的图（11-22 他）：打字、出联想、空闲三条小候选栏，右边那一格标出来。
- * [right] 为真时取消／关联想是右边的「×」，和空闲时的收起键同一格；为假时左边「<」，右边永远收起键盘。
- */
-@Composable
-internal fun CandidateCloseSideIllustration(right: Boolean) {
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val primary = MaterialTheme.colorScheme.primary
-    @Composable
-    fun Dot(icon: ImageVector, highlight: Boolean) {
-        Box(Modifier.size(18.dp).clip(CircleShape)
-            .background(if (highlight) primary.copy(alpha = 0.3f) else onSurface.copy(alpha = 0.08f)),
-            contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = if (highlight) primary else onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.size(14.dp))
-        }
-    }
-    @Composable
-    fun Bar(words: String, typing: Boolean) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 3.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (typing && !right) Dot(Icons.AutoMirrored.Filled.KeyboardArrowLeft, highlight = false)
-            if (!typing) Text("☰", fontSize = 11.sp, color = onSurface.copy(alpha = 0.6f), maxLines = 1)
-            Spacer(Modifier.width(4.dp))
-            Text(words, fontSize = 11.sp, color = onSurface, maxLines = 1, overflow = TextOverflow.Clip,
-                modifier = Modifier.weight(1f))
-            Dot(if (typing && right) Icons.Filled.Close else Icons.Filled.KeyboardArrowDown, highlight = true)
-        }
-    }
-    Column(Modifier.fillMaxWidth().testTag("candidate-close-side-illustration:$right"),
-        verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Bar("你好 拟好", typing = true)
-        Bar("世界 啊 吗", typing = true)
-        Bar("", typing = false)
-    }
-    Spacer(Modifier.height(4.dp))
-    Text(if (right) "右边：先关候选/联想，再点收键盘" else "右边：永远收起键盘", fontSize = 11.sp,
-        color = primary, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-}

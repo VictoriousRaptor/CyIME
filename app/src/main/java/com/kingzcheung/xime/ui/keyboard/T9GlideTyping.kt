@@ -18,18 +18,22 @@ import kotlin.math.ceil
 internal val LocalT9GlideKeys = staticCompositionLocalOf<MutableMap<Char, Rect>?> { null }
 
 /**
- * Decides when a touch becomes a glide (it reached another digit key) and whether it left the digit grid.
+ * Decides when a touch becomes a glide (it reached another digit key).
  * The digits it crosses are no longer what gets typed: the whole path goes to [t9GlideTyping]'s callback,
  * which matches it against the dictionary (a line from 9 to 4 passes over 8 or 5 but means 94).
  * Sample segments as well as events so the same path on a slower touchscreen behaves the same.
+ *
+ * 手指出了数字区不再作废（他 11-23「只能在九宫格里面滑，稍微出界一点点就被直接中断，体验极差」）：
+ * 以前一碰到左栏、功能键、1 键（不是滑行键，2 斜着划到 4 就擦过它）或键区外，整笔扔掉。现在出界的点按数字区的边算
+ * （[clamp]），抬手才结束；出界那段不会进任何键，只是轨迹贴着边走。
  */
 internal class DigitStroke(private val keys: Map<Char, Rect>, private val start: Offset, first: Char) {
     private var previous = start
     private val keySize = keys.values.minOf { it.minDimension }
     private val step = (keySize / 4f).coerceAtLeast(1f)
+    /** 数字区（2～9 键合起来的外框）。 */
+    private val grid = keys.values.reduce { a, b -> Rect(minOf(a.left, b.left), minOf(a.top, b.top), maxOf(a.right, b.right), maxOf(a.bottom, b.bottom)) }
     val digits = StringBuilder().append(first)
-    var cancelled = false
-        private set
     /** 手指离按下点最远走了多远（键盘坐标）。 */
     private var reach = 0f
 
@@ -38,22 +42,23 @@ internal class DigitStroke(private val keys: Map<Char, Rect>, private val start:
      * 滑行根本打不了字，滑一点就判成滑行）。以前只看进没进另一个键，手指落在键边上一抖就够了，点按被吞掉；
      * 现在从键边起滑要多走大半个键。从键中间滑到相邻键中间本来就超过这个距离，正常滑行和以前一样。
      */
-    val claimed: Boolean get() = !cancelled && digits.length > 1 && reach >= keySize * CLAIM_KEY_FRACTION
+    val claimed: Boolean get() = digits.length > 1 && reach >= keySize * CLAIM_KEY_FRACTION
+
+    /** 出了数字区的点拉回到数字区的边上；区内（含键缝、1 键的位置）照原样。 */
+    fun clamp(point: Offset): Offset = Offset(point.x.coerceIn(grid.left, grid.right), point.y.coerceIn(grid.top, grid.bottom))
 
     fun move(end: Offset) {
         reach = maxOf(reach, (end - start).getDistance())
-        val count = ceil((end - previous).getDistance() / step).toInt().coerceAtLeast(1)
+        val target = clamp(end)
+        val count = ceil((target - previous).getDistance() / step).toInt().coerceAtLeast(1)
         for (i in 1..count) {
-            val point = lerp(previous, end, i.toFloat() / count)
-            val hit = keys.entries.firstOrNull { it.value.contains(point) }
-            if (hit == null) {
-                // Small gaps between keys are traversable. A visit to the rail or a function key cancels.
-                if (keys.values.none { it.inflate(step / 2).contains(point) }) { cancelled = true; break }
-            } else if (hit.key != digits.last() && hit.value.deflate(hit.value.minDimension * CORE_INSET).contains(point)) {
+            val point = lerp(previous, target, i.toFloat() / count)
+            val hit = keys.entries.firstOrNull { it.value.contains(point) } ?: continue
+            if (hit.key != digits.last() && hit.value.deflate(hit.value.minDimension * CORE_INSET).contains(point)) {
                 digits.append(hit.key)
             }
         }
-        previous = end
+        previous = target
     }
 
     companion object {
@@ -122,17 +127,18 @@ internal fun Modifier.t9GlideTyping(
                                 path += position
                                 times += time
                                 stroke.move(position + offset)
-                                if (stroke.cancelled) break
                             }
                         }
                         claimed = claimed || stroke.claimed
                         if (claimed) change.consume() // the original button drops its tap/flick on this same event
-                        if (stroke.cancelled || origin.value() != offset || ticket.value() != editor) break
+                        if (origin.value() != offset || ticket.value() != editor) break
                         if (!change.pressed) {
                             // Root coordinates, same as the key rectangles.
                             if (claimed) {
-                                val xs = FloatArray(path.size) { path[it].x + offset.x }
-                                val ys = FloatArray(path.size) { path[it].y + offset.y }
+                                // 出了数字区的点拉回边上再认：抬手时甩出键区、贴着左栏划，起止点照样对得上键。
+                                val inside = path.map { stroke.clamp(it + offset) }
+                                val xs = FloatArray(inside.size) { inside[it].x }
+                                val ys = FloatArray(inside.size) { inside[it].y }
                                 // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
                                 if (com.kingzcheung.xime.glide.GlideSampleRecorder.listener != null)
                                     com.kingzcheung.xime.glide.GlideSampleRecorder.record("t9", keys.mapValues { (_, r) ->

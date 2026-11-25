@@ -42,9 +42,44 @@ object HandwritingEngine {
     @Volatile
     private var lastReinitAttemptMs = 0L
 
+    /**
+     * 加载只能一个一个来：键盘弹出/落笔时的预热（[warmUp]）和识别时的自愈（[ensureEngineReady]）
+     * 以前会同时 initialize，后来的那个先 release 掉正在连的 client 再从头连一遍，
+     * 慢的时候（横屏游戏里 :inference 进程被回收后冷启动）一个字要等两次加载。
+     * [release] 不拿这把锁：它在主线程调用，不能等后台加载。
+     */
+    private val loadLock = Any()
+
+    /** 每次 [release] 加一：加载途中被 release 的那次加载作废，不把已经放掉的 client 标成可用。 */
+    @Volatile
+    private var generation = 0
+
     fun initialize(context: Context, language: InputLanguage = InputLanguage.CHINESE): Boolean {
         if (!HandwritingLanguages.supports(language)) return false
         if (initialized && inferenceClient?.isBound() == true) return true
+        synchronized(loadLock) { return initializeLocked(context, language) }
+    }
+
+    /**
+     * 预热：模型没在就在后台先加载，加载好了直接返回。在后台线程调用。
+     * 键盘收起会卸载模型（见输入法服务的 onFinishInputView），再弹出来时手写板还在、不会重新 initialize，
+     * 以前要等第一个字写完、停顿到了才在识别里现加载；游戏占着内存时 :inference 进程已被回收，
+     * 冷启动 + 读模型要几秒，就是「写完迟迟不出字」。现在键盘一弹出、一落笔就先加载，和书写同时进行。
+     * 不受 [REINIT_RETRY_INTERVAL_MS] 节流，也不改节流时间：预热失败不影响识别时再试。
+     */
+    fun warmUp(context: Context, language: InputLanguage = InputLanguage.CHINESE) {
+        if (!HandwritingLanguages.supports(language)) return
+        if (initialized && inferenceClient?.isBound() == true) return
+        synchronized(loadLock) {
+            if (initialized && inferenceClient?.isBound() == true) return
+            initializeLocked(context, language)
+        }
+    }
+
+    private fun initializeLocked(context: Context, language: InputLanguage): Boolean {
+        if (initialized && inferenceClient?.isBound() == true) return true
+        val startedAt = SystemClock.elapsedRealtime()
+        val token = generation
 
         val ctx = context.applicationContext
         val modelDir = ModelStorage.getModelDir(ctx, "ochwpro")
@@ -90,9 +125,17 @@ object HandwritingEngine {
                 Log.e(TAG, "Failed to load handwriting model in inference process")
                 return false
             }
+            // 加载途中键盘收起、换了方案等已经 release：这个 client 不再是当前的，放掉，不标成已加载
+            if (token != generation || inferenceClient !== client) {
+                client.unbind()
+                return false
+            }
 
             initialized = true
-            Log.i(TAG, "Handwriting engine initialized via IPC: ${modelFile.name}")
+            val tookMs = SystemClock.elapsedRealtime() - startedAt
+            Log.i(TAG, "Handwriting engine initialized via IPC: ${modelFile.name} ms=$tookMs")
+            // 记进日志文件：横屏游戏里「迟迟不出字」时能看出是不是在等加载（PC 拉日志对照）
+            FileLogger.i(TAG, "handwriting model loaded ms=$tookMs")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "HandwritingEngine init failed: ${e.message}", e)
@@ -205,14 +248,19 @@ object HandwritingEngine {
         val ctx = appContext ?: return false
         if (initialized && inferenceClient?.isBound() == true) return true
 
-        release()
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastReinitAttemptMs < REINIT_RETRY_INTERVAL_MS) return false
-        lastReinitAttemptMs = now
-        return initialize(ctx)
+        // 预热正在加载时在这里等它加载完，直接用，不 release 掉它再重来
+        synchronized(loadLock) {
+            if (initialized && inferenceClient?.isBound() == true) return true
+            release()
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastReinitAttemptMs < REINIT_RETRY_INTERVAL_MS) return false
+            lastReinitAttemptMs = now
+            return initializeLocked(ctx, InputLanguage.CHINESE)
+        }
     }
 
     fun release() {
+        generation++
         if (!initialized && inferenceClient == null) return
         initialized = false
         inferenceClient?.apply {

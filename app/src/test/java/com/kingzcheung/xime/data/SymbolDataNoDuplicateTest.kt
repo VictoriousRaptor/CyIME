@@ -21,6 +21,12 @@ class SymbolDataNoDuplicateTest {
         assertTrue(boxed.contains("🈹")) // 🈹 割
     }
 
+    @Test fun subscriptPageHasEveryUnicodeSubscriptLetter() {
+        // #389：下标字母只有 a e o x ə，补上 Unicode 里有的其余下标字母。
+        val page = SymbolData.categories.first { it.id == "superscriptSubscript" }.symbols
+        "ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ".forEach { assertTrue("$it", page.contains(it.toString())) }
+    }
+
     @Test fun emojiCategoriesHaveNoRepeats() {
         val repeated = EmojiData.categories.flatMap { category ->
             category.emojis.groupBy(::key).filterValues { it.size > 1 }.keys.map { "${category.name}: $it" }

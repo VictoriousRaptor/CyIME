@@ -133,7 +133,7 @@ fun CellDictionarySettingsPanel(
                 if (dictionaries.selected.isNotEmpty()) Text("开着 ${dictionaries.selected.size} 个词库，${words(selectedEntries)}，" +
                     "打字最多慢 ${CellDictionaryCost.format(total)}" + when (totalLevel) {
                         CellDictionaryCost.Level.NORMAL -> ""
-                        CellDictionaryCost.Level.NOTICEABLE -> "，超出正常"
+                        CellDictionaryCost.Level.NOTICEABLE -> "，偏慢"
                         CellDictionaryCost.Level.HEAVY -> "，会明显卡顿"
                     },
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("cell-dictionary-total-cost"),
@@ -198,7 +198,7 @@ fun CellDictionarySettingsPanel(
             }
             item(key = "english") {
                 SettingsGroupRow(1, 2) {
-                    SettingsToggleItem(Icons.Default.Translate, "分类词库英文候选", "中文键盘里也出导入词库的英文词",
+                    SettingsToggleItem(Icons.Default.Translate, "分类词库英文候选", "中文键盘里也给出词库里的英文词",
                         dictionaries.selectedEnglish, onSelectEnglish,
                         lockMessage = if (state.busy) "正在处理词库" else null)
                 }
@@ -281,7 +281,7 @@ private fun DictionaryRow(
                 if (onSource != null) DropdownMenuItem(text = { Text("查看来源") }, onClick = { menu = false; onSource() })
                 if (installed != null) {
                     val label = when {
-                        onRemove == null -> "内置词库随安装包提供，可关闭"
+                        onRemove == null -> "内置词库，可关闭"
                         selected -> "删除前请关闭词库并应用更改"
                         applied -> "应用更改后可删除"
                         else -> "删除词库"

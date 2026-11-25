@@ -15,6 +15,9 @@ import androidx.compose.ui.unit.Dp
  */
 internal const val NUMBER_ROW_HEIGHT_WEIGHT = 0.8f
 
+/** 数字行占几排高：默认矮一点；开了「数字行和字母一样高」（#444，默认关）就是整排。 */
+internal fun numberRowHeightWeight(fullHeight: Boolean): Float = if (fullHeight) 1f else NUMBER_ROW_HEIGHT_WEIGHT
+
 /** 分体中缝按行登记位置（[SplitGapSpacer]）；字母行用 0-3，数字行用一个不会撞上的行号。 */
 internal const val NUMBER_ROW_SPLIT_ROW = 9
 

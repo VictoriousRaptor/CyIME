@@ -23,6 +23,7 @@ object GlideLexicon {
 
     private class T9Codes(val index: LinkedHashMap<String, Int>) {
         val lines: Map<String, List<String>> by lazy { T9Glide.lines(index.keys) }
+        val shapes: Map<String, List<String>> by lazy { T9Glide.shapes(index.keys) }
     }
     @Volatile private var words: List<String>? = null
     @Volatile private var pinyin: List<List<String>>? = null
@@ -185,28 +186,51 @@ object GlideLexicon {
      * 九键滑行：[t9Digits] 的数字串，再加同一笔排在其后的 [alternatives] 个编码各自最常用的词（#214）。
      * 九键上只差连按同一个键的词划出来是同一条线（高兴 4269464 和 高中 42694664、晚安 92626 和 早餐 926226），
      * 只能靠词频分先后，而几份词频在这几对上都不可靠；首选照常打入，这几个词放进候选栏首选之后，点了直接上屏。
+     * [before] 是这一笔之前组合里已有的数字（没有就是空）：同一条线上按它挑编码（[T9Glide.preferJoint]，
+     * 先打 hua 再划 xing 出 滑行 不出 华中），备选给的是整个组合的词（[T9Glide.alternativeChoices]）。
      * 词表读不出时没有备选，数字串照常。须在后台线程调用。
      */
     fun t9Glide(context: Context, keys: Map<Char, LetterKeyRect>, xs: FloatArray, ys: FloatArray,
-        dictionary: Boolean, doublePinyin: DoublePinyinScheme?, alternatives: Int = T9_ALTERNATIVES): T9GlideResult {
+        dictionary: Boolean, doublePinyin: DoublePinyinScheme?, alternatives: Int = T9_ALTERNATIVES,
+        before: String = ""): T9GlideResult {
         if (dictionary) {
             val decoder = cachedDecoder(if (doublePinyin == null) "t9" else "t9sp", doublePinyin, T9Glide.keyboard(keys),
-                T9Glide.MAX_ENDPOINT) { t9Codes(context, doublePinyin).index.keys.toList() }
+                T9Glide.MAX_ENDPOINT, minPath = T9Glide.MIN_PATH) { t9Codes(context, doublePinyin).index.keys.toList() }
             val found = decoder.decode(xs, ys, limit = 1 + alternatives.coerceAtLeast(0)).map { it.word }
             if (found.isNotEmpty()) {
                 // 这条线上次点过备选的，先出点过的那个词（[T9GlideMemory]）；记不住、查不到时照旧。
-                val ranked = runCatching {
+                val remembered = runCatching {
                     val codes = t9Codes(context, doublePinyin)
                     val line = GlideDecoder.collapseRepeats(found.first())
                     T9GlideMemory.promote(found, T9GlideMemory.preferred(context.filesDir, line),
                         codes.lines[line].orEmpty(), t9WordOf(context, doublePinyin))
                 }.getOrElse { found }
+                // 前面已有组合时，同一条线上挑能和它连成词的编码；连不成照旧。
+                val ranked = if (before.isEmpty()) remembered else runCatching {
+                    val codes = t9Codes(context, doublePinyin)
+                    val entries = pinyin(context)
+                    // 词表第几项各音节的数字（双拼按方案换码）；有换不了的音节时为空。
+                    val syllableDigits: (Int) -> List<String>? = { index ->
+                        entries.getOrNull(index)?.let { syllables ->
+                            syllables.map { syllable ->
+                                val letters = if (doublePinyin == null) syllable else doublePinyin.code(syllable) ?: return@let null
+                                T9Glide.digits(letters) ?: return@let null
+                            }
+                        }
+                    }
+                    T9Glide.preferJoint(remembered, before, { codes.shapes[it].orEmpty() }, { codes.index[it] }, syllableDigits)
+                }.getOrElse { remembered }
                 val words = if (alternatives <= 0) emptyList() else runCatching {
                     val codes = t9Codes(context, doublePinyin)
-                    T9Glide.alternatives(ranked, { codes.lines[it].orEmpty() }, t9WordOf(context, doublePinyin))
-                        .take(alternatives)
+                    val syllableWords = t9SyllableWords(context, doublePinyin)
+                    T9Glide.alternativesWithSyllable(ranked, before, alternatives, { codes.lines[it].orEmpty() },
+                        { codes.shapes[it].orEmpty() }, t9WordOf(context, doublePinyin)) { syllableWords[it] }.map { it.second }
                 }.getOrElse { emptyList() }
-                return T9GlideResult(ranked.first(), words)
+                // 左栏读音用的编码（#582）：和打入的划出来是同一条线的那些，按常用程度。
+                val lineCodes = if (alternatives <= 0) emptyList() else runCatching {
+                    t9Codes(context, doublePinyin).lines[GlideDecoder.collapseRepeats(ranked.first())].orEmpty()
+                }.getOrElse { emptyList() }
+                return T9GlideResult(ranked.first(), words, lineCodes)
             }
         }
         return T9GlideResult(T9Glide.turnDigits(xs, ys, keys), emptyList())
@@ -218,6 +242,23 @@ object GlideLexicon {
         val words = pinyinWords(context)
         if (words.size != pinyin(context).size) return { null }
         return { code -> index[code]?.let { words.getOrNull(it) } }
+    }
+
+    /** 九键编码 → 它最常用的单音节词（一体 和 追 都是 9484，这里给 追）；全拼、各双拼方案各一份。两份词表行数对不上时为空。 */
+    private val t9SyllableWords = HashMap<Any, Map<String, String>>()
+
+    private fun t9SyllableWords(context: Context, doublePinyin: DoublePinyinScheme?): Map<String, String> = synchronized(this) {
+        val key: Any = doublePinyin ?: "t9"
+        t9SyllableWords[key] ?: run {
+            val entries = pinyin(context); val words = pinyinWords(context)
+            val out = HashMap<String, String>()
+            if (words.size == entries.size) entries.forEachIndexed { index, syllables ->
+                if (syllables.size != 1) return@forEachIndexed
+                val letters = if (doublePinyin == null) syllables[0] else doublePinyin.code(syllables[0]) ?: return@forEachIndexed
+                T9Glide.digits(letters)?.let { out.putIfAbsent(it, words[index]) }
+            }
+            out.also { t9SyllableWords[key] = it }
+        }
     }
 
     private fun t9Codes(context: Context, doublePinyin: DoublePinyinScheme?): T9Codes =
@@ -234,15 +275,15 @@ object GlideLexicon {
         T9GlideMemory.remember(context.filesDir, GlideDecoder.collapseRepeats(digits), word)
     }
 
-    /** 九键滑行在首选之后给几个备选。 */
+    /** 九键滑行在首选之后给几个备选（同一条线上的单音节另可再补一个，见 [T9Glide.alternativesWithSyllable]）。 */
     const val T9_ALTERNATIVES = 2
 
     private fun cachedDecoder(kind: String, source: Any?, keyboard: GlideKeyboard,
         maxEndpoint: Float = GlideDecoder.MAX_ENDPOINT, syllables: (() -> List<String>)? = null,
-        words: () -> List<String>): GlideDecoder =
+        minPath: Float = GlideDecoder.MIN_PATH_KEYS, words: () -> List<String>): GlideDecoder =
         synchronized(this) {
             cached[kind]?.takeIf { (cachedSource, decoder) -> cachedSource == source && decoder.revision == keyboard.revision }?.second
-                ?: GlideDecoder(keyboard, words(), maxEndpoint, syllables?.invoke()).also { cached[kind] = source to it }
+                ?: GlideDecoder(keyboard, words(), maxEndpoint, syllables?.invoke(), minPath).also { cached[kind] = source to it }
         }
 
     fun keyboard(keys: Map<Char, LetterKeyRect>): GlideKeyboard {
@@ -252,8 +293,11 @@ object GlideLexicon {
     }
 }
 
-/** 九键滑行一笔的结果：打入的数字串 [digits]，和同一笔其后几个编码最常用的词 [alternatives]（可为空）。 */
-data class T9GlideResult(val digits: String, val alternatives: List<String>)
+/**
+ * 九键滑行一笔的结果：打入的数字串 [digits]，同一笔其后几个编码最常用的词 [alternatives]（可为空），
+ * 和划出来是同一条线的编码 [codes]（左栏读音用，见 [T9Glide.lineReadings]）。
+ */
+data class T9GlideResult(val digits: String, val alternatives: List<String>, val codes: List<String> = emptyList())
 
 /** 词的音节连成要划的字母串；同一字母串只留最常用的一次（xi an 与 xian 划法相同，交给 Rime 区分）。 */
 internal fun pinyinCodes(entries: List<List<String>>, doublePinyin: DoublePinyinScheme?): List<String> =

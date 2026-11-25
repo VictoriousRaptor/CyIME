@@ -11,12 +11,15 @@ import kotlin.math.ln
  */
 class EnglishBigrams(vocabulary: List<String>, lines: Sequence<String>) {
     private val ids = HashMap<String, Int>(vocabulary.size * 2)
+    /** 序号 → 词，查「后面常跟什么词」用（[next]）。 */
+    private val words: Array<String>
     private val unigram: FloatArray
     private val keys: IntArray
     private val scores: ByteArray
 
     init {
         vocabulary.forEach { word -> if (word.isNotEmpty() && word !in ids) ids[word] = ids.size }
+        words = Array(ids.size) { "" }.also { array -> ids.forEach { (word, id) -> array[id] = word } }
         var total = 0.0
         for (rank in 0 until ids.size) total += 1.0 / (rank + 10)
         unigram = FloatArray(ids.size) { rank -> (-ln(RANK_SHARE / (rank + 10) / total)).toFloat() }
@@ -49,6 +52,20 @@ class EnglishBigrams(vocabulary: List<String>, lines: Sequence<String>) {
         val a = previous?.let { ids[it] } ?: return unigram[b]
         val index = keys.binarySearch(key(a, b))
         return if (index >= 0) (scores[index].toInt() and 0xff) / 10f else unigram[b] + UNSEEN_COST
+    }
+
+    /**
+     * 表里跟在 [previous] 后面的词，最常跟的在前，最多 [limit] 个（#101 英文下一词）。前词不认识时为空。
+     * 同一个前词的词对按序号排在一起，二分找到开头后只看这一段。
+     */
+    fun next(previous: String, limit: Int): List<String> {
+        val a = ids[previous] ?: return emptyList()
+        val from = key(a, 0)
+        val to = from + VOCAB_LIMIT
+        var index = keys.binarySearch(from).let { if (it < 0) -it - 1 else it }
+        val found = ArrayList<Int>()
+        while (index < keys.size && keys[index] < to) found += index++
+        return found.sortedBy { scores[it].toInt() and 0xff }.take(limit).map { words[keys[it] - from] }
     }
 
     private fun key(a: Int, b: Int) = a * VOCAB_LIMIT + b

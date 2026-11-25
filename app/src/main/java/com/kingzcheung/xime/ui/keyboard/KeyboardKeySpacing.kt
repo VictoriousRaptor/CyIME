@@ -14,6 +14,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,6 +28,34 @@ internal val LocalKeyboardExplicitWidth = staticCompositionLocalOf { false }
 internal val LocalFloatingBottomClearance = staticCompositionLocalOf<MutableFloatState?> { null }
 // The keycap inset belongs to the key's touch target but is part of the visible gap below its ink.
 internal val LocalFloatingKeyCapInset = staticCompositionLocalOf<MutableFloatState?> { null }
+/** 悬浮键盘小于正常大小时整块按比例缩小的倍数（见 [floatingContentScale]）；上面两个留白写回时乘它，换成卡片外面的 dp。 */
+internal val LocalFloatingContentScale = staticCompositionLocalOf { 1f }
+
+/**
+ * 悬浮键盘下面拖动条那一截有多高（像素）：键区的背景（图片、渐变、玻璃、动态背景）往下多画这么高，整张卡片只画一张图、
+ * 一起动（用户 11-25：拖动条另画一张是两块，镜像过去也是「上下镜像的，各动各的，不是一个整体」）。
+ * 键区画了就把 [consumed] 设上，拖动条那段不再自己铺底色。
+ */
+internal class FloatingBackgroundBleed(val px: Int) {
+    var consumed by androidx.compose.runtime.mutableStateOf(false)
+}
+internal val LocalFloatingBackgroundBleed = staticCompositionLocalOf<FloatingBackgroundBleed?> { null }
+
+/** 往下多量 [px] 给后面的修饰符（背景按多出来的大小画），对外仍报原来的大小；越出的部分只画不占位、不接触摸。 */
+internal fun Modifier.bleedBottomOut(px: Int): Modifier = if (px <= 0) this else layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(
+        minHeight = constraints.minHeight + px,
+        maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight + px else constraints.maxHeight))
+    layout(placeable.width, (placeable.height - px).coerceAtLeast(0)) { placeable.place(0, 0) }
+}
+
+/** [bleedBottomOut] 的另一头：里面的内容按原来的大小排。 */
+internal fun Modifier.bleedBottomIn(px: Int): Modifier = if (px <= 0) this else layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(
+        minHeight = (constraints.minHeight - px).coerceAtLeast(0),
+        maxHeight = if (constraints.hasBoundedHeight) (constraints.maxHeight - px).coerceAtLeast(0) else constraints.maxHeight))
+    layout(placeable.width, placeable.height + px) { placeable.place(0, 0) }
+}
 internal val KeyboardGridBottomMargin = 8.dp
 
 
@@ -92,13 +123,14 @@ internal fun KeyboardKeySpacingScope(
         )
         val bottomClearance = LocalFloatingBottomClearance.current
         val capInset = LocalFloatingKeyCapInset.current
+        val outerScale = LocalFloatingContentScale.current
         if (bottomClearance != null && growthSpacing != null) {
             // 只有下面真正施加在整行外面的 padding 可以用来拖动；键帽内缩处仍是底排按键的触摸区。
             val clearance = metrics.bottomSpaceDp + gridBottomMargin.value
             val capPadding = resolvedKeyInset((growthSpacing.second ?: KeyVisualPolicy.DeclaredDefaultGap).dp, metrics.insetY)
             SideEffect {
-                bottomClearance.floatValue = clearance
-                capInset?.floatValue = capPadding.value + metrics.extraInsetY
+                bottomClearance.floatValue = clearance * outerScale
+                capInset?.floatValue = (capPadding.value + metrics.extraInsetY) * outerScale
             }
             DisposableEffect(bottomClearance) {
                 onDispose { bottomClearance.floatValue = 0f; capInset?.floatValue = 0f }

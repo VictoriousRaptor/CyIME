@@ -194,6 +194,19 @@ object SpellingPatches {
         runCatching { CustomKeyboardLayouts.load(context).map { it.id } }.getOrDefault(emptyList())).distinct()
 
     /**
+     * 别的中文全拼方案（导入的、扩展里装的，如 18 键 pinyin_18jian、朙月拼音）：以前只给上面自带的全拼写模糊音，
+     * 这些方案开了模糊音也不生效（11-23 群里反馈 18 键）。认得出是中文全拼、不是九键的，也把模糊音写在原有拼写规则最前面，
+     * 和 14 键一样先派生出近音拼音再走方案自己的规则。九键另外处理；只给别的方案查表用的方案不写。
+     */
+    internal fun otherFullPinyinSchemas(rimeDir: File, known: Set<String>): List<String> = rimeDir.listFiles().orEmpty()
+        .mapNotNull { file -> file.name.removeSuffix(".schema.yaml").takeIf { file.isFile && file.name.endsWith(".schema.yaml") } }
+        .filter { id ->
+            id !in known && id !in CyimeInputDefaults.dependencies && InputProfiles.describe(id).let {
+                it.language == InputLanguage.CHINESE && it.scheme == InputScheme.PINYIN && it.layout.kind != LayoutKind.T9
+            }
+        }.sorted()
+
+    /**
      * 双拼 26 键：小鹤和其他内置、自定义双拼。九键另外写模糊音，不打开邻键纠错。
      * 小鹤方案构建时已带 enable_correction 和 cyime_neighbor_correction，其他双拼由它生成，同样带着；开关关着时键盘
      * 只交出带 "~;" 的键位表（只纠拼不成音节的两个键），开着才整串纠错（KeyboardLayout）。
@@ -248,13 +261,18 @@ object SpellingPatches {
         val lead = TypoStrength.lead(context)
         val digit = TypoStrength.digit(context)
         var changed = false
-        for (id in fullPinyinSchemas(context)) {
+        val fullPinyin = fullPinyinSchemas(context)
+        for (id in fullPinyin) {
             changed = write(rimeDir, id) { schema ->
                 // 三种都开着（默认）时不读方案文件：什么都不写，同以前。
                 listOf(fuzzyPart(schema, fuzzy) ?: return@write null) +
                     (if (typos.size == Typo.entries.size) emptyList<Part>() else typoParts(schema(), typos)) +
                     Part(LEAD_BIAS, leadLines(schema, lead))
             } || changed
+        }
+        // 导入、扩展里装的全拼方案只写模糊音；错字开关、首字偏好是按自带方案调的，不动它们。
+        for (id in otherFullPinyinSchemas(rimeDir, fullPinyin.toSet())) {
+            changed = write(rimeDir, id) { schema -> listOf(fuzzyPart(schema, fuzzy) ?: return@write null) } || changed
         }
         // 双拼：拼写规则先按全拼派生模糊音，再换成双拼编码（同雾凇双拼方案注释里的位置），所以两段写在同一个文件里。
         for (id in doublePinyinSchemas(context)) {

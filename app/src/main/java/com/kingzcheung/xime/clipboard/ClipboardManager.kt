@@ -969,6 +969,17 @@ class ClipboardManager private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * 「粘贴后移到最前」（#299）：这段文字最新的那条历史记录时间改成现在，排回最前。
+     * 固定的不动（固定的本来就排在最前，顺序是用户排的）；没有这条记录时什么都不做。
+     */
+    fun moveToTop(text: String, now: Long = System.currentTimeMillis()) {
+        scope.launch {
+            val item = _clipboardItems.value.filter { it.text == text && !it.isPinned }.maxByOrNull { it.timestamp } ?: return@launch
+            dao.updateTimestamp(item.id, now)
+        }
+    }
+
     fun copyImageToSystemClipboard(imagePath: String, label: String = "emoji_image"): Boolean {
         return try {
             val imageFile = File(imagePath)

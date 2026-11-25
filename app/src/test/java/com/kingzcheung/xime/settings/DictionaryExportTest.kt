@@ -45,6 +45,23 @@ class DictionaryExportTest {
             .take(2).joinToString("\n", postfix = "\n"))
     }
 
+    @Test fun `english words of an imported list go into text and Rime only`() {
+        // #560：只有英文的词库以前导出 0 个词。
+        val mixed = listOf(DictEntry("你好", "ni hao", 5), DictEntry("Team Spirit", "", 0), DictEntry("x", "", 0))
+        val text = DictionaryExport.write(DictionaryExport.Format.TEXT, "测试", mixed)
+        assertEquals(2, text.written)
+        assertEquals(1, text.skipped)
+        assertEquals("你好\tni hao\t5\nTeam Spirit\tteamspirit\t1\n", String(text.bytes, Charsets.UTF_8))
+        val parsed = TxtCellDictionary.parse(text.bytes)
+        assertEquals(listOf("Team Spirit"), parsed.english)
+        assertTrue(String(DictionaryExport.write(DictionaryExport.Format.RIME, "测试", mixed).bytes, Charsets.UTF_8)
+            .endsWith("\n...\n你好\tni hao\t5\nTeam Spirit\tteamspirit\t1\n"))
+        val sogou = DictionaryExport.write(DictionaryExport.Format.SOGOU, "测试", mixed)
+        assertEquals(1, sogou.written)
+        assertEquals(2, sogou.skipped)
+        assertEquals(0, DictionaryExport.write(DictionaryExport.Format.GBOARD, "测试", listOf(DictEntry("hello", "", 0))).written)
+    }
+
     @Test fun `CyIME json is the phone and Windows import format`() {
         val bytes = write(DictionaryExport.Format.CYIME).bytes
         val parsed = JsonCellDictionary.parse(bytes)

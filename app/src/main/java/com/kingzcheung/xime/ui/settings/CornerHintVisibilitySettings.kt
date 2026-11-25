@@ -39,10 +39,10 @@ internal fun CornerHintVisibilitySettings(modifier: Modifier = Modifier) {
                 Switch(checked = checked, onCheckedChange = null, enabled = symbolsOn, colors = settingsSwitchColors())
             }
         }
-        toggle("上方角标提示", "平时显示按键右上角的小符号；滑动时照样在键内显示要输入的符号", hints.up) {
+        toggle("上方角标提示", "显示按键右上角的小符号", hints.up) {
             SettingsPreferences.setSwipeUpHintsEnabled(context, it)
         }
-        toggle("下方角标提示", "平时显示按键左下角的小符号；滑动时照样在键内显示要输入的符号", hints.down) {
+        toggle("下方角标提示", "显示按键左下角的小符号", hints.down) {
             SettingsPreferences.setSwipeDownHintsEnabled(context, it)
         }
         // 11-11 曾在开着 26 键滑行时不画下角标；现在滑行时长按弹出上下两个角标（withGlideCornerMenu），下角标照这个开关显示。

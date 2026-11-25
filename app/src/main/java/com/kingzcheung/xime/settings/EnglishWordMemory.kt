@@ -17,6 +17,10 @@ object EnglishWordMemory {
     const val DEMOTED_FILE_NAME = "cyime_en_demoted.txt"
     private const val MAX_WORDS = 2000
     private val WORD = Regex("[A-Za-z]{2,40}")
+    /** What the file holds: a word, or a word with the digits typed right after it (Abc123, 2026-11-25). */
+    private val STORED = Regex("[A-Za-z]{2,40}[0-9]{0,12}")
+    /** A word with digits right before the caret: letters not glued to more letters or digits in front. */
+    private val WORD_DIGITS = Regex("(?<![A-Za-z0-9])([A-Za-z]{2,40})([0-9]{1,12})$")
 
     /** A word with a capital, or of four letters and more; raw lowercase ab/abc is mostly a jianpin slip. */
     internal fun isLearnable(text: String): Boolean =
@@ -24,7 +28,8 @@ object EnglishWordMemory {
 
     @Synchronized
     fun remember(rimeDir: File, text: String) {
-        if (!isLearnable(text)) return
+        // A word, or a word with digits after it (Abc123 + Enter, 11-25).
+        if (!STORED.matches(text) || !isLearnable(text.trimEnd { it in '0'..'9' })) return
         val file = File(rimeDir, FILE_NAME)
         runCatching {
             val lines = if (file.exists()) file.readLines() else emptyList()
@@ -33,6 +38,62 @@ object EnglishWordMemory {
         }
         undemote(rimeDir, text)
     }
+
+    /**
+     * The word and the digits right before the caret (text before it: "见 Abc123" -> Abc, 123), when the word is one
+     * worth remembering ([isLearnable]); null otherwise.
+     */
+    internal fun wordWithDigits(before: String): Pair<String, String>? {
+        val match = WORD_DIGITS.find(before) ?: return null
+        val word = match.groupValues[1]
+        return if (isLearnable(word)) word to match.groupValues[2] else null
+    }
+
+    /**
+     * Digits typed right after an English word (Abc, then 1 2 3 on the number row) are kept with it, so typing abc
+     * offers Abc123. Each digit extends the newest line (Abc1 -> Abc12 -> Abc123) instead of adding another.
+     */
+    @Synchronized
+    fun rememberWithDigits(rimeDir: File, word: String, digits: String) {
+        if (!isLearnable(word) || digits.isEmpty() || digits.length > 12 || digits.any { it !in '0'..'9' }) return
+        val token = word + digits
+        val file = File(rimeDir, FILE_NAME)
+        runCatching {
+            val lines = if (file.exists()) file.readLines() else emptyList()
+            val last = lines.lastOrNull()?.trim()
+            when {
+                last == token -> return
+                last != null && last.length > word.length && token.startsWith(last) && last.startsWith(word) &&
+                    last.drop(word.length).all { it in '0'..'9' } -> write(file, lines.dropLast(1) + token)
+                lines.size >= MAX_WORDS * 2 -> write(file, compact(lines + token))
+                else -> file.appendText("$token\n")
+            }
+        }
+    }
+
+    /**
+     * Any keyboard, any mode (11-25 他：英文直出、九键、14 键里打的 Abc123 也要记住): called after one character that is not a
+     * letter went into the document, [before] being the text before the caret with that character last. A digit extends
+     * the word right before it (Abc1 -> Abc12, [rememberWithDigits]); a space or a mark ends the word before it, which is
+     * remembered when it has digits or a capital after its first letter (iPhone, CyIME, GPT4). Plain words (hello, The)
+     * are not: those are dictionary words or a capital at the start of a sentence.
+     */
+    @Synchronized
+    fun rememberTyped(rimeDir: File, before: String) {
+        val last = before.lastOrNull() ?: return
+        if (last.isLetter()) return
+        if (last in '0'..'9') {
+            wordWithDigits(before)?.let { (word, digits) -> rememberWithDigits(rimeDir, word, digits) }
+            return
+        }
+        val token = TYPED.find(before.dropLast(1))?.value ?: return
+        val word = token.trimEnd { it in '0'..'9' }
+        val shaped = token.length > word.length || word.drop(1).any { it.isUpperCase() }
+        if (shaped && isLearnable(word) && token.length <= 52) remember(rimeDir, token)
+    }
+
+    /** A word, maybe with digits, right at the end: not glued to more letters or digits in front. */
+    private val TYPED = Regex("(?<![A-Za-z0-9])[A-Za-z]{2,40}[0-9]{0,12}$")
 
     /** Long-press delete of a dictionary English word: it stays typable, behind the first four candidates. */
     @Synchronized
@@ -65,7 +126,7 @@ object EnglishWordMemory {
     @Synchronized
     fun forget(rimeDir: File, text: String): Boolean {
         val file = File(rimeDir, FILE_NAME)
-        if (!WORD.matches(text) || !file.exists()) return false
+        if (!STORED.matches(text) || !file.exists()) return false
         return runCatching {
             val lines = file.readLines()
             val kept = lines.filterNot { it.trim().equals(text, ignoreCase = true) }
@@ -77,7 +138,7 @@ object EnglishWordMemory {
 
     /** Latest spelling of each word last, at most [MAX_WORDS]. */
     internal fun compact(lines: List<String>): List<String> =
-        lines.map { it.trim() }.filter { WORD.matches(it) }.asReversed().distinct().take(MAX_WORDS).asReversed()
+        lines.map { it.trim() }.filter { STORED.matches(it) }.asReversed().distinct().take(MAX_WORDS).asReversed()
 
     private fun write(file: File, words: List<String>) {
         val tmp = File(file.parentFile, "${file.name}.tmp")

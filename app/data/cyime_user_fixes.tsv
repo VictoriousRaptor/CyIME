@@ -86,3 +86,71 @@
 # sentence took 好狠 (7601) + 多了; without the word model, or when learned words fill Rime's few sentences, the word
 # model never sees 好很多. The word model rates 好+很多 2.2 times 好狠 (ln P -11.99 against -12.81): 7601 × 2.2.
 好很多	hao hen duo	17000
+# 词库改进 2026-11-22（Claude 线程，按 tools/ime_lab/lexicon_source.py 的约定流程，不用外部 API）：日常/网络/办公/医疗常用词
+# 在同码里被冷僻词压住，或词库没有。权重规则：该码别的词都 <300 → 3000；否则 min(3000, 第一名/2)，不抢第一；
+# 明显比当前第一名常用的（新冠>信管、下单>下蛋、微博>微薄、飞书>飞鼠、闭环>鼻环、整活>正火、余票>鱼漂）= 第一名 + 1；
+# 规范词形低于同音异形词的（《第一批异形词整理表》/现汉）= 异形词 + 1。
+新冠	xin guan	3126
+下单	xia dan	11058
+整活	zheng huo	1053
+余票	yu piao	839
+微博	wei bo	56823
+飞书	fei shu	1470
+闭环	bi huan	1126
+嫉妒	ji du	35520
+推诿	tui wei	3024
+疲沓	pi ta	31
+核酸	he suan	3000
+爆雷	bao lei	3000
+全栈	quan zhan	2033
+拉取	la qu	3000
+闭源	bi yuan	639
+抄底	chao di	3000
+定投	ding tou	1559
+生成式	sheng cheng shi	3000
+私信	si xin	3000
+天哪	tian na	3000
+番剧	fan ju	3000
+补牙	bu ya	3000
+胃镜	wei jing	3000
+双减	shuang jian	3000
+美瞳	mei tong	2922
+训练集	xun lian ji	3000
+拉群	la qun	3000
+春招	chun zhao	3000
+撸铁	lu tie	3000
+# 词库改进 2026-11-22 第二批（单独一个提交，门槛不过就整批回退）：这些常用词在 rime-ice 原表里远高于同码词，
+# 被 70/30 聊天混合压到第二（支付<制服、优惠<又会、到账<道长、发货<发火）。逐个判断后只恢复日常/购物/办公/医疗里
+# 明显更常用的；去世/放假/毛衣/安利/一秒 这类聊天里本来就多的不动。权重 = 当前第一名 + 1，只动本码。
+支付	zhi fu	89693
+优惠	you hui	127421
+宽带	kuan dai	15691
+注销	zhu xiao	16941
+中介	zhong jie	56164
+发货	fa huo	48055
+折扣	zhe kou	28518
+指数	zhi shu	26457
+部位	bu wei	84016
+图形	tu xing	21767
+单击	dan ji	52978
+幅度	fu du	65467
+股价	gu jia	51120
+全套	quan tao	18085
+精度	jing du	34668
+凭证	ping zheng	31183
+源码	yuan ma	20223
+额度	e du	39564
+口服	kou fu	29232
+补办	bu ban	13952
+到账	dao zhang	8820
+献血	xian xue	7905
+上月	shang yue	20106
+眼科	yan ke	7775
+个税	ge shui	6608
+减税	jian shui	7449
+抽签	chou qian	6426
+结清	jie qing	2930
+协商	xie shang	48753
+# 九键只打 5268436 一个词时首选按词典权重（t9/whole_word_weight_margin），老陈原是 1 会被老臣顶掉；仍低于老臣 1162；谢了 101445 比写了 276909 差一点点在阈值外（2026-11-25）。
+老陈	lao chen	800
+谢了	xie le	110000

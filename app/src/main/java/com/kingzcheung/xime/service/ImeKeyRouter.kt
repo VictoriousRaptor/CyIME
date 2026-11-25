@@ -100,6 +100,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         // Ctrl+回车在没声明动作的框里执行「发送」；有的应用不理这个动作，见 [sendWithFallback]。
         if (ctrl && !terminal && plan == EnterKeyAction.EditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEND))
             return sendWithFallback(ic, info?.packageName)
+        // 数字后面刚上的半角 . ,（[DigitSeparatorGuess]）：回车换行、发送前按句末标点改成 。，（「价格是5。」）。
+        service.digitSeparatorGuess.beforeEnter(ic, newline = plan == EnterKeyAction.Newline,
+            now = android.os.SystemClock.uptimeMillis())
         when (plan) {
             is EnterKeyAction.EditorAction -> ic.performEditorAction(plan.action)
             EnterKeyAction.Newline -> ic.commitText("\n", 1)
@@ -253,7 +256,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     internal suspend fun offerEmailSuffixesAfterAt() = withEditor { offerEmailSuffixes() }
 
     /**
-     * 数字上屏之后（数字键盘、数字行、角标）：光标前那串数字对得上「我的短语」的编码开头时把短语放到候选栏（默认关，见 [DigitPhrases]），
+     * 数字上屏之后（数字键盘、数字行、角标）：光标前那串数字对得上「我的短语」的编码开头时把短语放到候选栏（默认开，见 [DigitPhrases]），
      * 打过两次以上的常用数字也放进这一组（默认开，见 [NumberHistory]）。
      * 两个开关都关着时不读短语表也不读输入框。短语表、记下的数字在按键队列里读（只读一次），输入框在主线程读。
      */
@@ -264,6 +267,23 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val finished = withEditor { showDigitPhrases(phrases, numbers) }
         // 上一串打完了的数字：记一次（文件在后台写）。
         finished?.let { NumberHistory.record(service, it) }
+    }
+
+    /**
+     * 英文词后面接着点的数字（Abc 上屏后点 1 2 3，2026-11-25 他问 Abc123 能不能记住）：光标前是「字母 + 数字」时连起来记进
+     * 英文记忆，之后打 abc 由 lua/cyime_en_memory.lua 补全出 Abc123。只在记英文的键盘（雾凇 26 键、英文单词），
+     * 无痕、密码框、键盘里的面板输入框不记。
+     */
+    internal suspend fun rememberEnglishDigits() {
+        if (!typesEnglishCapitals(service.uiState.value.currentSchemaId) ||
+            com.kingzcheung.xime.settings.IncognitoState.active) return
+        val before = withEditor {
+            if (service.uiState.value.inputTarget.isInternal || service.isSecretEditor()) null
+            else runCatching { service.currentInputConnection?.getTextBeforeCursor(64, 0)?.toString() }.getOrNull()
+        } ?: return
+        val (word, digits) = com.kingzcheung.xime.settings.EnglishWordMemory.wordWithDigits(before) ?: return
+        com.kingzcheung.xime.settings.EnglishWordMemory.rememberWithDigits(
+            com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service), word, digits)
     }
 
     /** 跟着光标前正在打的那串数字，打完才记（见 [NumberHistory]）。主线程用。 */
@@ -614,6 +634,40 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
     }
 
+    /** 正在候选栏里的英文下一词（#101）；选词时据此认出是它，选了或换了内容就作废。只在主线程读写。 */
+    private var englishNextWordList: List<String>? = null
+
+    /**
+     * #101 英文下一词（默认关）：英文打完 [word] 后光标前是「词 + 空格」时，候选栏给出常跟在后面的词。
+     * 只管英文（直接上屏的英文、中文键盘切的英文），别的拉丁语言没有双词表；密码、网址邮箱框、面板里的输入框不出。
+     * 查表在后台；查完光标前已不是「词 + 空格」、已经在打别的或候选栏有别的东西时不出。
+     */
+    private fun requestEnglishNextWords(word: String) {
+        if (!EnglishNextWords.isEnabled(service) || service.isSecretEditor()) return
+        val ui = service.uiState.value
+        val english = ui.isAsciiMode || ui.inputProfile.typesLettersDirectly &&
+            ui.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH
+        if (!english || ui.inputTarget.isInternal || service.editorInputPolicy.field.scoped) return
+        if (EnglishNextWords.key(word) == null) return
+        val session = ui.inputSessionId
+        val context = runCatching { captureInputContext() }.getOrNull() ?: return
+        service.serviceScope.launch(context) {
+            val words = withContext(Dispatchers.IO) {
+                runCatching { EnglishNextWords.predict(service, word) }.getOrDefault(emptyList())
+            }
+            if (words.isEmpty()) return@launch
+            withEditor {
+                val current = service.candidateState.value
+                if (service.uiState.value.inputSessionId != session || current.pendingEnglishText.isNotEmpty() ||
+                    current.isComposing || current.associationCandidates.isNotEmpty() || current.isShowingRecentClipboard) return@withEditor
+                val before = runCatching { service.currentInputConnection?.getTextBeforeCursor(word.length + 1, 0)?.toString() }.getOrNull()
+                if (before != "$word ") return@withEditor
+                englishNextWordList = words
+                service.candidateState.value = current.copy(associationCandidates = words)
+            }
+        }
+    }
+
     /**
      * 打单词时的撇号（Shift 键分词、逗号键分词、角标、长按都走这里）：光标前是正在打的词时，' 像字母一样上屏并接进这个词，
      * 补全接着按 what'、l'e 找（what's、l'eau）。没在打词、或不是用撇号的语言时返回 false，照旧当标点。
@@ -628,7 +682,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             service.predictionManager.invalidatePendingPredictions()
             val cleared = current.copy(associationCandidates = emptyList())
             service.candidateState.value = cleared
-            val committed = commitEnglishLetter(cleared, mark, false, service::supportsEnglishCandidateReplace) {
+            val committed = commitEnglishLetter(cleared, mark, false, service::supportsEnglishCandidateReplace,
+                completionOn = SettingsPreferences.isSmartPredictionEnabled(service)) {
                 service.commitTextAndPredict(it, isPaste = false, allowPrediction = false).accepted
             }
             if (committed != null) service.candidateState.value = committed
@@ -645,6 +700,18 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             service.rimeEngine.readQueuedComposition()?.input.isNullOrEmpty() &&
             digitSeparatorStaysHalfWidth(key, withEditor {
                 runCatching { service.editorConnection()?.getTextBeforeCursor(1, 0) }.getOrNull() })
+
+    /**
+     * 实体键盘数字后的 . ,：照半角上屏；选的是全角标点时记下来，接着打的不是数字就改成 。，（[DigitSeparatorGuess]，11-25）。
+     * 冒号（12:30）照旧只上半角。
+     */
+    private suspend fun commitDigitSeparator(key: String) {
+        val committed = commitHardwareLiteral(key)
+        if (committed && key.length == 1 && key[0] in ".,") withEditor {
+            if (service.textCommit.digitSeparatorAllowed() && service.textCommit.isFullWidthPunctuation())
+                service.digitSeparatorGuess.arm(key[0])
+        }
+    }
 
     private suspend fun <T> withEditor(block: suspend CoroutineScope.() -> T): T =
         withContext(Dispatchers.Main) {
@@ -839,7 +906,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     candidates = emptyList(), candidateComments = emptyList(), candidateActions = emptyList(),
                     pendingEnglishText = if (plan.pair && head != null) head + text else word, glidedWord = word,
                     associationCandidates = if (service.isSecretEditor()) emptyList() else plan.alternatives,
-                    englishReplaceSupported = replaceSupported,
+                    // 滑行是整词输入，像英文单词方案一样照常给候选，不看「智能联想」。
+                    englishReplaceSupported = replaceSupported, englishCompletionOff = false,
                     hasNextPage = false, hasPrevPage = false, isShowingRecentClipboard = false,
                 )
                 } finally {
@@ -1039,6 +1107,32 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * alternative_select_keys）由 Rime 定；没在打字时数字照旧直接上屏。九键等数字本来就是编码的键盘不经过这里。
      * 内置笔画方案的通配键 * 也从这里送进 Rime（[strokeWildcardIsCode]）。
      */
+    /**
+     * 打字中按的数字是在接着打「我的短语」里字母开头、带数字的编码（dz1）：这时数字送进 Rime 当编码（方案的 recognizer
+     * 认这些前缀，见 PersonalDictManager.applyPhraseDigitPattern），不在这边当选词键。九键的数字本来就是编码，不经过这里。
+     */
+    internal fun continuesPhraseCode(key: String): Boolean {
+        if (key.length != 1 || key[0] !in '0'..'9') return false
+        val state = service.uiState.value
+        if (state.isAsciiMode || state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9) return false
+        val input = service.rimeEngine.readQueuedComposition()?.input.orEmpty()
+        return com.kingzcheung.xime.settings.PersonalDictManager.continuesPhraseCode(service, state.currentSchemaId, input, key[0])
+    }
+
+    /**
+     * 屏幕键盘数字行、角标、长按打的数字平常先上屏候选再接数字（[ImeTextCommit.literalSubmission]）；接着打带数字的短语编码时
+     * 改成把数字送进 Rime（dz → dz1），候选栏出这条短语。返回 false 时照旧。
+     */
+    internal suspend fun typePhraseCodeDigit(literal: String): Boolean {
+        val digit = literal.singleOrNull()?.let { if (it in '０'..'９') '0' + (it - '０') else it } ?: return false
+        if (!continuesPhraseCode(digit.toString())) return false
+        val result = service.rimeEngine.processQueuedKeyAndGetResult(digit.code, 0)
+        if (!result.processed) return false
+        if (result.committedText.isNotEmpty()) withEditor { service.commitText(result.committedText) }
+        sendTransformedResult(result)
+        return true
+    }
+
     internal fun schemeCodeKey(text: String): String? {
         val state = service.uiState.value
         if (auxCodeTrigger(text)) return text
@@ -1309,7 +1403,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             // 104 里只有 : 变半角（#548）。没在打字、光标前是数字时照半角上屏；打字中照旧翻页。
             if (hardwareEvent == null && hardwarePageDirection != 0 && !zhuyinHardwareActive() &&
                 keepsDigitSeparatorHalfWidth(key)) {
-                commitHardwareLiteral(key)
+                commitDigitSeparator(key)
                 return@command
             }
             // 注音（大千）Shift+数字 / Ctrl+数字：按排在前面的注音键都处理完后的候选，选这一组的第 N 个，和光按数字选词同一条路
@@ -1363,8 +1457,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     hardwareNavigation.releasePress(HardwareCandidateKey.SPACE)
                     return@command
                 }
-                if (processHardwareCandidateKey(hardwareEvent)) return@command
-                if (hardwareCandidateDigitIndex(hardwareEvent.keyCode, hardwareEvent.isShiftPressed) != null) {
+                // 接着打带数字的短语编码（dz 后按 1，有 dz1 这条短语）：数字照普通键送进 Rime，不选词也不原样上屏。
+                val phraseDigit = hardwareCandidateDigitIndex(hardwareEvent.keyCode, hardwareEvent.isShiftPressed) != null &&
+                    continuesPhraseCode(key)
+                if (!phraseDigit && processHardwareCandidateKey(hardwareEvent)) return@command
+                if (!phraseDigit && hardwareCandidateDigitIndex(hardwareEvent.keyCode, hardwareEvent.isShiftPressed) != null) {
                     // DefaultInput here means no numbered candidate owns this digit.
                     // Never send it back into the active T9 decoder as a new spelling.
                     commitHardwareLiteral(key)
@@ -1385,7 +1482,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 // 数字后的 . , :（3.14、12:30）：上面的数字是直接上屏的，没进 Rime，Rime 的数字后半角规则管不到，
                 // 中文模式句号会成「。」（#527）。没在打字、光标前是数字时照半角上屏。
                 if (keepsDigitSeparatorHalfWidth(key)) {
-                    commitHardwareLiteral(key)
+                    commitDigitSeparator(key)
                     return@command
                 }
                 // 打拼音时不按 Shift 的 ; / \ 等：先把字母原样上屏（不上屏首选，Gboard 规则，用户 2026-10-24），
@@ -1458,7 +1555,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         }
                     }
                     val next = commitEnglishLetter(current, key, isShifted || autoCaps,
-                        service::supportsEnglishCandidateReplace, afterGlide = afterGlide) {
+                        service::supportsEnglishCandidateReplace, afterGlide = afterGlide,
+                        completionOn = SettingsPreferences.isSmartPredictionEnabled(service)) {
                         val letter = if (fullWidthLetter) fullWidthLetters(it) else it
                         service.commitTextAndPredict(letter, isPaste = false, allowPrediction = false).accepted
                     }
@@ -1797,6 +1895,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 associationCandidates = emptyList()
                             )
                         }
+                        if (hardwareEvent == null) requestEnglishNextWords(pendingEnglish)
                     } else if (candState.isComposing) {
                         if (candState.candidates.isNotEmpty()) {
                             val index = candState.spaceCandidateIndex(state.inputProfile)
@@ -1946,12 +2045,15 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                         syncCalculatorWithEditor(it)
                                 }
                         }
+                        // 数字键盘上打了字：收起候选栏里刚复制的内容（截图后才冒出来的图片也一样），和主键盘一打字就换成候选一样。
+                        // 以前只有切到数字键盘那一下清，图片晚到或在数字键盘里截图时一直占着候选栏，数字进不去（#542）。
+                        if (isNumberKeyboard && literal.isNotEmpty()) hideClipboardSuggestionsForTyping()
                         if (isNumberKeyboard) updateCalculatorCandidates()
                         // 数字键盘、常用符号面板打的 @：和主键盘一样给邮箱后缀（默认开），接着打的数字、点重新筛。
                         if (literal == "@" || literal == "＠" ||
                             emailDomain && literal.isNotEmpty() && literal.all { it == '.' || it == '-' || it in '0'..'9' })
                             offerEmailSuffixesAfterAt()
-                        // 数字键盘打的数字：对得上「我的短语」编码的短语放到候选栏（默认关）。
+                        // 数字键盘打的数字：对得上「我的短语」编码的短语放到候选栏（默认开）。
                         if (isNumberKeyboard && key.length == 1 && key[0] in '0'..'9') offerDigitPhrases()
                         needsUIUpdate = true
                         return@command
@@ -1983,7 +2085,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     // actions 为空（无变换）时保持原生数字选词行为不变。
                     if (!state.isAsciiMode && candState.isComposing &&
                         key.length == 1 && key[0] in '1'..'9' &&
-                        !(isRimeIceCapitalSchema(state.currentSchemaId) && isUnicodeCodeInput(candState.inputText))
+                        !(isRimeIceCapitalSchema(state.currentSchemaId) && isUnicodeCodeInput(candState.inputText)) &&
+                        !continuesPhraseCode(key)
                     ) {
                         val actions = service.candidateState.value.candidateActions
                         val digitIndex = key[0] - '1'
@@ -2048,6 +2151,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             // 大写字母（Shift、Caps Lock 或 Shift 拖线中途在字母区松手）在雾凇系 26 键方案里
                             // 参与组字：字母表含 A–Z，大写串进当前输入（zuogeDNAjiance → 做个DNA检测，
                             // Transformer、KFC 由英文词库和自动大写给出），已打的拼音不被顶上屏。
+                            // 实体键盘的 Caps Lock 键本身不一样：按下那一下先把已打的拼音原样上屏（照电脑上的习惯，
+                            // 见 onKeyDown），之后锁着大写打的字母才从这里进组字。
                             val capitalsInRime = isShiftedChinese && !mergedKey && service.t9PartialSegments.isEmpty() &&
                                 (typesEnglishCapitals(state.currentSchemaId) || externalCapitalInRime(char[0]))
                             // 其他方案（双拼、14 键合并键等）没有大写字母编码：已打的字母按原样连同大写字母上屏，
@@ -2526,13 +2631,16 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         englishAutoSpace.disarm()
         // 邮箱后缀：上屏后不补空格，也不接着联想。
         val emailSuffix = EmailSuffixes.isSuggestionList(state.associationCandidates)
+        // 英文下一词（#101）：和补全词一样跟「选词后自动加空格」。
+        val nextWordPick = englishNextWordList != null && englishNextWordList == state.associationCandidates
+        englishNextWordList = null
         // 英文选词后自动加空格（默认关）：只跟在英文补全词后面，中文联想、邮箱后缀不加。
-        val autoSpace = state.pendingEnglishText.isNotEmpty() && !emailSuffix &&
+        val autoSpace = (state.pendingEnglishText.isNotEmpty() || nextWordPick) && !emailSuffix &&
             service.uiState.value.let { (it.isAsciiMode || it.inputProfile.typesLettersDirectly) && !it.inputTarget.isInternal } &&
             SettingsPreferences.getPrefsPublic(service).getBoolean(EnglishAutoSpace.PREF_KEY, false)
         val accepted = commitAssociationSelection(state, index,
             commit = { text ->
-                service.commitTextAndPredict(text, isPaste = false,
+                service.commitTextAndPredict(if (nextWordPick && autoSpace) "$text " else text, isPaste = false,
                     allowPrediction = !emailSuffix && !SettingsPreferences.isSingleAssociationMode(service),
                     chained = true).accepted
             },
@@ -2544,10 +2652,15 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (!accepted) return false
         associationWordAt(state, index)?.let(com.kingzcheung.xime.stats.TypingStats::onAssociationPicked)
         if (autoSpace) associationWordAt(state, index)?.let(englishAutoSpace::arm)
+        val picked = associationWordAt(state, index)
+        // 英文下一词没自动加空格：选的词当作刚打的词，接着打字母是在改它，按空格再出下一批。
+        val pending = if (nextWordPick && !autoSpace && picked != null && EnglishNextWords.key(picked) != null) picked else ""
         service.candidateState.value = service.candidateState.value.copy(
-            pendingEnglishText = "", associationCandidates = emptyList())
+            pendingEnglishText = pending, associationCandidates = emptyList())
         hardwareNavigation.clear()
         publishHardwareCandidateSelection()
+        // 自动加了空格：光标前已是「词 + 空格」，直接出下一批（补全词也一样）。
+        if (autoSpace && picked != null && EnglishNextWords.key(picked) != null) requestEnglishNextWords(picked)
         return true
     }
 
@@ -2659,6 +2772,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             hold?.allowsDeletion(imeContent = true)
             return
         }
+        // 数字后的 . , 刚被自动改成 。，：紧接着这一下退格改回半角（[DigitSeparatorGuess]，11-25）。长按连删不算。
+        if (hold == null && service.t9PartialSegments.isEmpty() && service.candidateState.value.let { !it.isComposing && it.inputText.isEmpty() } &&
+            withEditor { service.currentInputConnection?.let { service.digitSeparatorGuess.undoOnDelete(it, android.os.SystemClock.uptimeMillis()) } == true }) return
         // 退格改变输入上下文：使在途的联想预测结果失效，防止过期结果迟到回填
         // associationCandidates，导致长按退格删除时候选栏在"联想词↔空"之间闪动。
         // 先作废再读候选：联想恰好在两步之间送达时，要么算“在等”，要么已经看得到，不会落成删正文。
@@ -3201,6 +3317,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * - index 0: 计算结果（如 "2"），点击直接替换为结果
      * - index 1: 带公式的结果（如 "1+1=2"），点击显示公式和结果
      */
+    /** 打字时收起候选栏里的剪贴板（文字和图片）；只是不显示，不算用过，下次弹出键盘照旧按 30 秒规则给。 */
+    private fun hideClipboardSuggestionsForTyping() {
+        val current = service.candidateState.value
+        if (!current.isShowingRecentClipboard) return
+        service.candidateState.value = current.copy(candidates = emptyList(), candidateComments = emptyList(),
+            clipboardImage = null, clipboardExtractedCount = 0, isShowingRecentClipboard = false)
+    }
+
     internal fun updateCalculatorCandidates() {
         val candidate = service.calculatorEngine.getCandidate()
         val result = service.calculatorEngine.getResult()

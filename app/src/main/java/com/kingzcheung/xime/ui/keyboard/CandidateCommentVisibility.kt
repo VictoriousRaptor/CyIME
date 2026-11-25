@@ -61,6 +61,23 @@ internal fun rememberCandidateCommentsAllowed(): CandidateCommentMode {
     return allowed
 }
 
+/** 「拼音显示改正后的读音」（#586，默认开）：贴边拼音（小标签、方块、整行）显示首选的纠正读音。 */
+@Composable
+internal fun rememberPreeditLineCorrected(): Boolean {
+    val context = LocalContext.current
+    val preferences = remember(context) { SettingsPreferences.getPrefsPublic(context) }
+    var shown by remember(preferences) { mutableStateOf(SettingsPreferences.preeditLineCorrected(context)) }
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == SettingsPreferences.KEY_PREEDIT_LINE_CORRECTED)
+                shown = SettingsPreferences.preeditLineCorrected(context)
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return shown
+}
+
 @Composable
 internal fun rememberCorrectionMarksVisible(): Boolean {
     val context = LocalContext.current

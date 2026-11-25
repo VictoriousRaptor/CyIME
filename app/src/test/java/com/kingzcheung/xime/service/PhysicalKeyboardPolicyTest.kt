@@ -171,7 +171,7 @@ class PhysicalKeyboardPolicyTest {
         val body = src.substringAfter("private fun routeKeyPress(")
         val capitals = body.indexOf("compositionIsAllCapitals(")
         assertTrue(capitals > 0)
-        assertTrue(capitals < body.indexOf("if (processHardwareCandidateKey(hardwareEvent)) return@command"))
+        assertTrue(capitals < body.indexOf("processHardwareCandidateKey(hardwareEvent)) return@command"))
         assertTrue(capitals < body.indexOf("if (hardwarePageDirection != 0 &&"))
     }
 

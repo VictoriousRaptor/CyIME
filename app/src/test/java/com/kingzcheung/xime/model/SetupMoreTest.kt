@@ -64,7 +64,7 @@ class SetupMoreTest {
 
     @Test fun reverseAndCancelButtonAreListed() {
         assertEquals(listOf("打开了「反转上下滑方向」：上滑出上角标、下滑出下角标，删除键也反过来。",
-            "关掉了「候选栏取消按钮」：候选词从最左边开始。"),
+            "关掉了「显示 ‹ 取消键」：候选词从最左边开始。"),
             SetupMore.changes(now, now.copy(reverseSwipe = true, cancelButton = false)))
     }
 

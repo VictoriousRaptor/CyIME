@@ -93,4 +93,13 @@ class HardwareLanguageShortcutsTest {
         }
         assertEquals(HardwareToolShortcut.CLIPBOARD, s.down(KEYCODE_V, 0, 0, false, true, false, false, options).tool)
     }
+
+    @Test fun symKeyOpensSymbolsOnceAndReleaseIsConsumed() {
+        assertEquals(HardwareShortcutResult(consume = true, tool = HardwareToolShortcut.SYMBOL), down(KEYCODE_SYM))
+        assertEquals(HardwareShortcutResult(consume = true), down(KEYCODE_SYM, repeat = 1))
+        assertTrue(s.up(KEYCODE_SYM, 100, false, options).consume)
+        assertEquals(HardwareShortcutResult(), down(KEYCODE_SYM, settings = options.copy(toolShortcuts = false)))
+        s.up(KEYCODE_SYM, 100, false, options)
+        assertEquals(HardwareShortcutResult(), down(KEYCODE_SYM, alt = true))
+    }
 }

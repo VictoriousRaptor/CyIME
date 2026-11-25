@@ -148,6 +148,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         }
         // 标记为已消费：候选栏/剪贴板点选上屏后不再重复出现在候选栏
         service.clipboardManager.markConsumed(source)
+        if (com.kingzcheung.xime.ui.menubar.clipboardMovesPastedToTop(service)) service.clipboardManager.moveToTop(source)
         if (com.kingzcheung.xime.clipboard.clipboardPasteMode(source, service.clipboardManager.quickSendItems.value +
                 service.clipboardManager.clipboardItems.value.filter { it.sensitive }) ==
             com.kingzcheung.xime.clipboard.ClipboardPasteMode.PRIVATE) {
@@ -259,22 +260,47 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
             }
             // 只打了大写字母（N、AGENTS）时点数字行，连同大写原样上屏（N1），同实体键盘 #528，不先上屏首选英文词。
             // 只在雾凇 26 键：14 键的合并键在引擎里是大写代表字母（di 送进去是 DU），不能当成打了大写（11-22 审查）。
+            // 接着打「我的短语」里带数字的编码（打了 dz、有 dz1 这条短语）：数字进编码，不先上屏候选（用户 11-24：数字短语打不出）。
+            if (!hardware && isComposingDigit(literal) && service.keyRouter.typePhraseCodeDigit(literal)) return@literal
             val capitalsDigit = isComposingDigit(literal) &&
                 screenDigitKeepsCapitals(service.uiState.value.currentSchemaId, engine.getInput())
             if (candidateFirst && !capitalsDigit && !emailDomain && owner == service.uiState.value.inputSessionId &&
-                commitCandidateAndPunctuation(paired, caret)) return@literal
+                commitCandidateAndPunctuation(paired, caret)) {
+                // 打着 Abc 点数字行：首选上屏接数字，这串字母加数字记进英文记忆（下面直接上屏数字的路同样记）。
+                if (!hardware && isComposingDigit(literal)) service.keyRouter.rememberEnglishDigits()
+                return@literal
+            }
             if (owner != service.uiState.value.inputSessionId) return@literal
-            val committed = commitCompositionAndLiteral(output, asTyped = true, caret = caret)
+            // 数字后面点中文键盘的「。」「，」：先上半角（3.14、1,000），接着打的不是数字时再改成全角（11-25，见 DigitSeparatorGuess）。
+            val digitHalf = if (!hardware && !emailDomain && paired == literal &&
+                engine.getInput().isEmpty() && service.t9PartialSegments.isEmpty())
+                DigitSeparatorGuess.halfFor(literal)?.takeIf { digitSeparatorAllowed() } else null
+            val half = digitHalf?.takeIf {
+                withContext(Dispatchers.Main) {
+                    DigitSeparatorGuess.digitBefore(runCatching { service.currentInputConnection?.getTextBeforeCursor(1, 0) }.getOrNull())
+                }
+            }
+            val committed = commitCompositionAndLiteral(half?.toString() ?: output, asTyped = true, caret = caret)
+            if (committed && half != null) withContext(Dispatchers.Main) { service.digitSeparatorGuess.arm(half) }
             // 打 @（中文符号面板是全角 ＠）时给邮箱后缀（默认开），给着后缀时接着打的点、数字重新筛；
             // 邮箱框走上面的直接上屏，在那里给。
             if (committed && (literal == "@" || literal == "＠" ||
                     emailDomain && output.all { it == '.' || it == '-' || it in '0'..'9' }))
                 service.keyRouter.offerEmailSuffixesAfterAt()
-            // 数字行、角标打的数字：对得上「我的短语」编码的短语放到候选栏（默认关）。
-            if (committed && !hardware && literal.lastOrNull()?.let { it in '0'..'9' || it in '０'..'９' } == true)
+            // 数字行、角标打的数字：对得上「我的短语」编码的短语放到候选栏（默认开）。
+            if (committed && !hardware && literal.lastOrNull()?.let { it in '0'..'9' || it in '０'..'９' } == true) {
+                service.keyRouter.rememberEnglishDigits()
                 service.keyRouter.offerDigitPhrases()
+            }
         }
         return submit
+    }
+
+    /** 数字后的句号、逗号先半角再看下一个字（[DigitSeparatorGuess]）：只在中文、应用的输入框里。 */
+    internal fun digitSeparatorAllowed(): Boolean {
+        val ui = service.uiState.value
+        return !ui.isAsciiMode && ui.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE &&
+            !ui.inputTarget.isInternal && !service.keyRouter.usesDirectFieldInput && !service.isTerminalEditor()
     }
 
     /** 屏幕键盘打出的一个数字（半角或全角），见 [literalSubmission] 里的 candidateFirst。 */

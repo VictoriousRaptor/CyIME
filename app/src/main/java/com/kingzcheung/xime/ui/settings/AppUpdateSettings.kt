@@ -122,7 +122,7 @@ internal fun AppUpdateSection() {
         SettingsToggleItem(
             icon = Icons.TwoTone.Update,
             title = "自动检查更新",
-            subtitle = "有新版本时在设置首页提示，不自动下载",
+            subtitle = "有新版本时提示，不自动下载",
             checked = autoCheck,
             onCheckedChange = { enabled ->
                 autoCheck = enabled

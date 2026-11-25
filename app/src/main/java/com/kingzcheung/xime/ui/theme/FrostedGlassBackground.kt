@@ -109,7 +109,7 @@ internal fun Modifier.frostedGlassBackground(
         return onGloballyPositioned {
             origin = it.positionInWindow()
             report(surfaceKey, origin.y)
-        }.drawWithContent {
+        }.then(motionRedrawIsolation(shared.motion.takeIf { imageSlot == null })).drawWithContent {
             if (shared.opacity > 0f) drawUnderTopFeather(feather?.top?.value?.minus(origin.y), feather?.heightPx ?: 0f) {
                 val image = shared.image?.takeIf { shared.frame.size.width > 0 && shared.frame.size.height > 0 }
                 if (image == null) drawRect(shared.fallback, alpha = shared.opacity)

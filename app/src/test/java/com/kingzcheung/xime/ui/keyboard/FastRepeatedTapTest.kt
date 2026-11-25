@@ -172,4 +172,90 @@ class FastRepeatedTapTest {
         }
         assertEquals("uuru", typed.toString())
     }
+
+    // ---- 几根手指交叠时按按下的先后出字。 ----
+    // 以前各键各管各的、抬手才出字：后按的键先抬手，出来的顺序就反了（按着 n 点 i 出 in，按着空格点下一个字母，
+    // 字母先进了拼音）。
+
+    private fun center(tag: String): Offset = rule.onNodeWithTag(tag, true).fetchSemanticsNode().boundsInRoot.center
+
+    /** [first] 按下没抬，[second] 按下并先抬起，[first] 最后抬。 */
+    private fun nested(first: Offset, second: Offset) {
+        touches { step -> down(0, first); step(); down(1, second); step(); up(1); step(); up(0) }
+    }
+
+    @Test fun nestedLettersTypeInPressOrder26() { show(); nested(point('n'), point('i')); assertEquals("ni", typed.toString()) }
+
+    @Test fun nestedLettersTypeInPressOrderEnglishGlide() {
+        show(ascii = true, prefs = KeyboardInputPreferences(glideTyping = true))
+        nested(point('n'), point('i'))
+        assertEquals("ni", typed.toString())
+    }
+
+    @Test fun nestedLettersTypeInPressOrderChineseGlide() {
+        show("rime_ice", prefs = KeyboardInputPreferences(chineseGlideTyping = true))
+        nested(point('n'), point('i'))
+        assertEquals("ni", typed.toString())
+    }
+
+    /** 14 键点双字母键提交整键：n 在 bn 键上，i 在 ui 键上。 */
+    @Test fun nestedKeysTypeInPressOrder14() { show("pinyin_14jian"); nested(point('n'), point('i')); assertEquals("bnui", typed.toString()) }
+
+    /** 第一根手指一直按着，另一根手指连点两个键：三个字母按按下的先后。 */
+    @Test fun firstLetterHeldThroughTwoTaps() {
+        show()
+        val h = point('h'); val a = point('a'); val o = point('o')
+        touches { step ->
+            down(0, h); step()
+            down(1, a); step(); up(1); step()
+            down(1, o); step(); up(1); step()
+            up(0)
+        }
+        assertEquals("hao", typed.toString())
+    }
+
+    /** 开着滑行时前一根手指挪了一点（没成滑行）：照样按按下的先后。 */
+    @Test fun nestedLettersWithDriftAndGlide() {
+        show(ascii = true, prefs = KeyboardInputPreferences(glideTyping = true))
+        val g = point('g'); val h = point('h')
+        touches { step ->
+            down(0, g); step(); moveTo(0, g + Offset(24f, 6f)); step()
+            down(1, h); step(); up(1); step()
+            up(0)
+        }
+        assertEquals("gh", typed.toString())
+    }
+
+    /** 空格还没抬就点了下一个字母：空格在前。 */
+    @Test fun letterTappedWhileSpaceIsStillDown() {
+        show(); nested(center("space-key"), point('a')); assertEquals("spacea", typed.toString())
+    }
+
+    /** 最后一个字母还没抬就点了空格：字母在前。 */
+    @Test fun spaceTappedWhileLetterIsStillDown() {
+        show(); nested(point('a'), center("space-key")); assertEquals("aspace", typed.toString())
+    }
+
+    /** 字母还没抬就点了删除：先出字母再删（删掉的是它）。 */
+    @Test fun deleteTappedWhileLetterIsStillDown() {
+        show(); nested(point('a'), center("qwerty-delete-key")); assertEquals("adelete", typed.toString())
+    }
+
+    /** 删除还没抬就点了下一个字母：先删再出字母（以前删掉的是刚打的这个字母）。 */
+    @Test fun letterTappedWhileDeleteIsStillDown() {
+        show(); nested(center("qwerty-delete-key"), point('a')); assertEquals("deletea", typed.toString())
+    }
+
+    /** 字母还没抬就点了回车：字母在前。 */
+    @Test fun enterTappedWhileLetterIsStillDown() {
+        show(); nested(point('a'), center("qwerty-enter-key")); assertEquals("aenter", typed.toString())
+    }
+
+    /** 反例：后按的键后抬（平常的两指交替）一直是按下的先后，不变。 */
+    @Test fun rolloverKeepsPressOrder() {
+        show()
+        val n = point('n'); val i = point('i')
+        touches { step -> down(0, n); step(); down(1, i); step(); up(0); step(); up(1) }
+        assertEquals("ni", typed.toString())
+    }
 }

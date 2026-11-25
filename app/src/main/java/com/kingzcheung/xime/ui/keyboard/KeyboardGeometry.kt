@@ -33,6 +33,15 @@ internal fun floatingResizeHeightBounds(hostHeightDp: Int, landscape: Boolean): 
     return min..max
 }
 
+/**
+ * 悬浮键盘比正常最矮（[FLOATING_RESIZE_MIN_HEIGHT_DP]）还矮时，键区整块按比例缩小的倍数：工具栏、字号、
+ * 周边键、键缝和中间的键一起缩，样子和正常大小时一样，只是小一号（用户 11-25「缩小到最小的时候比例都失调了，
+ * 中间那 9 个键小成啥样了…怎么不说上面工具栏呢，这不是按比例的吗」：原来工具栏 44dp、字号不缩，只压扁了按键行）。
+ * [keyboardHeightDp] 是键盘本身的高（含工具栏，不含拖动条和临时撑高的剪贴板搜索、拼音条）。
+ */
+internal fun floatingContentScale(keyboardHeightDp: Float): Float =
+    if (keyboardHeightDp > 0f) (keyboardHeightDp / FLOATING_RESIZE_MIN_HEIGHT_DP).coerceIn(0.5f, 1f) else 1f
+
 /** 最小宽度：手机基准下限与可用宽度取小（[availableWidthDp] 已扣边距）。 */
 internal fun floatingResizeMinWidthDp(availableWidthDp: Int): Int =
     availableWidthDp.coerceAtLeast(1).let { available ->

@@ -61,6 +61,15 @@ internal fun numberKeyboardSpacingSection(profile: InputProfile, ascii: Boolean)
     else -> "number"
 }
 
+/**
+ * 数字键盘九个数字从上到下的三排（11-22 群里有人问能不能改数字位置，作者答应加）。默认 1 2 3 在上，和现在一样；
+ * 设置「数字位置」选「7 8 9 在上」时整块上下翻过来，同电脑键盘右边的小键盘。0、小数点、左栏和右栏都不动。
+ */
+internal fun numberPadRows(top789: Boolean): List<List<String>> = if (top789) NUMBER_PAD_ROWS_789 else NUMBER_PAD_ROWS
+
+private val NUMBER_PAD_ROWS = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"))
+private val NUMBER_PAD_ROWS_789 = NUMBER_PAD_ROWS.reversed()
+
 /** Numeric keypad; navigation shares the text and symbol pages' mode-key preference. */
 @Composable
 fun NumberKeyboardLayout(
@@ -205,13 +214,14 @@ private fun NumberRows(
     enterKeyText: String = "确定",
 ) {
     val modeWeight = NineGridFrame.BOTTOM_MODE
-    val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(LocalKeyboardInputPreferences.current.symbolKeyCycle)
+    val modeSlots = com.kingzcheung.xime.keyboard.modeSlotOrder(LocalKeyboardInputPreferences.current.swapModeKeys, LocalKeyboardInputPreferences.current.symbolKeyCycle)
     // 左栏符号和数字键同一个字号（用户 11-18：符号和按键字号不一样）。
     val symFontSize = if (compactMode) 16.sp else KeyboardKeyMetrics.LabelSize
     val keyFontSize = if (compactMode) 16.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     val ctrlFontSize = if (compactMode) 12.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     // 左栏符号可在「按键符号 → 数字侧栏」改（用户 11-09）；没改过仍是 + - * /。四格一屏，多出的上下滑，末尾一格「编辑」。
     val symbols = SideSymbolTarget.NUMBER.resolve(LocalKeyboardInputPreferences.current.symbolsFor(SideSymbolTarget.NUMBER))
+    val digitRows = numberPadRows(LocalKeyboardInputPreferences.current.numberPadTop789)
     Column(Modifier.fillMaxSize()) {
         // Numeric navigation uses the operator-column width, independent of the text row.
         Row(Modifier.fillMaxWidth().weight(3f)) {
@@ -223,12 +233,12 @@ private fun NumberRows(
                     // 键缝动效：左栏不是键，按它不画；登记位置是为了线能绕着它走。
                     .then(keyGapLightSource(GapLightKind.NONE)))
             Column(Modifier.weight(NineGridFrame.MAIN).fillMaxHeight()) {
-                listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
+                digitRows.forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) {
                         row.forEach { key ->
                             KeyButton(text = key, onClick = { onKeyPress(key) },
                                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                                onPress = { onKeyPressDown?.invoke(key) }, modifier = Modifier.weight(1f),
+                                onPress = { onKeyPressDown?.invoke(key) }, modifier = Modifier.weight(1f).testTag("number-digit:$key"),
                                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
                         }
@@ -264,14 +274,14 @@ private fun NumberRows(
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            for (slot in 1..modeCount) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
+            for (slot in modeSlots) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
                 onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor, modifier = Modifier.weight(modeWeight),
                 onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
             KeyButton(text = "0", onClick = { onKeyPress("0") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(NineGridFrame.MAIN - modeCount * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
+                modifier = Modifier.weight(NineGridFrame.MAIN - modeSlots.size * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：
@@ -364,6 +374,8 @@ private fun NumberSymbolKey(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     val density = LocalDensity.current
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
     BoxWithConstraints(
@@ -376,6 +388,7 @@ private fun NumberSymbolKey(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             }, contentAlignment = Alignment.Center
     ) {

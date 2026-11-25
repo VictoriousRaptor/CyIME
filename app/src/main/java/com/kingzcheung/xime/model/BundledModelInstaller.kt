@@ -10,8 +10,10 @@ import org.json.JSONObject
 /** Offline edition: install on IO, then activate a usable local configuration once.
  * User changes/deletions after setup are preserved, including on subsequent upgrades. */
 object BundledModelInstaller {
+    // 离线翻译两个方向（11-23 他要完整版装上就能离线翻译）：只进完整发布包，老人包、朋友包按打包器清单不带。
     val modelIds = setOf("ochwpro",
-        SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE, BuiltinModelCatalog.SPEAKER_MODEL)
+        SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE, BuiltinModelCatalog.SPEAKER_MODEL,
+        "translate-zh-en", "translate-en-zh")
     /** Model ids packed into this offline edition (empty when the manifest is missing). */
     fun bundledIds(context: Context): Set<String> = runCatching {
         val manifest = context.assets.open("bundled-models/manifest.json").bufferedReader().use { JSONArray(it.readText()) }

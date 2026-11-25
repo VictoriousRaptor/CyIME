@@ -39,6 +39,7 @@ import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -157,11 +158,22 @@ private fun CustomPhraseTabContent(
     uiState: CustomPhraseUiState,
 ) {
     val listState = rememberLazyListState()
+    // 从文件导入短语（#298）：Gboard 导出的个人词库，或每行「短语 Tab 编码」的文本。
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> uri?.let(viewModel::importPhrases) }
     LazyColumn(state = listState, modifier = Modifier.settingsGutterScroll(listState).fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp)) {
         item {
             DictionarySearchField(uiState.searchQuery, viewModel::setSearchQuery, "搜索短语或编码",
                 Modifier.fillMaxWidth().padding(bottom = 12.dp))
+        }
+        item(key = "phrase_import") {
+            Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                TextButton(onClick = { importLauncher.launch(arrayOf("text/*")) },
+                    modifier = Modifier.testTag("phrase-import")) { Text("从文件导入短语") }
+                Text(uiState.importMessage ?: "Gboard 导出的个人词库，或每行「短语 Tab 编码」的文本",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         when {
             uiState.isLoading -> item {

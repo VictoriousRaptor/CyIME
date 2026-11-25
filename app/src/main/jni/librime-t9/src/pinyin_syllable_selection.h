@@ -40,7 +40,15 @@ struct Span {
   size_t start = 0;
   size_t end = 0;
   rime::SyllableId syllable = -1;
+  // #573: readings that 模糊音 put on the same keys as the chosen one (jin when
+  // jing is chosen with in/ing on). They stay, behind every candidate of the
+  // chosen reading (kFuzzyEquivalentPenalty), instead of vanishing.
+  std::vector<rime::SyllableId> fuzzy;
 };
+
+// Far below any dictionary weight difference: the chosen reading's candidates
+// all come first, the fuzzy equivalents after them.
+inline constexpr double kFuzzyEquivalentPenalty = -20.0;
 
 struct Lock {
   std::string schema;
@@ -59,7 +67,22 @@ struct Option {
   size_t start = 0;
   size_t end = 0;
   bool selected = false;
+  // Reached through a 模糊音 rule (fuzz/), not the typed spelling itself.
+  bool fuzzy = false;
 };
+
+// One form for readings that the 模糊音 groups (SpellingPatches.Fuzzy) join:
+// z/zh c/ch s/sh, n/l r/l f/h, an/ang en/eng in/ing ian/iang uan/uang.
+inline std::string FuzzyKey(std::string reading) {
+  if (reading.size() >= 2 && reading[1] == 'h' &&
+      (reading[0] == 'z' || reading[0] == 'c' || reading[0] == 's')) reading.erase(1, 1);
+  else if (!reading.empty() && (reading[0] == 'n' || reading[0] == 'r')) reading[0] = 'l';
+  else if (!reading.empty() && reading[0] == 'h') reading[0] = 'f';
+  const auto n = reading.size();
+  if (n >= 3 && reading.compare(n - 2, 2, "ng") == 0 &&
+      (reading[n - 3] == 'a' || reading[n - 3] == 'e' || reading[n - 3] == 'i')) reading.pop_back();
+  return reading;
+}
 
 inline std::string ConfirmedText(const rime::Context& context) {
   const auto confirmed = context.composition().GetConfirmedPosition();
@@ -74,12 +97,14 @@ inline std::string ConfirmedText(const rime::Context& context) {
 
 inline std::string Encode(const Lock& lock) {
   std::ostringstream out;
-  out << 2 << ' ' << std::quoted(lock.schema) << ' ' << std::quoted(lock.input)
+  out << 3 << ' ' << std::quoted(lock.schema) << ' ' << std::quoted(lock.input)
       << ' ' << std::quoted(lock.confirmed_text) << ' ' << lock.epoch << ' '
       << lock.dictionary_checksum << ' ' << lock.schema_checksum << ' '
       << lock.confirmed << ' ' << lock.spans.size();
-  for (const auto& span : lock.spans)
-    out << ' ' << span.start << ' ' << span.end << ' ' << span.syllable;
+  for (const auto& span : lock.spans) {
+    out << ' ' << span.start << ' ' << span.end << ' ' << span.syllable << ' ' << span.fuzzy.size();
+    for (const auto id : span.fuzzy) out << ' ' << id;
+  }
   return out.str();
 }
 
@@ -93,15 +118,21 @@ inline bool Decode(const std::string& value, Lock* lock) {
         >> std::quoted(parsed.confirmed_text) >> parsed.epoch
         >> parsed.dictionary_checksum >> parsed.schema_checksum
         >> parsed.confirmed >> count) ||
-      version != 2 || count == 0 || count > parsed.input.size()) {
+      version != 3 || count == 0 || count > parsed.input.size()) {
     return false;
   }
   size_t previous_end = parsed.confirmed;
   for (size_t i = 0; i < count; ++i) {
     Span span;
-    if (!(in >> span.start >> span.end >> span.syllable) || span.syllable < 0 ||
-        span.start >= span.end || span.end > parsed.input.size() ||
+    size_t fuzzy = 0;
+    if (!(in >> span.start >> span.end >> span.syllable >> fuzzy) || span.syllable < 0 ||
+        span.start >= span.end || span.end > parsed.input.size() || fuzzy > 64 ||
         (i == 0 ? span.start != parsed.confirmed : span.start < previous_end)) return false;
+    for (size_t j = 0; j < fuzzy; ++j) {
+      rime::SyllableId id = -1;
+      if (!(in >> id) || id < 0) return false;
+      span.fuzzy.push_back(id);
+    }
     previous_end = span.end;
     parsed.spans.push_back(span);
   }
@@ -249,7 +280,8 @@ inline void RebuildIndices(rime::SyllableGraph* graph) {
 // Pure graph operation, also used by the native regression probe. Span ends
 // include any trailing speller delimiters, exactly as Rime's graph does.
 inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
-                           rime::SyllableId syllable, bool allow_abbreviation = false) {
+                           rime::SyllableId syllable, bool allow_abbreviation = false,
+                           const std::vector<rime::SyllableId>& fuzzy = {}) {
   if (!graph || start >= end || end > graph->input_length) return false;
   auto from = graph->edges.find(start);
   if (from == graph->edges.end()) return false;
@@ -260,6 +292,16 @@ inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
       !(allow_abbreviation && target->second.type == rime::kAbbreviation))) return false;
   auto chosen = target->second;
   chosen.ambiguous_source_positions.clear();
+  // #573: the 模糊音 equivalents still on these keys, ranked after the chosen reading.
+  std::vector<std::pair<rime::SyllableId, rime::EdgeProperties>> equivalents;
+  for (const auto id : fuzzy) {
+    auto found = to->second.find(id);
+    if (id == syllable || found == to->second.end() || found->second.type >= rime::kAbbreviation) continue;
+    auto properties = found->second;
+    properties.ambiguous_source_positions.clear();
+    properties.credibility = std::min(properties.credibility, chosen.credibility) + kFuzzyEquivalentPenalty;
+    equivalents.emplace_back(id, std::move(properties));
+  }
 
   graph->indices.clear();
   for (auto source = graph->edges.begin(); source != graph->edges.end();) {
@@ -269,6 +311,7 @@ inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
       } else if (source->first == start && edge->first == end) {
         edge->second.clear();
         edge->second.emplace(syllable, chosen);
+        for (const auto& equivalent : equivalents) edge->second.emplace(equivalent.first, equivalent.second);
         ++edge;
       } else {
         edge = source->second.erase(edge);
@@ -309,7 +352,8 @@ inline bool ApplyGraphLock(rime::Context* context, rime::Schema* schema,
   for (size_t i = 0; applied && i < active; ++i) {
     applied = ConstrainGraph(graph, lock.spans[i].start - segment_start,
                              lock.spans[i].end - segment_start, lock.spans[i].syllable,
-                             context->get_property(kAllowAbbreviationProperty) == "1");
+                             context->get_property(kAllowAbbreviationProperty) == "1",
+                             lock.spans[i].fuzzy);
   }
   if (applied) {
     if (constrained) *constrained = true;
@@ -395,7 +439,8 @@ inline size_t BuildGraph(rime::Syllabifier& builder, const std::string& input,
     if (static_cast<size_t>(builder.BuildSyllableGraph(
             input.substr(end, chosen_length), prism, &chosen[i].second)) != chosen_length ||
         !ConstrainGraph(&chosen[i].second, 0, chosen_length, lock.spans[i].syllable,
-                        context->get_property(kAllowAbbreviationProperty) == "1")) return fail();
+                        context->get_property(kAllowAbbreviationProperty) == "1",
+                        lock.spans[i].fuzzy)) return fail();
     end = chosen_end;
   }
   rime::SyllableGraph after;
@@ -496,7 +541,7 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
               [&](const Span& span) {
                 return span.start == start && span.end >= code_start + match.length &&
                        span.end <= end && span.syllable == syllable;
-              })});
+              }), properties.type == rime::kFuzzySpelling});
     }
   }
   // Use the same schema and live keyboard geometry as the script translator.
@@ -532,7 +577,8 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
             if (pinyin.empty()) continue;
             result.push_back({spelling.first, pinyin, start, end,
                 selected && std::any_of(selected->spans.begin(), selected->spans.end(),
-                    [&](const Span& span) { return span.start == start && span.end == end && span.syllable == spelling.first; })});
+                    [&](const Span& span) { return span.start == start && span.end == end && span.syllable == spelling.first; }),
+                spelling.second.type == rime::kFuzzySpelling});
           }
         }
       }
@@ -614,9 +660,11 @@ inline bool Apply(rime::Context* context, rime::Schema* schema, const rime::Pris
   return false;
 }
 
+// [keep_fuzzy]: tapping a reading on the screen (#573) keeps its 模糊音 equivalents
+// behind it. Sentence re-editing pins exact readings and passes false.
 inline bool Select(rime::Context* context, rime::Schema* schema, rime::Engine* engine,
                    const std::string& expected_input, const std::string& expected_schema,
-                   size_t start, size_t end, rime::SyllableId syllable) {
+                   size_t start, size_t end, rime::SyllableId syllable, bool keep_fuzzy = false) {
   if (!context || !schema || context->get_option("ascii_mode") ||
       context->input() != expected_input || schema->schema_id() != expected_schema ||
       start >= end || end > context->caret_pos() ||
@@ -624,9 +672,23 @@ inline bool Select(rime::Context* context, rime::Schema* schema, rime::Engine* e
   auto dictionary = OpenDictionary(schema);
   if (!dictionary) return false;
   const auto options = Options(context, schema, engine, dictionary.get());
-  if (std::none_of(options.begin(), options.end(), [&](const Option& option) {
+  const auto picked = std::find_if(options.begin(), options.end(), [&](const Option& option) {
         return option.start == start && option.end == end && option.syllable == syllable;
-      })) return false;
+      });
+  if (picked == options.end()) return false;
+  // #573: with 模糊音 on (in/ing), choosing jing on the keys jj used to drop jin's 金 今 进 too.
+  // Only readings that a fuzz rule joins to the chosen one; other readings of the same
+  // keys (merged keys: kan, kuai) are still dropped, as choosing a reading means.
+  std::vector<rime::SyllableId> fuzzy;
+  if (keep_fuzzy) {
+    const auto key = FuzzyKey(picked->pinyin);
+    for (const auto& option : options) {
+      if (option.start != start || option.end != end || option.syllable == syllable ||
+          !(option.fuzzy || picked->fuzzy) || FuzzyKey(option.pinyin) != key ||
+          std::find(fuzzy.begin(), fuzzy.end(), option.syllable) != fuzzy.end()) continue;
+      fuzzy.push_back(option.syllable);
+    }
+  }
 
   // The readings chosen before this syllable stay; this one replaces any
   // reading chosen at the same place and the readings after it.
@@ -643,7 +705,7 @@ inline bool Select(rime::Context* context, rime::Schema* schema, rime::Engine* e
     }
   }
   if (lock.spans.empty() && start != confirmed) return false;
-  lock.spans.push_back({start, end, syllable});
+  lock.spans.push_back({start, end, syllable, std::move(fuzzy)});
   return Apply(context, schema, *dictionary->prism(), lock);
 }
 

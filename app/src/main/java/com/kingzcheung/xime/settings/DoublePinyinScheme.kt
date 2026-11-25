@@ -352,9 +352,7 @@ data class DoublePinyinScheme(
                 "  description: |\n    CyIME 双拼方案（由键位表生成）在自建布局「$layoutName」上的版本，词库与 26 键双拼相同。\n"))
         check(schemaBlock.contains("  schema_id: $layoutVariantId\n")) { "双拼方案缺少 schema_id" }
         text = text.replaceRange(header.range, schemaBlock)
-        val merged = semicolonOnL() + (0..1).flatMap { position ->
-            groups.filter { it.length > 1 }.map { group -> "derive/^(.{$position})[${group.drop(1)}](.*)$/\$1${group[0]}\$2/" }
-        }
+        val merged = semicolonOnL() + mergedDerives(groups)
         // 原有规则一字不动，合并键的派生接在最后（作用在已经换好的双拼编码上）。
         val speller = Regex("(?ms)^speller:\\n.*?(?=^[a-zA-Z_][a-zA-Z_0-9]*:|\\z)").find(text) ?: error("双拼方案缺少 speller 段")
         val algebra = Regex("(?m)^  algebra:[^\\n]*\\n(?:    [^\\n]*\\n)*").find(speller.value) ?: error("双拼方案缺少 algebra")
@@ -460,6 +458,36 @@ data class DoublePinyinScheme(
         /** 14 键版本，与 14 键小鹤双拼 double_pinyin_flypy_14jian 同样的后缀。 */
         const val K14_SUFFIX = "_14jian"
         fun k14Id(id: String) = id + K14_SUFFIX
+        /** 合并键的派生：双拼两键编码里每一位，组里后面的字母都能用组里第一个字母（点按送的那个）代替。 */
+        internal fun mergedDerives(groups: List<String>): List<String> = (0..1).flatMap { position ->
+            groups.filter { it.length > 1 }.map { group -> "derive/^(.{$position})[${group.drop(1)}](.*)$/\$1${group[0]}\$2/" }
+        }
+
+        /**
+         * 导入的双拼方案（#160，方案段写了 input_scheme: double_pinyin）在自建合并键布局上的版本。
+         * 整份引用原方案（Rime 引用时连它的 .custom.yaml 一起带上），只改方案 id、名字和 prism，
+         * 拼写规则最后接合并键派生；和内置双拼的布局版本一样不开纠错、编码显示打的键。原方案文件一字不动，它更新后这里跟着变。
+         */
+        fun importedLayoutSchema(baseId: String, baseName: String, variantId: String, layoutName: String,
+            groups: List<String>, semicolon: Boolean): String {
+            val name = "\"" + baseName.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+            val derives = (if (semicolon) listOf("derive/;/l/") else emptyList()) + mergedDerives(groups)
+            return buildString {
+                append("$GENERATED_MARK$variantId\n")
+                append("schema:\n  schema_id: $variantId\n  name: $name\n  language: zh\n  input_scheme: double_pinyin\n")
+                append("  description: |\n    导入方案在自建布局「${layoutName.replace('\n', ' ')}」上的版本（由 CyIME 生成），词库与原方案相同。\n")
+                append("__include: $baseId.schema:/\n")
+                append("__patch:\n")
+                append("  - schema/schema_id: $variantId\n")
+                append("    schema/name: $name\n")
+                append("    translator/prism: $variantId\n")
+                append("    translator/enable_correction: false\n")
+                append("    translator/preedit_format: []\n")
+                append("    speller/algebra/+:\n")
+                derives.forEach { append("      - \"$it\"\n") }
+            }
+        }
+
         /** 自建合并键布局上的版本：双拼方案 id + 布局 id（custom_pinyin_…）。 */
         fun layoutVariantId(id: String, layoutId: String) = "${id}_$layoutId"
         private val LAYOUT_VARIANT = Regex("(.+)_(custom_pinyin_[a-f0-9]{32})")

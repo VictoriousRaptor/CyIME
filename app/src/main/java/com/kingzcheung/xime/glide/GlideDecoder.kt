@@ -48,6 +48,8 @@ class GlideDecoder(
     private val maxEndpoint: Float = MAX_ENDPOINT,
     /** 中文：另按音节逐键认一遍（[SyllableGlide]），词表里没有的连划（如「印度一」）也能出整串编码。 */
     syllables: List<String>? = null,
+    /** 轨迹至少多长（键宽）才认；九键另给（[T9Glide.MIN_PATH]）。 */
+    private val minPath: Float = MIN_PATH_KEYS,
 ) {
     private val syllableGlide = syllables?.let { SyllableGlide(keyboard, it) }
     /** [shape] 是合并相邻重复字母后的写法，形状相同的词只比一次。 */
@@ -91,7 +93,7 @@ class GlideDecoder(
         val unit = keyboard.keyUnit
         val qx = FloatArray(xs.size) { xs[it] / unit }
         val qy = FloatArray(ys.size) { ys[it] / unit }
-        if (pathLength(qx, qy) < MIN_PATH_KEYS) return emptyList()
+        if (pathLength(qx, qy) < minPath) return emptyList()
         val (sx, sy) = resample(qx, qy)
         val envelope = Envelope(sx, sy)
         val last = SAMPLES - 1

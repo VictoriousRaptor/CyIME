@@ -29,6 +29,11 @@ data class KeyboardCallbacks(
     val captureInputContext: () -> kotlin.coroutines.CoroutineContext = { kotlin.coroutines.EmptyCoroutineContext },
     /** 九键组句和中文滑行选编码的上文：组合为空时光标前的已上屏文字；null 表示未知或正在组合。 */
     val t9LeftContext: () -> String? = { null },
+    /**
+     * 九键滑行抬手时组合里已有的数字（先打 hua 再划 xing 时是 482）；分段上屏过一部分、不是纯数字、没在打字时为空。
+     * 同一条线上的编码按它挑（[com.kingzcheung.xime.glide.T9Glide.preferJoint]）。
+     */
+    val t9GlideComposition: () -> String = { "" },
     val inputCommands: com.kingzcheung.xime.rime.InputCommandQueue? = null,
     val onT9UnconsumedDelete: (suspend (com.kingzcheung.xime.keyboard.RepeatInput?) -> Unit)? = null,
     val onKeyPressDown: ((String) -> Unit)? = null,

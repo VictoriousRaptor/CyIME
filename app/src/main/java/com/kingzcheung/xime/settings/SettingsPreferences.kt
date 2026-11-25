@@ -71,6 +71,17 @@ object SettingsPreferences {
     }
 
     /**
+     * 选完符号自动返回：在符号页点一个符号后回到打字键盘；默认关 = 留在符号页接着点（原来的样子）。
+     * 只管符号页的符号格子；删除、分类、数字键照旧（群友 11-24：选完要点「中文」才回去）。
+     */
+    const val KEY_SYMBOL_RETURN_AFTER_PICK = "symbol_return_after_pick"
+    fun isSymbolReturnAfterPickEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_SYMBOL_RETURN_AFTER_PICK, false)
+    fun setSymbolReturnAfterPickEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SYMBOL_RETURN_AFTER_PICK, enabled).apply()
+    }
+
+    /**
      * 回车发送：应用自己把回车设成发送时（微信「回车键发送消息」等），普通回车直接发送、键面写发送；
      * 默认关 = 回车换行、Ctrl+回车发送（用户 11-05）。见 EnterKeyAction。
      */
@@ -241,6 +252,27 @@ object SettingsPreferences {
 
     fun setNumberRowEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_NUMBER_ROW, enabled).apply()
+    }
+
+    /** 「数字行和字母一样高」（#444，默认关）：数字行和字母行一样高，键盘总高不变，每排一样分。 */
+    const val KEY_NUMBER_ROW_FULL_HEIGHT = "number_row_full_height"
+
+    fun isNumberRowFullHeight(context: Context): Boolean = getPrefs(context).getBoolean(KEY_NUMBER_ROW_FULL_HEIGHT, false)
+
+    fun setNumberRowFullHeight(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_NUMBER_ROW_FULL_HEIGHT, enabled).apply()
+    }
+
+    const val KEY_NUMBER_PAD_TOP_789 = "number_pad_top_789"
+
+    /**
+     * 「数字位置」：数字键盘最上面一排是 1 2 3（默认，和以前一样）还是 7 8 9（同电脑键盘右边的小键盘）。
+     * 新键（11-22，群里有人要），读不到就是 1 2 3 在上。管 123 页数字键盘和假名九键的数字页，见 numberPadRows。
+     */
+    fun isNumberPadTop789(context: Context): Boolean = getPrefs(context).getBoolean(KEY_NUMBER_PAD_TOP_789, false)
+
+    fun setNumberPadTop789(context: Context, top789: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_NUMBER_PAD_TOP_789, top789).apply()
     }
 
     const val KEY_SPLIT_GAP_PORTRAIT = "split_gap_fraction_portrait"
@@ -477,8 +509,14 @@ object SettingsPreferences {
     const val KEY_CANDIDATE_PRESS_HIGHLIGHT = "candidate_press_highlight"
     /** 候选滑到头回弹展开（11-21 他：默认关，关着时候选栏和 1.15.101 完全一样）。 */
     const val KEY_CANDIDATE_SWIPE_EXPAND = "candidate_swipe_expand"
+    /** 首选上拖选改局部（默认开，见 [isSentenceDragEdit]）。 */
+    const val KEY_SENTENCE_DRAG_EDIT = "sentence_drag_edit"
     /** 开了「候选滑到头回弹展开」时，取消／关联想键放右边画成「×」（11-22 他：和收起键盘同一个位置）；默认左边。 */
     const val KEY_CANDIDATE_CLOSE_ON_RIGHT = "candidate_close_on_right"
+    /** 「候选栏右边的键」选「关闭」前「左右滑展开」开没开；选回「展开」时恢复成它（11-23 平板实测：切回后不该还开着）。 */
+    const val KEY_CANDIDATE_SWIPE_BEFORE_CLOSE = "candidate_swipe_expand_before_close"
+    /** 「收键盘」（= 1.15.103，11-24 他：还有人要）：右边一直是收起键盘，左边「‹」取消，展开靠左右滑。默认关。 */
+    const val KEY_CANDIDATE_RIGHT_HIDES = "candidate_right_hides"
     const val KEY_INPUT_TEXT_LOCATION = "input_text_location"
     const val KEY_SHOW_PREEDIT_PREVIEW = "show_preedit_preview"
     const val KEY_INLINE_PREEDIT_PREVIEW = "inline_preedit_preview"
@@ -488,6 +526,14 @@ object SettingsPreferences {
     fun preeditTones(context: Context) = getPrefs(context).getBoolean(KEY_PREEDIT_TONES, false)
     fun setPreeditTones(context: Context, enabled: Boolean) =
         getPrefs(context).edit().putBoolean(KEY_PREEDIT_TONES, enabled).apply()
+    /**
+     * 小标签、方块、整行里的拼音在首选是纠错来的词时显示改正后的读音、改动的字母标红（#586）。默认开 = 原来的样子；
+     * 关掉时照打的字母显示，和气泡一样。不管候选旁边的纠错标记（那个是「显示纠错标记」）。
+     */
+    const val KEY_PREEDIT_LINE_CORRECTED = "preedit_line_corrected"
+    fun preeditLineCorrected(context: Context) = getPrefs(context).getBoolean(KEY_PREEDIT_LINE_CORRECTED, true)
+    fun setPreeditLineCorrected(context: Context, enabled: Boolean) =
+        getPrefs(context).edit().putBoolean(KEY_PREEDIT_LINE_CORRECTED, enabled).apply()
 
     fun showPreeditPreview(context: Context) = getPrefs(context).getBoolean(KEY_SHOW_PREEDIT_PREVIEW, true)
     fun setShowPreeditPreview(context: Context, show: Boolean) =
@@ -620,6 +666,17 @@ object SettingsPreferences {
     fun isCandidateSwipeExpand(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_CANDIDATE_SWIPE_EXPAND, false)
 
+    /**
+     * 首选上按住拖选一段改局部。默认开（11-24 他先说默认关，当晚改成「局部修改开开默认打开 你只能在6个字以上生效」），
+     * 只在首选超过 6 个字时接拖选，按住不拖照旧出调词频、固定、删除的卡片；关着时长按首选和别的候选一样。
+     */
+    fun isSentenceDragEdit(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_SENTENCE_DRAG_EDIT, true)
+
+    fun setSentenceDragEdit(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SENTENCE_DRAG_EDIT, enabled).apply()
+    }
+
     fun setCandidateSwipeExpand(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_CANDIDATE_SWIPE_EXPAND, enabled).apply()
     }
@@ -634,6 +691,45 @@ object SettingsPreferences {
 
     fun setCandidateCloseOnRight(context: Context, right: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_CANDIDATE_CLOSE_ON_RIGHT, right).apply()
+    }
+
+    /**
+     * 设置「候选栏右边的键」：[closes] 为真是「关闭」（右边 × 先关候选、同一处再点收键盘），存成关闭键放右边 + 左右滑展开开着；
+     * 「关闭」只能靠滑展开，所以选它时把「左右滑展开」打开，并记下原来开没开，选回「展开」时恢复。
+     */
+    fun setCandidateRightKeyCloses(context: Context, closes: Boolean) =
+        setCandidateRightKey(context, if (closes) CandidateRightKey.CLOSE else CandidateRightKey.EXPAND)
+
+    /** 候选栏三种用法，见 [CandidateRightKey]。 */
+    fun candidateRightKey(context: Context): CandidateRightKey {
+        val prefs = getPrefs(context)
+        if (!prefs.getBoolean(KEY_CANDIDATE_SWIPE_EXPAND, false)) return CandidateRightKey.EXPAND
+        return when {
+            prefs.getBoolean(KEY_CANDIDATE_CLOSE_ON_RIGHT, false) -> CandidateRightKey.CLOSE
+            prefs.getBoolean(KEY_CANDIDATE_RIGHT_HIDES, false) -> CandidateRightKey.HIDE
+            else -> CandidateRightKey.EXPAND
+        }
+    }
+
+    /**
+     * 选候选栏用法：「收键盘」「经典」右边不放 ▾/▴，只能靠滑展开，所以把「左右滑展开候选」打开，
+     * 并记下原来开没开（从「默认」离开时记），选回「默认」时恢复。存的键都是原来的，只多了 [KEY_CANDIDATE_RIGHT_HIDES]。
+     */
+    fun setCandidateRightKey(context: Context, mode: CandidateRightKey) {
+        val prefs = getPrefs(context)
+        val swipe = prefs.getBoolean(KEY_CANDIDATE_SWIPE_EXPAND, false)
+        val leavingDefault = candidateRightKey(context) == CandidateRightKey.EXPAND
+        val edit = prefs.edit()
+            .putBoolean(KEY_CANDIDATE_CLOSE_ON_RIGHT, mode == CandidateRightKey.CLOSE)
+            .putBoolean(KEY_CANDIDATE_RIGHT_HIDES, mode == CandidateRightKey.HIDE)
+        if (mode != CandidateRightKey.EXPAND) {
+            if (leavingDefault) edit.putBoolean(KEY_CANDIDATE_SWIPE_BEFORE_CLOSE, swipe)
+            edit.putBoolean(KEY_CANDIDATE_SWIPE_EXPAND, true)
+        } else if (prefs.contains(KEY_CANDIDATE_SWIPE_BEFORE_CLOSE)) {
+            edit.putBoolean(KEY_CANDIDATE_SWIPE_EXPAND, prefs.getBoolean(KEY_CANDIDATE_SWIPE_BEFORE_CLOSE, swipe))
+                .remove(KEY_CANDIDATE_SWIPE_BEFORE_CLOSE)
+        }
+        edit.apply()
     }
 
     /**
@@ -1220,6 +1316,13 @@ object SettingsPreferences {
      * 开车连续语音：语音悬浮条听写时发出消息或离开输入框，回到同一应用的输入框自动接着听。
      * 别人提的需求，默认关（用户 10-30 规则）；见 VoicePillResume。
      */
+    /** 「用蓝牙耳机的麦克风」（#309）：默认关，用手机麦克风。 */
+    const val KEY_STT_BLUETOOTH_MIC = "stt_bluetooth_mic"
+    fun isSttBluetoothMic(context: Context): Boolean = getPrefs(context).getBoolean(KEY_STT_BLUETOOTH_MIC, false)
+    fun setSttBluetoothMic(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STT_BLUETOOTH_MIC, enabled).apply()
+    }
+
     fun isSttPillResume(context: Context): Boolean {
         return getPrefs(context).getBoolean(KEY_STT_PILL_RESUME, false)
     }
@@ -1350,8 +1453,7 @@ object SettingsPreferences {
     }
 
     fun getKeyboardHeightDp(context: Context, isLandscape: Boolean): Int {
-        val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
-        val stored = getPrefs(context).getInt(key, -1)
+        val stored = storedFixedHeightDp(getPrefs(context), isLandscape, fixedGeometryScreen(context))
         // 横屏存值夹在范围内；下限按物理尺寸算（11-22），横屏调矮的值不被拉回 244dp。
         if (stored > 0) return if (isLandscape) stored.coerceIn(com.kingzcheung.xime.ui.keyboard.keyboardHeightBounds(
             context.resources.configuration.screenHeightDp, true,
@@ -1362,8 +1464,34 @@ object SettingsPreferences {
 
     fun setKeyboardHeightDp(context: Context, heightDp: Int, isLandscape: Boolean = false) {
         val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
-        getPrefs(context).edit().putInt(key, heightDp).apply()
+        val screen = fixedGeometryScreen(context)
+        // 和固定宽度一样（#37）：不带屏的旧键照样写（监听它的地方不变），另存一份带屏的，并记下是哪块屏调的。
+        getPrefs(context).edit().putInt(key, heightDp)
+            .putInt("${key}_sw$screen", heightDp)
+            .putInt(fixedHeightScreenKey(isLandscape), screen).apply()
     }
+
+    private fun fixedHeightScreenKey(isLandscape: Boolean) =
+        if (isLandscape) "keyboard_height_screen_landscape" else "keyboard_height_screen"
+
+    /**
+     * 这块屏存的固定键盘高度，0 = 没调过（GitHub #396）。折叠屏外屏、内屏都是竖屏，原来共用一份，
+     * 外屏调好的高度展开后带到内屏。规则同 [resolveFixedGeometry]：旧版本存的、同一块屏上的照旧用；
+     * 换到大小差很多的另一块屏时用那块屏自己的，没调过按默认高度。单屏手机、平板不变。
+     */
+    internal fun storedFixedHeightDp(prefs: SharedPreferences, isLandscape: Boolean, screen: Int): Int {
+        val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
+        val own = "${key}_sw$screen"
+        return resolveFixedGeometry(
+            ownValue = if (prefs.contains(own)) prefs.getInt(own, 0) else null,
+            sharedValue = prefs.getInt(key, 0).coerceAtLeast(0),
+            sharedScreen = prefs.getInt(fixedHeightScreenKey(isLandscape), 0),
+            screen = screen,
+        )
+    }
+
+    internal fun storedFixedHeightDp(context: Context, isLandscape: Boolean): Int =
+        storedFixedHeightDp(getPrefs(context), isLandscape, fixedGeometryScreen(context))
 
     fun getDefaultKeyboardHeightDp(context: Context, isLandscape: Boolean = false): Int {
         val config = context.resources.configuration
@@ -1722,4 +1850,30 @@ object SettingsPreferences {
     fun setClipboardSyncPluginId(context: Context, pluginId: String) {
         getPrefs(context).edit().putString(KEY_CLIPBOARD_SYNC_PLUGIN_ID, pluginId).apply()
     }
+
+    /** 其他同步服务（WebDAV 等）的自动拉取间隔，秒（#45）。默认 30，和以前一样。 */
+    const val KEY_CLIPBOARD_SYNC_PULL_INTERVAL_S = "clipboard_sync_pull_interval_s"
+    /** 键盘开着时按上面的间隔一直拉取（#45），默认关。 */
+    const val KEY_CLIPBOARD_SYNC_KEEP_PULLING = "clipboard_sync_keep_pulling"
+
+    fun getClipboardSyncPullIntervalS(context: Context): Int =
+        getPrefs(context).getInt(KEY_CLIPBOARD_SYNC_PULL_INTERVAL_S, 30).coerceIn(5, 60)
+
+    fun setClipboardSyncPullIntervalS(context: Context, seconds: Int) {
+        getPrefs(context).edit().putInt(KEY_CLIPBOARD_SYNC_PULL_INTERVAL_S, seconds.coerceIn(5, 60)).apply()
+    }
+
+    fun isClipboardSyncKeepPulling(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CLIPBOARD_SYNC_KEEP_PULLING, false)
+
+    fun setClipboardSyncKeepPulling(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CLIPBOARD_SYNC_KEEP_PULLING, enabled).apply()
+    }
 }
+
+/**
+ * 候选栏右边那个键（设置「候选栏按钮」里的三张卡，11-24 他定）：
+ * [EXPAND]「默认」= 1.15.101，右 ▾ 展开；[HIDE]「收键盘」= 1.15.103，右 ⌄ 一直收起键盘、左「‹」取消；
+ * [CLOSE]「经典」= 右 × 先关候选／联想，同一处再点收起键盘。后两种展开候选靠左右滑。
+ */
+enum class CandidateRightKey { EXPAND, HIDE, CLOSE }

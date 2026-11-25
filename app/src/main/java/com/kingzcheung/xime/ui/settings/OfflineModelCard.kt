@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.twotone.Language
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -61,15 +62,29 @@ internal fun OfflineModelCard() {
     val senseReady = SpeechModelCatalog.SENSEVOICE in ready
     var wholeSentence by remember { mutableStateOf(SettingsPreferences.isSttWholeSentence(context)) }
     var wholeFinalizer by remember { mutableStateOf(SettingsPreferences.getSttWholeFinalizer(context)) }
-    // 没开日语不列「日语语音」（用户 11-22）；存的日语模型选择不动，开了日语照旧。
+    // 没开日语不列「日语语音」（用户 11-22）；存的日语模型选择不动，开了日语照旧。韩语语音（#453）同样只在开了韩语时列出。
     val shownLanguages = remember { InputLanguage.speech.filter {
-        it != InputLanguage.JAPANESE || com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context) } }
+        when (it) {
+            InputLanguage.JAPANESE -> com.kingzcheung.xime.settings.LanguagePreferences.japaneseOn(context)
+            in InputLanguage.senseVoiceOnly -> it in com.kingzcheung.xime.settings.LanguagePreferences.enabled(context)
+            else -> true
+        } } }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         shownLanguages.forEachIndexed { index, language ->
             SettingsSection(title = "${language.displayName}语音") {
                 val content = if (index == shownLanguages.lastIndex) Modifier.testTag("speech-correction") else Modifier
                 Column(content.fillMaxWidth()) {
-                    SpeechPipeline(language, selected.getValue(language), ready, senseReady, xasrReady, wholeSentence,
+                    val mode = selected.getValue(language)
+                    if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
+                        SettingsToggleItem(icon = Icons.TwoTone.Language, title = "自动识别语音语言",
+                            subtitle = "开启后可输入粤语，关闭时使用普通话",
+                            checked = mode == SpeechModelCatalog.SENSEVOICE_AUTO,
+                            onCheckedChange = { automatic ->
+                                manager.setModel(if (automatic) SpeechModelCatalog.SENSEVOICE_AUTO else SpeechModelCatalog.SENSEVOICE, language)
+                                refresh(language)
+                            })
+                    }
+                    SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
                         wholeFinalizer, downloads, onPick = { editing = language }, onDownload = ::download,
                         onFinish = { finish, finalizer ->
                             finalizer?.let { wholeFinalizer = it; SettingsPreferences.setSttWholeFinalizer(context, it) }
@@ -116,7 +131,7 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
         // 没得选时也写出来，整条流程一眼看全。
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("说完后：不再校正", style = MaterialTheme.typography.bodyLarge)
-            Text(if (senseVoiceAlone) "SenseVoice 停顿出的字就是定稿" else "${language.displayName}没有二次校正",
+            Text(if (senseVoiceAlone) "停顿时出的字就是结果" else "${language.displayName}没有二次校正",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
@@ -134,11 +149,13 @@ private fun SpeechPipeline(language: InputLanguage, mode: String, ready: Set<Str
         rows.forEach { (finish, finalizer) ->
             val (title, caption) = when (finish) {
                 SpeechModelSelection.Finish.NONE -> "不校正" to
-                    (if (senseVoiceAlone) "每次停顿由 SenseVoice 直接出字" else "直接用说话时出的字")
+                    (if (senseVoiceAlone) "停顿时直接出字" else "直接用说话时出的字")
                 SpeechModelSelection.Finish.SENSEVOICE -> "SenseVoice 校正" to
                     ("每次停顿时再认一遍" + if (senseReady) "" else " (需下载 SenseVoice)")
                 SpeechModelSelection.Finish.WHOLE -> if (finalizer == SpeechModelCatalog.XASR)
-                    "整句定稿 · X-ASR" to "说完后用 X-ASR 整句再认一遍" else
+                    "整句定稿 · X-ASR" to (if (mode == SpeechModelCatalog.SENSEVOICE_AUTO)
+                        "仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字"
+                    else "说完后用 X-ASR 整句再认一遍") else
                     "整句定稿 · SenseVoice" to ("说完后整句再认一遍，更准但稍慢" +
                         if (xasrReady) "" else "; 也可下载 X-ASR 对比")
             }
@@ -310,9 +327,9 @@ internal fun SpeechPunctuationSettings() {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
                 Text(when {
-                    title == "末尾的标点" -> if (kept) "整段话最后保留句号、问号等标点。" else "整段话最后不带标点，中间的照留；口述照样出。"
+                    title == "末尾的标点" -> if (kept) "整段话最后保留句号、问号等标点。" else "整段话最后不带标点，中间的保留。"
                     kept -> "保留模型打的$title。"
-                    else -> "不带$title；口述照样出。"
+                    else -> "不带$title。"
                 },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

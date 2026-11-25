@@ -72,13 +72,21 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
-                        deque<an<Sentence>>* sentences, bool slip_only) {
+                        deque<an<Sentence>>* sentences, bool slip_only,
+                        vector<std::pair<double, an<Sentence>>>* runners_up,
+                        const deque<an<Sentence>>* built, double built_rime_weight, bool* stray_decided,
+                        const vector<int>* built_fuzzy, double fuzzy_penalty) {
   // translator/max_sentences gave the n-best to choose from; the menu keeps one sentence, as with
   // max_sentences: 1 (followed by Rime's best when that one is a correction).
   auto corrected = [&](const an<Sentence>& sentence) {
     return q.enable_correction && q.IsCorrection(sentence->code(), sentence->end() - q.start);
   };
   an<Sentence> chosen = sentences->front();
+  if (runners_up) {
+    runners_up->clear();
+    for (const auto& sentence : *sentences)
+      if (!corrected(sentence)) runners_up->emplace_back(sentences->front()->weight() - sentence->weight(), sentence);
+  }
   const string& in = q.input;
   size_t groups = 0;
   bool vowel = false, consonants_only = !in.empty();
@@ -162,9 +170,30 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         return std::max(a, b) + std::log1p(std::exp(-std::fabs(a - b)));
       };
       const int32_t root = ngram_sentence_start ? ngram->Bos() : ::T9NgramModel::kUnseen;
+      // The states after a character depend only on the text up to it (and on the model and the start rule),
+      // and the sentences of one n-best, and of the next key's, mostly begin alike. They are kept by prefix and
+      // a sentence starts from its longest prefix kept: the same states and the same sum, without working them
+      // out again for every sentence. A sentence with a mixed word scored whole is worked out on its own.
+      thread_local std::unordered_map<string, vector<State>> kept;
+      thread_local const T9NgramModel* kept_model = nullptr;
+      thread_local bool kept_start = false;
+      if (kept_model != ngram || kept_start != ngram_sentence_start || kept.size() > 2048) {
+        kept.clear();
+        kept_model = ngram;
+        kept_start = ngram_sentence_start;
+      }
+      const bool keep = wholes.empty();
       vector<vector<State>> states(n + 1);
       states[0].push_back({0, root, root, false});
-      for (size_t end = 1; end <= n; ++end) {
+      size_t first = 1;
+      string prefix;
+      for (; keep && first <= n; ++first) {
+        prefix.assign(text, 0, at[first]);
+        const auto known = kept.find(prefix);
+        if (known == kept.end()) break;
+        states[first] = known->second;
+      }
+      for (size_t end = first; end <= n; ++end) {
         auto& here = states[end];
         for (size_t start = end > 8 ? end - 8 : 0; start < end; ++start) {
           if (states[start].empty()) continue;
@@ -190,6 +219,10 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                                           [](const State& a, const State& b) { return a.value < b.value; });
             if (value > worst->value) *worst = next;
           }
+        }
+        if (keep) {
+          prefix.assign(text, 0, at[end]);
+          kept.emplace(prefix, here);
         }
       }
       double total = -std::numeric_limits<double>::infinity();
@@ -286,25 +319,81 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     // no correction did and its score, penalty paid, is still the higher one.
     an<Sentence> near_choice;
     double near_score = -std::numeric_limits<double>::infinity();
+    vector<std::pair<double, an<Sentence>>> ranked;
     for (const auto& sentence : pool) {
       const double value = total(*sentence);
+      if (runners_up) ranked.emplace_back(value, sentence);
       if (near_words(*sentence)) {
         if (value > near_score) { near_score = value; near_choice = sentence; }
         continue;
       }
       if (value > chosen_score) { chosen_score = value; chosen = sentence; }
     }
+    // `built` (t9/model_sentences): whole sentences the caller built with the word model. They are not made from
+    // this graph, so they stand beside the pool as the sentences through a second dictionary word do: each word the
+    // caller marked pays `near_penalty`, and the best one leads only at the end, the typed choice after it.
+    // `built_rime_weight` weighs Rime's own sentence weights into this comparison alone (the typed choice above is
+    // made without it).
+    // A sentence through a second dictionary word that led while keys arrived (it beats the typed choice) and loses
+    // the first place to a built one follows it, before the typed choice: what was first before the pause stays in
+    // the menu, second. Not when the built one (or the typed choice) is the same text in other words.
+    an<Sentence> near_led;
+    // `built_fuzzy` (beside `built`, t9/model_sentences_fuzzy_penalty): how many syllables of each built sentence are
+    // read only through a fuzzy spelling (模糊音); each costs `fuzzy_penalty`. Such a sentence guesses that the letters
+    // were spelt with an accent: when one leads, the sentence that leads without them (what the comparison chose before
+    // they joined) follows it, so a sentence typed right stays in the menu.
+    an<Sentence> typed_led;
+    if (built) {
+      if (near_choice && near_score > chosen_score) near_led = near_choice;
+      an<Sentence> typed_choice = near_choice;
+      double typed_score = near_score;
+      for (size_t i = 0; i < built->size(); ++i) {
+        const auto& sentence = (*built)[i];
+        const int fuzzy = built_fuzzy && i < built_fuzzy->size() ? (*built_fuzzy)[i] : 0;
+        const double value = total(*sentence) + built_rime_weight * (sentence->weight() - chosen->weight()) -
+                             fuzzy * fuzzy_penalty;
+        if (runners_up) ranked.emplace_back(value, sentence);
+        if (value > near_score) { near_score = value; near_choice = sentence; }
+        if (!fuzzy && value > typed_score) { typed_score = value; typed_choice = sentence; }
+      }
+      if (typed_choice && typed_choice != near_choice && typed_score > chosen_score &&
+          typed_choice->text() != near_choice->text() && typed_choice->text() != chosen->text())
+        typed_led = typed_choice;
+      if (near_led && (near_led == near_choice || near_led->text() == near_choice->text() ||
+                       near_led->text() == chosen->text() || (typed_led && near_led->text() == typed_led->text())))
+        near_led.reset();
+    }
+    if (runners_up) {
+      std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      runners_up->clear();
+      for (const auto& item : ranked) runners_up->emplace_back(ranked.front().first - item.first, item.second);
+    }
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
     // slips, so the corrected n-best is chosen by the word model too and leads (清晨 over 清真 in 是清晨的一杯).
     if (q.syllables.cyime_stray_initials && q.enable_correction && !slip_only) {
+      // t9/extra_corrections_pay_margin: every correction after a sentence's first costs `slip_margin` here too.
+      // Without it a sentence that also left out a letter pressed twice led for being a word shorter
+      // (nizhdjia...butinghuaa: 不听话 over 不听话啊; burannixanle: 不然闲了 over 不然你惨了).
+      const bool pay = slip_margin > 0 && q.translator && q.translator->extra_corrections_pay_margin();
       an<Sentence> fixed;
       double fixed_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence)) continue;
-        const double value = total(*sentence);
+        double value = total(*sentence);
+        if (pay) {
+          const string marks = sentence->correction_marks();
+          value -= slip_margin * std::max<std::ptrdiff_t>(0, std::count(marks.begin(), marks.end(), '=') - 1);
+        }
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
-      if (fixed) {
+      // t9/stray_correction_margin (ln units, on the scheme's own translator): the corrected sentence leads only when
+      // its score beats the typed choice's by this much. A word typed by its initials inside a sentence of full pinyin
+      // also leaves stray initials, and the corrected reading of them led it whatever the word model said. Unset: the
+      // corrected sentence always leads, as before.
+      const double margin = q.translator ? q.translator->stray_correction_margin()
+                                         : -std::numeric_limits<double>::infinity();
+      if (stray_decided && std::isfinite(margin)) *stray_decided = true;
+      if (fixed && fixed_score > chosen_score + margin) {
         sentences->clear();
         sentences->push_back(fixed);
         sentences->push_back(chosen);
@@ -357,6 +446,8 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     if (near_choice && near_score > chosen_score) {
       sentences->clear();
       sentences->push_back(near_choice);
+      if (typed_led) sentences->push_back(typed_led);
+      if (near_led) sentences->push_back(near_led);
       sentences->push_back(chosen);
       return;
     }

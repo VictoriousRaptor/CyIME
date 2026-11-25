@@ -95,7 +95,7 @@ class PerformanceCostsTest {
         assertFalse(source.device.items.getValue("glass").estimated)
         assertEquals(0.8, source.device.items.getValue("glass").keyMs!!, 1e-9)
         assertTrue(source.device.items.getValue("neighbor_correction").estimated)
-        assertEquals("性能开销：每键 +3.0 ms(慢 10%) · 内存 +2 MB", PerformanceCosts.note(source, "neighbor_correction"))
+        assertEquals("性能开销：每键约 +3.0 ms(慢 10%) · 内存约 +2 MB", PerformanceCosts.note(source, "neighbor_correction"))
         assertEquals(listOf("neighbor_correction"), PerformanceCosts.total(source.device, setOf("glass", "neighbor_correction")).estimated)
     }
 
@@ -110,8 +110,13 @@ class PerformanceCostsTest {
         // 平板 11-03 实测：语音常驻时 :asr 一直占 605 MB，总开销不能再漏掉它。
         val tablet = bundled.devices.first { it.model == "SM-X800" }
         assertEquals(605.0, tablet.voiceResident!!.memoryMb!!, 1e-9)
-        assertFalse(tablet.voiceResident!!.estimated)
-        assertEquals("内存 +605 MB", PerformanceCosts.describe(tablet.voiceResident, tablet))
+        // 11-23：605 MB 是 11-03 Paraformer 常驻时测的，现在默认 SenseVoice，重测前算估算，写「约」。
+        assertTrue(tablet.voiceResident!!.estimated)
+        assertEquals("内存约 +605 MB", PerformanceCosts.describe(tablet.voiceResident, tablet))
+        // 动态背景：键盘停着时的耗电是平板 11-23 实测（设置首页搜索框，开 26.0 秒/分钟、关 2.2 秒/分钟），不写「约」；
+        // 每键和内存还是估算，写「约」。
+        assertEquals("耗电：键盘停着时 CPU 每分钟 +24 秒 · 每键约 +0.5 ms(慢 1%) · 内存约 +1 MB",
+            PerformanceCosts.describe(tablet.items["background_motion"], tablet))
         // 本机实测表没测这一项：从安装包表补上。
         val mine = bundled.copy(devices = listOf(tablet.copy(voiceResident = null)))
         assertEquals(605.0, PerformanceCosts.pick(mine, bundled, "SM-X800", "HIGH")!!.device.voiceResident!!.memoryMb!!, 1e-9)
@@ -136,15 +141,15 @@ class PerformanceCostsTest {
             .startsWith("语音模型会一直占着内存。"))
     }
 
-    @Test fun negligibleCostsShowNoLineAndNoAbout() {
+    @Test fun negligibleCostsShowNoLineAndEstimatesSayAbout() {
         val estimates = device.copy(items = mapOf("t9_glide_typing" to PerformanceCosts.Cost(0.0, 0.0, estimated = true),
             "glide_typing" to PerformanceCosts.Cost(0.2, 8.0, estimated = true)))
         val source = PerformanceCosts.Source(estimates, local = false, sameModel = false)
         assertTrue(estimates.allEstimated)
-        // 11-03：没有值得说的开销不出这一行；不写「估算」「约」。
+        // 11-03：没有值得说的开销不出这一行。11-23：还没实测的数写「约」，和实测的分得开。
         assertNull(PerformanceCosts.note(source, "t9_glide_typing"))
-        assertEquals("性能开销：内存 +8 MB", PerformanceCosts.note(source, "glide_typing"))
-        assertEquals("合计：内存 +8 MB",
+        assertEquals("性能开销：内存约 +8 MB", PerformanceCosts.note(source, "glide_typing"))
+        assertEquals("合计：内存约 +8 MB",
             PerformanceCosts.totalNote(source, setOf("t9_glide_typing", "glide_typing"), "合计"))
     }
 
@@ -167,6 +172,50 @@ class PerformanceCostsTest {
         assertNull(PerformanceCosts.note(source, "mixed_input"))
         val reference = source.copy(local = false, sameModel = false)
         assertTrue(PerformanceCosts.note(reference, "fuzzy_z_zh")!!.endsWith("(Galaxy Tab S8+ 实测，仅供参考)"))
+    }
+
+    @Test fun idleDrainIsWrittenFirstAndAddedUpInTheTotal() {
+        val motion = PerformanceCosts.Cost(keyMs = 0.0, memoryMb = 1.0, estimated = true, idleCpuSecPerMin = 23.9)
+        val withMotion = device.copy(items = device.items + ("background_motion" to motion))
+        val source = PerformanceCosts.Source(withMotion, local = false, sameModel = true)
+        assertEquals("性能开销：耗电：键盘停着时 CPU 每分钟 +24 秒 · 内存约 +1 MB", PerformanceCosts.note(source, "background_motion"))
+        // 耗电也是估算时写「约」；不到 1 秒/分钟不写。
+        assertEquals("耗电：键盘停着时 CPU 每分钟约 +3 秒",
+            PerformanceCosts.describe(PerformanceCosts.Cost(idleCpuSecPerMin = 3.2, idleCpuEstimated = true), withMotion))
+        assertNull(PerformanceCosts.describe(PerformanceCosts.Cost(idleCpuSecPerMin = 0.4), withMotion))
+        // 总开销把耗电也算上；里面有估算的项就带「约」。
+        val load = PerformanceCosts.load(withMotion, setOf("background_motion", "neighbor_correction"), false, false, 0)
+        assertEquals(23.9, load.idleCpuSecPerMin, 1e-9)
+        assertTrue(load.estimated)
+        assertTrue(PerformanceCosts.describeLoad(load, withMotion)!!.startsWith("耗电：键盘停着时 CPU 每分钟 +24 秒 · 每键约 +"))
+        // 本机只测了每键：耗电从参考表补，标估算。
+        val mine = device.copy(items = mapOf("background_motion" to PerformanceCosts.Cost(keyMs = 0.3)))
+        val filled = PerformanceCosts.fillFrom(mine, withMotion).items.getValue("background_motion")
+        assertEquals(23.9, filled.idleCpuSecPerMin!!, 1e-9)
+        assertTrue(filled.idleCpuEstimated)
+    }
+
+    @Test fun drainIsConvertedToBatteryPercentOnThisDevice() {
+        val tab = device.copy(screenPixels = 4_905_600,
+            items = mapOf("background_motion" to PerformanceCosts.Cost(idleCpuSecPerMin = 23.9, idleRenderShare = 0.4)))
+        // 同样的屏幕、5000 mAh：23.9 秒/分钟 × 60 × 0.09 mAh/秒 ÷ 5000 mAh ≈ 2.6%/小时。
+        val same = PerformanceCosts.Here(5000.0, 4_905_600)
+        val pct = PerformanceCosts.drainPercentPerHour(23.9, 0.4, tab, same)!!
+        assertEquals(2.58, pct, 0.01)
+        assertEquals("性能开销：耗电：键盘停着时 CPU 每分钟 +24 秒(本机约每小时 2.6% 电)",
+            PerformanceCosts.note(PerformanceCosts.Source(tab, local = false, sameModel = true, here = same), "background_motion"))
+        // 屏幕小一半：只有渲染那 4 成跟着少。
+        val small = PerformanceCosts.drainPercentPerHour(23.9, 0.4, tab, PerformanceCosts.Here(5000.0, 4_905_600 / 2))!!
+        assertEquals(pct * 0.8, small, 1e-9)
+        // 电池大一倍，百分比少一半；读不到电池按 5000 mAh。
+        assertEquals(pct / 2, PerformanceCosts.drainPercentPerHour(23.9, 0.4, tab, PerformanceCosts.Here(10_000.0, 4_905_600))!!, 1e-9)
+        assertEquals(pct, PerformanceCosts.drainPercentPerHour(23.9, 0.4, tab, PerformanceCosts.Here(null, null))!!, 1e-9)
+        // 没有本机参数（测试、读不到）不写百分比。
+        assertNull(PerformanceCosts.drainPercentPerHour(23.9, 0.4, tab, null))
+        // 按档折算时停着的 CPU 秒数一起折，并标估算。
+        val mid = PerformanceCosts.scale(tab, 1.7).items.getValue("background_motion")
+        assertEquals(23.9 * 1.7, mid.idleCpuSecPerMin!!, 1e-9)
+        assertTrue(mid.idleCpuEstimated)
     }
 
     @Test fun totalUsesMeasuredComboWhenExact() {

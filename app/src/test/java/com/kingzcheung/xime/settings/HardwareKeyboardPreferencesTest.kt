@@ -14,6 +14,8 @@ class HardwareKeyboardPreferencesTest {
     private val prefs = mock<SharedPreferences>()
     private val editor = mock<SharedPreferences.Editor>()
     private val values = mutableMapOf<String, Boolean>()
+    private val sets = mutableMapOf<String, Set<String>>()
+    private val strings = mutableMapOf<String, String>()
 
     @Before fun setUp() {
         whenever(context.getSharedPreferences(any(), any())).thenReturn(prefs)
@@ -25,6 +27,32 @@ class HardwareKeyboardPreferencesTest {
             values[it.getArgument(0)] = it.getArgument<Boolean>(1)
             editor
         }
+        whenever(prefs.getStringSet(any(), org.mockito.kotlin.anyOrNull())).thenAnswer { sets[it.getArgument<String>(0)] }
+        whenever(editor.putStringSet(any(), any())).thenAnswer {
+            sets[it.getArgument(0)] = it.getArgument<Set<String>>(1).toSet()
+            editor
+        }
+        whenever(prefs.getString(any(), org.mockito.kotlin.anyOrNull())).thenAnswer { strings[it.getArgument<String>(0)] }
+        whenever(editor.putString(any(), any())).thenAnswer {
+            strings[it.getArgument(0)] = it.getArgument<String>(1)
+            editor
+        }
+    }
+
+    @Test fun passthroughAppsAreEmptyByDefaultAndToggle() {
+        // #265：默认没有单独直通的应用。
+        assertEquals(emptySet<String>(), HardwareKeyboardPreferences.read(context).passthroughApps)
+        HardwareKeyboardPreferences.setPassthroughApp(context, "com.example.remote", true)
+        HardwareKeyboardPreferences.setPassthroughApp(context, "com.example.emu", true)
+        assertEquals(setOf("com.example.remote", "com.example.emu"), HardwareKeyboardPreferences.read(context).passthroughApps)
+        HardwareKeyboardPreferences.setPassthroughApp(context, "com.example.remote", false)
+        assertEquals(setOf("com.example.emu"), HardwareKeyboardPreferences.read(context).passthroughApps)
+    }
+
+    @Test fun lastAppIsRememberedForTheSettingsPage() {
+        assertNull(HardwareKeyboardPreferences.lastApp(context))
+        HardwareKeyboardPreferences.noteLastApp(context, "com.example.remote")
+        assertEquals("com.example.remote", HardwareKeyboardPreferences.lastApp(context))
     }
 
     @Test fun existingUsersKeepAllPagingGroupsWithoutWritingPreferences() {

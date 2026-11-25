@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** #214：九键滑行首选之后给同一笔的其他词；只在这一笔就是整个组合时给，组合一变就不给。 */
+/** #214：九键滑行首选之后给同一笔的其他词；划之前已有组合时给整个组合的词（11-23），组合一变就不给。 */
 class T9GlideAlternativesTest {
     private val schema = "t9"
     private val engine = listOf("高中", "高", "搞")
@@ -67,7 +67,17 @@ class T9GlideAlternativesTest {
         val holder = holder()
         holder.offer("64426", emptyList(), schema, 7L)
         assertNull(holder.entry)
-        holder.offer("64426", listOf("", "你好", "你好", "拟好", "泥好"), schema, 7L)
-        assertEquals(listOf("你好", "拟好"), holder.entry?.words)
+        holder.offer("64426", listOf("", "你好", "你好", "拟好", "泥好", "腻好"), schema, 7L)
+        // 两个备选加一个补的单字（T9Glide.alternativesWithSyllable），最多三个。
+        assertEquals(listOf("你好", "拟好", "泥好"), holder.entry?.words)
+    }
+
+    /** 他 11-23：先打 hua 再划 xing。登记的是整个组合 482 + 9464，这一笔一个个键打入时不作废，打完给整串的词。 */
+    @Test fun aStrokeAfterEarlierInputOffersWordsForTheWholeComposition() {
+        val holder = T9GlideAlternatives().apply { offer("4829464", listOf("华中"), schema, 7L) }
+        assertTrue(holder.injections("482", listOf("华", "话"), true, schema, 7L).isEmpty())
+        assertTrue(holder.injections("48294", listOf("华西"), true, schema, 7L).isEmpty())
+        assertEquals(listOf("华中"), holder.injections("482'9464", listOf("滑行"), true, schema, 7L).map { it.snapshot.text })
+        assertTrue(holder.matches("4829464", schema, 7L))
     }
 }

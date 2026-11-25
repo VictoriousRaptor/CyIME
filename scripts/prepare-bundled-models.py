@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INCLUDED = {'ochwpro', 'paraformer-zh-en-int8', 'sensevoice-multilingual-int8',
-            'speaker-campplus-zh'}  # the elder package must tell speakers apart without a download (elder-pack-spec.md)
+            'speaker-campplus-zh', 'translate-zh-en', 'translate-en-zh'}  # the elder package must tell speakers apart without a download (elder-pack-spec.md)
 
 def digest(path):
     with path.open('rb') as stream:
@@ -27,8 +27,10 @@ def catalog():
             version = re.search(r'ModelVersion\(version = "([^"]+)"', block)[1]
             block = 'ModelVersion('.join(block.split('ModelVersion(')[:2])  # files of the first (newest) version only
             title = re.match(r'(?:"[^"]+"|\w+),\s*"([^"]+)"', block)
-            files = [dict(name=n, url=u, sha256=s, size=int(z)) for n,u,s,z in
-                     re.findall(r'ModelFile\("([^"]+)", "([^"]*)", "([^"]*)", (\d+)L[,)]', block)]  # files may list download mirrors after the size
+            # The URL is a literal or a catalog constant plus a literal (RELEASE + "translate-…"); files may list
+            # download mirrors after the size.
+            files = [dict(name=n, url=(constants[c] + u if c in constants else '') if c else u, sha256=s, size=int(z)) for n,c,u,s,z in
+                     re.findall(r'ModelFile\("([^"]+)", (?:(\w+) \+ )?"([^"]*)", "([^"]*)", (\d+)L[,)]', block)]
             archive = re.search(r'archiveUrl = "([^"]+)", sha256 = "([^"]+)"', block)
             if model_id in INCLUDED and (not files or (not archive and any(not f['sha256'] or not f['url'] for f in files))):
                 raise ValueError(f'Unsupported/incomplete pinned catalog: {model_id}')

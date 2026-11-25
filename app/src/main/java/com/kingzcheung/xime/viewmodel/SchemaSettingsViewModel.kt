@@ -121,8 +121,13 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
             enabled.add(schema.schemaId)
         }
         val turnedOn = schema.schemaId in enabled
+        val enabledBefore = _uiState.value.enabledSchemas
+        val installed = _uiState.value.allSchemas.map { it.toSchemaInfo() }
         viewModelScope.launch {
             val (persisted, current) = withContext(Dispatchers.IO) {
+                // 新打开的排在已打开的最后，不挤动用户原来的顺序（11-23）。
+                if (turnedOn) com.kingzcheung.xime.settings.InputModes.placeNewlyEnabledLast(
+                    context, installed, enabledBefore, listOf(schema.schemaId))
                 SchemaManager.setEnabledSchemas(context, enabled)
                 if (turnedOn) com.kingzcheung.xime.settings.LanguagePreferences.enableForSchema(context, schema.schemaId)
                 // 关掉的正是当前方案：马上换到同语言还开着的方案（#340），不然键盘一直用着它、布局栏画不出来。

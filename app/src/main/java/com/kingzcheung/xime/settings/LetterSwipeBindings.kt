@@ -20,6 +20,28 @@ internal object LetterSwipeBindings {
 
     fun key(english: Boolean) = if (english) ENGLISH else CHINESE
 
+    /**
+     * 九键 1～9 下方角标那一滑做的事（#297）：键是 "2.lower"，值是 [actions] 里的一个。默认空，照旧。
+     * 上方角标那一滑是数字；下方角标往哪边滑见 [lowerDirection]（默认上滑，「反转上下滑方向」时下滑）。
+     */
+    const val T9 = "t9_swipes"
+    val t9Digits = ('1'..'9').map { it.toString() }
+
+    fun loadT9(context: Context): Map<String, String> =
+        parseT9(SettingsPreferences.getPrefsPublic(context).getStringSet(T9, null).orEmpty())
+
+    fun saveT9(context: Context, bindings: Map<String, String>) {
+        SettingsPreferences.getPrefsPublic(context).edit().putStringSet(T9, encode(bindings.filterValues { it.isNotEmpty() })).apply()
+    }
+
+    internal fun parseT9(entries: Set<String>): Map<String, String> = buildMap {
+        for (entry in entries) {
+            val slot = entry.substringBefore('\t')
+            val value = entry.substringAfter('\t', "")
+            if (slot.substringBefore('.') in t9Digits && slot.substringAfter('.', "") == "lower" && value in actions) put(slot, value)
+        }
+    }
+
     /** 手指往哪边滑输入上方角标：默认下滑，「反转上下滑方向」打开时上滑。长按输入时这个方向空着，也用它。 */
     fun upperDirection(reverse: Boolean) = if (reverse) "up" else "down"
     fun lowerDirection(reverse: Boolean) = if (reverse) "down" else "up"

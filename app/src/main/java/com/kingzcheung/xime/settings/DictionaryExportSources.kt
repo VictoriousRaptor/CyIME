@@ -23,10 +23,14 @@ object DictionaryExportSources {
         }
     }
 
-    /** 一个导入的词库（手机里存的 Rime 词典）。 */
+    /**
+     * 一个导入的词库（手机里存的 Rime 词典），连同它的英文词（另存在 .en.txt，编码为空，见 [DictionaryExport.write]）。
+     * 以前只读 Rime 词典，只有英文的词库导出 0 个词（#560）。
+     */
     fun packWords(store: CellDictionaryStore, id: String): List<DictEntry> {
         val file = store.dictionaryFile(id)
         require(file.isFile) { "词库文件不见了，请重新导入" }
-        return file.useLines(Charsets.UTF_8) { DictionaryExport.fromRimeDictionary(it) }
+        return file.useLines(Charsets.UTF_8) { DictionaryExport.fromRimeDictionary(it) } +
+            store.englishWords(id).map { DictEntry(it, "", 0) }
     }
 }

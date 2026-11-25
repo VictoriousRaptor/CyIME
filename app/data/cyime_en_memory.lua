@@ -7,6 +7,9 @@
     前四个候选不动（回车也会上屏拼音字母，nihao、shi 被记住后不能挤到你好、是前面）。
   - 输入是记住的词的开头（3 个字母起；英文单词方案只打英文，2 个字母起，#465）：同样的规则放第三位或前四个之后，最近打过的优先，最多两个。
   输入不是纯字母或文件里没有对应词时不做任何事。
+  字母后面接着点的数字（Abc123，2026-11-25 他问）由输入法连起来记（EnglishWordMemory.kt），打 abc 照样补全出来；选它上屏时
+  这里把它挪到最新。
+  打了大写、前四个候选里有和所打一模一样的（打 Abc，词库是 ABC、Abc）：第一次打也把它放第一位，空格、数字上屏不再变成 ABC。
   长按删除过的词库英文词（cyime_en_demoted.txt，小写一行一个，见 EnglishWordMemory.kt；2026-11-13 删不掉的英文首选）：
   只打小写时排到前四个候选之后；打了大写照常。再选它上屏就从文件里去掉，回到原位。
 --]]
@@ -35,7 +38,7 @@ local function load_words()
         f:seek("set", 0)
         local words = {}
         for line in f:lines() do
-            local w = line:match("^%s*(%a+)%s*$")
+            local w = line:match("^%s*(%a+%d*)%s*$")
             if w then words[#words + 1] = w end
         end
         cache.key, cache.words = key, words
@@ -141,6 +144,11 @@ local function init(env)
         if text:match("^%a+$") then undemote(text) end
         if #text >= 2 and #text <= 40 and text:match("^%a+$") and text:find("%u") and text:lower() == input:lower() then
             remember(text)
+        elseif #text <= 52 and text:match("^%a+%d+$") and text:lower():sub(1, #input) == input:lower() then
+            -- A remembered word with digits (Abc123) picked again moves to the newest.
+            for _, w in ipairs(load_words()) do
+                if w == text then remember(text) break end
+            end
         end
     end)
 end
@@ -175,7 +183,8 @@ local function remembered_order(input, env, yield)
             end
         end
     end
-    if not exact and #prefixes == 0 then
+    -- Typed capitals: a candidate spelled exactly as typed may still lead (below), remembered or not.
+    if not exact and #prefixes == 0 and not upper then
         for cand in input:iter() do yield(cand) end
         return
     end
@@ -183,11 +192,18 @@ local function remembered_order(input, env, yield)
     local head, rest_started = {}, false
     local function emit_head()
         local offset = english_first(head[1], upper) and 0 or 4
+        -- Abc typed, the dictionary has ABC before Abc: the one spelled as typed goes first, first time too.
+        local own
+        if not exact and upper and #code >= 2 then
+            for _, cand in ipairs(head) do
+                if cand.text == code then exact, own = code, cand break end
+            end
+        end
         local out, inserted = {}, {}
         local function add(text)
             if inserted[text] then return end
             inserted[text] = true
-            out[#out + 1] = Candidate("cyime_en", 0, #code, text, "")
+            out[#out + 1] = (own and own.text == text) and own or Candidate("cyime_en", 0, #code, text, "")
         end
         local slots = {}
         if exact then slots[1 + offset] = { exact } end

@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -40,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * 「候选栏取消按钮」默认打开（用户 10-31），手动关过的不变；开关下面的图例随开关变化。
+ * 「显示 ‹ 取消键」（原名「候选栏取消按钮」）默认打开（用户 10-31），手动关过的不变；关掉后「关联想用 ⊗」照样能开（11-24）。
  * [renderLegend] 只在设置了 CYIME_RENDER_OUT=<目录> 时出图：开、关各一张，玻璃、不透明各一张，
  * 每张横排浅色、深色、纯白、纯黑四个主题，手机大小的候选词页。
  */
@@ -63,22 +64,29 @@ class CandidateCancelSettingRenderTest {
         assertFalse(SettingsPreferences.shouldShowCandidateCancelButton(context))
     }
 
-    @Test fun legendFollowsTheSwitch() {
-        SettingsPreferences.getPrefsPublic(context).edit().remove(SettingsPreferences.KEY_SHOW_CANDIDATE_CANCEL_BUTTON).commit()
+    @Test fun switchSavesAndCrossStaysWhenCancelIsOff() {
+        SettingsPreferences.getPrefsPublic(context).edit().remove(SettingsPreferences.KEY_SHOW_CANDIDATE_CANCEL_BUTTON)
+            .remove(SettingsPreferences.KEY_ASSOCIATION_CANCEL_CROSS).commit()
         KeyboardThemes.initFromConfig(context)
         rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") {
             LayoutDisplaySettingsContent(onBack = {}, initialPage = "candidates") } }
         rule.waitForIdle()
         // 这一行最外层是设置搜索的定位修饰（它的 testTag 在前，同一节点上前面的生效），两个名字都认。
-        val tagged = hasTestTag("candidate-cancel-setting") or hasTestTag("settings-search-anchor:候选栏取消按钮")
+        val tagged = hasTestTag("candidate-cancel-setting") or hasTestTag("settings-search-anchor:显示 ‹ 取消键")
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(tagged)
         val setting = rule.onNode(tagged)
         setting.assertIsOn()
-        rule.onNodeWithText("↑ 点它取消当前输入", useUnmergedTree = true).assertExists()
-        setting.performClick().assertIsOff()
-        rule.onNodeWithText("候选词从最左边开始", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("↑ 点它取消当前输入", useUnmergedTree = true).assertDoesNotExist()
+        // 滚到的那一行可能正在页底，中间压着悬浮的「显示键盘」按钮：点右边的开关。
+        setting.performTouchInput { click(androidx.compose.ui.geometry.Offset(width - 24.dp.toPx(), height / 2f)) }
+        setting.assertIsOff()
         assertFalse(SettingsPreferences.shouldShowCandidateCancelButton(context))
+        // 11-24 两个开关分开：取消键关了，「关联想用 ⊗」照样在、照样能拨（以前跟着取消键一起藏起来）。
+        val cross = hasTestTag("association-cancel-cross-setting") or hasTestTag("settings-search-anchor:关联想用 ⊗")
+        rule.onNode(hasScrollToNodeAction()).performScrollToNode(cross)
+        rule.onNode(cross).assertIsOff().performTouchInput { click(androidx.compose.ui.geometry.Offset(width - 24.dp.toPx(), height / 2f)) }
+        rule.onNode(cross).assertIsOn()
+        assertTrue(SettingsPreferences.isAssociationCancelCross(context))
+        SettingsPreferences.setAssociationCancelCross(context, false)
     }
 
     @Test fun doublePinyinDisplayUsesTheSharedPreference() {

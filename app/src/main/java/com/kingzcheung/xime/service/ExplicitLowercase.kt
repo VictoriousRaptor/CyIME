@@ -12,6 +12,10 @@ internal object ExplicitLowercase {
         pending = if (letter.length == 1 && letter[0].isLowerCase()) letter to now else null
     }
 
+    /** 只看不取：Shift 开着时键盘据此不把这个特意选的小写转成大写，留给按键线程照常 [consume]。 */
+    fun isPending(key: String, now: Long = android.os.SystemClock.uptimeMillis()): Boolean =
+        pending?.let { (letter, at) -> letter == key && now - at in 0..TTL_MS } == true
+
     fun consume(key: String, now: Long = android.os.SystemClock.uptimeMillis()): Boolean {
         val (letter, at) = pending ?: return false
         pending = null

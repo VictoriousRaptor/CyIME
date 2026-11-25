@@ -137,10 +137,12 @@ fun JapaneseKanaKeyboardLayout(
                 }
             }
             Column(Modifier.weight(3f).fillMaxHeight()) {
+                // 数字页同数字键盘，跟「数字位置」走（见 [numberPadRows]）；假名页不受影响。
+                val digitRows = numberPadRows(LocalKeyboardInputPreferences.current.numberPadTop789)
                 for (row in 0..2) Row(Modifier.weight(1f).fillMaxWidth()) {
                     for (column in 0..2) {
                         if (numberMode) {
-                            val digit = (row * 3 + column + 1).toString()
+                            val digit = digitRows[row][column]
                             KeyButton(digit, { onKeyPress(digit) }, keyBackgroundColor, keyTextColor,
                                 Modifier.weight(1f).testTag("kana-digit:$digit"), onPress = { onKeyPressDown?.invoke(digit) },
                                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
@@ -254,6 +256,8 @@ internal fun KanaFlickButton(
         else ctrlFade.snapTo(0f)
     }
     val currentPress by rememberUpdatedState(onPress)
+    // 松手给「按键抬起震动」，和字母键一样（用户 11-23）。
+    val release = keyReleaseOrShared(null, onPress != null)
     var pressed by remember { mutableStateOf(false) }
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     val density = LocalDensity.current
@@ -278,7 +282,7 @@ internal fun KanaFlickButton(
         onTap = { if (ctrlLetter == null || ctrlTargets?.ctrlTap(ctrlLetter.toString()) != true)
             currentAction(JapaneseKanaAction.Input(key.center.romaji)) },
         onPress = { pressed = true; suppressCursorMove.value = true; currentPress?.invoke() },
-        onRelease = { pressed = false; suppressCursorMove.value = false },
+        onRelease = { pressed = false; suppressCursorMove.value = false; release?.invoke() },
         onPreview = { state ->
             // Kana labels sit at the middle of each edge, not in the corner-hint positions.
             flickPreview = state.keyFlick?.let { preview -> when (preview.origin) {

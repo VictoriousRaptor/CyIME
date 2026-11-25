@@ -19,6 +19,8 @@ data class CandidateState(
     val clipboardExtractedCount: Int = 0,
     /** 当前宿主是否支持英文候选的"回删替换"（终端等受限宿主为 false，不展示英文候选）。 */
     val englishReplaceSupported: Boolean = true,
+    /** 英文直接输入打这个词时「智能联想」关着：不补词，原词也不单独放上候选栏，见 [showsTypedEnglishWord]。 */
+    val englishCompletionOff: Boolean = false,
     /** 候选词变换映射（插件 candidate_transform 能力）：与 [candidates] 平行；
      *  空列表 = 纯引擎语义（显示 index 即引擎 index）。见 CandidateAction。 */
     val candidateActions: List<CandidateAction> = emptyList(),
@@ -50,6 +52,14 @@ data class CandidateState(
     /** 候选栏现在放的是不是计算器结果。 */
     val showsCalculator: Boolean get() = calculatorCandidates.isNotEmpty() && calculatorCandidates == candidates
 }
+
+/**
+ * 英文直接输入时候选栏第一个放已打的原词，后面接补全。「智能联想」关着又没有别的词（「英文出短语」、邮箱后缀）时
+ * 不放：关了联想，直接输入就什么候选都不给（用户 11-23）。英文单词方案、滑行不走这里，照常有候选。
+ */
+internal val CandidateState.showsTypedEnglishWord: Boolean
+    get() = pendingEnglishText.isNotEmpty() && englishReplaceSupported &&
+        !(englishCompletionOff && associationCandidates.isEmpty())
 
 /** 候选栏上现在是删字后放回的那一组：不挡退格、不被空格上屏、不进九键选词。 */
 internal val CandidateState.isDeletionRecovery: Boolean

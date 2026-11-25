@@ -111,6 +111,8 @@ data class SwipeState(
     val selectedLongPressIndex: Int = 0,
     val longPressDrawableIds: List<Int> = emptyList(),
     val keyFlick: KeyFlickPreview? = null,
+    /** 文字长按菜单的默认项在第几格：气泡把这一格对准按键（[KeyboardKeyMetrics.longPressTextMenuCells]）。 */
+    val longPressAnchorIndex: Int = 0,
 )
 
 private val shadowColorCache = HashMap<Color, Color>()
@@ -160,6 +162,7 @@ fun KeyButton(
 ) {
     var ownPressed by remember { mutableStateOf(false) }
     val isPressed = ownPressed || externalPressed
+    val release = keyReleaseOrShared(onRelease, onPress != null)
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     val density = LocalDensity.current
     val view = LocalView.current
@@ -170,7 +173,7 @@ fun KeyButton(
         text = text,
         onTap = onClick,
         onPress = { ownPressed = true; onPress?.invoke() },
-        onRelease = { ownPressed = false; onRelease?.invoke() },
+        onRelease = { ownPressed = false; release?.invoke() },
         onPreview = { flickPreview = it.keyFlick; onSwipeStateChange?.invoke(it) },
         inlineVerticalPreview = true,
         upText = swipeText,
@@ -336,6 +339,10 @@ fun SwipeableKeyButton(
     onRelease: (() -> Unit)? = null,
     onLongPressSelect: ((String) -> Unit)? = null,
     longPressItems: List<String>? = null,
+    /** 长按到点时排在手指下、默认选中的项（见 [KeyGestureActions.longPressCenterItems]）。 */
+    longPressCenterItems: List<String> = emptyList(),
+    /** 长按菜单原样排、不按左右半边翻转（见 [KeyGestureActions.longPressFixedOrder]）。 */
+    longPressFixedOrder: Boolean = false,
     longPressDrawableIds: List<Int>? = null,
     /** 拂动选字母：依次为左、上、右、下（缺的方向保留原手势），长按执行 [onFlickLongPress]。 */
     flickLetters: List<String>? = null,
@@ -379,6 +386,7 @@ fun SwipeableKeyButton(
     val letters = fourteenKeyLetters(letterGroup, letterSwipeLayout &&
         inputPreferences.fourteenLetterSwipe && onLetterSelection != null)
     var isPressed by remember { mutableStateOf(false) }
+    val release = keyReleaseOrShared(onRelease, onPress != null)
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     var longPressShown by remember { mutableStateOf(false) }
     // 方向圆盘只在手指拂出去或按住一会儿后出现；快速点按不弹（用户 11-03：只点不拂时轮盘让打字发卡）。
@@ -464,12 +472,23 @@ fun SwipeableKeyButton(
             keyboard?.width, with(density) { KeyboardKeyMetrics.LongPressMenuMargin.toPx() })
         cells.copy(left = cells.left - keyLeft)
     }
+    // 文字长按菜单：排法、默认项、格宽和气泡（measureSwipeBubble）按同一个键、同一个键盘宽算。
+    val longPressTextMenu: (List<String>, List<String>, Boolean) -> LongPressTextMenu = { items, nearFirst, fixed ->
+        val key = liveBounds.current(buttonBounds, "key $text")
+        val keyboard = menuKeyboard?.invoke()
+        val keyLeft = if (keyboard != null) key.left - keyboard.left else 0f
+        val (ordered, anchor) = KeyboardKeyMetrics.longPressMenuOrder(items, nearFirst, fixed,
+            keyLeft + key.width / 2f, keyboard?.width)
+        val cells = KeyboardKeyMetrics.longPressTextMenuCells(keyLeft, key.width, ordered, anchor, keyboard?.width,
+            with(density) { KeyboardKeyMetrics.LongPressMenuMargin.toPx() }, density.density)
+        LongPressTextMenu(ordered, anchor, cells.cellWidth)
+    }
     val gestureActions = if (flick != null) KeyGestureActions(
         // 拂动：方向固定对应字母，不随角标方向反转；数字等改为长按。
         text = text,
         onTap = tapOrCtrl,
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
-        onRelease = { isPressed = false; onRelease?.invoke() },
+        onRelease = { isPressed = false; release?.invoke() },
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         inlineVerticalPreview = true,
         inlineHorizontalPreview = true,
@@ -494,7 +513,7 @@ fun SwipeableKeyButton(
         text = text,
         onTap = tapOrCtrl,
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
-        onRelease = { isPressed = false; onRelease?.invoke() },
+        onRelease = { isPressed = false; release?.invoke() },
         // 长按到点后（角标已输入或弹出菜单）方向盘收起，和拂动键一样只留长按气泡。
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         // 上下滑一律在键内渐变：要输入的符号从它那一角随手指拖到键中间（用户 11-22）。
@@ -508,12 +527,16 @@ fun SwipeableKeyButton(
         onUp = keyOnSwipe,
         onDown = keyOnSwipeDown,
         longPressItems = longPressItems.orEmpty(),
+        longPressCenterItems = longPressCenterItems,
+        longPressFixedOrder = longPressFixedOrder,
         onLeft = letters?.let { { onLetterSelection?.invoke(it.first); Unit } } ?: onSwipeLeft,
         // 「字母键显示大写」只改显示：方向提示跟键帽一样大写，送出的仍是 letters 原样。
         leftText = letters?.first?.let { if (inputPreferences.uppercaseKeyLabels) it.uppercase() else it } ?: swipeLeftText,
         onRight = letters?.let { { onLetterSelection?.invoke(it.second); Unit } } ?: onSwipeRight,
         rightText = letters?.second?.let { if (inputPreferences.uppercaseKeyLabels) it.uppercase() else it } ?: swipeRightText,
         horizontalThresholdDp = if (letters != null) normalizeLetterSwipeDistance(inputPreferences.fourteenLetterSwipeDp) else 50f,
+        // 上下滑输入符号要滑多远（#426，默认 50dp 和原来一样）；拂动键（上面那支）照旧用拂动距离。
+        verticalThresholdDp = normalizeSymbolSwipeDistance(inputPreferences.symbolSwipeDp),
         reserveHorizontalSwipe = letters != null,
         // 14 键双字母键四个方向都有东西：不管开不开方向盘，都按松手时落在哪个 45° 扇区算，和日语假名、九键拂动一样。
         // 以前键内模式沿用 26 键的锁轴：先往上拖就一直算上，要先拖回中线附近才换成左右，同一个位置出什么取决于刚才怎么拖，
@@ -524,6 +547,7 @@ fun SwipeableKeyButton(
         longPressDrawableIds = longPressDrawableIds.orEmpty(),
         keyWidth = buttonBounds.width,
         longPressMenuCells = longPressMenuCells,
+        longPressTextMenu = longPressTextMenu,
         onLongPressSelect = onLongPressSelect,
         longPressTimeoutMillis = longPressTimeoutMillis,
         onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
@@ -1011,11 +1035,15 @@ fun IconKeyButton(
     contentDescription: String? = null,
     /** 键缝动效里这个键画什么（回车：点一下整排往上扫；删除：往里收）。 */
     gapLight: GapLightKind = GapLightKind.PRESS,
+    /** 长按做的事；为空时长按松手照旧算点一下（和以前一样）。 */
+    onLongClick: (() -> Unit)? = null,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
-    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
+    val hasLongClick = onLongClick != null
     // 键缝动效：这个键点了一下并且生效时告诉光层（回车整排往上扫）。
     val gapLightTrigger = remember { KeyGapLightTrigger() }
     val density = LocalDensity.current
@@ -1053,7 +1081,7 @@ fun IconKeyButton(
         modifier = modifier
             .fillMaxHeight()
             .fillMaxWidth()
-            .pointerInput(Unit) {
+            .pointerInput(hasLongClick) {
                 detectTapGestures(
                     onPress = {
                         isPressed = true
@@ -1062,7 +1090,10 @@ fun IconKeyButton(
                         isPressed = false
                         currentOnRelease?.invoke()
                     },
+                    onLongPress = if (hasLongClick) ({ currentOnLongClick?.invoke() }) else null,
                     onTap = {
+                        // 比这个键早按下、还没抬的键先出字（按着最后一个字母就点了回车），见 KeyPressOrder。
+                        KeyPressOrder.settleAll()
                         gapLightTrigger.tap()
                         currentOnClick()
                     }
@@ -1140,7 +1171,7 @@ fun SwipeableIconKeyButton(
 ) {
     // Gesture coroutines survive recomposition; route to the current editor/input callbacks.
     val currentOnClick by rememberUpdatedState(onClick)
-    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
     val currentOnPress by rememberUpdatedState(onPress)
     val currentOnLongClick by rememberUpdatedState(onLongClick)
     val currentOnSwipe by rememberUpdatedState(onSwipe)

@@ -57,6 +57,9 @@ import kotlin.math.sign
  * 收回：展开着在候选栏上往左划，同样拉过门槛松手收回（用户 11-21：「右滑展开，左滑收起来」）；
  * 在展开页的候选上左右划、返回键、选词照旧也收回。没展开时往左划、展开着往右划，栏不动、也不算点候选。
  *
+ * 11-24 他采纳 B 站建议「改成两边滑都可以展开收起」：候选行滑到最左还往右拉、滑到最右还往左拉，都展开；
+ * 展开着往左、往右划都收回（不用再记方向，长句候选不用来回反着拉）。只在「左右滑展开候选」开着时有。
+ *
  * 不用系统的边缘拉伸回弹：11-05 用户录屏，有的手机回弹收不完，列表把每次按下都当成接着滑，点候选选不上。
  * 这里的回弹是自己画的位移，松手后 [RELEASE_MS] 内一定回到 0；回弹途中按下去就停住，点到的就是看到的那个候选，抬手再接着弹回。
  * 点候选、长按候选（删词、整句选段）不受影响：手指横着走过触摸阈值才算拉，之前照旧是点和长按。
@@ -177,7 +180,7 @@ private fun Modifier.rubberBandDrag(band: RubberBand, enabled: () -> Boolean, di
     }
 
 /**
- * 包住候选栏里的候选行：往左拉过门槛松手调 [onExpand]（和合并前一样，往左拉就展开）；给了 [onCollapse]（展开着）时改成往右拉过门槛松手调它（11-21 他：合并后方向反了）。
+ * 包住候选栏里的候选行：往左或往右拉过门槛松手调 [onExpand]；给了 [onCollapse]（展开着）时改成两边拉过门槛松手调它（11-24 两边都认）。
  * [enabled] 为 false（没有更多候选、滑行预览）且没有 [onCollapse] 时不拉，行为和以前一样。
  */
 @Composable
@@ -197,8 +200,8 @@ internal fun PullToExpandCandidates(
     val currentCollapsing by rememberUpdatedState(collapsing)
     val currentExpand by rememberUpdatedState(onExpand)
     val currentCollapse by rememberUpdatedState(onCollapse)
-    // 1.15.101 的候选行能左右滑（11-21 恢复）：滑到头还往左拉，多出来的距离拉动整行，过门槛松手展开；
-    // 展开着滑到最前还往右拉就收回。没滑到头时照旧只是滑候选，▾ 按钮照旧。
+    // 1.15.101 的候选行能左右滑（11-21 恢复）：滑到哪一头还往外拉，多出来的距离拉动整行，过门槛松手展开（展开着就收回）。
+    // 没滑到头时照旧只是滑候选，▾ 按钮照旧。
     val overscrollPull = remember(band) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -214,10 +217,10 @@ internal fun PullToExpandCandidates(
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput || !currentEnabled) return Offset.Zero
-                val dir = if (currentCollapsing) 1f else -1f
                 val dx = available.x
-                if (dx == 0f || !band.nested && sign(dx) != dir) return Offset.Zero
-                band.direction = dir
+                if (dx == 0f) return Offset.Zero
+                // 两头都认（11-24）：这一下从哪头拉出来就只认那个方向，拉过头折回来最多回到 0。
+                if (!band.nested) band.direction = sign(dx)
                 band.nested = true
                 band.move(dx)
                 return Offset(dx, 0f)
@@ -240,7 +243,7 @@ internal fun PullToExpandCandidates(
                 if (collapsing) customActions = listOf(CustomAccessibilityAction("收回候选") { currentCollapse?.invoke(); true })
                 else if (enabled) customActions = listOf(CustomAccessibilityAction("展开候选") { currentExpand(); true })
             }
-            .rubberBandDrag(band, { currentEnabled }, { if (currentCollapsing) 1f else -1f }) {
+            .rubberBandDrag(band, { currentEnabled }, { 0f }) {
                 if (currentCollapsing) currentCollapse?.invoke() else currentExpand()
             },
     ) {
@@ -266,7 +269,7 @@ private fun BoxScope.PullHint(band: RubberBand, hintColor: Color, verb: String) 
 }
 
 /**
- * 展开页的候选区：往右划过门槛松手调 [onCollapse]，页面跟手挪，不够就弹回；往左划不动（只在「候选滑到头回弹展开」打开时有）。
+ * 展开页的候选区：往左或往右划过门槛松手调 [onCollapse]，页面跟手挪，不够就弹回（只在「左右滑展开候选」打开时有）。
  * 上下划照旧滚列表；只认横着划（先过横向触摸阈值才算），不影响点候选、长按。
  */
 @Composable
@@ -276,8 +279,8 @@ internal fun Modifier.swipeToCollapse(onCollapse: (() -> Unit)?): Modifier {
     val currentCollapse by rememberUpdatedState(onCollapse)
     return this
         .semantics { customActions = listOf(CustomAccessibilityAction("收回候选") { currentCollapse(); true }) }
-        // 只认往右划（和候选栏上展开着往右拉收回同一方向，11-21 他：展开后往回划收起）。
-        .rubberBandDrag(band, { true }, { 1f }) { currentCollapse() }
+        // 往左、往右划都收回（11-24 他：「两边滑都可以展开收起」）。
+        .rubberBandDrag(band, { true }, { 0f }) { currentCollapse() }
         .graphicsLayer {
             translationX = band.shown
             alpha = 1f - 0.3f * (abs(band.shown) / (band.threshold * PULL_MAX_FACTOR)).coerceIn(0f, 1f)

@@ -131,7 +131,7 @@ internal fun CustomImageEditorSheet(
                 modifier = Modifier.padding(bottom = 4.dp),
             )
             Text(
-                text = "拖动移动，双指缩放，靠近边缘时自动吸附。",
+                text = "拖动移动，双指缩放。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp),

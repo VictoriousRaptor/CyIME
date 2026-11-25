@@ -63,7 +63,7 @@ internal fun hardwareCandidatePresentation(
     // The shared state may still contain the previous association while the next
     // request runs. Hide its text and click targets only in the physical toolbar.
     if (!english && predictionPending) return HardwareCandidatePresentation(emptyList(), association = true)
-    val words = if (state.pendingEnglishText.isNotEmpty() && state.englishReplaceSupported)
+    val words = if (state.showsTypedEnglishWord)
         listOf(state.pendingEnglishText) + state.associationCandidates
     else state.associationCandidates
     return HardwareCandidatePresentation(words.take(associationLimit.coerceAtLeast(0)), association = true)

@@ -79,9 +79,9 @@ object LetterLayouts {
      */
     fun restoreForOrientation(context: Context): Boolean {
         val prefs = SettingsPreferences.getPrefsPublic(context)
-        val changes = OrientationLayouts.lettersToRestore(prefs, OrientationLayouts.isLandscape(context), chosen) { language, id ->
-            id in sectionChoices(language) || CustomKeyboardLayouts.find(id)?.let(::typable) == true
-        }
+        val changes = OrientationLayouts.lettersToRestore(prefs, OrientationLayouts.isLandscape(context), chosen,
+            usable = { language, id -> id in sectionChoices(language) || CustomKeyboardLayouts.find(id)?.let(::typable) == true },
+            tag = OrientationLayouts.currentTag(context))
         if (changes.isEmpty()) return false
         prefs.edit().apply {
             changes.forEach { (language, id) -> if (id == null) remove(PREFIX + language.id) else putString(PREFIX + language.id, id) }

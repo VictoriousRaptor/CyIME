@@ -99,6 +99,11 @@ internal fun rememberImeKeyboardCallbacks(
                     service.isSecretEditor()) null
                 else runCatching { service.currentInputConnection?.getTextBeforeCursor(16, 0)?.toString() }.getOrNull()
             },
+            t9GlideComposition = {
+                // 九键的 inputText 是回显的拼音，数字要看引擎原始输入；组合已清空时不用上一次的。
+                if (service.t9PartialSegments.isNotEmpty() || service.candidateState.value.inputText.isEmpty()) ""
+                else T9GlideAlternatives.digitsOf(service.sessionController.engineInput).orEmpty()
+            },
             inputCommands = service.inputCommands,
             onT9UnconsumedDelete = service.keyRouter::processDeleteKey,
             onRetryRejectedCommit = service.keyRouter::retryRejectedCommit,
@@ -119,6 +124,8 @@ internal fun rememberImeKeyboardCallbacks(
                     service.noteInputDropped("key_not_ready")
                     return@keyPress
                 }
+                // 按键落点统计（只有自用包在记）：空格、删除、回车这些键靠这里知道哪一下出了字。
+                com.kingzcheung.xime.stats.TouchStats.keyEmit(key)
                 if (service.keyRouter.usesDirectFieldInput) {
                     service.keyRouter.handleKeyPress(key, isShifted)
                     return@keyPress

@@ -28,6 +28,8 @@ class UiTranslations private constructor(
     /** [text] 的英文；表里没有就原样返回。只含中文以外字符的直接返回。 */
     fun translate(text: String): String {
         if (!hasHan(text)) return text
+        // 界面句子不会这么长；用户粘进来的长文（设置搜索框里「没有找到“…”」）逐段套模板会把主线程卡死。
+        if (text.length > MAX_TRANSLATABLE) return text
         synchronized(cache) { cache[text]?.let { return it } }
         val result = translate(text, 0) ?: text
         synchronized(cache) { cache[text] = result }
@@ -80,6 +82,8 @@ class UiTranslations private constructor(
 
     companion object {
         private const val CACHE_SIZE = 1024
+        /** 表里最长的键约 2200 字（许可说明）；再长的只会是用户的文字，不翻。 */
+        private const val MAX_TRANSLATABLE = 4096
         /** 表里英文写成「=」的是有意留中文的（示例候选词、成语、给对面人看的快捷回复等）。 */
         private const val KEEP = "="
         private val SLOT = Regex("\\{(\\d+)\\}")

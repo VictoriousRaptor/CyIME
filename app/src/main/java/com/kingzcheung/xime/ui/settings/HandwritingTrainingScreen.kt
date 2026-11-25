@@ -60,6 +60,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -858,21 +859,27 @@ private fun HandwritingTrainingBody(
     val density = LocalDensity.current.density
     val eraserRadiusPx = with(LocalDensity.current) { PenEraser.Radius.toPx() }
     val stylusPresence = remember { StylusPresence() }
-    // 用笔时手指不出墨迹（仍可点按钮）：三星笔仓插拔广播说笔已拔出，或本次进入后笔碰过画板；笔插回后恢复手指书写
+    // 用笔时手指不出墨迹（仍可点按钮）：本次进入后笔碰过画板才算在用笔；笔插回笔仓后恢复手指书写。
+    // 笔只是拔出来、还没在画板上写过时不拦手指（和输入法手写板一样）：以前拔出就拦，用手指写什么都不出，
+    // 「下一题」一直是灰的，看起来整页坏了（11-12）。
     val penSeen = remember { mutableStateOf(false) }
-    val penDetached = remember { mutableStateOf(false) }
     // 橡皮范围圈：按住侧键或用笔尾时，悬停和擦除都在笔尖画出擦除范围（单独一层，移动时不重画笔迹）。
     // 注意不要按橡皮状态增删画板的 Modifier（例如切换悬停指针）：修饰链一变，下面的手势会被重建，
     // 拖动擦除会在第一下之后中断——1.12.26 “只能点一下擦一次”就是这个原因。
     val eraserAt = remember { mutableStateOf<Offset?>(null) }
-    val fingerBlocked = penSeen.value || penDetached.value
+    val fingerBlocked = penSeen.value
+    // 手指写不出字、空着画板点「下一题」时说清楚原因（画板下那行小字容易看漏）；提示还在时不重复弹
+    val hintScope = rememberCoroutineScope()
+    var hintJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    fun hint(text: String) {
+        if (hintJob?.isActive == true) return
+        hintJob = hintScope.launch { snackbarHostState.showSnackbar(text) }
+    }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: android.content.Context, intent: Intent) {
                 if (!intent.hasExtra(SPEN_INSERT_EXTRA)) return
-                val inserted = intent.getBooleanExtra(SPEN_INSERT_EXTRA, true)
-                penDetached.value = !inserted
-                if (inserted) penSeen.value = false
+                if (intent.getBooleanExtra(SPEN_INSERT_EXTRA, true)) penSeen.value = false
             }
         }
         // 粘性广播：注册时立即拿到当前插拔状态；非三星设备没有这个广播，只靠“笔碰过画板”判断
@@ -1295,7 +1302,10 @@ private fun HandwritingTrainingBody(
 
                             fun start(change: PointerInputChange, event: PointerEvent) {
                                 if (stylusPresence.rejectsTouch(change.type, change.uptimeMillis)) return
-                                if (change.type == PointerType.Touch && (penSeen.value || penDetached.value)) return
+                                if (change.type == PointerType.Touch && penSeen.value) {
+                                    hint("刚才用笔写过，手指不在画板上写字(防手掌误触)。继续用笔写，或把笔插回去后用手指写")
+                                    return
+                                }
                                 active = change.id
                                 erasing = isErasing(change.type, event.motionEvent?.buttonState ?: 0)
                                 lastErase = null
@@ -1400,6 +1410,11 @@ private fun HandwritingTrainingBody(
             ) {
                 Button(
                     onClick = {
+                        // 画板空着时也能点：不保存，提示先写或点「跳过」（以前灰着，看不出是要先写，像坏了）
+                        if (strokes.isEmpty()) {
+                            hint("先在框里写「${prompt?.label.orEmpty()}」再点下一题；不想写这题就点「跳过」")
+                            return@Button
+                        }
                         viewModel.submit(
                             TrainingInk.rebase(strokes.toList()),
                             canvasSize.first.toFloat(),
@@ -1408,7 +1423,7 @@ private fun HandwritingTrainingBody(
                         )
                         resetBoard()
                     },
-                    enabled = prompt != null && strokes.isNotEmpty() && !state.checking,
+                    enabled = prompt != null && !state.checking,
                     modifier = noKeyFocus,
                 ) {
                     Text(if (state.check?.promptId == prompt?.id && state.check != null) "保存并识别" else "下一题")

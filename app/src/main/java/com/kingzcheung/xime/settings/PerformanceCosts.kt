@@ -121,7 +121,8 @@ object PerformanceCosts {
         TYPING_STATS("typing_stats", "记录打字统计"),
         // 只在数字上屏后读一次光标前的字、查一遍编码是数字的短语；打拼音不经过它。
         DIGIT_PHRASES("digit_phrase_candidates", "数字出短语"),
-        // 打字不经过它，代价在键盘显示时每秒 20 帧的合成；测它要用图片背景（我的图片或内置图片主题），纯色、渐变不动。
+        // 打字不经过它，代价在键盘显示时一直出帧（最多每秒 20 帧，动得慢时更少）；耗电看 [Cost.idleCpuSecPerMin]。
+        // 测它要用图片背景（我的图片或内置图片主题），纯色、渐变不动；宿主不能是主题页（预览也在动，会算进来）。
         BACKGROUND_MOTION("background_motion", "动态背景");
 
         val nineKey: Boolean get() = id.startsWith(T9_PREFIX)
@@ -324,6 +325,18 @@ object PerformanceCosts {
          * 逐键实测（`/mnt/project-files/perf-matrix-1103`，只含引擎查词排序，不含画面），不是这台设备测的。
          */
         val basis: String? = null,
+        /**
+         * 耗电：键盘开着、不打字时，输入法每分钟多用几秒 CPU（energy_bench 的 idle_shown，开和关相减）。
+         * 一直在动的东西（动态背景）的代价主要在这里，每键耗时看不出来（用户 11-23：耗电、内存、速度都要写明白）。
+         */
+        val idleCpuSecPerMin: Double? = null,
+        /** true = [idleCpuSecPerMin] 还没实测，是估算；和 [estimated] 分开记，同一项可能只测了一样。 */
+        val idleCpuEstimated: Boolean = false,
+        /**
+         * [idleCpuSecPerMin] 里渲染线程占几成（0～1，实测时主线程、RenderThread 分开记）。这部分跟屏幕像素数成正比，
+         * 换到屏幕更大或更小的机器上按像素数折算；其余部分不随屏幕变。空时当 0（不按屏幕折算）。
+         */
+        val idleRenderShare: Double? = null,
     )
 
     /** [Cost.basis]：电脑同源引擎实测。 */
@@ -381,6 +394,13 @@ object PerformanceCosts {
         val voiceResident: Cost? = null,
         /** 九键词组模型（t9_ngram.lm）装着时九键每键多花的时间；不是开关，在九键上且模型装着时计入总开销。 */
         val t9Model: Cost? = null,
+        /** 测这台时的屏幕像素数（宽 × 高）；[idleRenderShare] 那部分按本机像素数和它的比折算。空时不折算。 */
+        val screenPixels: Long? = null,
+        /**
+         * 这台机器上输入法每用 1 秒 CPU，系统电池页记多少 mAh（拔电实测电流，或 batterystats 的 mAh ÷ CPU 秒）。
+         * 空时用 [DEFAULT_MAH_PER_CPU_SEC]。
+         */
+        val mAhPerCpuSec: Double? = null,
     ) {
         /** 一项都还没实测（安装包表里的估算）。 */
         val allEstimated: Boolean get() = items.isNotEmpty() && items.values.all { it.estimated }
@@ -397,7 +417,55 @@ object PerformanceCosts {
      * 用哪台机器的数：本机实测 > 表里同型号 > 表里同档位 > 表里第一台按档位折算（[scaled]）；[local] 表示本机实测。
      * 本机实测缺的项从后面几种补上并标估算，所以只要安装包表在，就不会是 null。
      */
-    data class Source(val device: Device, val local: Boolean, val sameModel: Boolean, val scaled: Boolean = false)
+    data class Source(val device: Device, val local: Boolean, val sameModel: Boolean, val scaled: Boolean = false,
+        /** 本机的电池容量和屏幕；有它时耗电再换算成「每小时约耗几 % 电」。 */
+        val here: Here? = null)
+
+    /**
+     * 本机系统给的参数（用户 11-23：屏幕、电池系统都给得出，用它来算）。读不到的为 null，算的时候回退到常见值并写「约」。
+     * [batteryMah]：电池容量（电量计剩余 µAh ÷ 当前电量百分比）；[screenPixels]：屏幕宽 × 高像素。
+     */
+    data class Here(val batteryMah: Double?, val screenPixels: Long?)
+
+    /**
+     * 每用 1 秒 CPU 约耗多少 mAh，两台都还没拔电实测时用：他手机 11-23 batterystats 一天 CyIME 记 149 mAh、
+     * 主进程加 :asr 共用 CPU 约 1,630 秒，约 0.09。电池页的百分比就是这样按 CPU 时间折算出来的，所以和他看到的对得上。
+     */
+    const val DEFAULT_MAH_PER_CPU_SEC = 0.09
+
+    /** 读不到电池容量时按这个算（常见手机 5000 mAh），结果照样写「约」。 */
+    const val DEFAULT_BATTERY_MAH = 5000.0
+
+    /**
+     * 键盘停着时每小时约耗几 % 电：[Cost.idleCpuSecPerMin] 里渲染那部分按本机像素数折算，乘每秒 CPU 的 mAh，除以本机电池容量。
+     * CPU 秒数是实测（或按档折算）的，换成电量这一步是推算，所以显示时一律写「约」。没有 [here] 或没有耗电数返回 null。
+     */
+    fun drainPercentPerHour(idleCpuSecPerMin: Double?, renderShare: Double?, device: Device, here: Here?): Double? {
+        val sec = idleCpuSecPerMin?.takeIf { it > 0 } ?: return null
+        here ?: return null
+        val pixelRatio = here.screenPixels?.takeIf { it > 0 }
+            ?.let { mine -> device.screenPixels?.takeIf { it > 0 }?.let { mine.toDouble() / it } } ?: 1.0
+        val share = (renderShare ?: 0.0).coerceIn(0.0, 1.0)
+        val scaledSec = sec * ((1 - share) + share * pixelRatio)
+        val mAhPerHour = scaledSec * 60 * (device.mAhPerCpuSec ?: DEFAULT_MAH_PER_CPU_SEC)
+        return mAhPerHour / (here.batteryMah?.takeIf { it >= 500 } ?: DEFAULT_BATTERY_MAH) * 100
+    }
+
+    /** 读本机电池容量和屏幕像素；读不到的为 null。 */
+    fun readHere(context: Context): Here {
+        val battery = runCatching {
+            val manager = context.getSystemService(android.os.BatteryManager::class.java)
+            val microAh = manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+            val percent = manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            // 电量太低时剩余量误差大，不用。
+            if (microAh > 0 && percent in 10..100) microAh / 1000.0 / (percent / 100.0) else null
+        }.getOrNull()
+        val pixels = runCatching {
+            val metrics = context.resources.displayMetrics
+            metrics.widthPixels.toLong() * metrics.heightPixels
+        }.getOrNull()?.takeIf { it > 0 }
+        return Here(battery, pixels)
+    }
 
     /**
      * 不同档位每键耗时的大致倍数（高配为 1）：作者平板（骁龙 8 Gen 1）对中端（骁龙 7 系、天玑 8000 级）、
@@ -430,7 +498,14 @@ object PerformanceCosts {
         reference ?: return device
         val missing = reference.items.filterKeys { it !in device.items }
             .mapValues { (_, c) -> if (c.basis == BASIS_ENGINE) c else c.copy(estimated = true) }
-        val noted = device.items.mapValues { (id, c) -> if (c.note == null) c.copy(note = reference.items[id]?.note) else c }
+        val noted = device.items.mapValues { (id, c) ->
+            val ref = reference.items[id]
+            var out = if (c.note == null) c.copy(note = ref?.note) else c
+            // 本机只测了每键耗时、没测耗电时，耗电用参考表的，标估算。
+            if (out.idleCpuSecPerMin == null && ref?.idleCpuSecPerMin != null)
+                out = out.copy(idleCpuSecPerMin = ref.idleCpuSecPerMin, idleCpuEstimated = true)
+            out
+        }
         val voice = device.voiceResident ?: reference.voiceResident?.copy(estimated = true)
         // 引擎实测不是哪台设备的数，补过来照原样标来源，不改成估算。
         val t9 = device.t9Model ?: reference.t9Model?.let { if (it.basis == BASIS_ENGINE) it else it.copy(estimated = true) }
@@ -447,8 +522,11 @@ object PerformanceCosts {
             baseline = device.baseline.x(),
             noiseMs = device.noiseMs * factor,
             // 引擎实测是电脑上的数，不按档位折算（折算系数是按手机芯片定的）。
+            // 停着时的 CPU 秒数也按档折算（同样的活，慢的 CPU 要更久）；换算成电量时不再折一次。
             items = device.items.mapValues { (_, c) -> if (c.basis == BASIS_ENGINE) c
-                else c.copy(keyMs = c.keyMs.x(), keyP95Ms = c.keyP95Ms.x(), baselineKeyMs = c.baselineKeyMs.x()) },
+                else c.copy(keyMs = c.keyMs.x(), keyP95Ms = c.keyP95Ms.x(), baselineKeyMs = c.baselineKeyMs.x(),
+                    idleCpuSecPerMin = c.idleCpuSecPerMin.x(),
+                    idleCpuEstimated = c.idleCpuEstimated || (c.idleCpuSecPerMin != null && factor != 1.0)) },
             combos = device.combos.map { it.copy(keyMs = it.keyMs.x()) },
             dictionaries = device.dictionaries.map { it.copy(keyMs = it.keyMs.x(), keyP95Ms = it.keyP95Ms.x()) },
             dictionaryBaseline = device.dictionaryBaseline?.x(),
@@ -471,23 +549,31 @@ object PerformanceCosts {
             com.kingzcheung.xime.runtime.adaptation.PerformanceTiers.classify(
                 com.kingzcheung.xime.runtime.adaptation.DeviceCapabilityProbe.read(context)).name
         }.getOrDefault("")
-        return pick(local, bundled, Build.MODEL.orEmpty(), tier).also { cached = stamp to it }
+        val here = runCatching { readHere(context) }.getOrNull()
+        return pick(local, bundled, Build.MODEL.orEmpty(), tier)?.copy(here = here).also { cached = stamp to it }
     }
 
     // ---- 文字 ----
 
     /**
-     * “每键 +1.2 ms（慢 4%）· 内存 +30 MB”。每键低于测量误差、内存不到 1 MB 的部分不写；两样都没有返回 null，
-     * 开关下面就不出这一行（用户 11-03「这种东西还有必要写性能开销吗」「也不用大约了」）。表里没有这项也返回 null。
+     * “耗电：键盘停着时 CPU 每分钟 +24 秒 · 每键 +1.2 ms(慢 4%) · 内存 +30 MB”。耗电不到 1 秒/分钟、每键低于测量误差、
+     * 内存不到 1 MB 的部分不写；都没有返回 null，开关下面就不出这一行（用户 11-03「这种东西还有必要写性能开销吗」）。
+     * 还没实测的数前面写「约」（用户 11-23：不准的写个大约是多少，并且标出来；11-03 说过不用写大约，以 11-23 为准）。
+     * 表里没有这项也返回 null。
      */
-    fun describe(cost: Cost?, device: Device): String? {
+    fun describe(cost: Cost?, device: Device, here: Here? = null): String? {
         cost ?: return null
         val parts = mutableListOf<String>()
-        cost.keyMs?.let { ms ->
-            if (ms >= device.noiseMs) parts += "每键 +${oneDecimal(ms)} ms(慢 ${percent(ms, cost.baselineKeyMs ?: device.baseline.keyMs)}%)"
+        val about = if (cost.estimated) "约 " else ""
+        cost.idleCpuSecPerMin?.let { sec ->
+            if (sec >= 1) parts += "耗电：键盘停着时 CPU 每分钟${if (cost.idleCpuEstimated) "约" else ""} +${sec.roundToInt()} 秒" +
+                (drainPercentPerHour(sec, cost.idleRenderShare, device, here)?.let { "(本机约每小时 ${percentText(it)} 电)" } ?: "")
         }
-        cost.keyP95Ms?.let { ms -> if (ms >= device.noiseMs) parts += "慢键 +${oneDecimal(ms)} ms" }
-        cost.memoryMb?.let { mb -> if (mb >= 1) parts += "内存 +${mb.roundToInt()} MB" }
+        cost.keyMs?.let { ms ->
+            if (ms >= device.noiseMs) parts += "每键${about.trimEnd()} +${oneDecimal(ms)} ms(慢 ${percent(ms, cost.baselineKeyMs ?: device.baseline.keyMs)}%)"
+        }
+        cost.keyP95Ms?.let { ms -> if (ms >= device.noiseMs) parts += "慢键${about.trimEnd()} +${oneDecimal(ms)} ms" }
+        cost.memoryMb?.let { mb -> if (mb >= 1) parts += "内存${about.trimEnd()} +${mb.roundToInt()} MB" }
         cost.note?.takeIf { it.isNotBlank() }?.let { parts += it }
         return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
@@ -495,7 +581,7 @@ object PerformanceCosts {
     /** 开关下面那一行：“性能开销：每键 +1.2 ms（慢 4%）”，别的机器测的补上是哪台；没有值得说的开销不出这一行。 */
     fun note(source: Source, id: String, label: String = "性能开销"): String? {
         val cost = source.device.items[id]
-        val text = describe(cost, source.device) ?: return null
+        val text = describe(cost, source.device, source.here) ?: return null
         return "$label：$text" + when {
             cost?.basis == BASIS_ENGINE -> "(电脑引擎实测)"
             cost?.estimated == true -> ""
@@ -510,7 +596,7 @@ object PerformanceCosts {
         val total = total(source.device, ids)
         if (total.items.isEmpty()) return null
         val estimated = total.estimated.isNotEmpty()
-        val text = describe(Cost(total.keyMs, total.memoryMb, total.baselineKeyMs, estimated = estimated), source.device) ?: return null
+        val text = describe(Cost(total.keyMs, total.memoryMb, total.baselineKeyMs, estimated = estimated), source.device, source.here) ?: return null
         return "$label：$text" + if (estimated) "" else reference(source)
     }
 
@@ -529,7 +615,7 @@ object PerformanceCosts {
     fun voiceResidentWarning(source: Source?): String {
         val mb = source?.device?.voiceResident?.memoryMb?.takeIf { it >= 1 }
         val amount = if (source == null || mb == null) "语音模型会一直占着内存"
-            else "语音模型会一直占着 ${mb.roundToInt()} MB 内存" + if (source.sameModel) "" else "(${deviceName(source.device)} 实测)"
+            else "语音模型会一直占着${if (source.device.voiceResident?.estimated == true) "约" else ""} ${mb.roundToInt()} MB 内存" + if (source.sameModel) "" else "(${deviceName(source.device)} 实测)"
         return "$amount。内存紧张时系统会自动卸掉，下次按麦克风要先重新加载，打字不受影响。"
     }
 
@@ -626,8 +712,14 @@ object PerformanceCosts {
         return if (Item.KEY_GAP_LIGHT.id in next) next else next - KeyGapLightPreferences.eventKeys
     }
 
-    /** 一组开关加上常驻语音、九键模型、导入词库之后的总开销。 */
-    data class Load(val keyMs: Double, val keyP95Ms: Double, val memoryMb: Double)
+    /**
+     * 一组开关加上常驻语音、九键模型、导入词库之后的总开销。[estimated]：里面有还没实测的数，写的时候带「约」；
+     * [idleCpuSecPerMin]：键盘停着时多用的 CPU（耗电），按项相加。
+     */
+    data class Load(val keyMs: Double, val keyP95Ms: Double, val memoryMb: Double,
+        val idleCpuSecPerMin: Double = 0.0, val estimated: Boolean = false, val idleCpuEstimated: Boolean = false,
+        /** [idleCpuSecPerMin] 里渲染线程的占比（各项按秒数加权）。 */
+        val idleRenderShare: Double = 0.0)
 
     fun load(device: Device, on: Set<String>, voiceResident: Boolean, t9Model: Boolean, dictionaryWords: Int): Load {
         val switches = total(device, on)
@@ -635,14 +727,22 @@ object PerformanceCosts {
         val voice = device.voiceResident?.takeIf { voiceResident }
         val t9 = device.t9Model?.takeIf { t9Model }
         val extras = listOfNotNull(dictionaries, voice, t9)
+        val idle = on.mapNotNull { device.items[it] }.filter { (it.idleCpuSecPerMin ?: 0.0) > 0.0 }
         return Load(switches.keyMs + extras.sumOf { it.keyMs ?: 0.0 },
             switches.keyP95Ms + extras.sumOf { it.keyP95Ms ?: 0.0 },
-            switches.memoryMb + extras.sumOf { it.memoryMb ?: 0.0 })
+            switches.memoryMb + extras.sumOf { it.memoryMb ?: 0.0 },
+            idleCpuSecPerMin = idle.sumOf { it.idleCpuSecPerMin ?: 0.0 },
+            estimated = switches.estimated.isNotEmpty() || extras.any { it.estimated },
+            idleCpuEstimated = idle.any { it.idleCpuEstimated },
+            idleRenderShare = idle.sumOf { (it.idleCpuSecPerMin ?: 0.0) * (it.idleRenderShare ?: 0.0) } /
+                idle.sumOf { it.idleCpuSecPerMin ?: 0.0 }.coerceAtLeast(1e-9))
     }
 
     /** 总开销一行（同 [describe] 的写法）；小到测不出返回 null。 */
-    fun describeLoad(load: Load, device: Device): String? =
-        describe(Cost(load.keyMs, load.memoryMb, keyP95Ms = load.keyP95Ms.takeIf { it > 0 }), device)
+    fun describeLoad(load: Load, device: Device, here: Here? = null): String? =
+        describe(Cost(load.keyMs, load.memoryMb, keyP95Ms = load.keyP95Ms.takeIf { it > 0 }, estimated = load.estimated,
+            idleCpuSecPerMin = load.idleCpuSecPerMin.takeIf { it > 0 }, idleCpuEstimated = load.idleCpuEstimated,
+            idleRenderShare = load.idleRenderShare), device, here)
 
     /**
      * 总开销下面那行“数从哪来”：开着的几项里多少是电脑引擎实测、多少是设备实测、多少还是按同类推算的，
@@ -708,6 +808,13 @@ object PerformanceCosts {
     }.getOrDefault(false)
 
     fun percent(ms: Double, baseline: Double): Int = if (baseline <= 0) 0 else (ms / baseline * 100).roundToInt()
+
+    /** 「1.2%」；不到 0.1% 写「不到 0.1%」，10% 以上取整。 */
+    fun percentText(value: Double): String = when {
+        value < 0.1 -> "不到 0.1%"
+        value >= 10 -> "${value.roundToInt()}%"
+        else -> "${oneDecimal(value)}%"
+    }
 
     fun oneDecimal(value: Double): String = "%.1f".format(java.util.Locale.ROOT, value)
 }

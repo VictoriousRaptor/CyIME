@@ -79,7 +79,7 @@ class SettingsSearchTest {
     /** 「时长与距离」默认收起：里面每一项搜到都要能让它自动展开（用户 10-31）。 */
     @Test fun foldedTimingItemsExpandOnSearch() {
         val folded = SettingsSearchIndex.filter { it.section == "时长与距离" }.map { it.title }
-        assertEquals(6, folded.size)
+        assertEquals(7, folded.size)
         assertTrue("没登记自动展开：${folded - TIMING_SEARCH_KEYS}", TIMING_SEARCH_KEYS.containsAll(folded))
     }
 
@@ -195,9 +195,11 @@ class SettingsSearchTest {
     /** 11-09 反馈：按「取消候选按钮」「关闭候选按钮」找候选栏最左边的取消键，排第一。 */
     @Test fun candidateCancelButtonFoundByOtherWordOrders() {
         for (q in listOf("取消候选按钮", "关闭候选按钮", "候选时取消按钮", "取消候选", "关闭候选", "关闭按钮")) {
-            assertEquals(q, "候选栏取消按钮", titles(q).first())
+            assertEquals(q, "显示 ‹ 取消键", titles(q).first())
         }
-        assertTrue("联想关闭键用叉号" in titles("取消联想"))
+        assertTrue("关联想用 ⊗" in titles("取消联想"))
+        assertEquals("显示 ‹ 取消键", titles("候选栏取消按钮").first())
+        assertEquals("关联想用 ⊗", titles("联想关闭键用叉号").first())
         assertTrue("键盘尺寸与位置" in titles("单手模式"))
     }
 

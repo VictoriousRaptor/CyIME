@@ -53,11 +53,12 @@ class LetterLanguagesTest {
         val fresh = setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH)
         for (letters in LetterLanguage.entries) {
             assertTrue(letters.language in InputLanguage.supported)
-            assertFalse(letters.language in InputLanguage.speech)
+            // 韩语有 SenseVoice（#453），其余字母语言没有识别器。
+            assertEquals(letters == LetterLanguage.KOREAN, letters.language in InputLanguage.speech)
             assertEquals(fresh + letters.language, LanguagePreferences.withSchemaLanguage(fresh, letters.schemaId))
             assertFalse(letters.schemaId in CyimeInputDefaults.recommended)
         }
-        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE), InputLanguage.speech)
+        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE, InputLanguage.KOREAN), InputLanguage.speech)
     }
 
     @Test fun `schemas are bundled and only mark the language`() {

@@ -52,7 +52,7 @@ internal fun FrostedThemeControls(config: FrostedGlassConfig, isDark: Boolean,
             actualSuffix(config.keyOpacity, effective?.keyOpacity), config.keyOpacity) {
             onChange(config.copy(keyOpacity = (it * 100).roundToInt() / 100f))
         }
-        if (!compact) Text("浅色、深色分别保存。太透时会自动加深，保证文字清楚。",
+        if (!compact) Text("浅色、深色分别保存。太透时自动加深。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

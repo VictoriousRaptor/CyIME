@@ -26,8 +26,8 @@ import org.robolectric.annotation.Config
 import kotlin.math.abs
 
 /**
- * 关闭键放右边（11-22 他）：全面屏手势的人要「不管什么时候点右边同一个位置都能收起键盘」。
- * 开了「候选滑到头回弹展开」又选「右边」：打字时右边「×」取消输入，出联想时「×」关联想，回到空闲同一个位置是收起键盘；左边不放「<」。
+ * 设置「候选栏右边的键」选「关闭」（11-22 他定功能，11-23 改名）：全面屏手势的人要「不管什么时候点右边同一个位置都能收起键盘」。
+ * 存的还是 candidate_swipe_expand + candidate_close_on_right 两个开关都开：打字时右边「×」取消输入，出联想时「×」关联想，回到空闲同一个位置是收起键盘；左边不放「<」。
  * 没选右边（默认）或开关关着时照旧。
  */
 @RunWith(AndroidJUnit4::class)
@@ -40,7 +40,9 @@ class CandidateCloseRightTest {
 
     @After fun reset() {
         prefs.edit().remove(SettingsPreferences.KEY_CANDIDATE_SWIPE_EXPAND)
-            .remove(SettingsPreferences.KEY_CANDIDATE_CLOSE_ON_RIGHT).commit()
+            .remove(SettingsPreferences.KEY_CANDIDATE_CLOSE_ON_RIGHT)
+            .remove(SettingsPreferences.KEY_CANDIDATE_RIGHT_HIDES)
+            .remove(SettingsPreferences.KEY_SHOW_CANDIDATE_CANCEL_BUTTON).commit()
     }
 
     private val typing = CandidateBarState.ChineseCandidates(listOf("这样就很好", "这样就"), inputText = "zheyangjiuhenhao", hasMore = true)
@@ -79,7 +81,8 @@ class CandidateCloseRightTest {
             abs(typingX - predictionX) < 1f && abs(typingX - idleX) < 4f * dp)
     }
 
-    @Test fun leftIsDefaultAndSameAs104() {
+    /** 「经典」开了左右滑（11-23 他选：滑单独做开关，经典也能滑）：右边照旧是 ▾，左边照旧是「‹」。 */
+    @Test fun classicWithSwipeKeepsTheArrow() {
         SettingsPreferences.setCandidateSwipeExpand(context, true)
         assertEquals(false, SettingsPreferences.isCandidateCloseOnRight(context))
         rule.setContent {
@@ -88,8 +91,46 @@ class CandidateCloseRightTest {
                 showPreeditPreview = false, modifier = Modifier.width(400.dp))
         }
         rule.onNodeWithTag("candidate-close-right").assertDoesNotExist()
-        rule.onNodeWithTag("candidate-hide").assertExists()
+        rule.onNodeWithTag("candidate-hide").assertDoesNotExist()
+        rule.onNodeWithTag("candidate-expansion").assertExists()
         rule.onNodeWithContentDescription("取消输入", useUnmergedTree = true).assertExists()
+    }
+
+    /** 「关闭」不看「候选栏取消按钮」：那个开关只管「展开」时左边的「‹」，「关闭」下设置里也不显示它。 */
+    @Test fun closeModeIgnoresTheCancelSwitch() {
+        SettingsPreferences.setCandidateSwipeExpand(context, true)
+        SettingsPreferences.setCandidateCloseOnRight(context, true)
+        SettingsPreferences.setShowCandidateCancelButton(context, false)
+        rule.setContent {
+            CandidateBar(state = typing, visuals = visuals,
+                callbacks = CandidateBarCallbacks(onCandidateSelect = {}, onCancelInput = {}, onShowMoreCandidates = {}, onHideKeyboard = {}),
+                showPreeditPreview = false, modifier = Modifier.width(400.dp))
+        }
+        rule.onNodeWithTag("candidate-close-right").assertExistsWithDescription("取消输入")
+        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
+    }
+
+    /** 「收键盘」（= 1.15.103，11-24）：打字、联想时右边都是收起键盘，左边「‹」取消，没有 ▾。 */
+    @Test fun hideModeRightAlwaysHidesTheKeyboard() {
+        SettingsPreferences.setCandidateRightKey(context, com.kingzcheung.xime.settings.CandidateRightKey.HIDE)
+        assertEquals(true, SettingsPreferences.isCandidateSwipeExpand(context))
+        val state = mutableStateOf<CandidateBarState>(typing)
+        var cancels = 0
+        var hides = 0
+        rule.setContent {
+            CandidateBar(state = state.value, visuals = visuals,
+                callbacks = CandidateBarCallbacks(onCandidateSelect = { state.value = association },
+                    onCancelInput = { cancels++ }, onShowMoreCandidates = {}, onHideKeyboard = { hides++ }),
+                showPreeditPreview = false, modifier = Modifier.width(400.dp))
+        }
+        rule.onNodeWithTag("candidate-expansion").assertDoesNotExist()
+        rule.onNodeWithTag("candidate-close-right").assertDoesNotExist()
+        rule.onNodeWithContentDescription("取消输入", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("candidate-hide").performClick()
+        rule.runOnIdle { assertEquals(1, hides); assertEquals(0, cancels) }
+        rule.onNodeWithTag("bar-candidate:0", useUnmergedTree = true).performClick()
+        rule.onNodeWithTag("candidate-hide").performClick()
+        rule.runOnIdle { assertEquals(2, hides); assertEquals(0, cancels) }
     }
 
     @Test fun rightChoiceDoesNothingWhileSwipeExpandIsOff() {

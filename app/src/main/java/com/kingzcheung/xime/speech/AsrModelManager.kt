@@ -99,27 +99,24 @@ class AsrModelManager(private val context: Context) {
             "所选模型不支持${language.displayName}语音"
         }
         // SenseVoice's automatic language detection turns short, phone-quality Mandarin into Japanese
-        // (2026-10-18: up to 23% of 0.5 s telephone-band clips with "auto", none with "zh"). Chinese and
-        // an unspecified language always decode as Chinese, in every build. Detection stays only when the
-        // voice language is explicitly Japanese or English (one shared engine for both, as before).
+        // (2026-10-18: up to 23% of 0.5 s telephone-band clips with "auto", none with "zh"). Mandarin and
+        // an unspecified language default to Chinese. Japanese and English share automatic detection.
         val languageId = when (language) {
             InputLanguage.JAPANESE, InputLanguage.ENGLISH -> "auto"
-            else -> "zh"
+            // 韩语只走 SenseVoice（#453），按韩语解，不自动判断语言、不当中文。
+            InputLanguage.KOREAN -> "ko"
+            else -> if (mode == SpeechModelCatalog.SENSEVOICE_AUTO) "auto" else "zh"
         }
         fun dir(id: String): File {
             ModelStorage.migrateLegacyForModel(context, id)
             return ModelStorage.getModelDir(context, id)
         }
-        val firstId = when (mode) {
-            SpeechModelCatalog.TWO_PASS -> SpeechModelCatalog.PARAFORMER
-            SpeechModelCatalog.ZIPFORMER_TWO_PASS -> SpeechModelCatalog.ZIPFORMER
-            else -> null
-        }
-        if (firstId != null) return Selection(mode,
-            getAsrModels().first { it.id == firstId }, dir(firstId), dir(SpeechModelCatalog.SENSEVOICE), languageId)
-        val info = getAsrModels().firstOrNull { it.id == mode } ?: error("不支持的语音模型：$mode")
-        return if (info.modelType == "sensevoice") Selection(mode, null, null, dir(mode), languageId)
-        else Selection(mode, info, dir(mode), null, languageId)
+        val primary = SpeechModelSelection.primary(mode)
+        if (primary == SpeechModelCatalog.SENSEVOICE)
+            return Selection(mode, null, null, dir(primary), languageId)
+        val info = getAsrModels().firstOrNull { it.id == primary } ?: error("不支持的语音模型：$mode")
+        val correction = if (SpeechModelSelection.hasCorrection(mode)) dir(SpeechModelCatalog.SENSEVOICE) else null
+        return Selection(mode, info, dir(primary), correction, languageId)
     }
 
     /** X-ASR for 整句定稿, when chosen ([finalizer]) and fully downloaded; when it applies is [SpeechModelSelection.xasrFinalizes]. */
@@ -170,6 +167,7 @@ class AsrModelManager(private val context: Context) {
                 // 一个日语模型都没下载时：指向 153 MB 的轻量版（和自动选择、开箱引导的先后一致），不是 586 MB 的原版。
                 InputLanguage.JAPANESE -> SpeechModelCatalog.ZIPFORMER_JA_INT8
                 InputLanguage.ENGLISH -> SpeechModelCatalog.PARAFORMER
+                in InputLanguage.senseVoiceOnly -> SpeechModelCatalog.SENSEVOICE
                 else -> com.kingzcheung.xime.model.DeviceDefaults.voiceModel(context)
             }
         }

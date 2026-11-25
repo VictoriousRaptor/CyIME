@@ -32,6 +32,8 @@ data class CustomPhraseUiState(
     val editPlace: String = "",
     /** 固定的词（长按候选固定的、短语填了第几位的），按编码排。 */
     val pins: List<PinnedWord> = emptyList(),
+    /** 从文件导入短语以后的结果（#298）；没导入过是 null。 */
+    val importMessage: String? = null,
 )
 
 /** 一条固定：编码（九键是数字）、词、第几位（0 排第一）。 */
@@ -151,6 +153,33 @@ class CustomPhraseViewModel(application: Application) : AndroidViewModel(applica
             }
             withContext(Dispatchers.IO) { PersonalDictManager.applyCustomPhrases(context, schemaId) }
             applyPlace(null, entry, place)
+        }
+    }
+
+    /** 从文件批量导入短语（#298），格式见 [com.kingzcheung.xime.settings.PhraseImport]。已有的不重复加。 */
+    fun importPhrases(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                }.getOrNull()?.let(com.kingzcheung.xime.settings.PhraseImport::parse)
+            }
+            if (result == null) {
+                _uiState.update { it.copy(importMessage = "无法打开文件") }
+                return@launch
+            }
+            val current = _uiState.value.entries
+            val added = com.kingzcheung.xime.settings.PhraseImport.merge(current, result.entries)
+            if (added.isNotEmpty()) {
+                val updated = current + added
+                withContext(Dispatchers.IO) { PersonalDictManager.saveCustomPhrases(context, schemaId, updated) }
+                _uiState.update { it.copy(entries = updated, filteredEntries = filterEntries(updated, it.searchQuery)) }
+                withContext(Dispatchers.IO) { PersonalDictManager.applyCustomPhrases(context, schemaId) }
+            }
+            _uiState.update {
+                it.copy(importMessage = com.kingzcheung.xime.settings.PhraseImport.message(
+                    added.size, result.entries.size - added.size, result.skipped))
+            }
         }
     }
 

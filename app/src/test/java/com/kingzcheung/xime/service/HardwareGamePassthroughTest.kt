@@ -37,6 +37,16 @@ class HardwareGamePassthroughTest {
         assertFalse(HardwareGamePassthrough.active(enabled = true, hardwareKeyboard = true, game = false))
     }
 
+    @Test fun `apps picked for passthrough skip the game check and the switch but still need a keyboard`() {
+        // #265：远程桌面、没标成游戏的模拟器，用户单独选了就直通。
+        assertTrue(HardwareGamePassthrough.active(enabled = false, hardwareKeyboard = true, game = false, listed = true))
+        assertTrue(HardwareGamePassthrough.active(enabled = true, hardwareKeyboard = true, game = false, listed = true))
+        // 没接实体键盘：照旧弹屏幕键盘。
+        assertFalse(HardwareGamePassthrough.active(enabled = false, hardwareKeyboard = false, game = false, listed = true))
+        // 没选的应用和以前一样。
+        assertFalse(HardwareGamePassthrough.active(enabled = false, hardwareKeyboard = true, game = true, listed = false))
+    }
+
     @Test fun `package lookup is cached until the editor package changes`() {
         val lookups = mutableListOf<String>()
         val packages = HardwareGamePackages { name -> lookups += name; name == "com.example.game" }

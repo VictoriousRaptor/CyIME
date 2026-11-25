@@ -1,0 +1,1154 @@
+# 口语里常说的「动作 + 时长/动量/结果」短语（2026-11-24 他报：全拼 jiangbantian 首选是「将半天」，不是「讲半天」）。
+# 原因：这些短语不在词典里，只能逐字拼；单字 将 比 讲 权重高，就成了 将+半天。同样的还有 吵半天→超+半天、骂一下→吗+一下、
+# 劝了几句→全了+几句、问了一下→闻了一下。
+# 怎么选的：约 150 个口语单字动词 × 半天/好久/一下/一遍/两句/一声/一趟/清楚/完了/不了 等补语（共 2775 个组合），按生成后的
+# 主词库（105）逐字拼句，只留首选会错的；去掉不自然的组合；读音逐条核对（还 huan、弹 tan、了 le/liao、宿 xiu）。生成与审校记录在
+# lexicon_source.py 的 zh_spoken 集合（Claude 生成，逐条写审校理由）。
+# 权重：词典里没有、同码也没别的词的给 500（整词就能赢过逐字拼，又不抢简拼和别的词）；同码几个都缺的，常用的排前
+# （吵>抄>炒、堵>读、做>坐…）。同码已有冷僻词压着的（骂一下<蚂蚁侠、问了一下<闻了一下、写一下<歇一下），给同码第一名 + 1，至少 500。
+# 和 cyime_user_fixes.tsv 一样只往上提，一行只动自己的码。text<TAB>code<TAB>weight
+# 同码被冷僻词压住的（第一名 + 1）
+玩半天	wan ban tian	500
+谈好久	tan hao jiu	500
+泡一会儿	pao yi hui er	500
+录一天	lu yi tian	500
+笑一阵子	xiao yi zhen zi	500
+睡一宿	shui yi xiu	500
+骂一下	ma yi xia	500
+写一下	xie yi xia	1875
+抢一下	qiang yi xia	500
+回一下	hui yi xia	500
+换一下	huan yi xia	500
+填一下	tian yi xia	500
+签一下	qian yi xia	500
+问了一下	wen le yi xia	1072
+录了一下	lu le yi xia	500
+抢了一下	qiang le yi xia	500
+量了一下	liang le yi xia	500
+填了一下	tian le yi xia	500
+交完了	jiao wan le	500
+读错了	du cuo le	500
+背完了	bei wan le	500
+不聊了	bu liao le	11541
+起了没	qi le mei	500
+# 词典里没有的
+讲半天	jiang ban tian	500
+骂半天	ma ban tian	500
+吵半天	chao ban tian	600
+劝半天	quan ban tian	500
+哄半天	hong ban tian	500
+读半天	du ban tian	500
+写半天	xie ban tian	500
+背半天	bei ban tian	500
+练半天	lian ban tian	500
+查半天	cha ban tian	500
+试半天	shi ban tian	500
+改半天	gai ban tian	500
+修半天	xiu ban tian	500
+搞半天	gao ban tian	500
+干半天	gan ban tian	500
+喝半天	he ban tian	500
+睡半天	shui ban tian	500
+坐半天	zuo ban tian	500
+逛半天	guang ban tian	500
+爬半天	pa ban tian	500
+游半天	you ban tian	500
+排半天	pai ban tian	500
+挤半天	ji ban tian	500
+闹半天	nao ban tian	500
+熬半天	ao ban tian	500
+憋半天	bie ban tian	500
+愣半天	leng ban tian	500
+磨半天	mo ban tian	500
+唱半天	chang ban tian	500
+弹半天	tan ban tian	500
+刷半天	shua ban tian	500
+录半天	lu ban tian	500
+画半天	hua ban tian	500
+煮半天	zhu ban tian	500
+炒半天	chao ban tian	450
+烤半天	kao ban tian	500
+挑半天	tiao ban tian	500
+陪半天	pei ban tian	500
+盯半天	ding ban tian	500
+猜半天	cai ban tian	500
+数半天	shu ban tian	500
+抄半天	chao ban tian	500
+念半天	nian ban tian	500
+骗半天	pian ban tian	500
+逗半天	dou ban tian	500
+敲半天	qiao ban tian	500
+剪半天	jian ban tian	500
+搬半天	ban ban tian	500
+收半天	shou ban tian	500
+晃半天	huang ban tian	500
+蹲半天	dun ban tian	500
+抱半天	bao ban tian	500
+堵半天	du ban tian	600
+讲好久	jiang hao jiu	500
+骂好久	ma hao jiu	500
+吵好久	chao hao jiu	600
+劝好久	quan hao jiu	500
+哄好久	hong hao jiu	500
+看好久	kan hao jiu	500
+听好久	ting hao jiu	500
+读好久	du hao jiu	500
+写好久	xie hao jiu	500
+背好久	bei hao jiu	500
+练好久	lian hao jiu	500
+查好久	cha hao jiu	500
+试好久	shi hao jiu	500
+改好久	gai hao jiu	500
+修好久	xiu hao jiu	500
+弄好久	nong hao jiu	500
+搞好久	gao hao jiu	500
+做好久	zuo hao jiu	600
+干好久	gan hao jiu	500
+玩好久	wan hao jiu	500
+睡好久	shui hao jiu	500
+躺好久	tang hao jiu	500
+坐好久	zuo hao jiu	500
+逛好久	guang hao jiu	500
+爬好久	pa hao jiu	500
+游好久	you hao jiu	500
+排好久	pai hao jiu	500
+挤好久	ji hao jiu	500
+闹好久	nao hao jiu	500
+熬好久	ao hao jiu	500
+憋好久	bie hao jiu	500
+愣好久	leng hao jiu	500
+磨好久	mo hao jiu	500
+笑好久	xiao hao jiu	500
+唱好久	chang hao jiu	500
+刷好久	shua hao jiu	500
+录好久	lu hao jiu	500
+画好久	hua hao jiu	500
+洗好久	xi hao jiu	500
+煮好久	zhu hao jiu	500
+炒好久	chao hao jiu	450
+烤好久	kao hao jiu	500
+泡好久	pao hao jiu	500
+挑好久	tiao hao jiu	500
+选好久	xuan hao jiu	500
+盯好久	ding hao jiu	500
+猜好久	cai hao jiu	500
+数好久	shu hao jiu	500
+抄好久	chao hao jiu	500
+念好久	nian hao jiu	500
+骗好久	pian hao jiu	500
+逗好久	dou hao jiu	500
+敲好久	qiao hao jiu	500
+剪好久	jian hao jiu	500
+搬好久	ban hao jiu	500
+收好久	shou hao jiu	500
+晃好久	huang hao jiu	500
+抱好久	bao hao jiu	500
+堵好久	du hao jiu	600
+讲老半天	jiang lao ban tian	500
+骂老半天	ma lao ban tian	500
+吵老半天	chao lao ban tian	600
+劝老半天	quan lao ban tian	500
+哄老半天	hong lao ban tian	500
+读老半天	du lao ban tian	500
+写老半天	xie lao ban tian	500
+背老半天	bei lao ban tian	500
+练老半天	lian lao ban tian	500
+查老半天	cha lao ban tian	500
+试老半天	shi lao ban tian	500
+改老半天	gai lao ban tian	500
+修老半天	xiu lao ban tian	500
+搞老半天	gao lao ban tian	500
+做老半天	zuo lao ban tian	600
+干老半天	gan lao ban tian	500
+玩老半天	wan lao ban tian	500
+喝老半天	he lao ban tian	500
+睡老半天	shui lao ban tian	500
+坐老半天	zuo lao ban tian	500
+逛老半天	guang lao ban tian	500
+爬老半天	pa lao ban tian	500
+游老半天	you lao ban tian	500
+排老半天	pai lao ban tian	500
+挤老半天	ji lao ban tian	500
+闹老半天	nao lao ban tian	500
+熬老半天	ao lao ban tian	500
+憋老半天	bie lao ban tian	500
+愣老半天	leng lao ban tian	500
+磨老半天	mo lao ban tian	500
+笑老半天	xiao lao ban tian	500
+唱老半天	chang lao ban tian	500
+弹老半天	tan lao ban tian	500
+刷老半天	shua lao ban tian	500
+录老半天	lu lao ban tian	500
+画老半天	hua lao ban tian	500
+煮老半天	zhu lao ban tian	500
+炒老半天	chao lao ban tian	450
+烤老半天	kao lao ban tian	500
+泡老半天	pao lao ban tian	500
+挑老半天	tiao lao ban tian	500
+盯老半天	ding lao ban tian	500
+猜老半天	cai lao ban tian	500
+数老半天	shu lao ban tian	500
+抄老半天	chao lao ban tian	500
+念老半天	nian lao ban tian	500
+骗老半天	pian lao ban tian	500
+逗老半天	dou lao ban tian	500
+敲老半天	qiao lao ban tian	500
+剪老半天	jian lao ban tian	500
+搬老半天	ban lao ban tian	500
+收老半天	shou lao ban tian	500
+晃老半天	huang lao ban tian	500
+蹲老半天	dun lao ban tian	500
+抱老半天	bao lao ban tian	500
+堵老半天	du lao ban tian	600
+讲一会儿	jiang yi hui er	500
+骂一会儿	ma yi hui er	500
+劝一会儿	quan yi hui er	500
+哄一会儿	hong yi hui er	500
+读一会儿	du yi hui er	500
+背一会儿	bei yi hui er	500
+练一会儿	lian yi hui er	500
+查一会儿	cha yi hui er	500
+试一会儿	shi yi hui er	500
+改一会儿	gai yi hui er	500
+修一会儿	xiu yi hui er	500
+搞一会儿	gao yi hui er	500
+干一会儿	gan yi hui er	500
+喝一会儿	he yi hui er	500
+逛一会儿	guang yi hui er	500
+游一会儿	you yi hui er	500
+排一会儿	pai yi hui er	500
+挤一会儿	ji yi hui er	500
+闹一会儿	nao yi hui er	500
+熬一会儿	ao yi hui er	500
+憋一会儿	bie yi hui er	500
+愣一会儿	leng yi hui er	500
+磨一会儿	mo yi hui er	500
+笑一会儿	xiao yi hui er	500
+唱一会儿	chang yi hui er	500
+弹一会儿	tan yi hui er	500
+刷一会儿	shua yi hui er	500
+录一会儿	lu yi hui er	500
+画一会儿	hua yi hui er	500
+烤一会儿	kao yi hui er	500
+挑一会儿	tiao yi hui er	500
+盯一会儿	ding yi hui er	500
+猜一会儿	cai yi hui er	500
+数一会儿	shu yi hui er	500
+念一会儿	nian yi hui er	500
+骗一会儿	pian yi hui er	500
+逗一会儿	dou yi hui er	500
+敲一会儿	qiao yi hui er	500
+剪一会儿	jian yi hui er	500
+搬一会儿	ban yi hui er	500
+收一会儿	shou yi hui er	500
+晃一会儿	huang yi hui er	500
+蹲一会儿	dun yi hui er	500
+抱一会儿	bao yi hui er	500
+堵一会儿	du yi hui er	600
+讲一下午	jiang yi xia wu	500
+谈一下午	tan yi xia wu	600
+骂一下午	ma yi xia wu	500
+吵一下午	chao yi xia wu	600
+劝一下午	quan yi xia wu	500
+哄一下午	hong yi xia wu	500
+等一下午	deng yi xia wu	500
+读一下午	du yi xia wu	500
+写一下午	xie yi xia wu	500
+背一下午	bei yi xia wu	500
+练一下午	lian yi xia wu	500
+查一下午	cha yi xia wu	500
+试一下午	shi yi xia wu	500
+改一下午	gai yi xia wu	500
+修一下午	xiu yi xia wu	500
+搞一下午	gao yi xia wu	500
+干一下午	gan yi xia wu	500
+玩一下午	wan yi xia wu	500
+喝一下午	he yi xia wu	500
+睡一下午	shui yi xia wu	500
+躺一下午	tang yi xia wu	500
+逛一下午	guang yi xia wu	500
+爬一下午	pa yi xia wu	500
+游一下午	you yi xia wu	500
+排一下午	pai yi xia wu	500
+挤一下午	ji yi xia wu	500
+闹一下午	nao yi xia wu	500
+熬一下午	ao yi xia wu	500
+憋一下午	bie yi xia wu	500
+愣一下午	leng yi xia wu	500
+磨一下午	mo yi xia wu	500
+笑一下午	xiao yi xia wu	500
+唱一下午	chang yi xia wu	500
+弹一下午	tan yi xia wu	500
+刷一下午	shua yi xia wu	500
+翻一下午	fan yi xia wu	500
+录一下午	lu yi xia wu	500
+画一下午	hua yi xia wu	500
+煮一下午	zhu yi xia wu	500
+炒一下午	chao yi xia wu	450
+烤一下午	kao yi xia wu	500
+泡一下午	pao yi xia wu	500
+挑一下午	tiao yi xia wu	500
+盯一下午	ding yi xia wu	500
+猜一下午	cai yi xia wu	500
+数一下午	shu yi xia wu	500
+抄一下午	chao yi xia wu	500
+念一下午	nian yi xia wu	500
+骗一下午	pian yi xia wu	500
+逗一下午	dou yi xia wu	500
+敲一下午	qiao yi xia wu	500
+剪一下午	jian yi xia wu	500
+搬一下午	ban yi xia wu	500
+收一下午	shou yi xia wu	500
+晃一下午	huang yi xia wu	500
+蹲一下午	dun yi xia wu	500
+抱一下午	bao yi xia wu	500
+堵一下午	du yi xia wu	600
+讲一上午	jiang yi shang wu	500
+骂一上午	ma yi shang wu	500
+吵一上午	chao yi shang wu	600
+劝一上午	quan yi shang wu	500
+哄一上午	hong yi shang wu	500
+读一上午	du yi shang wu	500
+写一上午	xie yi shang wu	500
+背一上午	bei yi shang wu	500
+练一上午	lian yi shang wu	500
+查一上午	cha yi shang wu	500
+试一上午	shi yi shang wu	500
+改一上午	gai yi shang wu	500
+修一上午	xiu yi shang wu	500
+搞一上午	gao yi shang wu	500
+干一上午	gan yi shang wu	500
+玩一上午	wan yi shang wu	500
+喝一上午	he yi shang wu	500
+睡一上午	shui yi shang wu	500
+逛一上午	guang yi shang wu	500
+爬一上午	pa yi shang wu	500
+游一上午	you yi shang wu	500
+排一上午	pai yi shang wu	500
+挤一上午	ji yi shang wu	500
+闹一上午	nao yi shang wu	500
+熬一上午	ao yi shang wu	500
+憋一上午	bie yi shang wu	500
+愣一上午	leng yi shang wu	500
+磨一上午	mo yi shang wu	500
+笑一上午	xiao yi shang wu	500
+唱一上午	chang yi shang wu	500
+弹一上午	tan yi shang wu	500
+刷一上午	shua yi shang wu	500
+翻一上午	fan yi shang wu	500
+录一上午	lu yi shang wu	500
+画一上午	hua yi shang wu	500
+煮一上午	zhu yi shang wu	500
+炒一上午	chao yi shang wu	450
+烤一上午	kao yi shang wu	500
+泡一上午	pao yi shang wu	500
+挑一上午	tiao yi shang wu	500
+盯一上午	ding yi shang wu	500
+猜一上午	cai yi shang wu	500
+数一上午	shu yi shang wu	500
+抄一上午	chao yi shang wu	500
+念一上午	nian yi shang wu	500
+骗一上午	pian yi shang wu	500
+逗一上午	dou yi shang wu	500
+敲一上午	qiao yi shang wu	500
+剪一上午	jian yi shang wu	500
+搬一上午	ban yi shang wu	500
+收一上午	shou yi shang wu	500
+晃一上午	huang yi shang wu	500
+蹲一上午	dun yi shang wu	500
+抱一上午	bao yi shang wu	500
+堵一上午	du yi shang wu	600
+讲一晚上	jiang yi wan shang	500
+骂一晚上	ma yi wan shang	500
+吵一晚上	chao yi wan shang	600
+劝一晚上	quan yi wan shang	500
+哄一晚上	hong yi wan shang	500
+读一晚上	du yi wan shang	500
+写一晚上	xie yi wan shang	500
+背一晚上	bei yi wan shang	500
+练一晚上	lian yi wan shang	500
+查一晚上	cha yi wan shang	500
+试一晚上	shi yi wan shang	500
+改一晚上	gai yi wan shang	500
+修一晚上	xiu yi wan shang	500
+搞一晚上	gao yi wan shang	500
+干一晚上	gan yi wan shang	500
+玩一晚上	wan yi wan shang	500
+喝一晚上	he yi wan shang	500
+睡一晚上	shui yi wan shang	500
+逛一晚上	guang yi wan shang	500
+爬一晚上	pa yi wan shang	500
+游一晚上	you yi wan shang	500
+排一晚上	pai yi wan shang	500
+挤一晚上	ji yi wan shang	500
+闹一晚上	nao yi wan shang	500
+熬一晚上	ao yi wan shang	500
+憋一晚上	bie yi wan shang	500
+愣一晚上	leng yi wan shang	500
+磨一晚上	mo yi wan shang	500
+笑一晚上	xiao yi wan shang	500
+唱一晚上	chang yi wan shang	500
+弹一晚上	tan yi wan shang	500
+刷一晚上	shua yi wan shang	500
+翻一晚上	fan yi wan shang	500
+录一晚上	lu yi wan shang	500
+画一晚上	hua yi wan shang	500
+炒一晚上	chao yi wan shang	450
+烤一晚上	kao yi wan shang	500
+泡一晚上	pao yi wan shang	500
+挑一晚上	tiao yi wan shang	500
+盯一晚上	ding yi wan shang	500
+猜一晚上	cai yi wan shang	500
+数一晚上	shu yi wan shang	500
+抄一晚上	chao yi wan shang	500
+念一晚上	nian yi wan shang	500
+骗一晚上	pian yi wan shang	500
+逗一晚上	dou yi wan shang	500
+敲一晚上	qiao yi wan shang	500
+剪一晚上	jian yi wan shang	500
+搬一晚上	ban yi wan shang	500
+收一晚上	shou yi wan shang	500
+晃一晚上	huang yi wan shang	500
+蹲一晚上	dun yi wan shang	500
+抱一晚上	bao yi wan shang	500
+堵一晚上	du yi wan shang	600
+讲一整天	jiang yi zheng tian	500
+骂一整天	ma yi zheng tian	500
+吵一整天	chao yi zheng tian	600
+劝一整天	quan yi zheng tian	500
+哄一整天	hong yi zheng tian	500
+读一整天	du yi zheng tian	500
+写一整天	xie yi zheng tian	500
+背一整天	bei yi zheng tian	500
+练一整天	lian yi zheng tian	500
+查一整天	cha yi zheng tian	500
+试一整天	shi yi zheng tian	500
+改一整天	gai yi zheng tian	500
+修一整天	xiu yi zheng tian	500
+搞一整天	gao yi zheng tian	500
+干一整天	gan yi zheng tian	500
+玩一整天	wan yi zheng tian	500
+喝一整天	he yi zheng tian	500
+睡一整天	shui yi zheng tian	500
+坐一整天	zuo yi zheng tian	500
+逛一整天	guang yi zheng tian	500
+爬一整天	pa yi zheng tian	500
+游一整天	you yi zheng tian	500
+排一整天	pai yi zheng tian	500
+挤一整天	ji yi zheng tian	500
+闹一整天	nao yi zheng tian	500
+熬一整天	ao yi zheng tian	500
+憋一整天	bie yi zheng tian	500
+愣一整天	leng yi zheng tian	500
+磨一整天	mo yi zheng tian	500
+笑一整天	xiao yi zheng tian	500
+唱一整天	chang yi zheng tian	500
+弹一整天	tan yi zheng tian	500
+刷一整天	shua yi zheng tian	500
+翻一整天	fan yi zheng tian	500
+录一整天	lu yi zheng tian	500
+画一整天	hua yi zheng tian	500
+煮一整天	zhu yi zheng tian	500
+炒一整天	chao yi zheng tian	450
+烤一整天	kao yi zheng tian	500
+泡一整天	pao yi zheng tian	500
+挑一整天	tiao yi zheng tian	500
+盯一整天	ding yi zheng tian	500
+猜一整天	cai yi zheng tian	500
+数一整天	shu yi zheng tian	500
+抄一整天	chao yi zheng tian	500
+念一整天	nian yi zheng tian	500
+骗一整天	pian yi zheng tian	500
+逗一整天	dou yi zheng tian	500
+敲一整天	qiao yi zheng tian	500
+剪一整天	jian yi zheng tian	500
+搬一整天	ban yi zheng tian	500
+收一整天	shou yi zheng tian	500
+晃一整天	huang yi zheng tian	500
+蹲一整天	dun yi zheng tian	500
+抱一整天	bao yi zheng tian	500
+堵一整天	du yi zheng tian	600
+讲一天	jiang yi tian	500
+骂一天	ma yi tian	500
+吵一天	chao yi tian	600
+劝一天	quan yi tian	500
+哄一天	hong yi tian	500
+读一天	du yi tian	500
+背一天	bei yi tian	500
+练一天	lian yi tian	500
+改一天	gai yi tian	500
+搞一天	gao yi tian	500
+喝一天	he yi tian	500
+爬一天	pa yi tian	500
+排一天	pai yi tian	500
+挤一天	ji yi tian	500
+闹一天	nao yi tian	500
+熬一天	ao yi tian	500
+愣一天	leng yi tian	500
+磨一天	mo yi tian	500
+唱一天	chang yi tian	500
+弹一天	tan yi tian	500
+刷一天	shua yi tian	500
+翻一天	fan yi tian	500
+画一天	hua yi tian	500
+炒一天	chao yi tian	450
+烤一天	kao yi tian	500
+挑一天	tiao yi tian	500
+盯一天	ding yi tian	500
+猜一天	cai yi tian	500
+数一天	shu yi tian	500
+抄一天	chao yi tian	500
+念一天	nian yi tian	500
+骗一天	pian yi tian	500
+逗一天	dou yi tian	500
+敲一天	qiao yi tian	500
+剪一天	jian yi tian	500
+搬一天	ban yi tian	500
+收一天	shou yi tian	500
+晃一天	huang yi tian	500
+蹲一天	dun yi tian	500
+抱一天	bao yi tian	500
+堵一天	du yi tian	600
+讲半个小时	jiang ban ge xiao shi	500
+骂半个小时	ma ban ge xiao shi	500
+吵半个小时	chao ban ge xiao shi	600
+劝半个小时	quan ban ge xiao shi	500
+哄半个小时	hong ban ge xiao shi	500
+读半个小时	du ban ge xiao shi	500
+写半个小时	xie ban ge xiao shi	500
+背半个小时	bei ban ge xiao shi	500
+练半个小时	lian ban ge xiao shi	500
+查半个小时	cha ban ge xiao shi	500
+试半个小时	shi ban ge xiao shi	500
+改半个小时	gai ban ge xiao shi	500
+修半个小时	xiu ban ge xiao shi	500
+搞半个小时	gao ban ge xiao shi	500
+干半个小时	gan ban ge xiao shi	500
+玩半个小时	wan ban ge xiao shi	500
+喝半个小时	he ban ge xiao shi	500
+睡半个小时	shui ban ge xiao shi	500
+坐半个小时	zuo ban ge xiao shi	500
+逛半个小时	guang ban ge xiao shi	500
+爬半个小时	pa ban ge xiao shi	500
+游半个小时	you ban ge xiao shi	500
+排半个小时	pai ban ge xiao shi	500
+挤半个小时	ji ban ge xiao shi	500
+闹半个小时	nao ban ge xiao shi	500
+熬半个小时	ao ban ge xiao shi	500
+憋半个小时	bie ban ge xiao shi	500
+愣半个小时	leng ban ge xiao shi	500
+磨半个小时	mo ban ge xiao shi	500
+笑半个小时	xiao ban ge xiao shi	500
+唱半个小时	chang ban ge xiao shi	500
+弹半个小时	tan ban ge xiao shi	500
+刷半个小时	shua ban ge xiao shi	500
+录半个小时	lu ban ge xiao shi	500
+画半个小时	hua ban ge xiao shi	500
+炒半个小时	chao ban ge xiao shi	450
+烤半个小时	kao ban ge xiao shi	500
+泡半个小时	pao ban ge xiao shi	500
+挑半个小时	tiao ban ge xiao shi	500
+盯半个小时	ding ban ge xiao shi	500
+猜半个小时	cai ban ge xiao shi	500
+数半个小时	shu ban ge xiao shi	500
+抄半个小时	chao ban ge xiao shi	500
+念半个小时	nian ban ge xiao shi	500
+骗半个小时	pian ban ge xiao shi	500
+逗半个小时	dou ban ge xiao shi	500
+敲半个小时	qiao ban ge xiao shi	500
+剪半个小时	jian ban ge xiao shi	500
+搬半个小时	ban ban ge xiao shi	500
+收半个小时	shou ban ge xiao shi	500
+晃半个小时	huang ban ge xiao shi	500
+蹲半个小时	dun ban ge xiao shi	500
+抱半个小时	bao ban ge xiao shi	500
+堵半个小时	du ban ge xiao shi	600
+讲一个小时	jiang yi ge xiao shi	500
+骂一个小时	ma yi ge xiao shi	500
+吵一个小时	chao yi ge xiao shi	600
+劝一个小时	quan yi ge xiao shi	500
+哄一个小时	hong yi ge xiao shi	500
+读一个小时	du yi ge xiao shi	500
+写一个小时	xie yi ge xiao shi	500
+背一个小时	bei yi ge xiao shi	500
+练一个小时	lian yi ge xiao shi	500
+查一个小时	cha yi ge xiao shi	500
+改一个小时	gai yi ge xiao shi	500
+修一个小时	xiu yi ge xiao shi	500
+搞一个小时	gao yi ge xiao shi	500
+干一个小时	gan yi ge xiao shi	500
+玩一个小时	wan yi ge xiao shi	500
+喝一个小时	he yi ge xiao shi	500
+睡一个小时	shui yi ge xiao shi	500
+坐一个小时	zuo yi ge xiao shi	500
+逛一个小时	guang yi ge xiao shi	500
+爬一个小时	pa yi ge xiao shi	500
+游一个小时	you yi ge xiao shi	500
+排一个小时	pai yi ge xiao shi	500
+挤一个小时	ji yi ge xiao shi	500
+闹一个小时	nao yi ge xiao shi	500
+熬一个小时	ao yi ge xiao shi	500
+憋一个小时	bie yi ge xiao shi	500
+愣一个小时	leng yi ge xiao shi	500
+磨一个小时	mo yi ge xiao shi	500
+笑一个小时	xiao yi ge xiao shi	500
+唱一个小时	chang yi ge xiao shi	500
+弹一个小时	tan yi ge xiao shi	500
+刷一个小时	shua yi ge xiao shi	500
+录一个小时	lu yi ge xiao shi	500
+画一个小时	hua yi ge xiao shi	500
+煮一个小时	zhu yi ge xiao shi	500
+炒一个小时	chao yi ge xiao shi	450
+烤一个小时	kao yi ge xiao shi	500
+泡一个小时	pao yi ge xiao shi	500
+挑一个小时	tiao yi ge xiao shi	500
+盯一个小时	ding yi ge xiao shi	500
+猜一个小时	cai yi ge xiao shi	500
+数一个小时	shu yi ge xiao shi	500
+抄一个小时	chao yi ge xiao shi	500
+念一个小时	nian yi ge xiao shi	500
+骗一个小时	pian yi ge xiao shi	500
+逗一个小时	dou yi ge xiao shi	500
+敲一个小时	qiao yi ge xiao shi	500
+剪一个小时	jian yi ge xiao shi	500
+搬一个小时	ban yi ge xiao shi	500
+收一个小时	shou yi ge xiao shi	500
+晃一个小时	huang yi ge xiao shi	500
+蹲一个小时	dun yi ge xiao shi	500
+抱一个小时	bao yi ge xiao shi	500
+堵一个小时	du yi ge xiao shi	600
+骂一阵子	ma yi zhen zi	500
+吵一阵子	chao yi zhen zi	500
+劝一阵子	quan yi zhen zi	500
+哄一阵子	hong yi zhen zi	500
+练一阵子	lian yi zhen zi	500
+玩一阵子	wan yi zhen zi	500
+喝一阵子	he yi zhen zi	500
+睡一阵子	shui yi zhen zi	500
+坐一阵子	zuo yi zhen zi	500
+闹一阵子	nao yi zhen zi	500
+熬一阵子	ao yi zhen zi	500
+憋一阵子	bie yi zhen zi	500
+磨一阵子	mo yi zhen zi	500
+劝了半天	quan le ban tian	500
+哄了半天	hong le ban tian	500
+查了半天	cha le ban tian	500
+玩了半天	wan le ban tian	500
+站了半天	zhan le ban tian	500
+逛了半天	guang le ban tian	500
+爬了半天	pa le ban tian	500
+游了半天	you le ban tian	500
+挤了半天	ji le ban tian	500
+磨了半天	mo le ban tian	500
+唱了半天	chang le ban tian	500
+弹了半天	tan le ban tian	500
+画了半天	hua le ban tian	500
+拖了半天	tuo le ban tian	500
+煮了半天	zhu le ban tian	500
+炒了半天	chao le ban tian	450
+烤了半天	kao le ban tian	500
+泡了半天	pao le ban tian	500
+挑了半天	tiao le ban tian	500
+陪了半天	pei le ban tian	500
+盯了半天	ding le ban tian	500
+猜了半天	cai le ban tian	500
+数了半天	shu le ban tian	500
+抄了半天	chao le ban tian	500
+夸了半天	kua le ban tian	500
+剪了半天	jian le ban tian	500
+搬了半天	ban le ban tian	500
+收了半天	shou le ban tian	500
+晃了半天	huang le ban tian	500
+绕了半天	rao le ban tian	500
+抱了半天	bao le ban tian	500
+堵了半天	du le ban tian	500
+劝了好久	quan le hao jiu	500
+哄了好久	hong le hao jiu	500
+查了好久	cha le hao jiu	500
+搞了好久	gao le hao jiu	500
+玩了好久	wan le hao jiu	500
+坐了好久	zuo le hao jiu	500
+站了好久	zhan le hao jiu	500
+逛了好久	guang le hao jiu	500
+爬了好久	pa le hao jiu	500
+游了好久	you le hao jiu	500
+排了好久	pai le hao jiu	500
+挤了好久	ji le hao jiu	500
+愣了好久	leng le hao jiu	500
+磨了好久	mo le hao jiu	500
+唱了好久	chang le hao jiu	500
+弹了好久	tan le hao jiu	500
+拖了好久	tuo le hao jiu	500
+煮了好久	zhu le hao jiu	500
+炒了好久	chao le hao jiu	450
+烤了好久	kao le hao jiu	500
+泡了好久	pao le hao jiu	500
+挑了好久	tiao le hao jiu	500
+陪了好久	pei le hao jiu	500
+盯了好久	ding le hao jiu	500
+猜了好久	cai le hao jiu	500
+数了好久	shu le hao jiu	500
+抄了好久	chao le hao jiu	500
+夸了好久	kua le hao jiu	500
+敲了好久	qiao le hao jiu	500
+剪了好久	jian le hao jiu	500
+搬了好久	ban le hao jiu	500
+收了好久	shou le hao jiu	500
+晃了好久	huang le hao jiu	500
+绕了好久	rao le hao jiu	500
+抱了好久	bao le hao jiu	500
+堵了好久	du le hao jiu	500
+劝了一天	quan le yi tian	500
+哄了一天	hong le yi tian	500
+查了一天	cha le yi tian	500
+搞了一天	gao le yi tian	500
+站了一天	zhan le yi tian	500
+爬了一天	pa le yi tian	500
+游了一天	you le yi tian	500
+挤了一天	ji le yi tian	500
+憋了一天	bie le yi tian	500
+愣了一天	leng le yi tian	500
+磨了一天	mo le yi tian	500
+唱了一天	chang le yi tian	500
+弹了一天	tan le yi tian	500
+画了一天	hua le yi tian	500
+煮了一天	zhu le yi tian	500
+炒了一天	chao le yi tian	450
+烤了一天	kao le yi tian	500
+挑了一天	tiao le yi tian	500
+陪了一天	pei le yi tian	500
+盯了一天	ding le yi tian	500
+猜了一天	cai le yi tian	500
+数了一天	shu le yi tian	500
+抄了一天	chao le yi tian	500
+夸了一天	kua le yi tian	500
+敲了一天	qiao le yi tian	500
+剪了一天	jian le yi tian	500
+搬了一天	ban le yi tian	500
+收了一天	shou le yi tian	500
+晃了一天	huang le yi tian	500
+绕了一天	rao le yi tian	500
+抱了一天	bao le yi tian	500
+堵了一天	du le yi tian	500
+劝了一会儿	quan le yi hui er	500
+哄了一会儿	hong le yi hui er	500
+查了一会儿	cha le yi hui er	500
+搞了一会儿	gao le yi hui er	500
+站了一会儿	zhan le yi hui er	500
+逛了一会儿	guang le yi hui er	500
+爬了一会儿	pa le yi hui er	500
+游了一会儿	you le yi hui er	500
+排了一会儿	pai le yi hui er	500
+挤了一会儿	ji le yi hui er	500
+憋了一会儿	bie le yi hui er	500
+磨了一会儿	mo le yi hui er	500
+唱了一会儿	chang le yi hui er	500
+弹了一会儿	tan le yi hui er	500
+画了一会儿	hua le yi hui er	500
+拖了一会儿	tuo le yi hui er	500
+煮了一会儿	zhu le yi hui er	500
+炒了一会儿	chao le yi hui er	450
+烤了一会儿	kao le yi hui er	500
+泡了一会儿	pao le yi hui er	500
+挑了一会儿	tiao le yi hui er	500
+陪了一会儿	pei le yi hui er	500
+盯了一会儿	ding le yi hui er	500
+猜了一会儿	cai le yi hui er	500
+数了一会儿	shu le yi hui er	500
+抄了一会儿	chao le yi hui er	500
+夸了一会儿	kua le yi hui er	500
+敲了一会儿	qiao le yi hui er	500
+剪了一会儿	jian le yi hui er	500
+搬了一会儿	ban le yi hui er	500
+收了一会儿	shou le yi hui er	500
+晃了一会儿	huang le yi hui er	500
+绕了一会儿	rao le yi hui er	500
+抱了一会儿	bao le yi hui er	500
+堵了一会儿	du le yi hui er	500
+劝了一晚上	quan le yi wan shang	500
+哄了一晚上	hong le yi wan shang	500
+查了一晚上	cha le yi wan shang	500
+搞了一晚上	gao le yi wan shang	500
+玩了一晚上	wan le yi wan shang	500
+坐了一晚上	zuo le yi wan shang	500
+站了一晚上	zhan le yi wan shang	500
+逛了一晚上	guang le yi wan shang	500
+爬了一晚上	pa le yi wan shang	500
+游了一晚上	you le yi wan shang	500
+排了一晚上	pai le yi wan shang	500
+挤了一晚上	ji le yi wan shang	500
+憋了一晚上	bie le yi wan shang	500
+愣了一晚上	leng le yi wan shang	500
+磨了一晚上	mo le yi wan shang	500
+唱了一晚上	chang le yi wan shang	500
+弹了一晚上	tan le yi wan shang	500
+画了一晚上	hua le yi wan shang	500
+拖了一晚上	tuo le yi wan shang	500
+煮了一晚上	zhu le yi wan shang	500
+炒了一晚上	chao le yi wan shang	450
+烤了一晚上	kao le yi wan shang	500
+泡了一晚上	pao le yi wan shang	500
+挑了一晚上	tiao le yi wan shang	500
+陪了一晚上	pei le yi wan shang	500
+盯了一晚上	ding le yi wan shang	500
+猜了一晚上	cai le yi wan shang	500
+抄了一晚上	chao le yi wan shang	500
+夸了一晚上	kua le yi wan shang	500
+敲了一晚上	qiao le yi wan shang	500
+剪了一晚上	jian le yi wan shang	500
+搬了一晚上	ban le yi wan shang	500
+收了一晚上	shou le yi wan shang	500
+晃了一晚上	huang le yi wan shang	500
+绕了一晚上	rao le yi wan shang	500
+抱了一晚上	bao le yi wan shang	500
+堵了一晚上	du le yi wan shang	500
+劝了一下午	quan le yi xia wu	500
+哄了一下午	hong le yi xia wu	500
+查了一下午	cha le yi xia wu	500
+搞了一下午	gao le yi xia wu	500
+躺了一下午	tang le yi xia wu	500
+坐了一下午	zuo le yi xia wu	500
+站了一下午	zhan le yi xia wu	500
+爬了一下午	pa le yi xia wu	500
+游了一下午	you le yi xia wu	500
+排了一下午	pai le yi xia wu	500
+挤了一下午	ji le yi xia wu	500
+憋了一下午	bie le yi xia wu	500
+愣了一下午	leng le yi xia wu	500
+磨了一下午	mo le yi xia wu	500
+唱了一下午	chang le yi xia wu	500
+弹了一下午	tan le yi xia wu	500
+画了一下午	hua le yi xia wu	500
+拖了一下午	tuo le yi xia wu	500
+煮了一下午	zhu le yi xia wu	500
+炒了一下午	chao le yi xia wu	450
+烤了一下午	kao le yi xia wu	500
+泡了一下午	pao le yi xia wu	500
+挑了一下午	tiao le yi xia wu	500
+陪了一下午	pei le yi xia wu	500
+盯了一下午	ding le yi xia wu	500
+猜了一下午	cai le yi xia wu	500
+数了一下午	shu le yi xia wu	500
+抄了一下午	chao le yi xia wu	500
+夸了一下午	kua le yi xia wu	500
+敲了一下午	qiao le yi xia wu	500
+剪了一下午	jian le yi xia wu	500
+搬了一下午	ban le yi xia wu	500
+收了一下午	shou le yi xia wu	500
+晃了一下午	huang le yi xia wu	500
+绕了一下午	rao le yi xia wu	500
+抱了一下午	bao le yi xia wu	500
+堵了一下午	du le yi xia wu	500
+熬一宿	ao yi xiu	500
+喝一宿	he yi xiu	500
+吵一宿	chao yi xiu	500
+打一宿	da yi xiu	500
+唠一宿	lao yi xiu	500
+玩了一宿	wan le yi xiu	500
+唠了一宿	lao le yi xiu	500
+哄一下	hong yi xia	500
+骗一下	pian yi xia	500
+卖一下	mai yi xia	500
+刷一下	shua yi xia	500
+瞅一下	chou yi xia	500
+评一下	ping yi xia	500
+劝了一下	quan le yi xia	500
+哄了一下	hong le yi xia	500
+夸了一下	kua le yi xia	500
+记了一下	ji le yi xia	600
+坐了一下	zuo le yi xia	500
+站了一下	zhan le yi xia	500
+逛了一下	guang le yi xia	500
+卖了一下	mai le yi xia	500
+借了一下	jie le yi xia	500
+还了一下	huan le yi xia	500
+收了一下	shou le yi xia	500
+拖了一下	tuo le yi xia	500
+煮了一下	zhu le yi xia	500
+炒了一下	chao le yi xia	450
+烤了一下	kao le yi xia	500
+剪了一下	jian le yi xia	500
+画了一下	hua le yi xia	500
+敲了一下	qiao le yi xia	600
+挤了一下	ji le yi xia	500
+绕了一下	rao le yi xia	500
+泡了一下	pao le yi xia	500
+尝了一下	chang le yi xia	600
+抱了一下	bao le yi xia	500
+陪了一下	pei le yi xia	500
+盯了一下	ding le yi xia	600
+瞅了一下	chou le yi xia	500
+瞧了一下	qiao le yi xia	500
+猜了一下	cai le yi xia	500
+数了一下	shu le yi xia	500
+称了一下	cheng le yi xia	500
+交了一下	jiao le yi xia	500
+充了一下	chong le yi xia	500
+抄了一下	chao le yi xia	500
+唱了一下	chang le yi xia	500
+弹了一下	tan le yi xia	500
+评了一下	ping le yi xia	500
+审了一下	shen le yi xia	500
+补了一下	bu le yi xia	500
+订了一下	ding le yi xia	500
+聚了一下	ju le yi xia	500
+问一遍	wen yi bian	500
+背一遍	bei yi bian	500
+改一遍	gai yi bian	500
+练一遍	lian yi bian	500
+算一遍	suan yi bian	500
+录一遍	lu yi bian	500
+画一遍	hua yi bian	500
+弹一遍	tan yi bian	500
+叫一遍	jiao yi bian	500
+喊一遍	han yi bian	500
+催一遍	cui yi bian	500
+说两遍	shuo liang bian	500
+讲两遍	jiang liang bian	500
+问两遍	wen liang bian	500
+读两遍	du liang bian	500
+背两遍	bei liang bian	500
+念两遍	nian liang bian	500
+唱两遍	chang liang bian	500
+看两遍	kan liang bian	500
+听两遍	ting liang bian	500
+洗两遍	xi liang bian	500
+擦两遍	ca liang bian	500
+扫两遍	sao liang bian	500
+查两遍	cha liang bian	500
+改两遍	gai liang bian	500
+练两遍	lian liang bian	500
+抄两遍	chao liang bian	500
+数两遍	shu liang bian	500
+算两遍	suan liang bian	500
+试两遍	shi liang bian	500
+画两遍	hua liang bian	500
+弹两遍	tan liang bian	500
+叫两遍	jiao liang bian	500
+喊两遍	han liang bian	500
+催两遍	cui liang bian	500
+找两遍	zhao liang bian	500
+翻两遍	fan liang bian	500
+刷两遍	shua liang bian	500
+过两遍	guo liang bian	500
+对两遍	dui liang bian	500
+说几遍	shuo ji bian	500
+讲几遍	jiang ji bian	500
+问几遍	wen ji bian	500
+读几遍	du ji bian	500
+写几遍	xie ji bian	500
+背几遍	bei ji bian	500
+念几遍	nian ji bian	500
+唱几遍	chang ji bian	500
+听几遍	ting ji bian	500
+洗几遍	xi ji bian	500
+擦几遍	ca ji bian	500
+扫几遍	sao ji bian	500
+改几遍	gai ji bian	500
+练几遍	lian ji bian	500
+抄几遍	chao ji bian	500
+数几遍	shu ji bian	500
+算几遍	suan ji bian	500
+录几遍	lu ji bian	500
+画几遍	hua ji bian	500
+弹几遍	tan ji bian	500
+叫几遍	jiao ji bian	500
+喊几遍	han ji bian	500
+催几遍	cui ji bian	500
+找几遍	zhao ji bian	500
+翻几遍	fan ji bian	500
+过几遍	guo ji bian	500
+对几遍	dui ji bian	500
+讲了一遍	jiang le yi bian	500
+问了一遍	wen le yi bian	500
+写了一遍	xie le yi bian	500
+背了一遍	bei le yi bian	500
+念了一遍	nian le yi bian	500
+唱了一遍	chang le yi bian	500
+洗了一遍	xi le yi bian	500
+擦了一遍	ca le yi bian	500
+查了一遍	cha le yi bian	500
+改了一遍	gai le yi bian	500
+练了一遍	lian le yi bian	500
+抄了一遍	chao le yi bian	500
+数了一遍	shu le yi bian	500
+算了一遍	suan le yi bian	500
+录了一遍	lu le yi bian	500
+画了一遍	hua le yi bian	500
+弹了一遍	tan le yi bian	500
+叫了一遍	jiao le yi bian	500
+喊了一遍	han le yi bian	500
+催了一遍	cui le yi bian	500
+找了一遍	zhao le yi bian	500
+对了一遍	dui le yi bian	500
+吵两句	chao liang ju	500
+劝两句	quan liang ju	500
+哄两句	hong liang ju	500
+回两句	hui liang ju	500
+顶两句	ding liang ju	500
+怼两句	dui liang ju	500
+吵几句	chao ji ju	500
+劝几句	quan ji ju	500
+哄几句	hong ji ju	500
+念几句	nian ji ju	500
+答几句	da ji ju	500
+回几句	hui ji ju	500
+顶几句	ding ji ju	500
+怼几句	dui ji ju	500
+劝了几句	quan le ji ju	500
+哄了几句	hong le ji ju	500
+唱了几句	chang le ji ju	500
+答了几句	da le ji ju	500
+顶了几句	ding le ji ju	500
+怼了几句	dui le ji ju	500
+劝了两句	quan le liang ju	500
+哄了两句	hong le liang ju	500
+夸了两句	kua le liang ju	500
+唱了两句	chang le liang ju	500
+答了两句	da le liang ju	500
+顶了两句	ding le liang ju	500
+怼了两句	dui le liang ju	500
+哭一声	ku yi sheng	500
+应一声	ying yi sheng	500
+讲了一声	jiang le yi sheng	500
+问了一声	wen le yi sheng	500
+答了一声	da le yi sheng	500
+哭了一声	ku le yi sheng	500
+骂了一声	ma le yi sheng	500
+盯一眼	ding yi yan	500
+瞧了一眼	qiao le yi yan	500
+盯了一眼	ding le yi yan	500
+逛一趟	guang yi tang	500
+搬一趟	ban yi tang	500
+逛了一趟	guang le yi tang	500
+搬了一趟	ban le yi tang	500
+爬一圈	pa yi quan	500
+爬了一圈	pa le yi quan	500
+游了一圈	you le yi quan	500
+吵一顿	chao yi dun	500
+夸了一顿	kua le yi dun	500
+讲一番	jiang yi fan	500
+骂一番	ma yi fan	500
+劝一番	quan yi fan	500
+哄一番	hong yi fan	500
+夸了一番	kua le yi fan	500
+劝了一番	quan le yi fan	500
+哄了一番	hong le yi fan	500
+说一通	shuo yi tong	500
+讲一通	jiang yi tong	500
+骂一通	ma yi tong	500
+吵一通	chao yi tong	500
+聊一通	liao yi tong	500
+说了一通	shuo le yi tong	500
+讲了一通	jiang le yi tong	500
+吵了一通	chao le yi tong	500
+打了一通	da le yi tong	500
+骂个够	ma ge gou	500
+笑个够	xiao ge gou	500
+答清楚	da qing chu	500
+写不清楚	xie bu qing chu	500
+查不清楚	cha bu qing chu	500
+答不清楚	da bu qing chu	500
+问得清楚	wen de qing chu	500
+聊得清楚	liao de qing chu	500
+谈得清楚	tan de qing chu	500
+写得清楚	xie de qing chu	500
+想得清楚	xiang de qing chu	500
+查得清楚	cha de qing chu	500
+算得清楚	suan de qing chu	500
+答得清楚	da de qing chu	500
+答不明白	da bu ming bai	500
+说得明白	shuo de ming bai	500
+讲得明白	jiang de ming bai	500
+问得明白	wen de ming bai	500
+聊得明白	liao de ming bai	500
+谈得明白	tan de ming bai	500
+答得明白	da de ming bai	500
+谈完了	tan wan le	600
+骂完了	ma wan le	500
+吵完了	chao wan le	600
+哄完了	hong wan le	500
+逛完了	guang wan le	500
+借完了	jie wan le	500
+煮完了	zhu wan le	500
+炒完了	chao wan le	450
+录完了	lu wan le	500
+刷完了	shua wan le	500
+翻完了	fan wan le	500
+删完了	shan wan le	500
+回完了	hui wan le	500
+退完了	tui wan le	500
+熬完了	ao wan le	500
+挑完了	tiao wan le	500
+签完了	qian wan le	500
+充完了	chong wan le	500
+抄完了	chao wan le	500
+弹完了	tan wan le	500
+讲好了	jiang hao le	500
+骂好了	ma hao le	500
+吵好了	chao hao le	600
+哄好了	hong hao le	500
+读好了	du hao le	500
+记好了	ji hao le	500
+练好了	lian hao le	500
+查好了	cha hao le	500
+干好了	gan hao le	500
+整好了	zheng hao le	500
+玩好了	wan hao le	500
+喝好了	he hao le	500
+睡好了	shui hao le	500
+逛好了	guang hao le	500
+借好了	jie hao le	500
+煮好了	zhu hao le	500
+炒好了	chao hao le	450
+画好了	hua hao le	500
+录好了	lu hao le	500
+刷好了	shua hao le	500
+回好了	hui hao le	500
+熬好了	ao hao le	500
+签好了	qian hao le	500
+交好了	jiao hao le	500
+抄好了	chao hao le	500
+念好了	nian hao le	500
+唱好了	chang hao le	500
+弹好了	tan hao le	500
+骂不完	ma bu wan	500
+吵不完	chao bu wan	600
+哄不完	hong bu wan	500
+记不完	ji bu wan	500
+练不完	lian bu wan	500
+查不完	cha bu wan	500
+试不完	shi bu wan	500
+睡不完	shui bu wan	500
+煮不完	zhu bu wan	500
+炒不完	chao bu wan	450
+录不完	lu bu wan	500
+删不完	shan bu wan	500
+回不完	hui bu wan	500
+退不完	tui bu wan	500
+熬不完	ao bu wan	500
+选不完	xuan bu wan	500
+签不完	qian bu wan	500
+交不完	jiao bu wan	500
+充不完	chong bu wan	500
+抄不完	chao bu wan	500
+念不完	nian bu wan	500
+逛不了	guang bu liao	500
+讲错了	jiang cuo le	500
+签错了	qian cuo le	500
+认错了	ren cuo le	500
+叫不动	jiao bu dong	500
+哄不动	hong bu dong	500
+说不动	shuo bu dong	500
+讲不动	jiang bu dong	500
+喊不动	han bu dong	500
+讲不懂	jiang bu dong	600
+讲不过去	jiang bu guo qu	500
+用不着	yong bu zhe	500
+讲点理	jiang dian li	500
+唠会儿	lao hui er	500
+照实说	zhao shi shuo	500
+讲定了	jiang ding le	500
+讲作业	jiang zuo ye	500
+讲日语	jiang ri yu	500
+讲着讲着	jiang zhe jiang zhe	500

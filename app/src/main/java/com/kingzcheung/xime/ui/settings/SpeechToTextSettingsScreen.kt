@@ -93,7 +93,7 @@ private fun VoiceOtherAudioItem() {
                     }
                 }
                 // 用户 11-12 转来：抖音暂停后不会接着放。接着放要播放的应用自己做，输入法替不了。
-                Text("暂停播放：说完由播放的应用自己接着放，抖音等部分应用不会接着放，用它们时选「压低音量」。",
+                Text("暂停播放：有的应用说完后不会接着放，这时选「压低音量」。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp))
             }
@@ -162,8 +162,13 @@ fun SpeechToTextSettingsContent(
                     VoiceOtherAudioItem()
                     var pillResume by remember { mutableStateOf(SettingsPreferences.isSttPillResume(context)) }
                     SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "连续语音",
-                        subtitle = "点麦克风说话时，发完消息在同一个输入框里接着听；收成悬浮条时回到这个应用也接着听",
+                        subtitle = "发完消息后在同一个输入框里接着听",
                         checked = pillResume, onCheckedChange = { pillResume = it; SettingsPreferences.setSttPillResume(context, it) })
+                    // #309：骑车等手不方便时戴蓝牙耳机说话。默认关，用手机麦克风。
+                    var bluetoothMic by remember { mutableStateOf(SettingsPreferences.isSttBluetoothMic(context)) }
+                    SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "用蓝牙耳机的麦克风",
+                        subtitle = "连着蓝牙耳机时用耳机收音；说话时耳机里的音乐会暂时变成通话音质",
+                        checked = bluetoothMic, onCheckedChange = { bluetoothMic = it; SettingsPreferences.setSttBluetoothMic(context, it) })
                     // 隔空输入（用户 11-02 要的，参照微信）：默认关；走剪贴板同步已配对的电脑。
                     var remoteTyping by remember { mutableStateOf(SettingsPreferences.isSttRemoteTyping(context)) }
                     val computers = com.kingzcheung.xime.clipboard.sync.WindowsDevices.saved.value
@@ -253,12 +258,37 @@ internal fun OnlineSpeechApiSection() {
     var status by remember { mutableStateOf(api.status(context)) }
     var testing by remember { mutableStateOf(false) }
     var configured by remember { mutableStateOf(api.isConfigured(context)) }
-    var preferOnline by remember { mutableStateOf(api.isActive(context)) }
+    // 自己装的语音插件（市场以外导入的也算）走哪一路：11-03 在线语音改回内置（1.15.51）时，选插件的那几行跟着删了，
+    // 装了语音插件也选不上，一直用本地模型（11-24 群友「插件的语音接口被封死了」）。识别那边一直认选中的插件，这里补回选择。
+    var tick by remember { mutableStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    val plugins = remember(tick) { ExtensionManager.getEnabledAsrPlugins(context) }
+    val pluginNames = remember(tick) { ExtensionManager.getAllInstalledPlugins().associate { it.id to it.name } }
+    var route by remember(tick) {
+        mutableStateOf(SettingsPreferences.getSttOnlinePluginId(context).takeIf { id -> plugins.any { it.first == id } }
+            ?: api.BUILTIN_ID)
+    }
+    fun routeReady(id: String): Boolean = plugins.firstOrNull { it.first == id }?.second
+        ?.let { plugin -> runCatching { plugin.isConfigured() }.getOrDefault(false) } ?: configured
+    // 内置接口：同原来的 api.isActive；选的是插件：选了它且没在用本地。
+    var preferOnline by remember(tick) {
+        mutableStateOf(if (route == api.BUILTIN_ID) api.isActive(context)
+            else !SettingsPreferences.isSttUseLocal(context) && routeReady(route))
+    }
     fun save() {
         api.save(context, com.kingzcheung.xime.speech.OnlineSpeechApi.Config(baseUrl, apiKey, model, appId, bodyTemplate, textPath))
         status = api.status(context)
         configured = api.isConfigured(context)
-        if (!configured && preferOnline) {
+        if (route == api.BUILTIN_ID && !configured && preferOnline) {
+            preferOnline = false
+            SettingsPreferences.setSttUseLocal(context, true)
+        }
+    }
+    fun choose(id: String) {
+        route = id
+        SettingsPreferences.setSttOnlinePluginId(context, id)
+        // 换到还没填好的那一路：先关掉优先在线，免得说话时落到别的插件上。
+        if (!routeReady(id) && preferOnline) {
             preferOnline = false
             SettingsPreferences.setSttUseLocal(context, true)
         }
@@ -318,11 +348,27 @@ internal fun OnlineSpeechApiSection() {
             Text(if (volcengine) "新版填 API Key。旧版在接口配置里填写 App ID 和 Access Token。" else "密钥保存在本机。检测连接会向所选服务发送一秒测试静音。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (configured) SettingsToggleItem(icon = Icons.TwoTone.GraphicEq, title = "优先使用在线语音",
+        // 装了语音插件才出现：上面的内置接口和每个插件各一行，点哪行用哪一路；插件的接口在它自己的插件页里填。
+        if (plugins.isNotEmpty()) {
+            SettingsItem(icon = Icons.TwoTone.GraphicEq, title = "上面填的接口",
+                subtitle = if (route == api.BUILTIN_ID) "在线语音用这一路" else "点一下改用这一路",
+                status = if (route == api.BUILTIN_ID) "正在用" else null,
+                onClick = { choose(api.BUILTIN_ID) })
+            plugins.forEach { (id, _) ->
+                val chosen = id == route
+                SettingsItem(icon = Icons.TwoTone.GraphicEq, title = pluginNames[id] ?: id,
+                    subtitle = if (!chosen) "点一下改用这个插件"
+                        else if (routeReady(id)) "在线语音用这个插件"
+                        else "先在「扩展 › 插件」里这个插件的页面填好接口",
+                    status = if (chosen) "正在用" else null,
+                    onClick = { choose(id) })
+            }
+        }
+        if (routeReady(route)) SettingsToggleItem(icon = Icons.TwoTone.GraphicEq, title = "优先使用在线语音",
             subtitle = "在线识别失败时改用本地模型",
             checked = preferOnline, onCheckedChange = {
                 preferOnline = it
-                if (it) SettingsPreferences.setSttOnlinePluginId(context, com.kingzcheung.xime.speech.OnlineSpeechApi.BUILTIN_ID)
+                if (it) SettingsPreferences.setSttOnlinePluginId(context, route)
                 SettingsPreferences.setSttUseLocal(context, !it)
             })
     }

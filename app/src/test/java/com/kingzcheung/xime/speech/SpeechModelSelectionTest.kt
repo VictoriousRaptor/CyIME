@@ -25,6 +25,10 @@ class SpeechModelSelectionTest {
         } }
     }
 
+    @Test fun unknownStoredModeOffersOnlyUncorrectedInput() {
+        assertEquals(listOf(Finish.NONE), SpeechModelSelection.finishOptions("retired-model", chinese = true))
+    }
+
     @Test fun storedPairsRemainCompatible() {
         assertEquals(SpeechModelCatalog.ZIPFORMER_TWO_PASS, SpeechModelSelection.withCorrection(SpeechModelCatalog.ZIPFORMER, true))
         assertEquals(SpeechModelCatalog.TWO_PASS, SpeechModelSelection.withCorrection(SpeechModelCatalog.PARAFORMER, true))
@@ -116,7 +120,7 @@ class SpeechModelSelectionTest {
         assertEquals(c.SENSEVOICE, SpeechModelSelection.wholeFinalizer("whatever"))
         assertEquals(c.XASR, SpeechModelSelection.wholeFinalizer(c.XASR))
         assertEquals(c.SENSEVOICE, SpeechModelSelection.wholeFinalizer(c.SENSEVOICE))
-        listOf(c.SENSEVOICE, c.TWO_PASS, c.ZIPFORMER_TWO_PASS).forEach { mode ->
+        listOf(c.SENSEVOICE, c.SENSEVOICE_AUTO, c.TWO_PASS, c.ZIPFORMER_TWO_PASS).forEach { mode ->
             assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(mode, true, true, xasrReady = true).finalizer)
             assertEquals(c.SENSEVOICE, SpeechModelSelection.pipeline(mode, true, true, xasrReady = true,
                 wholeFinalizer = c.SENSEVOICE).finalizer)

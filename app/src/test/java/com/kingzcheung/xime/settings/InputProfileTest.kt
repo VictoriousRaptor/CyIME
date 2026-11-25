@@ -247,3 +247,28 @@ class InputProfileTest {
         assertEquals(listOf(InputLayout.QWERTY), InputProfileSelection.layouts(entries, entry("japanese")))
     }
 }
+
+/** #565：导入的万象拼音没写 input_scheme，仍算自定义编码，但组字区的编码能点开改。 */
+class WanxiangEditableCodeTest {
+    @After fun reset() { InputProfiles.updateInstalled(emptyList()) }
+
+    @Test fun `wanxiang code is editable but stays an external scheme`() {
+        InputProfiles.updateInstalled(listOf(SchemaMeta("wanxiang", "万象拼音"), SchemaMeta("wanxiang_pro", "万象拼音 Pro"),
+            SchemaMeta("jde", "简单鹤")))
+        for (id in listOf("wanxiang", "wanxiang_pro")) {
+            val profile = InputProfiles.describe(id)
+            assertEquals(InputScheme.EXTERNAL, profile.scheme)
+            assertTrue(profile.capabilities.editablePinyin)
+            assertFalse(profile.capabilities.caseSensitiveCode)
+        }
+        // 别的第三方方案照旧。
+        assertFalse(InputProfiles.describe("jde").capabilities.editablePinyin)
+        assertFalse(InputProfiles.describe("flypy").capabilities.editablePinyin)
+    }
+
+    @Test fun `declared input scheme still wins`() {
+        InputProfiles.updateInstalled(listOf(SchemaMeta("wanxiang", "万象拼音", scheme = InputScheme.PINYIN)))
+        assertEquals(InputScheme.PINYIN, InputProfiles.describe("wanxiang").scheme)
+        assertTrue(InputProfiles.describe("wanxiang").capabilities.editablePinyin)
+    }
+}

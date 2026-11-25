@@ -49,13 +49,13 @@ internal fun JapanesePackStatus(modifier: Modifier = Modifier, showReady: Boolea
     if (isReady && !showReady) return
     Column(modifier.testTag("japanese-pack-status")) {
         val text = when {
-            isReady -> "日语词库、转换引擎和手写模板已装好。日语在「语言与方案」里开关。"
+            isReady -> "日语已装好，在「语言与方案」里开关。"
             downloading != null -> if (downloading.progress > 0f) "正在下载日语词库 ${(downloading.progress * 100).toInt()}%…" else "正在下载日语词库…"
             failed != null -> "日语词库下载失败：${failed.message}"
             missing.isEmpty() -> "正在准备日语词库…"
             // 1.16 起轻量版的日语手写模板也是下载的：只缺它时日语打字不受影响。
             missing.all { it.id == com.kingzcheung.xime.model.BuiltinModelCatalog.JAPANESE_HANDWRITING } ->
-                "日语手写要先下载假名模板（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}），下好前手写认不出假名，打字不受影响。"
+                "日语手写要先下载假名模板（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}）。"
             else -> "日语要先下载词库（约 ${formatModelMegabytes(JapanesePack.downloadBytes(missing))}）。"
         }
         Text(text, style = MaterialTheme.typography.bodySmall,

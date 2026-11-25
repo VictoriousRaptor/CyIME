@@ -243,10 +243,15 @@ internal class EditorCursor(private val clock: () -> Long = { System.nanoTime() 
             val moved = Character.codePointCount(text, minOf(from, next), maxOf(from, next))
             // 片段边缘不一定是文档边缘：查询光标周围文本后计算绝对位置，
             // 在真实文首/文末截停，不能继续发 DPAD 让宿主把焦点移出输入框。
+            // 片段外的字读不到（宿主给 null）时按读得到的走到头，不再退回方向键。
             val target = if (moved == abs(remaining)) extracted.startOffset + next
-                else extendedHorizontalTarget(ic, extracted, from, remaining).also { dropDragText() }
-            if (target != null && setSelection(ic, target, selecting))
+                else (extendedHorizontalTarget(ic, extracted, from, remaining) ?: (extracted.startOffset + next))
+                    .also { dropDragText() }
+            if (setSelection(ic, target, selecting))
                 return target != extracted.startOffset + from || collapsed
+            // 读得到文字、已经到头：宿主不收原地 setSelection 也停在这里，不交给方向键。有的应用读光标后面的字
+            // 又给 null，方向键会把焦点移出输入框，键盘跟着收起（#403，小米笔记滑到句末）。
+            if (!collapsed && target == extracted.startOffset + from) return false
         }
         // 下面交给宿主按方向键移动，缓存的文字和选区都不再可信；这一步也不用缓存。
         dropDragText()

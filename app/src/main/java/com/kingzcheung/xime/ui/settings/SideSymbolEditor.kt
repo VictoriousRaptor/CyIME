@@ -62,6 +62,7 @@ import com.kingzcheung.xime.ui.keyboard.NineGridFrame
 import com.kingzcheung.xime.ui.keyboard.QwertyBottomRowWeights
 import com.kingzcheung.xime.ui.keyboard.SideSymbolTarget
 import com.kingzcheung.xime.ui.keyboard.handwritingKeyLabel
+import com.kingzcheung.xime.ui.keyboard.numberPadRows
 import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.strokeMainLabels
 import com.kingzcheung.xime.ui.keyboard.symbolGridGeometry
@@ -258,8 +259,9 @@ private fun sketchLabel(action: String): String = when (action) {
 }
 
 /**
- * 九键、笔画左边那一列：上面一块符号面板，一屏 [NineGridFrame.SIDE_VISIBLE_SLOTS] 格，多出的上下滑；
- * 笔画栏不多于四格时平分面板（同键盘）。末尾一格是「+」。
+ * 九键、笔画、数字键盘左边那一列：上面一块符号面板，多出的上下滑；笔画栏不多于四格时平分面板（同键盘）。
+ * 末尾一格是「+」，钉在最下面一直看得见（11-23 他在数字侧栏找不到加格子的地方：四格刚好占满一屏，
+ * 「+」排在第五格，要往下滑才出来，又没有滚动条）。这时符号格按「一屏 [NineGridFrame.SIDE_VISIBLE_SLOTS] 格 + 「+」」分高。
  */
 @Composable
 private fun SlotRail(count: Int, canGrow: Boolean, fillWhenFew: Boolean, modifier: Modifier,
@@ -270,9 +272,12 @@ private fun SlotRail(count: Int, canGrow: Boolean, fillWhenFew: Boolean, modifie
         if (fillWhenFew && count <= NineGridFrame.SIDE_VISIBLE_SLOTS) Column(Modifier.fillMaxSize()) {
             repeat(slots) { cell(it, Modifier.fillMaxWidth().weight(1f)) }
         } else {
-            val rowHeight = maxHeight / NineGridFrame.SIDE_VISIBLE_SLOTS
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                repeat(slots) { cell(it, Modifier.fillMaxWidth().height(rowHeight)) }
+            val rowHeight = maxHeight / (NineGridFrame.SIDE_VISIBLE_SLOTS + if (canGrow) 1 else 0)
+            Column(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                    repeat(count) { cell(it, Modifier.fillMaxWidth().height(rowHeight)) }
+                }
+                if (canGrow) cell(count, Modifier.fillMaxWidth().height(rowHeight))
             }
         }
     }
@@ -316,12 +321,13 @@ private fun NumberSketch(count: Int, cell: @Composable (Int, Modifier) -> Unit) 
     val cycle = rememberKeyboardInputPreferences().symbolKeyCycle
     val modeCount = modeSlotCount(cycle)
     val text = LocalTextModeLabel.current
+    val digitRows = numberPadRows(rememberKeyboardInputPreferences().numberPadTop789)
     Column(Modifier.fillMaxWidth().height(SketchRow * 4).testTag("side-symbol-sketch:number")) {
         Row(Modifier.fillMaxWidth().weight(3f)) {
             SlotRail(count, canGrow = true, fillWhenFew = false,
                 modifier = Modifier.weight(NineGridFrame.SIDE).fillMaxHeight(), cell = cell)
             Column(Modifier.weight(NineGridFrame.MAIN).fillMaxHeight()) {
-                listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
+                digitRows.forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) { row.forEach { FixedKey(it, Modifier.weight(1f).fillMaxHeight()) } }
                 }
             }

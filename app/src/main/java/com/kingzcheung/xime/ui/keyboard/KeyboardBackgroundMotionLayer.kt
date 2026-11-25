@@ -43,12 +43,15 @@ internal fun BoxScope.KeyboardBackgroundMotionLayer(
     motion: KeyboardBackgroundMotion,
     splitGap: SplitKeyboardGap?,
     glass: Boolean,
+    /** 悬浮键盘：往下多画到拖动条底，见 [FloatingBackgroundBleed]。 */
+    bleedPx: Int = 0,
 ) {
     val root = LocalView.current.rootView
     val feather = LocalGlassTopFeather.current?.takeIf { glass && it.windowRoot === root }
     var origin by remember { mutableStateOf(Offset.Zero) }
     Box(
         Modifier.matchParentSize()
+            .bleedBottomOut(bleedPx)
             .onGloballyPositioned { origin = it.positionInWindow() }
             .clipToBounds()
             .drawWithContent {

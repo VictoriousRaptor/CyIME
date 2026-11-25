@@ -536,6 +536,18 @@ class KeyboardInputPreferencesTest {
         assertEquals(false, KeyboardInputPreferences.read(context).splitKeyboardEnabled)
     }
 
+    /** 「数字位置」：新键读不到就是 1 2 3 在上（和以前一样），选了 7 8 9 在上要能读回来，正在显示的键盘要听这个键。 */
+    @Test fun `number pad order defaults to 123 on top and persists independently`() {
+        assertEquals(false, KeyboardInputPreferences.read(context).numberPadTop789)
+        assertTrue(SettingsPreferences.KEY_NUMBER_PAD_TOP_789 in KeyboardInputPreferences.watchedKeys)
+        SettingsPreferences.setNumberPadTop789(context, true)
+        assertEquals(true, KeyboardInputPreferences.read(context).numberPadTop789)
+        KeyboardInputPreferences().save(context)
+        assertEquals(true, SettingsPreferences.isNumberPadTop789(context))
+        SettingsPreferences.setNumberPadTop789(context, false)
+        assertEquals(false, KeyboardInputPreferences.read(context).numberPadTop789)
+    }
+
     /** 屏幕太窄时分体不分开，但存着的「分体键盘」不改；转到够宽的方向再分开。 */
     @Test fun `split keyboard shows only on wide screens and keeps the stored choice`() {
         SettingsPreferences.setSplitKeyboardEnabled(context, true)

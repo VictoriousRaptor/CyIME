@@ -1254,3 +1254,152 @@ user-gezhileyi	9	439445394	!何枝可依	1	user	2026-11-20	打到「搁置了一
 must-gezhileyiduanshijian	9	43944539438267445426	搁置了一段时间	1	user	2026-11-20	排序必过句（11-20 九键反馈，古诗词移出词库）
 must-gezhileyiduanshijian-26	26	gezhileyiduanshijian	搁置了一段时间	1	user	2026-11-20	排序必过句
 user-gezhileyiduanshijia-9	9	4394453943826744542	搁置了一段时间	1	user	2026-11-20	最后一个音节 jian 只打到 jia（542）时整句曾是「何止可以断食加」
+lex1122-xinguan	26	xinguan	新冠	1	lexicon-1122	2026-11-22	原 100；补后应排第 1
+lex1122-xiadan	26	xiadan	下单	1	lexicon-1122	2026-11-22	原 4885；补后应排第 1
+lex1122-zhenghuo	26	zhenghuo	整活	5	lexicon-1122	2026-11-22	原 526；补后应排第 1；11-23 按现状记录（排第 3～5），不算门槛
+lex1122-yupiao	26	yupiao	余票	1	lexicon-1122	2026-11-22	词库没有（12306 常用）；补后应排第 1
+lex1122-weibo	26	weibo	微博	1	lexicon-1122	2026-11-22	原 3008；补后应排第 1
+lex1122-feishu	26	feishu	飞书	1	lexicon-1122	2026-11-22	原 47；补后应排第 1
+lex1122-bihuan	26	bihuan	闭环	1	lexicon-1122	2026-11-22	原 117；补后应排第 1
+lex1122-jidu	26	jidu	嫉妒	3	lexicon-1122	2026-11-22	规范词形，原 961 低于异形 忌妒 35519；补后应排第 3
+lex1122-tuiwei	26	tuiwei	推诿	2	lexicon-1122	2026-11-22	规范词形，原低于异形 推委；补后应排第 2
+lex1122-pita	26	pita	疲沓	1	lexicon-1122	2026-11-22	规范词形，原低于异形 疲塌；补后应排第 1
+lex1122-hesuan	26	hesuan	核酸	3	lexicon-1122	2026-11-22	原 45；补后应排第 3
+lex1122-baolei	26	baolei	爆雷	2	lexicon-1122	2026-11-22	原 100；补后应排第 2
+lex1122-quanzhan	26	quanzhan	全栈	3	lexicon-1122	2026-11-22	原 75；补后应排第 3
+lex1122-laqu	26	laqu	拉取	2	lexicon-1122	2026-11-22	原 58；补后应排第 2
+lex1122-biyuan	26	biyuan	闭源	5	lexicon-1122	2026-11-22	原 10；补后应排第 2；11-23 按现状记录（排第 3～5），不算门槛
+lex1122-chaodi	26	chaodi	抄底	2	lexicon-1122	2026-11-22	原 58；补后应排第 2
+lex1122-dingtou	26	dingtou	定投	2	lexicon-1122	2026-11-22	原 21；补后应排第 2
+lex1122-shengchengshi	26	shengchengshi	生成式	1	lexicon-1122	2026-11-22	原 18；补后应排第 1
+lex1122-sixin	26	sixin	私信	5	lexicon-1122	2026-11-22	原 2691；补后应排第 3；11-23 按现状记录（排第 3～5），不算门槛
+lex1122-tianna	26	tianna	天哪	2	lexicon-1122	2026-11-22	原 20；补后应排第 2
+lex1122-fanju	26	fanju	番剧	2	lexicon-1122	2026-11-22	原 271；补后应排第 2
+lex1122-buya	26	buya	补牙	2	lexicon-1122	2026-11-22	原 52；补后应排第 2
+lex1122-weijing	26	weijing	胃镜	3	lexicon-1122	2026-11-22	原 108；补后应排第 3
+lex1122-shuangjian	26	shuangjian	双减	5	lexicon-1122	2026-11-22	原 100；补后应排第 3；11-23 按现状记录（排第 3～5），不算门槛
+lex1122-meitong	26	meitong	美瞳	2	lexicon-1122	2026-11-22	原 347；补后应排第 2
+lex1122-xunlianji	26	xunlianji	训练集	1	lexicon-1122	2026-11-22	原 100；补后应排第 1
+lex1122-laqun	26	laqun	拉群	1	lexicon-1122	2026-11-22	词库没有；补后应排第 1
+lex1122-chunzhao	26	chunzhao	春招	1	lexicon-1122	2026-11-22	词库没有；补后应排第 1
+lex1122-lutie	26	lutie	撸铁	1	lexicon-1122	2026-11-22	词库没有；补后应排第 1
+lex1122-neg-jidu	26	jidu	极度	1	反例	2026-11-22	嫉妒 只升到异形词之上，极度 仍第一
+lex1122-neg-hesuan	26	hesuan	核算	1	反例	2026-11-22	核酸 只到第三，不抢 核算
+lex1122-neg-sixin	26	sixin	私心	1	反例	2026-11-22	私信 不抢 私心
+lex1122-neg-muji	26	mujixiadanle	母鸡下蛋了	1	反例	2026-11-22	下单 提到第一后整句仍要出 下蛋
+lex1122-neg-weibo	26	weibodeshouru	微薄的收入	1	反例	2026-11-22	微博 提到第一后整句仍要出 微薄
+lex1122b-zhifu	26	zhifu	支付	1	lexicon-1122	2026-11-22	原 22289，聊天混合后排第二
+lex1122b-youhui	26	youhui	优惠	1	lexicon-1122	2026-11-22	原 18194，聊天混合后排第二
+lex1122b-kuandai	26	kuandai	宽带	1	lexicon-1122	2026-11-22	原 13335，聊天混合后排第二
+lex1122b-zhuxiao	26	zhuxiao	注销	1	lexicon-1122	2026-11-22	原 11213，聊天混合后排第二
+lex1122b-zhongjie	26	zhongjie	中介	1	lexicon-1122	2026-11-22	原 15420，聊天混合后排第二
+lex1122b-fahuo	26	fahuo	发货	1	lexicon-1122	2026-11-22	原 13713，聊天混合后排第二
+lex1122b-zhekou	26	zhekou	折扣	1	lexicon-1122	2026-11-22	原 17993，聊天混合后排第二
+lex1122b-zhishu	26	zhishu	指数	1	lexicon-1122	2026-11-22	原 18195，聊天混合后排第二
+lex1122b-buwei	26	buwei	部位	1	lexicon-1122	2026-11-22	原 17614，聊天混合后排第二
+lex1122b-tuxing	26	tuxing	图形	1	lexicon-1122	2026-11-22	原 16307，聊天混合后排第二
+lex1122b-danji	26	danji	单击	1	lexicon-1122	2026-11-22	原 16270，聊天混合后排第二
+lex1122b-fudu	26	fudu	幅度	1	lexicon-1122	2026-11-22	原 12444，聊天混合后排第二
+lex1122b-gujia	26	gujia	股价	1	lexicon-1122	2026-11-22	原 12312，聊天混合后排第二
+lex1122b-quantao	26	quantao	全套	1	lexicon-1122	2026-11-22	原 11009，聊天混合后排第二
+lex1122b-jingdu	26	jingdu	精度	1	lexicon-1122	2026-11-22	原 32780，聊天混合后排第二
+lex1122b-pingzheng	26	pingzheng	凭证	1	lexicon-1122	2026-11-22	原 13610，聊天混合后排第二
+lex1122b-yuanma	26	yuanma	源码	1	lexicon-1122	2026-11-22	原 9144，聊天混合后排第二
+lex1122b-edu	26	edu	额度	1	lexicon-1122	2026-11-22	原 8274，聊天混合后排第二
+lex1122b-koufu	26	koufu	口服	1	lexicon-1122	2026-11-22	原 9324，聊天混合后排第二
+lex1122b-buban	26	buban	补办	1	lexicon-1122	2026-11-22	原 4048，聊天混合后排第二
+lex1122b-daozhang	26	daozhang	到账	1	lexicon-1122	2026-11-22	原 4251，聊天混合后排第二
+lex1122b-xianxue	26	xianxue	献血	1	lexicon-1122	2026-11-22	原 3784，聊天混合后排第二
+lex1122b-shangyue	26	shangyue	上月	1	lexicon-1122	2026-11-22	原 6782，聊天混合后排第二
+lex1122b-yanke	26	yanke	眼科	1	lexicon-1122	2026-11-22	原 4408，聊天混合后排第二
+lex1122b-geshui	26	geshui	个税	1	lexicon-1122	2026-11-22	原 3148，聊天混合后排第二
+lex1122b-jianshui	26	jianshui	减税	1	lexicon-1122	2026-11-22	原 3027，聊天混合后排第二
+lex1122b-chouqian	26	chouqian	抽签	1	lexicon-1122	2026-11-22	原 3374，聊天混合后排第二
+lex1122b-jieqing	26	jieqing	结清	1	lexicon-1122	2026-11-22	原 2672，聊天混合后排第二
+lex1122b-xieshang	26	xieshang	协商	1	lexicon-1122	2026-11-22	原 28827，聊天混合后排第二
+lex1122b-neg-youhui	26	tayouhuilaide	他有回来的	1	反例	2026-11-22	11-23 记录现状，不算门槛：原期望 他又会来的（优惠 提到第一后整句不能变），现首选 他有回来的
+lex1122b-neg-buwei	26	buweisuodong	不为所动	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-fahuo	26	tafahuole	他发火了	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhekou	26	yanbuxiazhekouqi	咽不下这口气	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-fudu	26	woxiangfudu	我想复读	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhuxiao	26	tazaizhuxiao	他在住校	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-quantao	26	zhongletadequantao	中了他的圈套	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-yuanma	26	lizheliyuanma	离这里远吗	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-xianxue	26	woxianxuezhege	我先学这个	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-shangyue	26	zhongqiujieshangyue	中秋节赏月	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-xieshang	26	xieshangmingzi	写上名字	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhifu	26	chuanzhezhifu	穿着制服	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhongjie	26	zhongjiezhezhanzheng	终结者战争	1	反例	2026-11-22	11-23 记录现状，不算门槛：原期望 终结这场战争（第二批提权后整句不能变），现首选 终结者战争
+lex1122b-neg-daozhang	26	zhangdaozhang	张道长	1	反例	2026-11-22	第二批提权后整句不能变
+user-aizibing-9	9	24942464	艾滋病	1	user	2026-11-23	九键 ai'zi'bing 曾在第三个出 逼一逼你（ext 词组碎片）
+user-aizibing-9-nofrag	9	24942464	!逼一逼你	1	user	2026-11-23	同上
+frag-biyibini-26	26	biyibini	!逼一逼你	1	反例	2026-11-23	0004 删掉的碎片，26 键首选不应再是它；比一比你 更通顺
+frag-bixianggang-26	26	bixianggang	比香港	3	反例	2026-11-23	删掉整词后仍要能拼出来
+spoken-jiangbantian	26	jiangbantian	讲半天	1	user	2026-11-24	口语短语；补前首选 将半天
+spoken-jiangleyibian	26	jiangleyibian	讲了一遍	1	user	2026-11-24	口语短语；补前首选 讲了一边
+spoken-jiangyixiawu	26	jiangyixiawu	讲一下午	1	user	2026-11-24	口语短语；补前首选 将一下午
+spoken-jiangbuguoqu	26	jiangbuguoqu	讲不过去	1	user	2026-11-24	口语短语；补前首选 将不过去
+spoken-jianghaole	26	jianghaole	讲好了	1	user	2026-11-24	口语短语；补前首选 将好了
+spoken-jiangriyu	26	jiangriyu	讲日语	1	user	2026-11-24	口语短语；补前首选 将日语
+spoken-chaobantian	26	chaobantian	吵半天	1	user	2026-11-24	口语短语；补前首选 超半天
+spoken-mayixia	26	mayixia	骂一下	1	user	2026-11-24	口语短语；补前首选 蚂蚁侠
+spoken-mayitong	26	mayitong	骂一通	1	user	2026-11-24	口语短语；补前首选 吗一同
+spoken-quanlejiju	26	quanlejiju	劝了几句	1	user	2026-11-24	口语短语；补前首选 全了几句
+spoken-honglebantian	26	honglebantian	哄了半天	1	user	2026-11-24	口语短语；补前首选 红了半天
+spoken-wenleyixia	26	wenleyixia	问了一下	1	user	2026-11-24	口语短语；补前首选 闻了一下
+spoken-wenyibian	26	wenyibian	问一遍	1	user	2026-11-24	口语短语；补前首选 问一边
+spoken-shuoliangbian	26	shuoliangbian	说两遍	1	user	2026-11-24	口语短语；补前首选 说两边
+spoken-jiangjibian	26	jiangjibian	讲几遍	1	user	2026-11-24	口语短语；补前首选 将即便
+spoken-qianyixia	26	qianyixia	签一下	1	user	2026-11-24	口语短语；补前首选 牵一下
+spoken-tianyixia	26	tianyixia	填一下	1	user	2026-11-24	口语短语；补前首选 舔一下
+spoken-huiyixia	26	huiyixia	回一下	1	user	2026-11-24	口语短语；补前首选 回忆下
+spoken-huanyixia	26	huanyixia	换一下	1	user	2026-11-24	口语短语；补前首选 缓一下
+spoken-xieyixia	26	xieyixia	写一下	1	user	2026-11-24	口语短语；补前首选 歇一下
+spoken-liaoyitong	26	liaoyitong	聊一通	1	user	2026-11-24	口语短语；补前首选 聊一同
+spoken-dubantian	26	dubantian	堵半天	1	user	2026-11-24	口语短语；补前首选 度半天
+spoken-wanbantian	26	wanbantian	玩半天	1	user	2026-11-24	口语短语；补前首选 晚半天
+spoken-shuiyixiu	26	shuiyixiu	睡一宿	1	user	2026-11-24	口语短语；补前首选 睡衣秀
+spoken-aoyixiu	26	aoyixiu	熬一宿	1	user	2026-11-24	口语短语；补前首选 奥一宿
+spoken-yongbuzhe	26	yongbuzhe	用不着	1	user	2026-11-24	口语短语；补前首选 永不这
+spoken-buliaole	26	buliaole	不聊了	1	user	2026-11-24	口语短语；补前首选 不了了
+spoken-beiwanle	26	beiwanle	背完了	1	user	2026-11-24	口语短语；补前首选 被玩了
+spoken-jiaowanle	26	jiaowanle	交完了	1	user	2026-11-24	口语短语；补前首选 浇完了
+spoken-ducuole	26	ducuole	读错了	1	user	2026-11-24	口语短语；补前首选 赌错了
+spoken-dingyiyan	26	dingyiyan	盯一眼	1	user	2026-11-24	口语短语；补前首选 定一眼
+spoken-guangyitang	26	guangyitang	逛一趟	1	user	2026-11-24	口语短语；补前首选 光一趟
+spoken-payiquan	26	payiquan	爬一圈	1	user	2026-11-24	口语短语；补前首选 怕一圈
+spoken-banyitang	26	banyitang	搬一趟	1	user	2026-11-24	口语短语；补前首选 办一趟
+spoken-kuyisheng	26	kuyisheng	哭一声	1	user	2026-11-24	口语短语；补前首选 哭医生
+spoken-quanyifan	26	quanyifan	劝一番	1	user	2026-11-24	口语短语；补前首选 权益翻
+spoken-gaobantian	26	gaobantian	搞半天	1	user	2026-11-24	口语短语；补前首选 高半天
+spoken-bieyiwanshang	26	bieyiwanshang	憋一晚上	1	user	2026-11-24	口语短语；补前首选 别一晚上
+spoken-pailehaojiu	26	pailehaojiu	排了好久	1	user	2026-11-24	口语短语；补前首选 拍了好久
+spoken-jileyixiawu	26	jileyixiawu	挤了一下午	1	user	2026-11-24	口语短语；补前首选 急了一下午
+spoken-neg-wenyixiawufan	26	wenyixiawufan	问一下午饭	1	对照	2026-11-24	问一下午 不能把 午饭 拆开
+spoken-neg-womenyitongqu	26	womenyitongqu	我们一同去	1	对照	2026-11-24	一同 不能变 一通
+spoken-neg-shuoleyihuierhua	26	shuoleyihuierhua	说了一会儿话	1	对照	2026-11-24	原有整句
+spoken-neg-buliaoliaozhi	26	buliaoliaozhi	不了了之	1	对照	2026-11-24	不聊了 不能抢 4 字成语
+spoken-neg-dabantian	26	dabantian	大半天	1	对照	2026-11-24	答半天 没补，大半天 照旧第一
+spoken-neg-paoyitian	26	paoyitian	跑一天	1	对照	2026-11-24	泡一天 没补，跑一天 照旧
+spoken-neg-huiyixia	26	huiyixia	回忆下	3	对照	2026-11-24	回一下 第一，回忆下 仍在前三
+spoken-neg-huanyixia	26	huanyixia	缓一下	3	对照	2026-11-24	换一下 第一，缓一下 仍在前三
+spoken-neg-xieyixia	26	xieyixia	歇一下	3	对照	2026-11-24	写一下 第一，歇一下 仍在前三
+spoken-neg-wenleyixia	26	wenleyixia	闻了一下	3	对照	2026-11-24	问了一下 第一，闻了一下 仍在前三
+spoken-neg-wokanhaoni	26	wokanhaoni	我看好你	1	对照	2026-11-24	看好久 不影响 看好你
+spoken-neg-chaohao	26	chaohao	超好	1	对照	2026-11-24	吵好了 不影响
+spoken-9-jiangbantian	9	542642268426	讲半天	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-chaobantian	9	24262268426	吵半天	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-mayixia	9	6294942	骂一下	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-wenleyixia	9	9365394942	问了一下	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-qianyixia	9	742694942	签一下	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-quanlejiju	9	7826535458	劝了几句	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-yongbuzhe	9	966428943	用不着	3	user	2026-11-24	九键：口语短语进前三
+spoken-9-jiangyixiawu	9	542649494298	讲一下午	3	user	2026-11-24	九键：口语短语进前三
+common-9-jintian-mid	9	546842	今天	1	user	2026-11-25	九键：打今天打到 jin tia 时首选不能是吉姆哈（常用词被冷门词压住）
+common-9-zhidao-mid	9	94432	知道	1	user	2026-11-25	九键：打到 zhi da 时首选不能是直达
+common-26-zhineng	26	zhineng	只能	1	user	2026-11-25	他：只能 竟然排在 智能后面（无学习时）
+common-9-zhineng	9	9446364	只能	1	user	2026-11-25	他：只能 竟然排在 智能后面（无学习时）
+common-14-zhineng	14	ZGUBEBG	只能	1	user	2026-11-25	他：只能 竟然排在 智能后面（无学习时）
+common-9-shihou	9	744468	时候	1	user	2026-11-25	九键：只打时候首选不能是事后（t9/whole_word_weight_margin）
+common-9-tongzhi	9	8664944	通知	1	user	2026-11-25	九键：只打通知首选不能是同志
+common-9-yangzi	9	926494	样子	1	user	2026-11-25	九键：只打样子首选不能是王子

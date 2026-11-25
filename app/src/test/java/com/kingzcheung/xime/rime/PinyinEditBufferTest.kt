@@ -8,6 +8,32 @@ class PinyinEditBufferTest {
         listOf("rime_ice", "t9_pinyin", "pinyin_14jian", "double_pinyin_flypy").forEach { assertTrue(PinyinEditBuffer.supports(it)) }
         listOf("japanese", "japanese_kana", "wubi86", "english").forEach { assertFalse(PinyinEditBuffer.supports(it)) }
     }
+    /** 11-22：笔画编码也能打开编辑条改；左栏选音节、逗号键分词这些拼音专用的不跟着开。 */
+    @Test fun strokeCodeIsEditableButNotPinyin() {
+        assertTrue(PinyinEditBuffer.supports("stroke"))
+        assertTrue(PinyinEditBuffer.isStrokeCode("stroke"))
+        assertFalse(PinyinEditBuffer.isStrokeCode("rime_ice"))
+        assertFalse(com.kingzcheung.xime.settings.InputProfiles.describe("stroke").capabilities.editablePinyin)
+    }
+    @Test fun strokeCodeKeepsWildcardsAndEverySeparator() {
+        assertEquals("hs*''h", PinyinEditBuffer.normalized("hs*''h", false, false, true))
+        assertEquals("*h*", PinyinEditBuffer.normalized("*h*", false, false, true))
+        assertEquals("hs''h", PinyinEditBuffer.normalized("hs*''h", false, false, false))
+    }
+    /** 编辑条跟组字区一样：组字区显示笔画时编辑条也是笔画（折是乛），关着时是字母；一个换一个，长度不变。 */
+    @Test fun strokeEditorFollowsTheShownPreedit() {
+        assertEquals("⼀⼁*'乛", strokeEditorText("hs*'z", "⼀⼁*'乛"))
+        assertEquals("hs*'z", strokeEditorText("hs*'z", "hs*'z"))
+        assertEquals("hspnz*'", strokeLetters(strokeGlyphs("hspnz*'")))
+        assertEquals("hspnz".length, strokeGlyphs("hspnz").length)
+    }
+    /** 输入框里显示的是笔画时，点在第几个笔画上，编辑光标就在第几个字母上。 */
+    @Test fun strokeHostCaretMapsGlyphsToLetters() {
+        val session = PinyinEditSession(1, "stroke", "hs*h", "", "", "hs*h", 2, false)
+        assertEquals(2, session.inlineOffset("⼀⼁*⼀"))
+        assertEquals(3, session.editOffset("⼀⼁*⼀", 3))
+        assertEquals(2, session.inlineOffset("hs*h"))
+    }
     @Test fun keepsRealBoundariesAndUmlautAsV() {
         assertEquals("nv'er", PinyinEditBuffer.normalized("Nü er"))
         assertEquals("ni'hao", PinyinEditBuffer.normalized("ni hao"))
@@ -117,5 +143,18 @@ class PinyinEditBufferTest {
         val session = PinyinEditSession(1, "double_pinyin_mspy", "p;vg", "", "", "p;vg", 4, false)
         assertEquals(2, session.editOffset("ping'zheng", 4))
         assertEquals(0, session.editOffset("ping'zheng", 0))
+    }
+
+    /** 点屏上拼音打开编辑：按「点在第几个字母后面」对位置，带声调、空格、隔音符、汉字前缀都不影响（11-23）。 */
+    @Test fun shownPreeditLettersMapBackToTheCode() {
+        assertEquals(5, preeditLettersBefore("wǒ'men shi", 7))
+        assertEquals(0, preeditLettersBefore("我们 shi", 3))
+        assertEquals("跳过前面选好的汉字", 3, offsetAfterPreeditLetters("我们 shi hao", 0))
+        assertEquals(6, offsetAfterPreeditLetters("我们 shi hao", 3))
+        assertEquals(10, offsetAfterPreeditLetters("wo men shi", 99))
+        assertFalse(isPreeditLetter('|'))
+        assertFalse(isPreeditLetter('\u200B'))
+        assertTrue(isPreeditLetter(';'))
+        assertTrue(isPreeditLetter('7'))
     }
 }

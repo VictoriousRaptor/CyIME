@@ -162,14 +162,14 @@ object StorageStats {
             Category(
                 id = ID_CLIPBOARD,
                 title = "剪贴板历史",
-                description = "本地剪贴板记录(不含固定内容)",
+                description = "剪贴板记录，不含固定的",
                 sizeBytes = clipboardSize,
                 clearable = true,
             ),
             Category(
                 id = ID_LOGS,
                 title = "日志",
-                description = "运行日志文件(保留当日日志)",
+                description = "运行日志，保留今天的",
                 sizeBytes = logsSize,
                 clearable = true,
             ),

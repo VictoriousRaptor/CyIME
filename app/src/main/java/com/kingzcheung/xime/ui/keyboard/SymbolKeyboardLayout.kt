@@ -196,6 +196,9 @@ fun SymbolKeyboardLayout(
                                             if (!onRecentPage) recentSymbols = updated
                                             if (preserveWidth || (category.id == "common" && symbol in ownCommon)) onSelectExact(symbol)
                                             else onSelect(symbol)
+                                            // 「选完符号自动返回」（默认关）：符号已排进按键队列，回到打字键盘不影响上屏。
+                                            if (com.kingzcheung.xime.settings.SettingsPreferences
+                                                    .isSymbolReturnAfterPickEnabled(context)) onBack()
                                         },
                                         modifier = Modifier.weight(1f).height(grid.rowHeightDp.dp).testTag("symbol-key:$symbol"),
                                         fontSize = symbolFontSize,
@@ -217,7 +220,7 @@ fun SymbolKeyboardLayout(
 
         // 和标准 26 键共用底栏权重；分类只占余下空间，不挤压两侧入口。
         val bottom = QwertyBottomRowWeights.Standard
-        val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(LocalKeyboardInputPreferences.current.symbolKeyCycle)
+        val modeSlots = com.kingzcheung.xime.keyboard.modeSlotOrder(LocalKeyboardInputPreferences.current.swapModeKeys, LocalKeyboardInputPreferences.current.symbolKeyCycle)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -225,7 +228,7 @@ fun SymbolKeyboardLayout(
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            for (slot in 1..modeCount) {
+            for (slot in modeSlots) {
                 KeyboardModeKey(
                     slot = slot, page = KeyboardInputPage.SYMBOLS,
                     onKeyPress = { action -> if (action == "abc") onBack() else onNumber() },
@@ -240,7 +243,7 @@ fun SymbolKeyboardLayout(
             }
             BoxWithConstraints(
                 modifier = Modifier
-                    .weight(bottom.total - modeCount * bottom.mode - bottom.enter)
+                    .weight(bottom.total - modeSlots.size * bottom.mode - bottom.enter)
                     .fillMaxHeight()
                     .testTag("symbol-category-strip"),
                 contentAlignment = Alignment.CenterStart,

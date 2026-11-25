@@ -208,7 +208,7 @@ fun KeyboardLayout(
     val numberKeys = remember(numberRowPrefs.numberRow, zhuyin, numberRowPrefs.sideSymbols) {
         if (numberRowShown(numberRowPrefs.numberRow, zhuyin)) numberRowPrefs.numberRowKeys() else emptyList()
     }
-    val numberRowWeight = if (numberKeys.isEmpty()) 0f else NUMBER_ROW_HEIGHT_WEIGHT
+    val numberRowWeight = if (numberKeys.isEmpty()) 0f else numberRowHeightWeight(numberRowPrefs.numberRowFullHeight)
     val metricContext = LocalContext.current
     val metricDisplay = LocalView.current.display
     val metricConfiguration = LocalConfiguration.current
@@ -1058,6 +1058,8 @@ fun KeyboardLayout(
                                         onRelease = onRelease,
                                         onLongPressSelect = onLongPressSelect,
                                         longPressItems = longPressLabels,
+                                        longPressCenterItems = letterMenuCenterItems(key, longPressLabels, isShifted,
+                                            KeysConfigHelper.longPressLetters(isAsciiMode)),
                                         shadowEnabled = shadowEnabled,
                                         shadowElevation = shadowElevation,
                                         shadowShapeRadius = shadowShapeRadius,
@@ -1114,7 +1116,7 @@ fun KeyboardLayout(
                     // 空格左侧逗号、右侧句号；只开逗号时沿用原配置的逗号键。
                     val bottomPrefs = LocalKeyboardInputPreferences.current
                     val customBottom = usesCustom26BottomRow(uiState.inputProfile, keyRows)
-                    val modeCount = com.kingzcheung.xime.keyboard.modeSlotCount(bottomPrefs.symbolKeyCycle)
+                    val modeSlots = com.kingzcheung.xime.keyboard.modeSlotOrder(bottomPrefs.swapModeKeys, bottomPrefs.symbolKeyCycle)
                     val commaOnLeft = if (customBottom) QwertyBottomKey.COMMA in bottomPrefs.qwertyBottomRow.keys else bottomPrefs.qwertyCommaKey
                     val periodOnRight = if (customBottom) QwertyBottomKey.PERIOD in bottomPrefs.qwertyBottomRow.keys else bottomPrefs.qwertyPeriodKey
                     val punctuationFull = LocalKeyboardPunctuation.current?.full ?: !isAsciiMode
@@ -1122,7 +1124,7 @@ fun KeyboardLayout(
                         punctuationFull, english = isAsciiMode || uiState.inputProfile.language.typesLettersDirectly,
                         japanese = LocalKeyboardPunctuation.current?.japanese == true)
                     val punctuationCount = (if (commaOnLeft) 1 else 0) + (if (periodOnRight) 1 else 0)
-                    val bottomSpaceWeight = bottom.space + bottom.punctuation * (1 - punctuationCount) + bottom.mode * (2 - modeCount)
+                    val bottomSpaceWeight = bottom.space + bottom.punctuation * (1 - punctuationCount) + bottom.mode * (2 - modeSlots.size)
                     // 键面写什么就上屏什么：只有与当前宽度一致的全角标点走普通按键；
                     // 半角模式下滑的全角标点、中文状态的半角标点都原样上屏，避免被宽度设置转回去。
                     val commitPunctuation: (String) -> Unit = { text ->
@@ -1138,7 +1140,8 @@ fun KeyboardLayout(
                         CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
                         SwipeableKeyButton(
                             layoutMode = KeysConfigHelper.getButtonLayout(isAsciiMode),
-                            followSymbolSwipeDirection = !keyLabelPrefs.bottomPunctuationSwipeUp,
+                            // 带分词的标点键不跟角标方向翻：' 画在左下角就下滑分词、副标点上滑（11-24 反馈「中文逗号下滑分词失效」）。
+                            followSymbolSwipeDirection = !keyLabelPrefs.bottomPunctuationSwipeUp && !split,
                             keepSymbolSwipeOnLongPress = keyLabelPrefs.bottomPunctuationSwipeUp,
                             text = key.primary,
                             onClick = { commitPunctuation(key.primary) },
@@ -1319,6 +1322,7 @@ fun KeyboardLayout(
                                 shadowEnabled = shadowEnabled,
                                 shadowElevation = shadowElevation,
                                 shadowShapeRadius = shadowShapeRadius,
+                                onLongClick = enterLongPressNewline(enterKeyText) { if (!shiftSlideTargets.ctrlEnter()) shiftEnter() },
                             )
                         }
 
@@ -1369,14 +1373,14 @@ fun KeyboardLayout(
                         if (isVoiceMode && !isVoiceSticky) {
                             DummyKeyButton(
                                 backgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
-                                modifier = Modifier.weight(bottom.mode * modeCount + if (languageOnLeft) bottom.language else 0f)
+                                modifier = Modifier.weight(bottom.mode * modeSlots.size + if (languageOnLeft) bottom.language else 0f)
                             )
                             if (commaOnLeft) DummyKeyButton(
                                 backgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
                                 modifier = Modifier.weight(bottom.punctuation)
                             )
                         } else {
-                            for (slot in 1..modeCount) {
+                            for (slot in modeSlots) {
                                 KeyboardModeKey(
                                     slot = slot, onKeyPress = onKeyPress,
                                     backgroundColor = specialKeyBackgroundColor,
@@ -1390,8 +1394,8 @@ fun KeyboardLayout(
                                         onGestureAction(GestureAction.COMMAND, com.kingzcheung.xime.keyboard.CtrlShortcuts.command(letter))
                                     },
                                 )
-                                if (slot == modeCount && languageOnLeft) LanguageKey()
                             }
+                            if (languageOnLeft) LanguageKey()
 
                             if (leftPunctuation != null) PunctuationKey(leftPunctuation, "qwerty-punctuation-key", leftSplit)
                             else if (commaOnLeft) {
@@ -1510,7 +1514,7 @@ fun KeyboardLayout(
 
                         // 分体时空格在中线处分成左右两块，两块都是完整的空格键。
                         val spaceParts = if (splitKeyboard) SplitKeyboardGeometry.spaceSplit(bottom, bottomSpaceWeight,
-                            bottom.mode * modeCount + (if (commaOnLeft) bottom.punctuation else 0f) +
+                            bottom.mode * modeSlots.size + (if (commaOnLeft) bottom.punctuation else 0f) +
                                 (if (languageOnLeft) bottom.language else 0f)).toList()
                             else listOf(bottomSpaceWeight)
                         spaceParts.forEachIndexed { part, spaceWeight ->
@@ -1875,6 +1879,8 @@ fun KeyboardRowWithConfig(
                 onRelease = onRelease,
                 onLongPressSelect = onLongPressSelect,
                 longPressItems = longPressLabels,
+                longPressCenterItems = letterMenuCenterItems(key, longPressLabels, isShifted,
+                    KeysConfigHelper.longPressLetters(isAsciiMode)),
                 fontSize = config.fontSize,
                 swipeFontSize = config.swipeFontSize,
                 shadowEnabled = config.shadowEnabled,
@@ -1925,9 +1931,13 @@ internal fun ShiftCapsKeyButton(
     val currentSplitRedundant by rememberUpdatedState(splitRedundant)
     val suppressCursorMove = LocalSuppressCursorMove.current
     val currentPress by rememberUpdatedState(onKeyPressDown)
+    // 松手给「按键抬起震动」，和字母键一样（用户 11-23）。
+    val currentRelease by rememberUpdatedState(keyReleaseOrShared(null, onKeyPressDown != null))
     val currentKey by rememberUpdatedState(onKeyPress)
     val currentTapKey by rememberUpdatedState(tapKey)
     val currentGapLight by rememberUpdatedState(LocalKeyGapLight.current)
+    // 「点一下 Shift 锁定大写」（默认关）：开着时点按直接锁定/解锁，见 [shiftTapAction]。
+    val currentTapLocks by rememberUpdatedState(LocalKeyboardInputPreferences.current.shiftTapLocks)
     var bounds by remember { mutableStateOf(Rect.Zero) }
 
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
@@ -1994,6 +2004,8 @@ internal fun ShiftCapsKeyButton(
                     // 也不会按住打出大写字母把拼音打断（#464）。
                     val splitTap = tapOutput == null && currentSplit?.invoke() == true
                     var holding = tapOutput == null && !splitTap
+                    // 按住 Shift 之前按下、还没抬的字母先按原样出（见 KeyPressOrder），不被这次 Shift 变成大写。
+                    if (holding) KeyPressOrder.settleAll()
                     if (holding) viewModel.beginShiftHold()
                     var released = false
                     var dragged = false
@@ -2019,6 +2031,8 @@ internal fun ShiftCapsKeyButton(
                             if (!change.pressed) {
                                 released = true
                                 upTime = change.uptimeMillis
+                                // 这个键松手要生效了（分词、长音、切大小写）：比它早按下、还没抬的字母先出。
+                                KeyPressOrder.settleAll()
                                 // 键缝动效：从 Shift 拖到字母上松手，大写收到那个字母上（换成按键区里的位置）。
                                 if (dragged && target != null && targets != null && targets.keyboardBounds.contains(target.bounds.center)) {
                                     currentGapLight?.aim(target.bounds.center - targets.keyboardBounds.topLeft)
@@ -2032,6 +2046,7 @@ internal fun ShiftCapsKeyButton(
                         targets?.finish()
                         isPressed = false
                         suppressCursorMove.value = false
+                        currentRelease?.invoke()
                         if (tapOutput != null) {
                             // 长音键：点按送 ー；按住没打别的键松手，照 Shift 点按切换（小写→单次大写→锁定→小写）。
                             // 计时没赶上（松手事件先到）时按事件时间判断，不把长按当成点按。
@@ -2050,12 +2065,11 @@ internal fun ShiftCapsKeyButton(
                             if (currentSplit?.invoke() == true) {
                                 currentKey(SYLLABLE_SEPARATOR)
                                 lastTap = Long.MIN_VALUE
-                            } else if (lastTap != Long.MIN_VALUE && down.uptimeMillis - lastTap in 0..viewConfiguration.doubleTapTimeoutMillis) {
-                                currentKey("shift_caps")
-                                lastTap = Long.MIN_VALUE
                             } else {
-                                currentKey("shift_single")
-                                lastTap = upTime
+                                val doubleTap = lastTap != Long.MIN_VALUE && down.uptimeMillis - lastTap in 0..viewConfiguration.doubleTapTimeoutMillis
+                                val action = shiftTapAction(currentTapLocks, doubleTap)
+                                currentKey(action)
+                                lastTap = if (action == "shift_single") upTime else Long.MIN_VALUE
                             }
                         } else lastTap = Long.MIN_VALUE
                     }
@@ -2119,6 +2133,7 @@ fun SwipeableKeyButtonLandscape(
     onRelease: (() -> Unit)? = null,
     onLongPressSelect: ((String) -> Unit)? = null,
     longPressItems: List<String>? = null,
+    longPressCenterItems: List<String> = emptyList(),
     fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
     swipeFontSize: androidx.compose.ui.unit.TextUnit = 10.sp,
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
@@ -2133,7 +2148,7 @@ fun SwipeableKeyButtonLandscape(
         symbolInputText = symbolInputText, symbolInputDownText = symbolInputDownText,
         swipeUpKeyLabel = swipeUpKeyLabel, swipeDownKeyLabel = swipeDownKeyLabel,
         onSwipe = onSwipe, onSwipeDown = onSwipeDown, onPress = onPress, onRelease = onRelease,
-        onLongPressSelect = onLongPressSelect, longPressItems = longPressItems,
+        onLongPressSelect = onLongPressSelect, longPressItems = longPressItems, longPressCenterItems = longPressCenterItems,
         fontSize = if (fontSize == TextUnit.Unspecified) 14.sp else fontSize, swipeFontSize = swipeFontSize,
         onSwipeStateChange = onSwipeStateChange, shadowEnabled = shadowEnabled,
         shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
@@ -2258,6 +2273,8 @@ fun CompactKeyboardRowWithConfig(
                 onRelease = compactOnRelease,
                 onLongPressSelect = compactOnLongPressSelect,
                 longPressItems = longPressLabels,
+                longPressCenterItems = letterMenuCenterItems(key, longPressLabels, isShifted,
+                    KeysConfigHelper.longPressLetters(isAsciiMode)),
                 fontSize = config.fontSize,
                 swipeFontSize = config.swipeFontSize,
                 shadowEnabled = config.shadowEnabled,
@@ -2320,6 +2337,28 @@ internal fun commitLongPressChoice(label: String, onCommitText: ((String) -> Uni
         com.kingzcheung.xime.service.ExplicitLowercase.mark(label)
         onKeyPress(label)
     } else (onCommitText ?: onKeyPress)(label)
+}
+
+/**
+ * 键盘把按下的字母交给按键线程前套上 Shift：Shift 开着时长按气泡里特意选的小写（[explicitLowercase]）不再转成大写，
+ * 也不按 Shift 处理（按着 Shift 长按 K 选 k 上屏 k，11-23 平板复测）；其余照旧由 Shift 决定大小写。
+ */
+internal fun shiftedKeyPress(key: String, shift: com.kingzcheung.xime.viewmodel.ShiftMode, explicitLowercase: Boolean): Pair<String, Boolean> =
+    if (shift.isShifted && explicitLowercase && key.length == 1 && key[0] in 'a'..'z') key to false
+    else shift.applyToKey(key) to shift.isShifted
+
+/**
+ * 26 键中文、英文的单字母键长按气泡里排在手指下的项：点按得不到的那个大小写在先（平时点按是小写，长按松手就是大写；
+ * Shift 按着时反过来），另一个挨着。带声调、变音的字母往外排（群友 11-23）。气泡里没有这对大小写、
+ * 或是字母语言键盘（[accentLetters] 不空：西班牙、德、俄语等，长按要的是 ñ、ä 这类）时不排，照旧。
+ */
+internal fun letterMenuCenterItems(key: String, labels: List<String>?, isShifted: Boolean, accentLetters: String): List<String> {
+    if (labels == null || accentLetters.isNotEmpty() || key.length !in 1..2 || !key.all { it.lowercaseChar() in 'a'..'z' }) return emptyList()
+    // 14 键合并键（qw）：两个大写在前、两个小写在后，松手不挪是左边那个字母的大写（11-24 长按方案）。
+    val upper = key.map { it.uppercase() }
+    val lower = key.map { it.lowercase() }
+    if (!labels.containsAll(upper) || !labels.containsAll(lower)) return emptyList()
+    return if (isShifted) lower + upper else upper + lower
 }
 
 /**

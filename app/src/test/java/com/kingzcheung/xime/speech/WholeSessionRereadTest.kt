@@ -59,6 +59,44 @@ class WholeSessionRereadTest {
         assertTrue("both sentences are decoded at their pause/stop first", engine.reread.size >= 3)
     }
 
+    @Test fun `one unsupported language skips X-ASR for the entire recording regardless of order`() {
+        val cases = listOf(
+            Triple(RichTranscript("first", "en"), RichTranscript("second", "yue"), "first second"),
+            Triple(RichTranscript("係咩？", "yue"), RichTranscript("second", "zh"), "係咩？second"),
+            Triple(RichTranscript("普通话", "zh"), RichTranscript("", "<|yue|>"), "普通话"),
+            Triple(RichTranscript("first", "zh"), RichTranscript("", "<|nospeech|>"), null),
+            Triple(RichTranscript("first", "zh"), RichTranscript("second", "en"), null),
+        )
+        for ((first, second, fallback) in cases) {
+            val engine = object : Engine() {
+                override val hasRefinement = false
+                override val isStreaming = false
+                override val checkXasrLanguagesAtStop = true
+                var firstPasses = 0
+                override fun refineRich(samples: FloatArray): RichTranscript {
+                    return if (firstPasses++ == 0) first else second
+                }
+                override fun refinePunctuated(samples: FloatArray): String {
+                    reread.add(samples.size)
+                    return "final transcript"
+                }
+            }
+            val session = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+            session.acceptPcm(pcm(16000, loud))
+            session.acceptPcm(pcm(32000, quiet))
+            session.acceptPcm(pcm(16000, loud))
+            val text = session.finish()
+            assertEquals(2, engine.firstPasses)
+            if (fallback != null) {
+                assertEquals(fallback, text)
+                assertTrue(engine.reread.isEmpty())
+            } else {
+                assertEquals("final transcript", text)
+                assertEquals(listOf(64000), engine.reread)
+            }
+        }
+    }
+
     @Test fun `SenseVoice alone with the switch off keeps the old segments without a re-read`() {
         val engine = object : Engine() {
             override val hasRefinement = false
@@ -143,5 +181,58 @@ class WholeSessionRereadTest {
         release.countDown(); finisher.join(2000); successor.join(2000)
         assertFalse(successor.isAlive)
         assertNotEquals("迟到", result); assertFalse(output.contains("迟到"))
+    }
+
+    /** Silero never opens a region on some short phrases on the tablet (2026-11-22): loud enough still counts. */
+    private open class DeafEngine(val answer: String) : Engine() {
+        override fun detector(): SpeechDetector = object : SpeechDetector {
+            override fun speech(frame: FloatArray) = false
+            override fun reset() { }
+        }
+        override fun refinePunctuated(samples: FloatArray): String { reread.add(samples.size); return answer }
+    }
+    private val floor = 30    // about -61 dBFS: the room
+    private val phrase = 1500 // about -27 dBFS: 34 dB over the room
+
+    @Test fun `a short phrase the VAD missed is still read when it is clearly louder than the room`() {
+        val engine = DeafEngine("等着。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, phrase)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("等着。", s.finish())
+        assertEquals(56000, engine.reread.single())
+    }
+
+    @Test fun `automatic mode recovers a Cantonese phrase missed by VAD without running X-ASR`() {
+        val engine = object : DeafEngine("unexpected X-ASR") {
+            override val isStreaming = false
+            override val checkXasrLanguagesAtStop = true
+            override fun refineRich(samples: FloatArray) = RichTranscript("早晨。", "<|yue|>")
+        }
+        val session = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        session.acceptPcm(pcm(32000, floor)); session.acceptPcm(pcm(8000, phrase)); session.acceptPcm(pcm(16000, floor))
+        assertEquals("早晨。", session.finish())
+        assertTrue(engine.reread.isEmpty())
+    }
+
+    @Test fun `room noise alone without a VAD region is not read`() {
+        val engine = DeafEngine("我。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, floor * 3)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("", s.finish())
+        assertTrue(engine.reread.isEmpty())
+    }
+
+    @Test fun `one character read from a loud sound without a VAD region is dropped`() {
+        val engine = DeafEngine("我。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, phrase)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("", s.finish())
+    }
+
+    @Test fun `speech lift measures the loudest third of a second over the floor`() {
+        val lift = SpeechLift()
+        lift.accept(FloatArray(32000) { .001f }); lift.accept(FloatArray(8000) { .05f }); lift.accept(FloatArray(16000) { .001f })
+        assertEquals(34f, lift.liftDb(), .5f)
+        assertEquals(0f, SpeechLift().apply { accept(FloatArray(4000) { .05f }) }.liftDb(), 0f)
     }
 }

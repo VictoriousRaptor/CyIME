@@ -244,11 +244,8 @@ CyIME 电脑	CyIME computer
 声纹模型 · 中文	Voiceprint model · Chinese
 字幕模式用来区分不同说话人。	Used by caption mode to tell speakers apart.
 Zipformer · 中文	Zipformer · Chinese
-中文流式语音识别，可使用 SenseVoice 二次校正。	Streaming Chinese speech recognition; can be refined by SenseVoice.
 离线翻译 · 中译英	Offline translation · Chinese→English
-翻译插件没填 API 时，在手机上把中文翻成英文，不联网。Mozilla Firefox 的翻译模型。	Translates Chinese into English on the phone, offline, when the translation plugin has no API set. Mozilla Firefox's translation model.
 离线翻译 · 英译中	Offline translation · English→Chinese
-翻译插件没填 API 时，在手机上把英文翻成中文，不联网。Mozilla Firefox 的翻译模型。	Translates English into Chinese on the phone, offline, when the translation plugin has no API set. Mozilla Firefox's translation model.
 西班牙语补全词表	Spanish word list
 西班牙语键盘的单词补全，约 4 万个常用词。不打重音也能补全：cancion → canción、ano → año。	Word completion for the Spanish keyboard, about 40,000 common words. Works without accents: cancion → canción, ano → año.
 德语补全词表	German word list
@@ -260,19 +257,15 @@ Zipformer · 中文	Zipformer · Chinese
 俄语补全词表	Russian word list
 俄语键盘的单词补全，约 4 万个常用词。不打 ё 也能补全：еще → ещё。	Word completion for the Russian keyboard, about 40,000 common words. Works without ё: еще → ещё.
 日语转换引擎	Japanese conversion engine
-把罗马字、假名转换成日语汉字假名的程序库（azooKey）。轻量版装「日语」插件时下载，完整版已内置。	Library (azooKey) that converts romaji and kana into Japanese kanji and kana. The light build downloads it with the Japanese plugin; the full build includes it.
 手写模型	Handwriting model
 本地手写识别模型。	On-device handwriting recognition model.
 拍照识别模型	Photo text recognition model
-拍照识字用的中英文识别模型，约 21 MB。轻量版第一次拍照识别时下载，完整版已内置。	Chinese/English recognition model for reading text from photos, about 21 MB. The light build downloads it the first time you use it; the full build includes it.
 拍照识别引擎	Photo text recognition engine
-拍照识字时处理图片用的程序库（OpenCV）。轻量版第一次拍照识别时和识别模型一起下载，完整版已内置。	Library (OpenCV) that processes images for photo text recognition. The light build downloads it with the recognition model the first time; the full build includes it.
 日语词库	Japanese dictionary
 日语转换用的 azooKey 词库（含 Mozc 的人名地名）。轻量版装「日语」插件时下载，完整版已内置。	azooKey dictionary for Japanese conversion (with Mozc names and places). The light build downloads it with the Japanese plugin; the full build includes it.
 公式手写模型	Formula handwriting model
 手写数学公式，识别成 LaTeX；日语、英文手写的边写边学也需要它。	Recognizes handwritten math as LaTeX; Japanese and English handwriting learning also need it.
 候选中英释义词典	Candidate glossary (Chinese–English)
-设置里“候选注释内容”选释义后，中文候选旁显示英文，中文键盘里的英文候选旁显示中文。英→中取自 ECDICT，中→英取自 CC-CEDICT（MDBG）；常见的日常短语也显示英文。	When “Candidate notes” is set to meanings, Chinese candidates show English and English candidates on the Chinese keyboard show Chinese. English→Chinese comes from ECDICT, Chinese→English from CC-CEDICT (MDBG); common everyday phrases also show English.
 内置模型清单与应用不匹配	Built-in model list doesn't match the app
 清理旧模型失败：{0}	Failed to clean up old models: {0}
 {0} 已被 {1} 替代，但未能删除	{0} was replaced by {1} but couldn't be deleted
@@ -282,13 +275,9 @@ Zipformer · 中文	Zipformer · Chinese
 词组模型(完整，203 MB)	Phrase model (full, 203 MB)
 「觉的」改成「觉得」，其余不变。	Fixes “觉的” to “觉得”; nothing else changed.
 被 v3-ls-tri-jue1105-c3 取代（只修了「觉的」）。	Replaced by v3-ls-tri-jue1105-c3 (only fixed “觉的”).
-旧格式，内容与新版相同；可删除后改装新版以节省空间。	Old format with the same content as the new one; you can delete it and install the new version to save space.
 词组模型(精简，105 MB)	Phrase model (compact, 105 MB)
-完整版剪枝后的小一半版本，九键、26 键全拼和双拼的整句都用它；九键整句首选约低 3 个百分点，26 键长句和完整版一样；和完整版二选一，安装后重新启动输入法生效。CyIME 自行训练。	A pruned version about half the size of the full one, used for whole sentences in 9-key, QWERTY full pinyin and Shuangpin. 9-key sentence top picks are about 3 points lower; QWERTY long sentences are the same as full. Choose either this or the full one. Takes effect after restarting the keyboard. Trained by CyIME.
 九键语法增强(已停用)	9-key grammar boost (retired)
-已停用：九键词组模型更准、更小，请改装词组模型；装了词组模型后它不再起作用，会自动删除。来源：RIME-LMDG，CC-BY-4.0。	Retired: the 9-key phrase model is more accurate and smaller, please install it instead. Once the phrase model is installed this has no effect and is deleted automatically. Source: RIME-LMDG, CC-BY-4.0.
 九键长句增强(已停用)	9-key long-sentence boost (retired)
-已停用：实测对首选提升很小，却拖慢打字并在停顿后改动候选；现在不参与排序，已下载的可删除以释放空间。来源：UER-py，Apache-2.0。	Retired: tests showed little gain in top picks while slowing typing and changing candidates after pauses. It no longer affects ranking; delete it to free space. Source: UER-py, Apache-2.0.
 内置模型准备失败，下次启动重试	Built-in model setup failed; will retry next launch
 默认模型准备失败，联网或下次启动重试：{0}	Default model setup failed; will retry when online or next launch: {0}
 无法保存设备模型默认配置	Couldn't save the device model defaults
@@ -458,8 +447,8 @@ Zipformer · 日语原版	Zipformer · Japanese original
 按键角标改成「{0}」。	Key hints set to “{0}”.
 打开了「反转上下滑方向」：上滑出上角标、下滑出下角标，删除键也反过来。	Turned on “Reverse swipe directions”: swipe up for the top hint, down for the bottom hint; the delete key is reversed too.
 关掉了「反转上下滑方向」：下滑出上角标、上滑出下角标。	Turned off “Reverse swipe directions”: swipe down for the top hint, up for the bottom hint.
-打开了「候选栏取消按钮」：打字时候选栏最左边有左箭头，点它取消输入。	Turned on “Cancel button in candidate bar”: while typing, a left arrow at the far left of the candidate bar cancels input.
-关掉了「候选栏取消按钮」：候选词从最左边开始。	Turned off “Cancel button in candidate bar”: candidates start at the far left.
+打开了「显示 ‹ 取消键」：打字时候选栏最左边有左箭头，点它取消输入。	Turned on “Show ‹ cancel key”: while typing, a left arrow at the far left of the candidate bar cancels input.
+关掉了「显示 ‹ 取消键」：候选词从最左边开始。	Turned off “Show ‹ cancel key”: candidates start at the far left.
 长按空格改成「{0}」。	Hold space set to “{0}”.
 打开了「退格直接删字」：有联想词时第一下删除键就删字。	Turned on “Backspace deletes right away”: with predictions showing, the first delete removes a character.
 关掉了「退格直接删字」：有联想词时第一下删除键先收起联想。	Turned off “Backspace deletes right away”: with predictions showing, the first delete dismisses them.
@@ -853,7 +842,6 @@ Cyletix10（实验）	Cyletix10 (experimental)
 缺少已安装词典：{0}	Missing installed dictionary: {0}
 五笔86（Rime 官方）	Wubi 86 (official Rime)
 Rime / 王永民	Rime / Wang Yongmin
-Rime 官方五笔86，支持拼音反查；仅下载本方案和词库，基础依赖已随 CyIME 提供。	Official Rime Wubi 86 with pinyin lookup; downloads only this scheme and its dictionary, base dependencies come with CyIME.
 形码	Shape-based
 拼音	Pinyin
 固定 Rime 官方提交；仅下载五笔86方案和词库，不带其他方案或应用设置。	Pinned to an official Rime commit; downloads only the Wubi 86 scheme and dictionary, no other schemes or app settings.
@@ -861,7 +849,6 @@ Rime 官方五笔86，支持拼音反查；仅下载本方案和词库，基础�
 繁体	Traditional
 小鹤音形	Xiaohe Yinxing
 何海峰 flypy.cc / cubercsl 整理	He Haifeng flypy.cc / compiled by cubercsl
-小鹤音形：音码加形码，四码定长、满码顶字上屏；ok 引导拼字，带小鹤双拼反查。整套方案和词库一起下载。	Xiaohe Yinxing: sound code plus shape code, fixed four-key codes that commit when full; “ok” starts character spelling, with Xiaohe Shuangpin lookup. The whole scheme downloads together with its dictionary.
 音形	Sound-shape
 小鹤	Xiaohe
 固定 cubercsl/rime-flypy 提交 9ee4647（码表 10.26.1）。	Pinned to cubercsl/rime-flypy commit 9ee4647 (table 10.26.1).
@@ -968,6 +955,7 @@ zh、ch、sh 需要三个不同的键	zh, ch and sh need three different keys
 未标注语言	No language set
 双拼编码	Shuangpin codes
 {0}没有{1}，已换成{2}	{0} has no {1}; switched to {2}
+合并键布局只能用中文26键和双拼方案	Merged-key layouts only work with Chinese 26-key and double pinyin schemes
 设置日语引擎路径失败	Failed to set the Japanese engine path
 日语词库解压失败	Failed to unpack the Japanese dictionary
 词条文字或拼音格式有误	Entry text or pinyin is malformed
@@ -1146,9 +1134,7 @@ zhuan 也出“装”，zhuang 也出“专”	zhuan also gives “装”, zhuan
 方案与词库	Schemes & dictionaries
 插件	Plugins
 已下载方案包	Downloaded scheme packages
-本地剪贴板记录(不含固定内容)	Local clipboard records (not pinned items)
 日志	Logs
-运行日志文件(保留当日日志)	Log files (today's log is kept)
 缓存	Cache
 图片与临时文件缓存，可安全清理	Image and temporary file cache; safe to clear
 文字识别模型	Text recognition model
@@ -1554,7 +1540,6 @@ CyIME备份-{0}.zip	=
 怎么导入	How to import
 1. 先把词库文件存到手机上：搜狗词库网站下载的、微信或 QQ 收到的文件、用数据线从电脑拷过来的都可以。	1. Save the dictionary file on your phone first: files from the Sogou dictionary site, received via WeChat or QQ, or copied from a computer over USB all work.
 2. 点「导入文件」，在文件选择器里找到它。	2. Tap “Import file” and find it in the file picker.
-3. 导入后这个词库会自动打开，点底部「应用更改」才生效。不用了可以关掉，关掉并应用后可以删除。	3. The dictionary turns on after import; tap “Apply changes” at the bottom for it to take effect. Turn it off when you don't need it; once off and applied, you can delete it.
 支持的格式	Supported formats
 搜狗细胞词库(.scel)	Sogou cell dictionary (.scel)
 搜狗词库网站下载的文件，直接导入。	Files downloaded from the Sogou dictionary site; import them directly.
@@ -1574,7 +1559,6 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 导入的词库	Imported dictionaries
 开着 {0} 个词库，{1}，打字最多慢 {2}	{0} dictionaries on, {1}, typing up to {2} slower
 打字最多慢 {0}	Typing up to {0} slower
-，超出正常	, more than normal
 ，会明显卡顿	, will lag noticeably
 应用更改	Apply changes
 搜索词库	Search dictionaries
@@ -1585,7 +1569,6 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 自动更新词库	Update dictionaries automatically
 每天查一次新词，只下载不上传	Checks for new words once a day; download only, nothing uploaded
 分类词库英文候选	English candidates from category dictionaries
-中文键盘里也出导入词库的英文词	English words from imported dictionaries also appear on the Chinese keyboard
 正在处理词库	Processing dictionaries
 检查内置词库更新	Check for built-in dictionary updates
 可导入 .scel、.txt、.dict.yaml、.json 词库	Import .scel, .txt, .dict.yaml or .json dictionaries
@@ -1603,7 +1586,6 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 启用{0}	Enable {0}
 {0}的更多操作	More actions for {0}
 查看来源	View source
-内置词库随安装包提供，可关闭	Built-in dictionaries come with the installer and can be turned off
 删除前请关闭词库并应用更改	Turn the dictionary off and apply changes before deleting
 应用更改后可删除	Can be deleted after applying changes
 删除词库	Delete dictionary
@@ -1633,10 +1615,15 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 卡片显示行数	Card lines
 每条记录最多显示几行文字	Maximum lines of text shown per record
 {0} 行	{0} lines
+卡片文字大小	Card text size
+只改剪贴板记录里的字，候选和按键不变	Only the text in clipboard records; candidates and keys stay the same
+标准	Standard
 图片高度	Image height
 也显示相册照片	Also show photos
 先打开「最近截图」	Turn on “Recent screenshots” first
 上屏后自动关闭剪贴板	Close clipboard after pasting
+粘贴后移到最前	Move to top after pasting
+点一条记录上屏后，这条排到最前面	A record you tap to paste moves to the top
 同步	Sync
 剪贴板同步	Clipboard sync
 扫码连接电脑，和其他手机、平板互相同步	Scan to connect a computer, and sync with other phones and tablets
@@ -1648,12 +1635,16 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 收起手动连接与其他服务	Hide manual connection and other services
 备用：手动连接与其他服务	Fallback: manual connection and other services
 同步服务	Sync service
-插件未能启动，请在已安装插件中检查状态。	The plugin couldn't start. Check its status in installed plugins.
 无法启用服务：{0}	Can't enable the service: {0}
 管理其他同步服务	Manage other sync services
 同步开关	Sync switch
-启用所选兼容服务	Enable the selected compatible service
 请先选择同步服务并完成连接配置。	Choose a sync service and finish connecting it first.
+自动拉取	Auto pull
+拉取间隔	Pull interval
+打开键盘时，离上次拉取满这个时间才再拉	When the keyboard opens, pull again only after this long since the last pull
+{0} 秒	{0} s
+键盘开着时一直拉取	Keep pulling while the keyboard is open
+按上面的间隔反复拉，请求会变多	Pulls repeatedly at the interval above; more requests
 已导出 {0} 条	Exported {0}
 导出剪贴板	Export clipboard
 导出格式	Export format
@@ -1755,6 +1746,9 @@ CyIME 基于它开发	CyIME is built on it
 查词	Look up
 搜索短语或编码	Search phrases or codes
 还没有短语，点 + 添加	No phrases yet. Tap + to add one
+从文件导入短语	Import phrases from a file
+Gboard 导出的个人词库，或每行「短语 Tab 编码」的文本	A Gboard personal dictionary export, or text with one "phrase Tab code" per line
+已导入 {0} 条短语	Imported {0} phrases
 没有找到	Not found
 删除{0}	Delete {0}
 固定的词	Pinned words
@@ -1800,9 +1794,7 @@ ing 放在 Shift 键上	ing on the Shift key
 零声母音节	Zero-initial syllables
 没有声母的音节，每个打两个字母。	Syllables without an initial; each is typed with two letters.
 检查	Check
-同码音节(由词库区分候选)：	Syllables sharing a code (the dictionary tells candidates apart):
 正在保存…	Saving…
-已保存，正在应用；之后可在「语言与方案」的方案一栏选择	Saved, applying; you can then choose it in the scheme row of “Languages & schemes”
 保存方案	Save scheme
 删除这个双拼方案？	Delete this Shuangpin scheme?
 已删除	Deleted
@@ -1952,7 +1944,7 @@ Ctrl + 空格	Ctrl + Space
 工具快捷键	Tool shortcuts
 Ctrl / Alt 组合键	Ctrl / Alt shortcuts
 关闭后下面这些组合键交给应用	When off, the shortcuts below go to the app
-Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：发送。\nAlt + V：打开或关闭剪贴板，方向键选择，回车粘贴并关闭，Esc 取消。\nAlt + H：开始或停止语音输入。	Ctrl + .: toggle Chinese/English punctuation (English mode is always half-width).\nCtrl + Enter: send.\nAlt + V: open or close the clipboard; arrow keys to choose, Enter to paste and close, Esc to cancel.\nAlt + H: start or stop voice input.
+Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：发送。\nAlt + V：打开或关闭剪贴板，方向键选择，回车粘贴并关闭，Esc 取消。\nAlt + H：开始或停止语音输入。\nSYM 键（有的全键盘手机）：打开或关闭符号页。	Ctrl + .: toggle Chinese/English punctuation (English mode is always half-width).\nCtrl + Enter: send.\nAlt + V: open or close the clipboard; arrow keys to choose, Enter to paste and close, Esc to cancel.\nAlt + H: start or stop voice input.\nSYM key (on some keyboard phones): open or close the symbol page.
 候选翻页	Candidate paging
 减号和等号	Minus and equals
 − 上一页 / = 下一页	− previous page / = next page
@@ -1969,6 +1961,8 @@ Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：�
 底部候选	Bottom candidates
 游戏	Games
 游戏直通	Game pass-through
+按应用直通	Per-app pass-through
+打开的应用里不弹键盘，按键直接给应用。先在那个应用里用实体键盘打几个字，再回到这里打开。	In apps turned on here the keyboard stays hidden and keys go straight to the app. Type a few keys in that app with the physical keyboard first, then come back here to turn it on.
 屏幕底部	Bottom of screen
 你好	=
 拟好	=
@@ -2009,7 +2003,6 @@ Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：�
 底部留白滑动移动光标	Swipe the bottom margin to move the cursor
 键盘尺寸与位置	Keyboard size & position
 长按语言键弹出列表	Hold language key for the list
-符号键松手打开符号的时限	Time limit for opening symbols on release
 时长与距离	Timing & distance
 移动光标时振动	Vibrate when moving the cursor
 移动光标时播放按键音	Key sound when moving the cursor
@@ -2019,12 +2012,9 @@ Ctrl + .：切换中英文标点(英文模式固定半角)。\nCtrl + 回车：�
 长按空格多久开始{0}：{1} 秒	Hold space to {0} after: {1} s
 默认 0.2 秒。	Default 0.2 s.
 从中间滑到屏幕边缘走：{0} 行	Center to screen edge moves: {0} lines
-光标每移动一字所需距离：{0} 档(约 {1} 毫米)	Distance per character: level {0} (about {1} mm)
 共通输入	Common input
 {0}：{1} 秒	{0}: {1} s
-长按语言键弹出输入法选择框	Hold language key for the keyboard picker
 默认 0.15 秒。	Default 0.15 s.
-符号键松手打开符号的时限：{0} 秒	Time limit for opening symbols on release: {0} s
 手写停顿识别：{0} 秒	Handwriting pause to recognize: {0} s
 手写公式两边的标记	Formula delimiters for handwriting
 手写 › 已安装的手写模型	Handwriting › Installed handwriting models
@@ -2051,7 +2041,6 @@ a b c  A B C  拼音	=
 跟随系统	Follow system
 启用	On
 按键抬起振动	Vibrate on key release
-手指抬起时触发短振动	A short vibration when your finger lifts
 按键振动时长	Key vibration duration
 系统默认	System default
 长按振动时长	Hold vibration duration
@@ -2059,8 +2048,6 @@ a b c  A B C  拼音	=
 长按振动振幅	Hold vibration strength
 按键视觉效果	Key visual effects
 点按时键帽缩放回弹。	Keycaps shrink and bounce back when tapped.
-点按时显示半秒渐变光效。	A half-second fading glow when tapped.
-首次使用时按设备配置推荐。	Recommended by device on first use.
 点按下方按键预览	Tap the keys below to preview
 样式	Style
 沿键缝走	Along the gaps
@@ -2087,7 +2074,6 @@ a b c  A B C  拼音	=
 录屏时包含按键音	Include key sounds in screen recordings
 按键效果	Key effects
 按键音色	Key sound
-换一种按键声音，选好立即生效	Choose a different key sound; takes effect immediately
 Rain75 紫薇轴	Rain75 Lavender switch
 默认 · 线性轴	Default · linear switch
 经典音色	Classic
@@ -2117,7 +2103,6 @@ Ctrl(左下角 !@# 键)	Ctrl (the !@# key at bottom left)
 按住 !@# 长按空格拖动	Hold !@# and drag on space
 选中文字，同按住 Shift。	Selects text, same as holding Shift.
 点一下 !@#	Tap !@#
-按键与手势 › 符号键松手打开符号的时限	Keys & gestures › Time limit for opening symbols on release
 按住 !@# 拖到数字键上松手	Hold !@# and drag onto a number key
 长按「下一项」	Hold “Next”
 从「下一项」拖到候选上松手	Drag from “Next” onto a candidate and release
@@ -2175,17 +2160,13 @@ settings-fold:语言键切换方式	=
 已保存：{0} · {1}，下次切换到该语言时使用	Saved: {0} · {1}, used next time you switch to this language
 已保存：{0} · {1}，	Saved: {0} · {1}, 
 键盘跟着换	the keyboard switches too
-好了键盘自动换上	the keyboard switches once it's ready
 下次切换到该语言时使用	used next time you switch to this language
-已打开并选好：{0} · {1}，正在部署，几秒后好；	Turned on and selected: {0} · {1}; deploying, ready in a few seconds;
 导入方案的语言	Language of imported schemes
-方案没写语言，点开选一次	The scheme doesn't state a language; tap to choose one
 {0}(自动)	{0} (auto)
 已改回未标注语言	Changed back to no language set
 已设为{0}，切到这个方案时生效	Set to {0}; takes effect when you switch to this scheme
 选 Rime 方案文件或压缩包导入	Pick a Rime scheme file or archive to import
 已安装的方案	Installed schemes
-启用、停用和排序语言、方案与布局的组合	Enable, disable and order combinations of language, scheme and layout
 输入设置	Input settings
 繁体、生僻字、拼音纠错、模糊音	Traditional, rare characters, pinyin correction, fuzzy pinyin
 自动切英文、自动加空格、邮箱后缀	Auto English, auto space, email domains
@@ -2228,6 +2209,10 @@ settings-fold:语言键切换方式	=
 尺寸与位置	Size & position
 底部留白校准	Bottom margin calibration
 数字框自动数字键盘	Number pad for number fields
+数字位置	Number positions
+数字键盘最上面一排是 1 2 3 还是 7 8 9	Whether the top row of the number pad is 1 2 3 or 7 8 9
+1 2 3 在上	1 2 3 on top
+7 8 9 在上	7 8 9 on top
 左栏符号	Left column symbols
 数字行	Number row
 英文出短语	Phrases in English
@@ -2252,22 +2237,19 @@ settings-fold:语言键切换方式	=
 显示在输入框	In the text field
 显示在候选栏	In candidate bar
 显示拼音编辑栏	Show pinyin edit bar
-打字时显示编码，支持编辑的方案可点按修改。	Shows the code while typing; schemes that support editing can be tapped to change it.
 拼音位置	Pinyin position
 小标签	Small tab
-拼音贴在键盘上边，只有拼音那么宽。输入框往上让开，不会被挡住。	Pinyin on the keyboard's top edge, only as wide as the pinyin. The text field moves up so it is not covered.
 方块	Block
-和小标签一样贴着键盘，但更高、字更大，四角是直角。输入框往上让开，不会被挡住。	Like the small tab but taller, with larger text and square corners. The text field moves up so it is not covered.
 整行	Full row
-拼音占满键盘上面一整行。输入框往上让开，不会被挡住。	Pinyin fills a whole row above the keyboard. The text field moves up so it is not covered.
+键盘加高一行放拼音，和键盘连成一块。	The keyboard grows one row for the pinyin, as part of the keyboard.
 拼音靠哪边	Pinyin alignment
 靠左	Left
 居中	Center
 靠右	Right
 气泡	Bubble
-拼音浮在键盘上面，会挡住一点输入框。透明度可调。	Pinyin floats above the keyboard and can cover part of the text field. Opacity is adjustable.
 拼音显示声调	Show tones on pinyin
-按首选字的读音标调，如 jiù'shì'zhè'yàng；只是显示，上屏的还是字母。简拼、双拼显示按键时不标。	Marks tones from the first candidate's reading, e.g. jiù'shì'zhè'yàng. Display only; letters are still what gets entered. Not shown for initials-only input or double pinyin keys.
+拼音显示改正后的读音	Show corrected pinyin
+首选是纠错来的词时，拼音换成改正后的读音，改动的字母标红。关掉时照打的字母显示	When the first candidate comes from a correction, the pinyin shows the corrected reading with changed letters in red. Off: shows the letters as typed
 拼音气泡不透明度：{0}%	Pinyin bubble opacity: {0}%
 键盘上方拼音气泡的底色。100% 是实底，后面有画面也看得清；调低更透。	Background of the pinyin bubble above the keyboard. 100% is solid and readable over anything; lower is more transparent.
 角标与长按	Hints & hold
@@ -2287,9 +2269,7 @@ settings-fold:语言键切换方式	=
 底部位置	Bottom position
 调低	Lower
 抬高	Raise
-恢复默认（自动、留白 0）	Restore default (auto, margin 0)
 底部诊断	Bottom diagnostics
-反馈底部被挡住或有缝时，把这一行复制一起发来。打开一次键盘后更新。	When reporting a covered bottom row or a gap, copy this line and send it too. Updates after the keyboard opens once.
 候选词	Candidates
 按键与手势	Keys & gestures
 键盘上显示的字	Text shown on the keyboard
@@ -2307,6 +2287,8 @@ settings-fold:语言键切换方式	=
 关闭后空格向左加宽。	When off, space extends to the left.
 空格右侧句号键	Period key right of space
 开启后空格让出一个键宽。	When on, space gives up one key width.
+123 和 !@# 对调	Swap 123 and !@#
+底排 123 在左、!@# 在右，符号页和数字页跟着对调	123 on the left and !@# on the right; the symbol and number pages follow
 底排标点固定上滑	Bottom-row punctuation always swipes up
 逗号键分词	Comma key separator
 没在打拼音时输入 '。九键照旧用 1 键分词。	types ' when not typing pinyin. 9-key still uses the 1 key as separator.
@@ -2316,6 +2298,10 @@ Shift 键分词	Shift key separator
 去掉 0 键，回车加高	Remove the 0 key, taller Enter
 九键手势	9-key gestures
 拂动选字母	Flick to choose letters
+九键滑动动作	9-key swipe actions
+选一个数字键，设{0}做什么；数字照旧在另一个方向	Pick a number key and choose what {0} does; the digit stays on the other direction
+拂动选字母或九键滑行开着时，这一滑可能被字母或滑行占用	With flick letters or 9-key glide on, this swipe may be taken by letters or glide
+不设	None
 拖到候选选词的距离：键盘的 {0}%	Distance to drag onto candidates: {0}% of the keyboard
 双字母键	Double-letter keys
 左右滑动选字母	Swipe left/right to choose the letter
@@ -2400,7 +2386,6 @@ APP 版本要求	Required app version
 插件详情	Plugin details
 未找到该插件	Plugin not found
 版本	Version
-已不再提供：翻译已并入「AI 改写」，可以卸载。键盘上方的翻译栏是插件市场里的「翻译」	No longer offered: translation has merged into “AI rewrite”, so this can be uninstalled. The translation bar above the keyboard is “Translate” in the plugin market
 已并入「AI 改写」，可以卸载	Merged into “AI rewrite”; can be uninstalled
 已内置：语音转文本 › 在线语音，可以卸载	Now built in: Speech to text › Online voice; can be uninstalled
 已内置：打字统计，可以卸载	Now built in: Typing stats; can be uninstalled
@@ -2433,14 +2418,11 @@ APP 版本要求	Required app version
 无痕模式	Incognito mode
 已安装模型({0})	Installed models ({0})
 正在检查已下载的模型…	Checking downloaded models…
-本地模型在手机上运行，会占用 CPU、增加耗电，可能让手机发热。	Local models run on the phone, using CPU and battery, and may make it warm.
 自动更新	Auto update
 自动更新模型	Update models automatically
 删除模型	Delete model
-确定删除「{0}」？模型文件将被删除，此操作不可撤销。	Delete “{0}”? The model files will be deleted; this can't be undone.
 {0}还开着，打{1}时会重新下载。	{0} is still on and will download again when you type {1}.
 下载线路	Download route
-{0}(当前判断：{1})	{0} (currently detected: {1})
 中国大陆	Mainland China
 海外	Overseas
 从本机导入	Import from this device
@@ -2453,11 +2435,9 @@ APP 版本要求	Required app version
  (未下载)	 (not downloaded)
 换{0}说话时用的模型	Change the model used while speaking {0}
 说完后：不再校正	After speaking: no correction
-SenseVoice 停顿出的字就是定稿	Text from SenseVoice at pauses is final
 {0}没有二次校正	{0} has no second-pass correction
 说完后	After speaking
 不校正	No correction
-每次停顿由 SenseVoice 直接出字	SenseVoice outputs text directly at each pause
 直接用说话时出的字	Use the text from while speaking as is
 SenseVoice 校正	SenseVoice correction
  (需下载 SenseVoice)	 (needs SenseVoice download)
@@ -2486,9 +2466,7 @@ SenseVoice 校正	SenseVoice correction
 问号、感叹号	Question and exclamation marks
 末尾的标点	Final punctuation
 整段话最后保留句号、问号等标点。	Keeps the period, question mark and so on at the end of the passage.
-整段话最后不带标点，中间的照留；口述照样出。	No punctuation at the very end; punctuation in the middle stays, and spoken punctuation still works.
 保留模型打的{0}。	Keeps the model's {0}.
-不带{0}；口述照样出。	Without {0}; spoken punctuation still works.
 停顿处加空格	Space at pauses
 说话停顿、没加标点的地方空一格。	Leaves a space where you pause and no punctuation is added.
 中文里不加空格；英文单词之间照常空一格。	No spaces in Chinese text; English words are still separated by a space.
@@ -2500,8 +2478,6 @@ SenseVoice 校正	SenseVoice correction
 语音模型常驻	Voice model resident
 测不出差别	No measurable difference
 导入的词库({0} 词)	Imported dictionaries ({0} words)
-开着但表里没有：	On but not in the table:
-读不到开销表(安装包里的 perf_costs.json)，暂时算不出总开销。	Can't read the cost table (perf_costs.json in the installer), so the total cost can't be calculated for now.
 当前总开销	Current total cost
 没有额外开销	No extra cost
 按本机配置选：	Choose by this device's specs:
@@ -2570,7 +2546,6 @@ CPU 未测	CPU not tested
 入口：键盘菜单 › {0}	Entry: keyboard menu › {0}
 入口：键盘菜单 › 排列，把「{0}」拖进工具栏或菜单	Entry: keyboard menu › Order; drag “{0}” into the toolbar or menu
 需要 CyIME {0} 或更高版本	Needs CyIME {0} or later
-装好后键盘菜单里有「字幕」，设置在这个插件的那一页。不用联网。	Once installed, “Captions” is in the keyboard menu, with settings on this plugin's page. No internet needed.
 装好后日语出现在键盘的语言切换里。	Once installed, Japanese appears in the keyboard's language switching.
 要下载日语词库和转换引擎（约 {0}）。	Downloads the Japanese dictionary and conversion engine (about {0}).
 不用下载。	No download needed.
@@ -2591,9 +2566,7 @@ CPU 未测	CPU not tested
 有错误	Has errors
 网络访问待授权	Network access pending
 与主应用版本不兼容	Incompatible with the app version
-该插件不支持当前主应用版本，已跳过加载	This plugin doesn't support the current app version and wasn't loaded
 (要求 {0})	 (requires {0})
-。请更新主应用后重试。	. Please update the app and try again.
 当前使用中	In use
 未使用	Not in use
 要求 {0}	Requires {0}
@@ -2683,8 +2656,6 @@ Rime 配置文件	Rime config files
 \n目录内的所有内容将被删除。	\nEverything in the folder will be deleted.
 导出 Rime 配置	Export Rime config
 选择导出范围：	Choose what to export:
-排除 build/ 目录和 .bin/.gram 等编译产物	Excludes the build/ folder and compiled files such as .bin/.gram
-包含 Rime 目录下所有文件和子目录	Includes all files and subfolders in the Rime folder
 已保存到 Downloads/{0}	Saved to Downloads/{0}
 没能保存到「下载」文件夹，备份包已留在应用里	Couldn't save to the Downloads folder; the backup stays in the app
 导出失败: {0}	Export failed: {0}
@@ -2694,7 +2665,6 @@ Rime 配置文件	Rime config files
 正在打包 Rime 配置…	Packaging Rime config…
 已保存，键盘已更新	Saved; keyboard updated
 保存失败: {0}	Save failed: {0}
-确定删除「{0}」？此操作不可撤销。	Delete “{0}”? This can't be undone.
  · 未保存	 · unsaved
 预览	Preview
 贡献样本协议	Sample contribution agreement
@@ -2711,18 +2681,15 @@ Rime 配置文件	Rime config files
 不指定({0})	Unspecified ({0})
 导入方案	Import scheme
 可以导入：	You can import:
-· Rime 方案压缩包(.zip、.tar.gz)，比如从 GitHub 下载的方案仓库\n· 单个方案或词库文件(.schema.yaml、.dict.yaml)	· Rime scheme archives (.zip, .tar.gz), such as scheme repositories downloaded from GitHub\n· Single scheme or dictionary files (.schema.yaml, .dict.yaml)
 · 单个方案或词库文件(.schema.yaml、.dict.yaml)	· Single scheme or dictionary files (.schema.yaml, .dict.yaml)
 扩展 › 方案	Extensions › Schemes
 不再显示	Don't show again
 方案导入结果	Scheme import result
 更新共用文件	Update shared files
-以下 {0} 个同名文件将备份并更新：\n{1}\n不会卸载其他输入模式；卸载新方案时可恢复原文件。	These {0} files with the same names will be backed up and updated:\n{1}\nOther input modes won't be uninstalled; the original files can be restored when the new scheme is uninstalled.
 备份并更新	Back up and update
 已启用的输入组合	Enabled input combinations
 暂未启用任何方案	No schemes enabled yet
 长按可在同一语言里排序；语言的先后和默认组合在「语言与方案」里改。	Hold to reorder within a language; change language order and default combinations in “Languages & schemes”.
-安装、启停方案后自动应用，不用再部署。	Changes apply automatically after installing or toggling schemes; no deploy needed.
 收起其他已安装方案	Hide other installed schemes
 其他已安装方案(高级)	Other installed schemes (advanced)
 没有其他可用方案	No other schemes available
@@ -2827,6 +2794,8 @@ CommentDisplayCard - 显示注释	=
 屏蔽外放音	Mute other audio
 语音输入	Voice input
 连续语音	Continuous voice
+用蓝牙耳机的麦克风	Use the Bluetooth headset mic
+连着蓝牙耳机时用耳机收音；说话时耳机里的音乐会暂时变成通话音质	With a Bluetooth headset connected, listen through its mic; music in the headset drops to call quality while you talk
 隔空输入	Remote typing
 保存语音调优录音	Save voice tuning recordings
 中文语音	Chinese voice
@@ -3217,7 +3186,6 @@ API 密钥	API key
 确定清理吗？	Clear now?
 没有删掉的候选	No removed candidates
 放回	Put back
-沿用当前配色，切换主题时保持	Keeps the current colors when switching themes
 浅色、深色分开设置	Separate light and dark settings
 {0}跟随系统壁纸取色。点击可预览。	{0} take colors from the system wallpaper. Tap to preview.
 与视觉样式同步	Sync with visual style
@@ -3284,7 +3252,6 @@ API 密钥	API key
 已记住	Remembered
 改用	Use this
 取消配对	Unpair
-自动同步复制的文字；图片暂不支持跨设备同步。	Copied text syncs automatically; images can't sync across devices yet.
 重新连接	Reconnect
 连接电脑	Connect computer
 添加设备	Add device
@@ -3642,7 +3609,6 @@ Language · 语言	Language · 语言
 长按拖动排序	Long-press and drag to reorder
 现在的条目会换成默认的几条，自己加的和改过的都会去掉。	The list will be replaced by the defaults. Entries you added or changed will be removed.
 显示自造词角标	Show learned-word badge
-学到的词在候选右上角显示小铅笔；关掉只是不显示，照常学习	Show a small pencil at the top right of words it has learned; turning this off only hides it, learning continues
 # 设置页说明精简（11-18）
 0 到数字键盘里打	0 is on the number pad
 0 改在回车上{0}输入	0 moves to {0} on Enter
@@ -3661,7 +3627,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 “永不”最快，但最占内存	“Never” is fastest but uses the most memory
 「上下滑输入符号」关着	“Swipe up/down for symbols” is off
 「全部」里显示的图片数，其余在「图片」里	Images shown in “All”; the rest are under “Images”
-「全部」里显示的图片数，截图、相册照片、复制的图各至少一张，其余在「图片」里	Images shown in “All”, at least one each of screenshots, photos and copied images; the rest are under “Images”
 「字幕」把身边的人说的话实时变成大字，适合开会、上课或和听力不好的人交流。	“Captions” shows what people around you say in large text, in real time, for meetings, classes or talking with hard-of-hearing people.
 「智能联想」关着，这项不起作用。	“Smart prediction” is off, so this has no effect.
 一个字符一格，从左到右对应这一排的键，空格写 {0}。	One character per key, left to right; use {0} for an empty key.
@@ -3674,7 +3639,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 三行字母左右错开的方式	How the three letter rows are staggered
 上下滑动按键输入角标里的符号和数字	Swipe keys up or down to type their hint symbols and digits
 上滑出上角标，下滑出下角标，删除键也反过来	Swipe up for the top hint, down for the bottom one; Delete swipes are reversed too
-上面的开关关着：键盘用配色方案的底色，这些图片留着	The switch above is off: the keyboard uses the color scheme's background, and these images are kept
 下次打字时生效	Takes effect next time you type
 下次说话时生效。	Takes effect the next time you speak.
 下载公式手写模型后可用，见「手写 › 已安装的手写模型」。	Available after downloading the formula model in “Handwriting › Installed handwriting models”.
@@ -3694,7 +3658,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 五笔等常用方案在「扩展 › 方案」里获取。	Get common schemes like Wubi in “Extensions › Schemes”.
 从下面选一个图标。	Pick an icon below.
 以后可以随时重新设置。	You can redo this any time.
-你在用双拼，打开上面的开关后模糊音才对双拼生效	You're using Shuangpin: turn on the switch above for fuzzy Pinyin to apply
 依次切换已启用的语言	Cycle through enabled languages
 保留按键动效，关炫光和玻璃	Keep key animations; turn off glow and glass
 候选之间留宽一些，用竖线隔开	More space between candidates, with a divider
@@ -3706,12 +3669,9 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 停靠底边时候选栏铺满屏幕宽度	When docked at the bottom, the candidate bar spans the screen
 先在上面打开其他语言。	Turn on another language above first.
 光标每移一字响一下	Click as the cursor moves
-光标每移一字震一下	Vibrate as the cursor moves
 全拼 26 键里夹着英文单词时，照样认出来	Recognize English words mixed into Pinyin on QWERTY
 公式上屏时两边加的标记	Delimiters added around entered formulas
 共 {0} 个模型 · 在本机运行，较耗电	{0} models · run on this device and use more power
-共 {0} 张，打开下面的「动态背景」才会轮流换	{0} images; turn on “Animated background” below to rotate them
-共 {0} 张，背景每动完一圈换下一张；点哪张就调哪张的位置	{0} images; the background switches to the next one after each loop. Tap one to adjust its position
 关掉动效和特效，最省电	Turn off animations and effects to save the most power
 关掉后可以连续粘贴多条	When off, you can paste several items in a row
 关着时不显示麦克风，也不下载语音模型	Off: no mic button, and no speech models are downloaded
@@ -3734,7 +3694,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 删除方案市场的安装包？已安装的方案不受影响。	Delete downloaded scheme packages? Installed schemes aren't affected.
 删除键一次删掉滑行输入的一个字	Delete removes one glided character at a time
 删除键滑动清空要滑多远	How far to swipe on Delete to clear
-别人说到下面的名字时振动提醒，多个叫法用空格隔开	Vibrate when someone says one of these names; separate them with spaces
 到期自动删除，固定和分组的保留	Removed when expired; pinned and grouped are kept
 剪贴板里图片的显示高度	How tall images appear in the clipboard
 动效和炫光全开	All animations and glow effects on
@@ -3758,7 +3717,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 可选。中文说完后用它整句定稿，更准更快。	Optional. Finalizes whole Chinese sentences after you finish speaking; more accurate and faster.
 同一 Wi-Fi 下的手机、平板直接同步复制的文字	Sync copied text directly with phones and tablets on the same Wi-Fi
 同按住 Shift，候选换成英文。	Same as holding Shift: candidates switch to English.
-向不同方向拂动直接输入键上的字母，长按输入数字	Flick in a direction to type that letter; long-press for the digit
 启用这个语言的方案后，布局会显示在这里。	Layouts appear here after you enable a scheme for this language.
 和电脑上显示的连接码一致再确认。	Confirm only if it matches the code on your computer.
 回答几个问题，按你的习惯设好键盘，并清掉用不到的模型。	Answer a few questions to set up the keyboard your way and clear out unused models.
@@ -3768,6 +3726,8 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 图标跟随「主题与外观」里的视觉样式。	The icon follows the visual style in “Theme & appearance”.
 图标颜色跟随键盘主题。	The icon color follows the keyboard theme.
 在 26 键、14 键字母上方加一排数字	Add a row of digits above the letters on QWERTY and 14-key
+数字行和字母一样高	Number row as tall as letters
+关着时数字行矮一点。键盘总高不变	When off, the number row is a bit shorter. Keyboard height stays the same
 在「语言与方案」打开日语后可用。	Available after turning on Japanese in “Languages & schemes”.
 在「语言与方案」里切换双拼。内置方案可以复制后改键位。	Switch Shuangpin schemes in “Languages & schemes”. Built-in schemes can be copied and remapped.
 在「语言与方案」里可以选它	Selectable in “Languages & schemes”
@@ -3780,7 +3740,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 在展开的菜单里直接调整按钮顺序和显示	Rearrange and show or hide buttons right in the open menu
 在常用字后面给出生僻字	Show rare characters after common ones
 在常用字后面给出中文生僻字	Show rare Chinese characters after common ones
-在中文字后面给出日本的字和日本人名地名	Show Japanese-only characters and Japanese names and places after Chinese ones
 韩文汉字	Korean hanja
 在中文字后面给出韩国自造的汉字	Show Korea-made characters after Chinese ones
 粤语字	Cantonese characters
@@ -3800,7 +3759,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 复制的密码也记下来，显示成圆点，1 小时后自动删除	Keep copied passwords too, shown as dots and deleted after 1 hour
 多按了一个键也能出想打的词，如 woomen 出“我们”	Get the intended word with an extra key, e.g. woomen → 我们
 字号、注释、按钮、编码显示	Font size, annotations, buttons, input display
-字幕按已下载的模型自动选择识别模型。	Captions pick a recognition model from those downloaded.
 导入后自动安装启用，同名文件会先问你。	Imported schemes are installed and enabled; you'll be asked about files with the same name.
 导出时也包含固定的记录	Include pinned items in the export
 工具条固定在当前位置	Keep the toolbar where it is
@@ -3812,6 +3770,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 布局、语音和手写会按这个语言。	Layout, voice and handwriting will follow this language.
 带底板时和其他图标大小一致	With a background, it matches other icons in size
 应用支持时，回车直接发送消息	Enter sends the message when the app supports it
+应用支持时，回车直接发送消息，长按回车换行	Enter sends the message when the app supports it; hold Enter for a new line
 应用本身另占 {0}	The app itself takes another {0}
 底下空太多就调低，底排被挡住就抬高	Lower it if there's too much space below; raise it if the bottom row is covered
 底部圆角，导航栏透明	Rounded bottom, transparent navigation bar
@@ -3822,24 +3781,19 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 当前设置的效果	Effect of the current settings
 录屏时能录到按键音	Key sounds are included in screen recordings
 录音只存在本机，用来改进断句和模型；最多留 300 段或 500 MB，不会上传。	Recordings stay on this device to improve sentence breaks and models; up to 300 clips or 500 MB, never uploaded.
-总会备份设置、主题、布局和固定的剪贴板记录；不含插件、模型、剪贴板图片和密码。	Always includes settings, themes, layouts and pinned clipboard items; not plugins, models, clipboard images or passwords.
 所有布局的按键一起改。	Applies to keys on all layouts.
 所有键盘共用	Applies to all keyboards
 打 @ 后给出 gmail.com 等常用后缀	After @, suggest common domains like gmail.com
 打 xita、pi、alpha 时给出 θ、π、α	Typing xita, pi or alpha offers θ, π, α
 打“时间”“日期”“星期”时给出当前时间	Typing “时间”, “日期” or “星期” suggests the current time or date
 打了声母后 Shift 键变成 ing	After an initial, Shift becomes ing
-打字时滑动清空，连输入框里的字一起清掉	While typing, swipe-to-clear also clears the text field
 打字时点标点，先上屏首选再接标点	Tapping punctuation while typing enters the top candidate first
 打字时自动学习，可导入导出。	Learned as you type; can be imported and exported.
 打完拼音后点「辅」再打字形编码，筛选候选	After the Pinyin, tap “辅” and type the shape code to filter candidates
 打开「语音转文本」后可用	Available after turning on “Speech to text”
-打开后上滑出上角标，下滑出下角标，删除键也反过来	When on, swipe up for the top hint and down for the bottom one; Delete swipes are reversed too
-{0} 秒内、没拖动就松手才打开符号面板；时限在「按键与手势 › 符号键松手打开符号的时限」里调。	The symbol panel opens only if you release within {0} s without dragging; change the limit in “Keys & gestures › Time limit for opening symbols on release”.
 打拼音时 Shift 键变成分词键	Shift becomes the syllable separator while typing Pinyin
 打拼音时在逗号键上{0}插入分词符 '	While typing Pinyin, {0} on the comma key to insert the ' separator
 打数字时，候选里给出编码相符的「我的短语」	Typing digits suggests matching entries from “My phrases”
-打符号的名字时多给一个符号，如 加号 +、摄氏度 ℃、平方 ²、约等于 ≈	Typing a symbol's name also offers the symbol, e.g. 加号 +, 摄氏度 ℃, 平方 ², 约等于 ≈
 打过的常用长数字，打开头时直接给出	Suggest long numbers you've typed before
 打错时也给出想打的词，原来的候选还在	Suggest the intended word when you mistype; your own input stays in the list
 打长句时多给一个整句候选	Offer one more whole-sentence candidate for long input
@@ -3848,17 +3802,14 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 拂动选字母、双字母键、假名提示	Flick for letters, two-letter keys, kana hints
 拖动「下一项」超过这个距离才算选词	How far to drag “Next” before it picks a candidate
 拖动浮条可移动位置；长按语言键选择语言。	Drag the bar to move it; long-press the language key to pick a language.
-拖动移动，双指缩放，靠近边缘时自动吸附。	Drag to move, pinch to zoom; snaps near edges.
 按下候选栏按钮时显示高亮	Highlight candidate bar buttons when pressed
 按下时在键上方显示放大的字	Show an enlarged key above your finger
 按住删除键左右滑动，连续删除光标前后的字	Hold Delete and slide left or right to delete text before or after the cursor
 按住删除键时连续删除的快慢	How fast text is deleted while holding Delete
 按住时沿键边显示进度	Show progress along the key edge while holding
-按住符号键超过这个时间就变成 Ctrl	Holding the symbol key longer than this turns it into Ctrl
 按到旁边的键时也能出想打的词	Get the intended word when you hit a neighboring key
 按导航方式自动选择	Chosen automatically from the navigation mode
 按意思自动加标点。本地中文要在「说完后」选整句定稿	Add punctuation by meaning. For local Chinese, choose whole-sentence finalizing under “After speaking”
-按输入框宽度换算	Scaled to the width of the text field
 按键加亮边，按住时变亮	Keys get a bright edge and light up when pressed
 按键角标、侧栏和数字行的符号	Symbols on keys, side bars and the number row
 换配色时保留背景图片	Keep the background image when changing colors
@@ -3876,14 +3827,12 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 日语要先下载词库（约 {0}）。	Japanese needs its dictionary downloaded first (about {0}).
 更新后在设置首页提示一次	Show once on the settings home page after updating
 有候选时用这些键翻页，可多选	Use these keys to page through candidates; pick any
-有新版本时在设置首页提示，不自动下载	Show new versions on the settings home page; nothing is downloaded automatically
 有新版本时连着 Wi-Fi 自动更新	Update automatically over Wi-Fi when a new version is out
 有联想词时，退格直接删字	Backspace deletes text even when predictions are shown
 有英文的候选换成英文。	Candidates with an English form switch to English.
 未上屏的编码显示在哪里	Where uncommitted input is shown
-本地模型会占用内存和 CPU，手机可能发热。	On-device models use memory and CPU and may warm up your phone.
 桌面图标可能稍后才更新，位置可能会变。	The home screen may take a moment to update, and the icon may move.
-横屏和竖屏各用各的布局	Landscape and portrait each keep their own layout
+横屏、竖屏和折叠屏的两块屏各用各的布局	Landscape, portrait and each foldable screen keep their own layout
 正在准备同步服务…	Preparing sync service…
 正在编辑「{0}」这一套。	Editing the “{0}” set.
 每写一笔就识别，不用等停顿	Recognize after every stroke without waiting for a pause
@@ -3894,7 +3843,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 每行一条：错词 空格 正词。	One per line: wrong word, space, correct word.
 没有「下一项」键，{0}	No “Next” key; {0}
 没有汉字的行当作英文词，# 开头的行跳过。	Lines without Chinese characters are treated as English words; lines starting with # are skipped.
-浅色、深色分别保存。太透时会自动加深，保证文字清楚。	Saved separately for light and dark. Too transparent is darkened automatically so text stays readable.
 浮窗不挡住正在输入的地方	Keep the window away from where you're typing
 浮窗拖到屏幕边缘时贴边停靠	Dock the window when dragged to a screen edge
 清空剪贴板历史？固定的会保留，删除后无法恢复。	Clear clipboard history? Pinned items are kept. This can't be undone.
@@ -3936,12 +3884,12 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 背景图片缓慢移动，省电时停止	The background image moves slowly; stops in battery saver
 自动查找同一 Wi-Fi 下的电脑，首次连接要核对连接码。	Finds computers on the same Wi-Fi; check the code the first time.
 自动：宽时显示，窄时隐藏	Auto: show when there's room, hide when narrow
-自造词、词频和个人词库，属于隐私数据	Your own words, word frequencies and personal dictionary; private data
 英文、中文、九键滑行	English, Chinese and 9-key glide typing
 英文打 , . ? ! 后自动加一个空格	Add a space after , . ? ! in English
 英文打出短语编码时，候选里给出「我的短语」	Typing a phrase code in English suggests the entry from “My phrases”
-英文等拉丁字母键盘上，句首字母自动大写	Capitalize the first letter of each sentence on English and other Latin keyboards
 英文选词后自动加一个空格	Add a space after picking an English word
+英文下一词	Next-word suggestions
+英文打完一个词按空格后，候选栏给出常跟在后面的词	After you type an English word and a space, suggest words that often come next
 补全词表还没下载(约 {0})，暂时没有单词补全。	The completion word list isn't downloaded yet (about {0}), so there's no word completion.
 角标、删除键、空格、光标	Corner symbols, Delete, Space, cursor
 角标的输入方式见「按键与手势 › 按键角标的符号和数字」	How hints are typed: see “Keys & gestures › Key hint symbols and digits”
@@ -3968,7 +3916,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 越大越不容易误触	Larger means fewer accidental swipes
 越小越灵敏	Smaller is more sensitive
 越高图片越淡、字越清楚	Higher makes the image fainter and text clearer
-跟随系统：强弱跟系统设置一致	Follow system: strength matches system settings
 打 0，打字选词时不接。0 键已去掉，见「九键与 14 键 › 去掉 0 键，回车加高」。	types 0 (not while choosing words). The 0 key is removed; see “9-key & 14-key › Remove the 0 key, taller Enter”.
 输入左括号、左引号时自动补上右半边	Typing an opening bracket or quote adds the closing one
 输入方案的缓存，清除后自动重建	Input scheme cache; rebuilt automatically after clearing
@@ -3976,7 +3923,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 按满 {0} 秒，这个键变成 Ctrl，字母键上显示快捷键。	After {0} s the key becomes Ctrl and letter keys show shortcuts.
 这是最后一张，删掉后就没有背景图片了。	This is the last one; deleting it leaves no background image.
 连不上？在电脑上选“使用二维码连接”，再用这里扫码。	Can't connect? Choose “Connect with QR code” on the computer, then scan it here.
-连电脑请用上面的“扫码连接电脑”，下面用于其他同步服务。	To connect a computer, use “Scan to connect” above; below is for other sync services.
 选一套复制到「{0}」，这一套的符号会被覆盖。	Pick a set to copy into “{0}”; its symbols will be replaced.
 选中文字。	Selects text.
 选中的是现在的设置，点一下立即生效。	The selected option is your current setting; tap to change it right away.
@@ -3989,11 +3935,9 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 释放后再用时稍慢	Slightly slower the next time after release
 锁定后不能移动或缩放，长按底部横条解锁	Can't move or resize when locked; long-press the bottom bar to unlock
 键盘贴到屏幕最底边	The keyboard reaches the very bottom of the screen
-长按字母弹出大小写和带声调的字母。	Long-press a letter for its cases and accented forms.
-长按弹出上下两个角标，松手出上角标，右移一格出下角标。	Long-press shows both hints: release for the top one, slide right for the bottom one.
+长按字母弹出大小写和声调，九键弹出大写、数字、小写。	Long-press a letter for its cases and tones; on 9-key, capitals, the digit and lower case.
 长按拖动调整顺序。关掉的分类不显示，记录仍在「全部」里。	Long-press and drag to reorder. Hidden categories' items stay in “All”.
 长按时长、光标灵敏度	Long-press time, cursor sensitivity
-长按语言键打开系统的输入法选择框	Long-press the language key to open the system keyboard picker
 长按输入上方角标。	Long-press types the top hint.
 隐藏的角标照样能输入。	Hidden hints can still be typed.
 需先在系统无障碍里打开“通话字幕”。	Turn on “Call captions” in system accessibility first.
@@ -4001,7 +3945,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 需要通讯录权限，请在系统设置里允许	Contacts permission is needed; allow it in system settings
 高度、宽度、悬浮、透明度	Height, width, floating, transparency
 浮窗位置	Floating bar position
-固定后工具条停在这一边、不能拖；候选照样出现在正在打字的那一行旁边，不挡这一行。	When fixed, the toolbar stays on that side and cannot be dragged; candidates still appear next to the line you are typing, without covering it.
 自由拖动	Drag freely
 固定在{0}	Fixed at {0}
 顶部	Top
@@ -4014,10 +3957,158 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 空格上滑输入 0	Swipe up on Space for 0
 九键与 14 键 › 空格上滑输入 0	9-key & 14-key › Swipe up on Space for 0
 长按空格 › 上滑取消	Hold space › Swipe up to cancel
-九键空格往上滑打 0，打字时不接	Swipe up on the 9-key Space to type 0 (not while typing)
-九键空格往上滑打 0，打字时不接；0 键一直是「→」，没有候选时点它光标右移、左滑左移	Swipe up on the 9-key Space to type 0 (not while typing). The 0 key always shows “→”; with no candidates, tap it to move the cursor right, swipe left to move it left
 空格上滑	Swipe up on Space
 打 0，打字时不接。见「九键与 14 键 › 空格上滑输入 0」。	types 0 (not while typing). See “9-key & 14-key › Swipe up on Space for 0”.
 没有候选时点「→」	Tap “→” with no candidates
 光标右移一格，左滑左移、右滑右移。	moves the cursor right one character; swipe left or right to move it.
-超过 22 候选栏会整条变高	Above 22 the whole candidate bar gets taller
+
+# 设置文字精简（11-22）
+候选注释选「释义」时用：中文候选旁显示英文，英文候选旁显示中文。英→中取自 ECDICT，中→英取自 CC-CEDICT（MDBG）。	Used when candidate notes show meanings: English next to Chinese candidates, Chinese next to English ones. English→Chinese from ECDICT, Chinese→English from CC-CEDICT (MDBG).
+中文语音识别，边说边出字。	Chinese speech recognition; text appears as you speak.
+不联网把中文翻成英文。Mozilla Firefox 的翻译模型。	Translates Chinese into English offline. Mozilla Firefox translation model.
+不联网把英文翻成中文。Mozilla Firefox 的翻译模型。	Translates English into Chinese offline. Mozilla Firefox translation model.
+把假名转换成汉字（azooKey）。轻量版装「日语」插件时下载，完整版已内置。	Converts kana into kanji (azooKey). The light build downloads it with the Japanese plugin; the full build includes it.
+拍照识字用。轻量版第一次用时下载，完整版已内置。	For reading text from photos. The light build downloads it on first use; the full build includes it.
+拍照识字时处理图片（OpenCV）。轻量版第一次用时下载，完整版已内置。	Processes images for photo text recognition (OpenCV). The light build downloads it on first use; the full build includes it.
+手写认生僻字用。轻量版随手写模型下载，完整版已内置。	For recognizing rare characters in handwriting. The light build downloads it with the handwriting model; the full build includes it.
+日语手写认假名和汉字用。轻量版装「日语」插件时下载，完整版已内置。	For recognizing kana and kanji in Japanese handwriting. The light build downloads it with the Japanese plugin; the full build includes it.
+旧格式，可删除后改装新版。	Old format; you can delete it and install the new version.
+完整版的一半大小，九键首选稍差，26 键一样准。和完整版二选一。CyIME 自行训练。	Half the size of the full version; slightly weaker top picks on 9-key, same accuracy on QWERTY. Use either this or the full version. Trained by CyIME.
+已停用，请改装词组模型。来源：RIME-LMDG，CC-BY-4.0。	Retired; please install the phrase model instead. Source: RIME-LMDG, CC-BY-4.0.
+已停用，可删除。来源：UER-py，Apache-2.0。	Retired; you can delete it. Source: UER-py, Apache-2.0.
+Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lookup.
+音码加形码，四码定长，带小鹤双拼反查。	Sound code plus shape code, fixed four-key codes, with Xiaohe Shuangpin lookup.
+剪贴板记录，不含固定的	Clipboard records, not pinned ones
+运行日志，保留今天的	Logs; today's are kept
+有新版本时提示，不自动下载	Tell me about new versions; nothing is downloaded automatically
+开关关着，键盘用配色的底色，图片保留	The switch is off: the keyboard uses the color scheme's background; images are kept
+共 {0} 张，背景动完一圈换下一张	{0} images; switches to the next one after each loop
+共 {0} 张，打开「动态背景」后轮流显示	{0} images; turn on “Animated background” to rotate them
+自造词、词频和个人词库	Your own words, word frequencies and personal dictionary
+设置、主题、布局和固定的剪贴板记录总会备份；不含插件、模型、图片和密码。	Settings, themes, layouts and pinned clipboard items are always included; plugins, models, images and passwords are not.
+别人说到这些名字时振动，多个用空格隔开	Vibrate when someone says one of these names; separate them with spaces
+自动使用已下载的模型。	Uses the downloaded models automatically.
+3. 导入后自动打开，点底部「应用更改」生效。	3. It turns on after import; tap “Apply changes” at the bottom to use it.
+，偏慢	, a bit slow
+中文键盘里也给出词库里的英文词	Also offer English words from these dictionaries on the Chinese keyboard
+内置词库，可关闭	Built-in dictionary; can be turned off
+「全部」里显示几张，其余在「图片」里	How many show in “All”; the rest are under “Images”
+复制后打开键盘，候选栏先给出刚复制的内容	When the keyboard opens after copying, the candidate bar offers what you just copied
+连电脑用上面的“扫码连接电脑”。	To connect a computer, use “Scan to connect” above.
+插件没有启动，到已安装的插件里查看。	The plugin didn't start. Check it in installed plugins.
+启用所选服务	Enable the selected service
+拖动移动，双指缩放。	Drag to move, pinch to zoom.
+同码音节：	Syllables sharing a code:
+已保存，正在应用	Saved, applying
+导入的方案，选它用的拼音规则	Imported scheme; choose the pinyin rules it uses
+选这个方案用的拼音规则，选错了滑出的字不对。	Choose the pinyin rules this scheme uses; the wrong choice gives wrong glide results.
+浅色、深色分别保存。太透时自动加深。	Saved separately for light and dark. Darkened automatically if too transparent.
+固定后工具条停在这一边，不能拖动	When fixed, the toolbar stays on that side and can't be dragged
+长按弹出上下角标，松手出上方的，右移一格出下方的。	Long-press shows both hints: release for the top one, slide right for the bottom one.
+打字时滑动清空，输入框里的字也清掉	While typing, swipe-to-clear also clears the text field
+贴边按键不触发返回手势	Edge keys don't trigger the back gesture
+打开后在键盘两边不能侧滑返回	When on, you can't swipe back from the keyboard's sides
+符号键变 Ctrl 的时长	Hold time for the symbol key to become Ctrl
+光标每移一字振动一下	Vibrate once per character the cursor moves
+按输入框宽度算	Based on the width of the text field
+光标移动一字的距离：{0} 档(约 {1} 毫米)	Distance per character: level {0} (about {1} mm)
+长按语言键弹出系统的输入法列表	Long-press the language key for the system keyboard list
+长按语言键弹出输入法列表	Hold language key for the keyboard list
+符号键变 Ctrl 的时长：{0} 秒	Hold time for the symbol key to become Ctrl: {0} s
+按住 !@# 超过这个时间变成 Ctrl	Holding !@# longer than this turns it into Ctrl
+日语已装好，在「语言与方案」里开关。	Japanese is installed; turn it on or off in “Languages & schemes”.
+日语手写要先下载假名模板（约 {0}）。	Japanese handwriting needs the kana templates first (about {0}).
+跟随系统：强弱在系统设置里调	Follow system: set the strength in system settings
+手指抬起时也振动一下	Also vibrate when your finger lifts
+点按时键上闪一下光。	A brief glow on the key when tapped.
+默认按本机性能推荐。	Defaults are recommended for this device.
+选好立即生效	Takes effect immediately
+{0} 秒内松手打开符号面板；时长在「按键与手势 › 符号键变 Ctrl 的时长」里调。	Release within {0} s to open the symbol panel; change it in “Keys & gestures › Hold time for the symbol key to become Ctrl”.
+按键与手势 › 符号键变 Ctrl 的时长	Keys & gestures › Hold time for the symbol key to become Ctrl
+打符号名时给出符号，如 加号 +、平方 ²	Typing a symbol's name offers the symbol, e.g. 加号 +, 平方 ²
+在中文字后面给出日本用字和人名地名	Show Japanese characters and Japanese names and places after Chinese ones
+已打开：{0} · {1}，	Turned on: {0} · {1}; 
+几秒后键盘自动换上	the keyboard switches in a few seconds
+启用、停用和排序输入方案	Enable, disable and order input schemes
+方案没标语言，点开选择	The scheme has no language; tap to choose one
+打字时显示拼音，部分方案可点按修改	Shows pinyin while typing; some schemes let you tap to edit it
+浮在键盘上方，会挡住一点输入框	Floats above the keyboard and can cover part of the text field
+贴着键盘上边，和拼音一样宽，不挡输入框	On the keyboard's top edge, as wide as the pinyin; doesn't cover the text field
+比小标签更高、字更大，不挡输入框	Taller than the small tab with larger text; doesn't cover the text field
+占满键盘上方一整行，不挡输入框	A full row above the keyboard; doesn't cover the text field
+按首选字标调，如 jiù'shì'zhè'yàng，只改显示	Tones from the first candidate, e.g. jiù'shì'zhè'yàng; display only
+超过 22 时候选栏会变高	Above 22 the candidate bar gets taller
+已开「候选滑到头回弹展开」，一屏就是一页	“Pull past the end to expand” is on: one screen is one page
+滑到头再往左拉展开，往右划收起；右边一格改为关闭和收起键盘	Pull left past the end to expand, swipe right to collapse; the right slot closes and hides the keyboard
+放右边时，同一处先关候选或联想，再点收起键盘	On the right, the same spot first closes candidates or predictions, then hides the keyboard
+底部被挡住或有缝时，复制这一行发给作者	If the bottom row is covered or there's a gap, copy this line and send it to the author
+往不同方向滑输入键上的字母，长按输入数字	Swipe in a direction to type that letter; long-press for the digit
+在九键上一笔划过几个键输入词语，2～9 键的角标改为长按输入	Swipe across 9-key keys in one stroke to type words; hints on keys 2–9 switch to long-press
+打开上面的开关后，双拼才用模糊音	Turn on the switch above to use fuzzy Pinyin with Shuangpin
+九键空格上滑打 0	Swipe up on the 9-key Space to type 0
+九键空格上滑打 0；0 键变成「→」，没有候选时点它移动光标	Swipe up on the 9-key Space to type 0; the 0 key becomes “→”, which moves the cursor when there are no candidates
+英文等键盘句首字母自动大写	Capitalize the first letter of sentences on English and similar keyboards
+模型在手机上运行，会耗电、发热。	Models run on the phone and use battery and warm it up.
+已并入「AI 改写」，可以卸载。翻译栏是插件市场里的「翻译」	Merged into “AI rewrite”, so this can be uninstalled. The translation bar is “Translate” in the plugin market
+删除「{0}」？删除后不能恢复。	Delete “{0}”? This can't be undone.
+{0}(当前：{1})	{0} (now: {1})
+停顿时出的字就是结果	Text at pauses is final
+停顿时直接出字	Outputs text directly at each pause
+整段话最后不带标点，中间的保留。	No punctuation at the very end; punctuation in the middle stays.
+不带{0}。	Without {0}.
+开着但没测过：	On but not measured:
+暂时算不出总开销。	The total cost can't be calculated for now.
+装好后在键盘菜单里，不用联网。	Once installed it's in the keyboard menu. No internet needed.
+插件和当前版本不兼容，没有加载	This plugin isn't compatible with this version and wasn't loaded
+。请更新 CyIME。	. Please update CyIME.
+不含编译生成的文件	Excludes compiled files
+包含全部文件	Includes all files
+· Rime 方案压缩包(.zip、.tar.gz)\n· 单个方案或词库文件(.schema.yaml、.dict.yaml)	· Rime scheme archives (.zip, .tar.gz)\n· Single scheme or dictionary files (.schema.yaml, .dict.yaml)
+推荐自带拼音，装上词组模型后更准。	The built-in pinyin is recommended; it's more accurate with the phrase model.
+以下 {0} 个同名文件会先备份再更新：\n{1}\n卸载新方案时会恢复原文件。	These {0} files with the same names will be backed up, then updated:\n{1}\nThe originals come back when you uninstall the new scheme.
+安装或启停方案后自动生效。	Changes take effect automatically after installing or toggling schemes.
+按键边缘像透镜，带一点彩虹色。	Key edges act like a lens with a hint of rainbow.
+透镜更宽，彩虹色和高光更明显。	A wider lens with stronger rainbow and highlights.
+学到的词在候选右上角显示小铅笔	Show a small pencil at the top right of learned words
+发完消息后在同一个输入框里接着听	Keep listening in the same text field after you send a message
+暂停播放：有的应用说完后不会接着放，这时选「压低音量」。	Pause: some apps don't resume afterwards; choose “Lower volume” for those.
+键盘变成半透明玻璃，换主题时保留	Makes the keyboard frosted glass; kept when you switch themes
+自动同步复制的文字，暂不同步图片。	Copied text syncs automatically; images don't sync yet.
+经典	Classic
+右侧收起	Hide on right
+左右滑展开候选	Swipe to expand candidates
+适合全面屏手势	Suits gesture navigation
+适合三键导航	Suits 3-button navigation
+适合全面屏，随时收键盘	Suits gestures; hide any time
+候选栏右边的键怎么用？	What should the key on the right of the candidate bar do?
+你的手机用全面屏手势，返回不好按，「经典」或「右侧收起」收键盘更顺手。以后在 设置 → 候选词 里随时能换。	Your phone uses gesture navigation, where Back is awkward; “Classic” or “Hide on right” makes hiding the keyboard easier. You can change it any time in Settings → Candidates.
+你的手机用三键导航，有返回键收键盘，用「默认」就好。以后在 设置 → 候选词 里随时能换。	Your phone uses 3-button navigation; Back hides the keyboard, so “Default” works well. You can change it any time in Settings → Candidates.
+你的平板用全面屏手势，返回不好按，「经典」或「右侧收起」收键盘更顺手。以后在 设置 → 候选词 里随时能换。	Your tablet uses gesture navigation, where Back is awkward; “Classic” or “Hide on right” makes hiding the keyboard easier. You can change it any time in Settings → Candidates.
+你的平板用三键导航，有返回键收键盘，用「默认」就好。以后在 设置 → 候选词 里随时能换。	Your tablet uses 3-button navigation; Back hides the keyboard, so “Default” works well. You can change it any time in Settings → Candidates.
+有返回键的用「默认」；全面屏手势返回不好按，选「经典」或「右侧收起」。以后在 设置 → 候选词 里随时能换。	With a Back button, use “Default”; with gesture navigation Back is awkward, so pick “Classic” or “Hide on right”. You can change it any time in Settings → Candidates.
+候选栏右边的键改成「默认」。	The key on the right of the candidate bar is now “Default”.
+候选栏右边的键改成「经典」。	The key on the right of the candidate bar is now “Classic”.
+候选栏右边的键改成「右侧收起」。	The key on the right of the candidate bar is now “Hide on right”.
+左边 ‹	Left ‹
+右边 ▾	Right ▾
+右边 ⌄	Right ⌄
+右边 ×	Right ×
+左右拉	Pull sideways
+取消输入、关掉联想	Cancel input, close predictions
+展开更多候选	Show more candidates
+随时收起键盘	Hide the keyboard any time
+关候选、关联想，同一处再点收键盘	Close candidates or predictions; tap the same spot again to hide the keyboard
+滑到头再往外拉就展开，左右划都能收起	At either end, keep pulling to expand; swipe either way to collapse
+显示 ‹ 取消键	Show ‹ cancel key
+关联想用 ⊗	Close predictions with ⊗
+联想时左边放 ⊗，点它关掉联想；取消键关着也有	Puts ⊗ at the left while predictions show; tap it to close them. Works even with the cancel key off
+左右滑展开候选默认关，开了也保留右边 ▾	Swipe to expand candidates is off by default; when on, ▾ on the right stays
+打开键盘时退出英文	Leave English when the keyboard opens
+换输入框或回到应用时，从英文切回中文等原来的语言	Switch back from English to Chinese or your other language when you change fields or return to an app
+上下滑输入符号的距离：{0} dp	Swipe distance for symbols: {0} dp
+上下滑输入符号的距离	Swipe distance for symbols
+长句拖选改局部	Drag to edit long sentences
+首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除	When the first candidate is over 6 characters, hold and drag across part of it to change only that part; holding without dragging still opens pin and delete
+自动识别语音语言	Detect spoken language automatically
+开启后可输入粤语，关闭时使用普通话	Enable for Cantonese dictation. Turn off to use Mandarin.
+仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字	X-ASR finalizes Mandarin and English. If another language is detected, the entire recording keeps its first transcript.

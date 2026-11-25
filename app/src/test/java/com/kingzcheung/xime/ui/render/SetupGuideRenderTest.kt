@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -120,7 +121,8 @@ class SetupGuideRenderTest {
         rule.onNodeWithTag("setup-t9:false").assertIsSelected()
         rule.onNodeWithTag("setup-t9:true").assertIsNotSelected()
         for (tag in listOf("setup-voice:OFTEN", "setup-voice:NEVER", "setup-t9:true", "setup-caption:false")) {
-            val bounds = rule.onNodeWithTag(tag).getBoundsInRoot()
+            // 引导里多了候选栏三张卡，后面的题要先滚到才量得出高度。
+            val bounds = rule.onNodeWithTag(tag).performScrollTo().getBoundsInRoot()
             assertTrue("$tag 只有 ${bounds.bottom - bounds.top} 高", bounds.bottom - bounds.top >= 76.dp)
             assertTrue("$tag 不是整行宽", bounds.right - bounds.left >= 360.dp)
         }
@@ -196,6 +198,35 @@ class SetupGuideRenderTest {
         rule.mainClock.advanceTimeBy(com.kingzcheung.xime.ui.theme.CyMotion.GUIDE.toLong() + 200)
         shot(out, "switched")
         rule.mainClock.autoAdvance = true
+    }
+
+    /** 11-25 他：候选栏右边的键很重要，引导里要问——三张卡和设置页一样（默认、经典、右侧收起），点哪张答案就是哪套，全面屏手机说一句哪套顺手。 */
+    @Test fun asksCandidateRightKey() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        KeyboardThemes.initFromConfig(context)
+        val facts = facts().copy(gestureNav = true)
+        var last: SetupAnswers? = null
+        rule.setContent {
+            var answers by androidx.compose.runtime.remember { mutableStateOf(SetupGuidePlanner.suggest(facts)) }
+            val plan = SetupGuidePlanner.plan(facts, answers)
+            XimeTheme(darkTheme = false) {
+                Box(Modifier.width(400.dp).fillMaxHeight()) {
+                    SetupGuideContent(facts, plan, emptySet(), allowMetered = false, applying = false,
+                        result = null, firstRun = true, onAnswers = { answers = it; last = it }, onToggleRemove = { _, _ -> },
+                        onAllowMetered = {}, onApply = {}, onSkip = {}, onDone = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("candidate-right-key:expand").performScrollTo().assertIsSelected()
+        rule.onNodeWithText("返回不好按", substring = true).assertExists()
+        val top = listOf("expand", "close", "hide").map { rule.onNodeWithTag("candidate-right-key:$it").getBoundsInRoot().top }
+        assertTrue("顺序应是默认、经典、右侧收起：$top", top == top.sortedBy { it.value })
+        rule.onNodeWithTag("candidate-right-key:close").performScrollTo().performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("candidate-right-key:close").assertIsSelected()
+        rule.onNodeWithTag("candidate-right-key:expand").assertIsNotSelected()
+        assertTrue(last?.candidateRightKey == com.kingzcheung.xime.settings.CandidateRightKey.CLOSE)
     }
 
     @Test fun renderSetupGuide() {

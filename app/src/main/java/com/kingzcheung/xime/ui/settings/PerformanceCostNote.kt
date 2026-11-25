@@ -75,14 +75,14 @@ internal fun PerformanceCostTotalSection(
     SettingsSection(title = "性能开销") {
         Column(Modifier.fillMaxWidth().padding(16.dp).testTag("perf-cost-total"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (source == null || load == null) {
-                Text("读不到开销表(安装包里的 perf_costs.json)，暂时算不出总开销。",
+                Text("暂时算不出总开销。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 return@Column
             }
             Row(Modifier.fillMaxWidth()) {
                 Text("当前总开销", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.width(8.dp))
-                Text(PerformanceCosts.describeLoad(load, source.device) ?: "没有额外开销",
+                Text(PerformanceCosts.describeLoad(load, source.device, source.here) ?: "没有额外开销",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.testTag("perf-cost-total-value"))
             }
@@ -95,7 +95,9 @@ internal fun PerformanceCostTotalSection(
         // 模糊音按组登记，一组的开销小到不值一提，合成一行：26 键一行（去模糊音页改），九键「按数字也模糊」一行（这里能关）。
         val fuzzy26 = PerformanceCosts.Item.entries.filter { !it.nineKey && it.id.startsWith("fuzzy_") }
         val fuzzy9 = PerformanceCosts.Item.entries.filter { it.nineKey && it.id.startsWith(PerformanceCosts.T9_PREFIX + "fuzzy_") }
-        fun weight(cost: PerformanceCosts.Cost?) = (cost?.keyMs ?: 0.0) + (cost?.keyP95Ms ?: 0.0) + (cost?.memoryMb ?: 0.0) / 10
+        // 键盘停着时一直耗电的（动态背景）排最前：每分钟多 1 秒 CPU 按每键多 1 ms 算。
+        fun weight(cost: PerformanceCosts.Cost?) = (cost?.keyMs ?: 0.0) + (cost?.keyP95Ms ?: 0.0) + (cost?.memoryMb ?: 0.0) / 10 +
+            (cost?.idleCpuSecPerMin ?: 0.0)
         val listed = PerformanceCosts.Item.entries
             .filter { it !in fuzzy26 && it !in fuzzy9 && (it.id in on || it.id in shownOff) }
             .map { it to device.items[it.id] }
@@ -105,7 +107,7 @@ internal fun PerformanceCostTotalSection(
         listed.forEach { (item, cost) ->
             val enabled = item.id in on
             CostDivider()
-            SettingsListRow(item.title, if (enabled) PerformanceCosts.describe(cost, device).orEmpty() else "已关",
+            SettingsListRow(item.title, if (enabled) PerformanceCosts.describe(cost, device, source.here).orEmpty() else "已关",
                 modifier = Modifier.testTag("perf-cost-row:${item.id}")) {
                 Switch(checked = enabled, onCheckedChange = { onToggle(item, it) }, modifier = Modifier.padding(end = 12.dp))
             }
@@ -141,7 +143,7 @@ internal fun PerformanceCostTotalSection(
             SettingsListRow("导入的词库($dictionaryWords 词)", text, modifier = Modifier.testTag("perf-cost-dictionaries"))
         }
         val missing = PerformanceCosts.Item.entries.filter { it.id in on && it.id !in device.items }
-        if (missing.isNotEmpty()) Text("开着但表里没有：" + missing.joinToString("、") { it.title },
+        if (missing.isNotEmpty()) Text("开着但没测过：" + missing.joinToString("、") { it.title },
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp))
     }

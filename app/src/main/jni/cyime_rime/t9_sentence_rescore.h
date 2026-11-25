@@ -35,6 +35,18 @@ class Sentence;
 // `initials_margin` (t9/initials_lead_margin): the first choice of the old order (`initials_first`, the dictionary's
 // first word with these initials; Rime's first sentence when empty) stays first unless another candidate beats it by
 // this margin (0: the highest score always leads).
+// `runners_up` (t9/menu_sentences): the typed sentences in the order of the computed score, best first (Rime's own
+// order and weights without the word model), each with how far its score is below the best one (ln units), for a
+// menu that lists more than one. The caller leaves out what it already lists.
+// `built` (t9/model_sentences): whole sentences the caller built with the word model, typed out in full. The best
+// of them leads when its score beats the typed choice's, and the typed choice follows it. `built_rime_weight`
+// (t9/model_sentences_rime_weight) adds that share of Rime's own sentence weight to both sides of this comparison
+// only.
+// `stray_decided`: set when the typed letters hold stray initials and the corrected sentence was weighed against the
+// typed choice by t9/stray_correction_margin (whichever leads), so the caller does not put Rime's best first again.
+// `built_fuzzy` (beside `built`, t9/model_sentences_fuzzy_penalty): the syllables of each built sentence read only
+// through a fuzzy spelling; each costs `fuzzy_penalty`. When such a sentence leads, the one that leads without them
+// follows it, before the typed choice.
 // T9InitialsOnly: every letter of `input` is a consonant (no key of it can be a whole syllable of pinyin letters).
 bool T9InitialsOnly(const string& input);
 
@@ -44,7 +56,11 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
-                        deque<an<Sentence>>* sentences, bool slip_only = false);
+                        deque<an<Sentence>>* sentences, bool slip_only = false,
+                        vector<std::pair<double, an<Sentence>>>* runners_up = nullptr,
+                        const deque<an<Sentence>>* built = nullptr, double built_rime_weight = 0.0,
+                        bool* stray_decided = nullptr, const vector<int>* built_fuzzy = nullptr,
+                        double fuzzy_penalty = 0.0);
 
 // 14-key: a whole-input word read through the initial of the final merged key (都是 for DOUA, the A key read
 // as s) normally follows the sentence of the typed letters (都啊). With the word model it goes first when its

@@ -145,7 +145,7 @@ fun KeyEffectSettingsContent(
                         )
                         Text(
                             // 有人调了半天不知道强弱在哪调（用户转述 10-31）：直接说强弱归谁管。
-                            text = "跟随系统：强弱跟系统设置一致",
+                            text = "跟随系统：强弱在系统设置里调",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -191,7 +191,7 @@ fun KeyEffectSettingsContent(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = "手指抬起时触发短振动",
+                                    text = "手指抬起时也振动一下",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -365,14 +365,14 @@ internal fun KeyVisualEffectSettings(
             KeyVisualEffectToggle("按键动效", "点按时键帽缩放回弹。",
                 animationEnabled, onAnimationChange, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_ANIMATION)
             Spacer(Modifier.height(12.dp))
-            KeyVisualEffectToggle("键内炫光", "点按时显示半秒渐变光效。",
+            KeyVisualEffectToggle("键内炫光", "点按时键上闪一下光。",
                 glowEnabled, onGlowChange, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GLOW)
             Spacer(Modifier.height(12.dp))
             KeyVisualEffectToggle("键缝动效", "点按时光沿键缝扩散",
                 gapLight.enabled, onGapLightChange, com.kingzcheung.xime.settings.PerformanceCosts.Item.KEY_GAP_LIGHT)
             if (gapLight.enabled) KeyGapLightDetailSettings(gapLight, onGapLightConfigChange)
             Spacer(Modifier.height(12.dp))
-            Text("首次使用时按设备配置推荐。",
+            Text("默认按本机性能推荐。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             Text("点按下方按键预览", style = MaterialTheme.typography.labelMedium)
@@ -546,7 +546,7 @@ private fun KeySoundStyleSetting() {
     }
     Column(modifier = Modifier.settingsSearchAnchor("按键音色").padding(16.dp)) {
         Text(text = "按键音色", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        Text(text = "换一种按键声音，选好立即生效", style = MaterialTheme.typography.bodySmall,
+        Text(text = "选好立即生效", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
         val rowHeight = with(androidx.compose.ui.platform.LocalDensity.current) {

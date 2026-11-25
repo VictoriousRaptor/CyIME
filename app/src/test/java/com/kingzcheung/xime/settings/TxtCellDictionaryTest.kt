@@ -72,6 +72,16 @@ class TxtCellDictionaryTest {
     }
 
     @Test
+    fun `english words with a Sogou spelled code keep only the word`() {
+        // #560：深蓝词库转出来的英文行，编码是一个个字母（'a'b'o'u't），不能和词连成一个词。
+        val text = "'a'b'o'u't about\nhello 'h'e'l'l'o\n'n'e'w'y'o'r'k New York\nabout\t'a'b'o'u't\t100\n'x'y'z about\n"
+        val parsed = TxtCellDictionary.parse(text.toByteArray(Charsets.UTF_8))
+        assertEquals(listOf("about", "hello", "New York"), parsed.english)
+        assertEquals(1, parsed.skipped)  // code and word differ: left as it was, and a leading ' is no word
+        assertEquals("Team Spirit", TxtCellDictionary.withoutSpelledCode("Team Spirit"))
+    }
+
+    @Test
     fun `tone marks as in wanxiang`() {
         assertEquals("阿爸|a ba", code("阿爸\tā bà\t716"))
         assertEquals("绿色|lv se", code("绿色\tlǜ sè\t100"))

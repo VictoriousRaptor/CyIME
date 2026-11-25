@@ -40,7 +40,8 @@ class SchemePanelMatchesSettingsTest {
         KeyboardThemes.reload(app)
         val current = schemas.first { it.schemaId == "rime_ice" }
         val expected = SchemaPicking.schemeRow(InputModes.ordered(app, schemas), current).map { it.schemaId }
-        assertTrue(expected.toString(), expected.containsAll(listOf("wubi86", "cyime_cangjie", "cyime_zhuyin", "stroke")))
+        assertTrue(expected.toString(), expected.containsAll(listOf("wubi86", "cyime_cangjie")))
+        assertTrue(expected.toString(), expected.none { it in listOf("cyime_zhuyin", "stroke", "t9_pinyin") })
         rule.setContent {
             MaterialTheme {
                 SchemaListView(schemas, "rime_ice", Color.White, Color.Blue, Color.Black, Color(0xFFEEEEEE),
@@ -50,6 +51,12 @@ class SchemePanelMatchesSettingsTest {
         for (id in expected) {
             rule.onNodeWithTag("profile-scheme-list:list", useUnmergedTree = true).performScrollToKey(id)
             rule.onNodeWithTag("panel-scheme:$id", useUnmergedTree = true).assertExists()
+        }
+        // 注音、笔画不在方案一行，在布局一行（大千、笔画键盘）。
+        for (id in listOf("cyime_zhuyin", "stroke")) rule.onNodeWithTag("panel-scheme:$id", useUnmergedTree = true).assertDoesNotExist()
+        for (layout in listOf("zhuyin", "stroke")) {
+            rule.onNodeWithTag("profile-layout-list:list", useUnmergedTree = true).performScrollToKey(layout)
+            rule.onNodeWithTag("panel-layout:$layout", useUnmergedTree = true).assertExists()
         }
     }
 }
