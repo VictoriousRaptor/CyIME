@@ -14,7 +14,6 @@ internal object SpeechModelSelection {
     fun supportsCorrection(mode: String) = primary(mode) in setOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.ZIPFORMER)
 
     fun primary(mode: String): String = when (mode) {
-        SpeechModelCatalog.SENSEVOICE_YUE -> SpeechModelCatalog.SENSEVOICE
         SpeechModelCatalog.ZIPFORMER_TWO_PASS -> SpeechModelCatalog.ZIPFORMER
         SpeechModelCatalog.TWO_PASS -> SpeechModelCatalog.PARAFORMER
         else -> mode
@@ -41,7 +40,7 @@ internal object SpeechModelSelection {
         SpeechModelCatalog.ZIPFORMER -> if (enabled) SpeechModelCatalog.ZIPFORMER_TWO_PASS else model
         SpeechModelCatalog.PARAFORMER -> if (enabled) SpeechModelCatalog.TWO_PASS else model
         // SenseVoice is a complete standalone choice and never corrects itself.
-        SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> mode
+        SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> model
         else -> error("不支持的语音模型：$model")
     }
 
@@ -50,7 +49,7 @@ internal object SpeechModelSelection {
      * correction, or SenseVoice alone. Paraformer / Zipformer alone and other languages ignore the switch.
      */
     fun wholeSentenceApplies(mode: String, chinese: Boolean): Boolean =
-        chinese && mode != SpeechModelCatalog.SENSEVOICE_YUE && (hasCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)
+        chinese && (hasCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)
 
     /**
      * Where 整句定稿 applies (after a streaming preview with SenseVoice correction, and for SenseVoice alone), X-ASR
@@ -103,7 +102,7 @@ internal object SpeechModelSelection {
     fun finishOptions(mode: String, chinese: Boolean): List<Finish> = buildList {
         add(Finish.NONE)
         if (supportsCorrection(mode)) add(Finish.SENSEVOICE)
-        if (wholeSentenceApplies(withCorrection(mode, true), chinese)) add(Finish.WHOLE)
+        if (chinese && (supportsCorrection(mode) || primary(mode) == SpeechModelCatalog.SENSEVOICE)) add(Finish.WHOLE)
     }
 
     /** 现在实际生效的定稿方式；与 [pipeline] 同一条规则。 */

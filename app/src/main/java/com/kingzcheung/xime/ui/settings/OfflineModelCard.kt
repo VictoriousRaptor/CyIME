@@ -7,7 +7,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -70,16 +69,7 @@ internal fun OfflineModelCard() {
             SettingsSection(title = "${language.displayName}语音") {
                 val content = if (index == shownLanguages.lastIndex) Modifier.testTag("speech-correction") else Modifier
                 Column(content.fillMaxWidth()) {
-                    val mode = selected.getValue(language)
-                    if (language == InputLanguage.CHINESE && SpeechModelSelection.primary(mode) == SpeechModelCatalog.SENSEVOICE) {
-                        SettingsToggleItem(Icons.Filled.Mic, "粤语识别", "开启时按粤语识别，关闭时按普通话识别",
-                            checked = mode == SpeechModelCatalog.SENSEVOICE_YUE,
-                            onCheckedChange = { cantonese ->
-                                manager.setModel(if (cantonese) SpeechModelCatalog.SENSEVOICE_YUE else SpeechModelCatalog.SENSEVOICE, language)
-                                refresh(language)
-                            })
-                    }
-                    SpeechPipeline(language, mode, ready, senseReady, xasrReady, wholeSentence,
+                    SpeechPipeline(language, selected.getValue(language), ready, senseReady, xasrReady, wholeSentence,
                         wholeFinalizer, downloads, onPick = { editing = language }, onDownload = ::download,
                         onFinish = { finish, finalizer ->
                             finalizer?.let { wholeFinalizer = it; SettingsPreferences.setSttWholeFinalizer(context, it) }
