@@ -458,6 +458,20 @@ fun KeyboardView(
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
     com.kingzcheung.xime.settings.KeysConfigHelper.cornerFullWidth = punctuationFull
+    val effectiveNumberRow = numberRowShown(
+        setting = inputPreferences.numberRow,
+        zhuyin = !state.isAsciiMode && state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN,
+        passwordField = state.isPasswordField,
+        passwordAutoNumberRow = inputPreferences.passwordAutoNumberRow,
+        is26Key = state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC &&
+            com.kingzcheung.xime.settings.KeysConfigHelper.letterLayout(state.currentSchemaId, state.isAsciiMode)?.honeycomb != true,
+    )
+    com.kingzcheung.xime.settings.KeysConfigHelper.cornerVariant = com.kingzcheung.xime.settings.CornerVariant.of(
+        effectiveNumberRow, inputPreferences.swipeUpHints, inputPreferences.swipeDownHints
+    )
+    DisposableEffect(keyboardContext) {
+        onDispose { com.kingzcheung.xime.settings.KeysConfigHelper.refreshCornerVariant(keyboardContext) }
+    }
     // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
@@ -2863,7 +2877,7 @@ fun KeyboardView(
             density = resizeControlDensity,
             aspectLimits = KeyboardAspectLimits.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction),
             squareSnap = KeyboardSquareSnap.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction,
-                inputPreferences.wideKeys, numberRow = inputPreferences.numberRow,
+                inputPreferences.wideKeys, numberRow = effectiveNumberRow,
                 numberRowFullHeight = inputPreferences.numberRowFullHeight)
                 ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize())),
             splitGapFraction = splitGapSetting,

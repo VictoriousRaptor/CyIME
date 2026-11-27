@@ -460,7 +460,7 @@ object DeviceHost {
 
     /** Only plain, non-sensitive text is served; incognito and password-manager copies stay local. */
     private fun readClipboardText(): ClipboardProfile? = runBlocking(Dispatchers.Main) {
-        if (IncognitoState.active || SettingsPreferences.isIncognito(context)) return@runBlocking null
+        if (IncognitoState.securitySensitive || SettingsPreferences.isIncognito(context)) return@runBlocking null
         val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as AndroidClipboardManager
         val stamp = try { manager.primaryClipDescription?.timestamp ?: 0L } catch (_: SecurityException) { return@runBlocking null }
         lastServed?.takeIf { stamp != 0L && it.first == stamp }?.let { return@runBlocking it.second }

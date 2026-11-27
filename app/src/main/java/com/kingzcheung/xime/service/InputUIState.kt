@@ -56,6 +56,7 @@ data class InputUIState(
     val isDeploying: Boolean = false,
     val deploymentMessage: String = "",
     val isAddressField: Boolean = false,
+    val isPasswordField: Boolean = false,
     val inputSessionId: Long = 0,
     val t9ResetSignal: Long = 0,
     val swipeCancelEpoch: Long = 0,

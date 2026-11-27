@@ -291,6 +291,13 @@ private fun LayoutDisplayPage(
                             onCheckedChange = { SettingsPreferences.setNumberRowFullHeight(context, it) })
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     }
+                    // 密码框自动数字行（默认开）：在密码输入框使用 26 键时自动弹出数字行，离开后恢复。
+                    SettingsToggleItem(Icons.TwoTone.Dialpad, "密码框自动数字行",
+                        if (numberRow) "已全局开启数字行；关闭全局数字行后仍会在密码框弹出"
+                        else "在密码输入框使用 26 键时自动弹出数字行",
+                        checked = numberRowPrefs.passwordAutoNumberRow,
+                        onCheckedChange = { SettingsPreferences.setPasswordAutoNumberRowEnabled(context, it) })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     // 打数字出短语（别人请求；11-24 起默认开）：见 service/DigitPhrases.kt。
                     var digitPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.DigitPhrases.isEnabled(context)) }
                     SettingsToggleItem(Icons.TwoTone.Dialpad, "数字出短语",

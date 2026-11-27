@@ -11,6 +11,8 @@ import android.view.inputmethod.EditorInfo
 object IncognitoState {
     @Volatile var manual: Boolean = false
     @Volatile var sensitiveEditor: Boolean = false
+    /** 当前输入框是否为密码框（与「密码框临时关闭学习」开关无关，用于保持插件与剪贴板同步安全边界）。 */
+    @Volatile var passwordEditor: Boolean = false
     /**
      * 剪贴板只看这个：当前开着的是藏字的密码框，离开输入框就清掉。以前剪贴板看 [sensitiveEditor]，
      * 浏览器无痕页（NO_PERSONALIZED_LEARNING）、借「可见密码」关联想的地址栏和搜索框、离开密码框后
@@ -23,12 +25,13 @@ object IncognitoState {
      */
     @Volatile var clipboardSearch: Boolean = false
     val active: Boolean get() = manual || sensitiveEditor || clipboardSearch
+    val securitySensitive: Boolean get() = active || passwordEditor
 
-    fun isSensitiveEditor(attribute: EditorInfo?): Boolean {
+    fun isPasswordInput(attribute: EditorInfo?): Boolean {
         if (attribute == null) return false
         val cls = attribute.inputType and InputType.TYPE_MASK_CLASS
         val variation = attribute.inputType and InputType.TYPE_MASK_VARIATION
-        val isPassword = when (cls) {
+        return when (cls) {
             InputType.TYPE_CLASS_TEXT -> variation in intArrayOf(
                 InputType.TYPE_TEXT_VARIATION_PASSWORD,
                 InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
@@ -37,9 +40,13 @@ object IncognitoState {
             InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
             else -> false
         }
-        val noPersonalized = attribute.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
-        return isPassword || noPersonalized
     }
+
+    fun hasNoPersonalizedLearning(attribute: EditorInfo?): Boolean =
+        attribute != null && (attribute.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0)
+
+    fun isSensitiveEditor(attribute: EditorInfo?): Boolean =
+        isPasswordInput(attribute) || hasNoPersonalizedLearning(attribute)
 
     /** 藏字的密码框：文字密码、网页密码、数字密码。「可见密码」常被用来关联想，不算。 */
     fun isPasswordField(attribute: EditorInfo?): Boolean {

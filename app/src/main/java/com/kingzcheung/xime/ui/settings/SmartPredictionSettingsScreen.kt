@@ -223,6 +223,26 @@ fun SmartPredictionSettingsContent(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
+                    // 密码框临时关闭学习（默认开）：进入密码输入框临时停用词库学习、联想和输入记忆，离开后恢复。
+                    var passwordDisableLearning by remember {
+                        mutableStateOf(SettingsPreferences.isPasswordDisableLearningEnabled(context))
+                    }
+                    SettingsToggleItem(
+                        icon = Icons.TwoTone.Lock,
+                        title = "密码框临时关闭学习",
+                        subtitle = "在密码输入框临时关闭学习与记忆，离开后恢复",
+                        checked = passwordDisableLearning,
+                        onCheckedChange = {
+                            passwordDisableLearning = it
+                            SettingsPreferences.setPasswordDisableLearningEnabled(context, it)
+                        },
+                        lockMessage = if (toggles.incognito) "无痕模式开着时不需要" else null,
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                     // 删掉刚上屏的词不学习（B站反馈 10-31，默认关）；无痕开着时本来就什么都不学，置灰。
                     var unlearnRejected by remember { mutableStateOf(SettingsPreferences.isUnlearnRejectedCommit(context)) }
                     SettingsToggleItem(

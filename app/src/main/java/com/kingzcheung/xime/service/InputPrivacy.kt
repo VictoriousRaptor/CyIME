@@ -11,6 +11,9 @@ import com.kingzcheung.xime.settings.IncognitoState
 internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) {
     private var applied: Boolean? = null
     private var lockWordOrder = false
+    private var passwordDisableLearning = true
+    private var currentIsPassword = false
+    private var currentNoPersonalized = false
 
     /** The saved switch at start-up; the first field applies it to the engine. */
     fun loadManual(on: Boolean) { IncognitoState.manual = on }
@@ -22,11 +25,27 @@ internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) 
 
     fun setLockWordOrder(on: Boolean) { lockWordOrder = on; apply() }
 
+    /** 「密码框临时关闭学习」（默认开）：进入密码框临时停用学习与记忆，离开后恢复。启动时等第一个输入框生效。 */
+    fun loadPasswordDisableLearning(on: Boolean) { passwordDisableLearning = on }
+
+    fun setPasswordDisableLearning(on: Boolean) {
+        passwordDisableLearning = on
+        syncSensitiveEditor()
+        apply()
+    }
+
     /** A new field: password fields and fields asking for no personalized learning stay private. */
     fun beginEditor(attribute: EditorInfo?) {
-        IncognitoState.sensitiveEditor = IncognitoState.isSensitiveEditor(attribute)
+        currentIsPassword = IncognitoState.isPasswordInput(attribute)
+        currentNoPersonalized = IncognitoState.hasNoPersonalizedLearning(attribute)
+        IncognitoState.passwordEditor = currentIsPassword
         IncognitoState.passwordField = IncognitoState.isPasswordField(attribute)
+        syncSensitiveEditor()
         apply()
+    }
+
+    private fun syncSensitiveEditor() {
+        IncognitoState.sensitiveEditor = currentNoPersonalized || (currentIsPassword && passwordDisableLearning)
     }
 
     /** The field closed: a copy made after this did not come from a password field. Learning waits for the next field. */

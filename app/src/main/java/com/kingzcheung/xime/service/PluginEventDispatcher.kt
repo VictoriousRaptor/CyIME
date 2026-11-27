@@ -34,7 +34,7 @@ internal class PluginEventDispatcher(private val service: XimeInputMethodService
 
     /** 无痕生效中（手动、密码类 / 不学习标记的输入框、剪贴板搜索）：与学习同一来源（InputPrivacy 写）。
      *  供 hotPath 插件能力（候选词变换）在发起请求前短路。 */
-    val isCurrentEditorSensitive: Boolean get() = com.kingzcheung.xime.settings.IncognitoState.active
+    val isCurrentEditorSensitive: Boolean get() = com.kingzcheung.xime.settings.IncognitoState.securitySensitive
 
     /** 新输入会话：重置 composing 去重。 */
     fun onStartInput() {

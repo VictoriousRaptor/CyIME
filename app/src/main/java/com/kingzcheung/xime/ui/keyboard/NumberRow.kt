@@ -21,8 +21,18 @@ internal fun numberRowHeightWeight(fullHeight: Boolean): Float = if (fullHeight)
 /** 分体中缝按行登记位置（[SplitGapSpacer]）；字母行用 0-3，数字行用一个不会撞上的行号。 */
 internal const val NUMBER_ROW_SPLIT_ROW = 9
 
-/** 这张字母键盘要不要数字行：注音（大千）首排本身就是数字位，不再加。 */
-internal fun numberRowShown(setting: Boolean, zhuyin: Boolean): Boolean = setting && !zhuyin
+/**
+ * 这张字母键盘要不要数字行：
+ * - 全局「数字行」开启时，注音（大千首排本身就是数字位）不加，其余字母键盘显示；
+ * - 密码输入框且开启「密码框自动数字行」时，26 键（[is26Key]）自动弹出数字行。
+ */
+internal fun numberRowShown(
+    setting: Boolean,
+    zhuyin: Boolean,
+    passwordField: Boolean = false,
+    passwordAutoNumberRow: Boolean = false,
+    is26Key: Boolean = true,
+): Boolean = !zhuyin && (setting || (passwordField && passwordAutoNumberRow && is26Key))
 
 /** 分体时左半的键数：一半归左手，单数时多出的一个给右手；不分体或只有一个键时 -1。 */
 internal fun numberRowSplitAt(count: Int, split: Boolean): Int = if (split && count >= 2) count / 2 else -1

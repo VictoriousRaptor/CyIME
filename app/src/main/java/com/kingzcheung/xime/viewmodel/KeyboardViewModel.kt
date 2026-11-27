@@ -90,6 +90,7 @@ data class KeyboardUiState(
     val isCalculatorMode: Boolean = false,
     val inputSessionId: Long = 0L,
     val isAddressField: Boolean = false,
+    val isPasswordField: Boolean = false,
     val isFloatingMode: Boolean = false,
     val isHandwritingMode: Boolean = false,
     val floatingOffsetX: Int = 0,

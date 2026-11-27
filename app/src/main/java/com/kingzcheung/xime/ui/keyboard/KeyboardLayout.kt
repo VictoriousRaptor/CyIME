@@ -204,9 +204,18 @@ fun KeyboardLayout(
     // 注音（大千）：11 列，下面三行 10 键缩进半键，没有 Shift，删除键在第四行末尾。
     val zhuyin = !isAsciiMode && uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN
     // 数字行（默认关）：字母上方一排，键和顺序在「按键符号 → 数字行」里改；注音不加（见 [numberRowShown]）。
+    // 密码框在 26 键下且开启「密码框自动数字行」时也自动弹出，离开后恢复。
     val numberRowPrefs = LocalKeyboardInputPreferences.current
-    val numberKeys = remember(numberRowPrefs.numberRow, zhuyin, numberRowPrefs.sideSymbols) {
-        if (numberRowShown(numberRowPrefs.numberRow, zhuyin)) numberRowPrefs.numberRowKeys() else emptyList()
+    val is26Key = uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !honeycomb
+    val showNumberRow = numberRowShown(
+        setting = numberRowPrefs.numberRow,
+        zhuyin = zhuyin,
+        passwordField = uiState.isPasswordField,
+        passwordAutoNumberRow = numberRowPrefs.passwordAutoNumberRow,
+        is26Key = is26Key,
+    )
+    val numberKeys = remember(showNumberRow, numberRowPrefs.sideSymbols) {
+        if (showNumberRow) numberRowPrefs.numberRowKeys() else emptyList()
     }
     val numberRowWeight = if (numberKeys.isEmpty()) 0f else numberRowHeightWeight(numberRowPrefs.numberRowFullHeight)
     val metricContext = LocalContext.current

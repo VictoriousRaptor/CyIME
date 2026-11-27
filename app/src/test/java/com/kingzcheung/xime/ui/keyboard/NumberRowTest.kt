@@ -71,4 +71,20 @@ class NumberRowTest {
         // 只开「一样高」没开数字行：什么都不变。
         assertEquals(4f, KeyboardSquareSnap.forLayout(LayoutKind.ALPHABETIC, false, numberRowFullHeight = true)!!.rows)
     }
+
+    @Test fun passwordFieldAutoShowsNumberRowOn26KeyWhenEnabled() {
+        assertTrue(KeyboardInputPreferences().passwordAutoNumberRow)
+        // 密码框 + 26 键 + 开关开：即使全局「数字行」关着也自动弹出。
+        assertTrue(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = true, is26Key = true))
+        // 开关关掉后，密码框不再自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
+        // 普通输入框不会触发自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = false, passwordAutoNumberRow = true, is26Key = true))
+        // 14 键等非 26 键合并布局不自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = true, is26Key = false))
+        // 注音（大千）首排本身就是数字位，不叠加数字行。
+        assertFalse(numberRowShown(setting = false, zhuyin = true, passwordField = true, passwordAutoNumberRow = true, is26Key = true))
+        // 全局「数字行」开着时，即使关闭密码框自动弹出也照常显示。
+        assertTrue(numberRowShown(setting = true, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
+    }
 }

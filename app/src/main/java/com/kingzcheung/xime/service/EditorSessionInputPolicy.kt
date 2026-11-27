@@ -8,6 +8,7 @@ internal data class EditorFieldPolicy(
     val kind: Kind = Kind.TEXT,
     val signed: Boolean = false,
     val decimal: Boolean = false,
+    val passwordNumberRow: Boolean = false,
 ) {
     enum class Kind { TEXT, PASSWORD, VISIBLE_PASSWORD, NUMBER_PASSWORD, NUMBER, PHONE, DATE, TIME, DATETIME, ADDRESS, SEARCH_OR_ADDRESS }
 
@@ -87,17 +88,25 @@ internal data class EditorFieldPolicy(
         fun fromInputType(inputType: Int): EditorFieldPolicy {
             val variation = inputType and InputType.TYPE_MASK_VARIATION
             return when (inputType and InputType.TYPE_MASK_CLASS) {
-                InputType.TYPE_CLASS_TEXT -> when (variation) {
-                    // 多行的「密码框」是借密码类型关掉联想、自动改正的代码编辑器（真正的密码框只有一行）：
-                    // 和可见密码一样先给英文、能切中文、能说话（用户 11-13：写代码、命令行一类的应用都要能打中文）。
-                    InputType.TYPE_TEXT_VARIATION_PASSWORD,
-                    InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(
-                        if (inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0) Kind.VISIBLE_PASSWORD else Kind.PASSWORD)
-                    InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> EditorFieldPolicy(Kind.VISIBLE_PASSWORD)
-                    InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
-                    InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
-                    InputType.TYPE_TEXT_VARIATION_URI -> EditorFieldPolicy(Kind.ADDRESS)
-                    else -> EditorFieldPolicy()
+                InputType.TYPE_CLASS_TEXT -> {
+                    val multiLine = inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
+                    when (variation) {
+                        // 多行的「密码框」是借密码类型关掉联想、自动改正的代码编辑器（真正的密码框只有一行）：
+                        // 和可见密码一样先给英文、能切中文、能说话（用户 11-13：写代码、命令行一类的应用都要能打中文）。
+                        InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                        InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(
+                            if (multiLine) Kind.VISIBLE_PASSWORD else Kind.PASSWORD,
+                            passwordNumberRow = !multiLine,
+                        )
+                        InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> EditorFieldPolicy(
+                            Kind.VISIBLE_PASSWORD,
+                            passwordNumberRow = !multiLine,
+                        )
+                        InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+                        InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+                        InputType.TYPE_TEXT_VARIATION_URI -> EditorFieldPolicy(Kind.ADDRESS)
+                        else -> EditorFieldPolicy()
+                    }
                 }
                 InputType.TYPE_CLASS_NUMBER -> if (variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
                     EditorFieldPolicy(Kind.NUMBER_PASSWORD)
