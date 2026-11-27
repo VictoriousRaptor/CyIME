@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.keyboard.KeyboardInputPage
+import com.kingzcheung.xime.keyboard.modeSlotOrder
 import com.kingzcheung.xime.util.SubcharHelper
 import com.kingzcheung.xime.settings.InputProfile
 import com.kingzcheung.xime.settings.LayoutKind
@@ -213,8 +214,9 @@ private fun NumberRows(
     specialKeyTextColor: Color = Color.White,
     enterKeyText: String = "确定",
 ) {
-    val modeWeight = NineGridFrame.BOTTOM_MODE
-    val modeSlots = com.kingzcheung.xime.keyboard.modeSlotOrder(LocalKeyboardInputPreferences.current.swapModeKeys, LocalKeyboardInputPreferences.current.symbolKeyCycle)
+    val prefs = LocalKeyboardInputPreferences.current
+    val modeSlots = modeSlotOrder(prefs.swapModeKeys)
+    val merged = prefs.symbolKeyCycle
     // 左栏符号和数字键同一个字号（用户 11-18：符号和按键字号不一样）。
     val symFontSize = if (compactMode) 16.sp else KeyboardKeyMetrics.LabelSize
     val keyFontSize = if (compactMode) 16.sp else androidx.compose.ui.unit.TextUnit.Unspecified
@@ -274,14 +276,23 @@ private fun NumberRows(
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            for (slot in modeSlots) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
-                onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
-                textColor = specialKeyTextColor, modifier = Modifier.weight(modeWeight),
-                onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
-                shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+            modeSlots.forEachIndexed { index, slot ->
+                val special = !merged || index == 0
+                KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
+                    onKeyPress = onKeyPress, backgroundColor = if (special) specialKeyBackgroundColor else keyBackgroundColor,
+                    textColor = if (special) specialKeyTextColor else keyTextColor,
+                    modifier = Modifier.weight(NineGridFrame.numberModeWeight(merged)),
+                    onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
+                    shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
+                if (merged && index == 0) KeyButton(text = ",", onClick = { onKeyPress(",") },
+                    backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
+                    modifier = Modifier.weight(NineGridFrame.NUMBER_COMMA).testTag("number-comma-key"),
+                    onPress = { onKeyPressDown?.invoke(",") }, shadowEnabled = shadowEnabled,
+                    shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
+            }
             KeyButton(text = "0", onClick = { onKeyPress("0") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(NineGridFrame.MAIN - modeSlots.size * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
+                modifier = Modifier.weight(NineGridFrame.numberZeroWeight(merged)).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：
@@ -289,7 +300,7 @@ private fun NumberRows(
             val bottomSwipeUp = LocalKeyboardInputPreferences.current.bottomPunctuationSwipeUp
             SwipeableKeyButton(text = ".", onClick = { onKeyPress(".") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(NineGridFrame.ACTION).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
+                modifier = Modifier.weight(NineGridFrame.numberDotWeight(merged)).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
                 swipeText = NUMBER_DOT_ALTERNATE, symbolInputText = NUMBER_DOT_ALTERNATE,
                 onSwipe = { onKeyPress(NUMBER_DOT_ALTERNATE) }, onSwipeStateChange = onSwipeStateChange,
                 followSymbolSwipeDirection = !bottomSwipeUp, keepSymbolSwipeOnLongPress = bottomSwipeUp,
@@ -297,7 +308,7 @@ private fun NumberRows(
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             ActionKeyButton(text = enterKeyText, onClick = { onKeyPress("enter") },
                 backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                modifier = Modifier.weight(NineGridFrame.ACTION), onPress = { onKeyPressDown?.invoke("enter") },
+                modifier = Modifier.weight(NineGridFrame.numberEnterWeight(merged)).testTag("number-enter-key"), onPress = { onKeyPressDown?.invoke("enter") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = ctrlFontSize)
         }

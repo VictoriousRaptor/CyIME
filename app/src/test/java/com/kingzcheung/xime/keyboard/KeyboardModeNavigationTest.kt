@@ -4,17 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class KeyboardModeNavigationTest {
-    @Test fun singleKeyCyclesFromTextThroughSymbolsAndNumbersBackToTheOriginalLanguage() {
+    @Test fun mergeUsesOneTextKeyAndPreservesBothSecondaryTargets() {
+        assertEquals(listOf(1), modeSlotOrder(swapped = false, cycleEnabled = true))
+        assertEquals(listOf(1), modeSlotOrder(swapped = true, cycleEnabled = true))
         for (label in listOf("中文", "ABC", "あいう", "한국어")) {
-            assertEquals(1, modeSlotCount(true))
             assertEquals(KeyboardModeTarget("?123", "symbol"), modeSlotTarget(KeyboardInputPage.TEXT, 1, label, true))
-            assertEquals(KeyboardModeTarget("123", "number"), modeSlotTarget(KeyboardInputPage.SYMBOLS, 1, label, true))
-            assertEquals(KeyboardModeTarget(label, "abc"), modeSlotTarget(KeyboardInputPage.NUMBERS, 1, label, true))
+            for (page in listOf(KeyboardInputPage.SYMBOLS, KeyboardInputPage.NUMBERS)) for (slot in 1..2) {
+                assertEquals(modeSlotTarget(page, slot, label), modeSlotTarget(page, slot, label, true))
+            }
         }
     }
 
-    @Test fun turningCycleOffRestoresBothIndependentTargetsOnEveryPage() {
-        assertEquals(2, modeSlotCount(false))
+    @Test fun turningMergeOffRestoresBothIndependentTargetsOnEveryPage() {
+        assertEquals(listOf(1, 2), modeSlotOrder(swapped = false))
         for (page in KeyboardInputPage.entries) for (slot in 1..2) {
             assertEquals(modeSlotTarget(page, slot, "中文"), modeSlotTarget(page, slot, "中文", false))
         }

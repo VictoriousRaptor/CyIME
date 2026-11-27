@@ -196,7 +196,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("按键符号", layouts, layoutIndex, "角标 符号编辑 字母键符号 上下角标 下滑符号 14键符号 自定义布局符号 侧栏 笔画 短语 常用符号栏 手写符号 数字行 数字侧栏 数字键盘 滑动动作 zxcv 撤销 剪切 复制 粘贴 全选 段首 段尾"),
         page("26 键底栏", layouts, SettingsRoutes.QwertyBottomRow, "26键 底栏 底排 顺序 自定义 语言键放左侧 地球键 中英切换键 语言切换 符号键 数字键 空格两侧的标点 空格两侧标点 空格左侧逗号键 空格右侧句号键 标点 全角 半角 显示 隐藏 排列 位置"),
         SettingsSearchEntry("其他布局语言键放左侧", layouts, layoutIndex, "中英切换键 语言切换 地球键 左边 左侧 数字键右边 123 合并按钮 符号键 位置"),
-        SettingsSearchEntry("符号键循环切换", layouts, layoutIndex, "Gboard 符号键 数字键 循环切换 合并 单键 ?123 输入法键盘"),
+        SettingsSearchEntry("合并符号和数字键", layouts, layoutIndex, "Gboard 符号键 数字键 符号键循环切换 合并 单键 ?123 记住上次 返回 数字键盘 逗号"),
         SettingsSearchEntry("标点上屏首选", layouts, layoutIndex, "标点 逗号 句号 问号 首选 第一个候选 上屏 候选上屏 打逗号 选词 搜狗"),
         SettingsSearchEntry("输入成对符号", layouts, layoutIndex, "成对 配对 括号 引号 书名号 自动补全 闭合 光标中间"),
         SettingsSearchEntry("选完符号自动返回", layouts, layoutIndex, "符号页 符号面板 自动返回 回到打字 回到键盘 选完 点完 退出符号 锁定符号"),

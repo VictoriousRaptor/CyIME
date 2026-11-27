@@ -109,10 +109,8 @@ fun JapaneseKanaKeyboardLayout(
                     onPress = { onKeyPressDown?.invoke("japanese_left") }, shadowEnabled = shadowEnabled)
                 // Mode names are UI labels, not literals affected by full-/half-width input.
                 CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
-                    if (LocalKeyboardInputPreferences.current.symbolKeyCycle) {
+                    if (!numberMode && LocalKeyboardInputPreferences.current.symbolKeyCycle) {
                         KeyboardModeKey(slot = 1,
-                            page = if (numberMode) com.kingzcheung.xime.keyboard.KeyboardInputPage.NUMBERS
-                                else com.kingzcheung.xime.keyboard.KeyboardInputPage.TEXT,
                             onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
                             textColor = specialKeyTextColor, modifier = Modifier.weight(2f),
                             onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,

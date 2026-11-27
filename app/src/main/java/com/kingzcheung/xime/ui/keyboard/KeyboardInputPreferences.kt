@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import com.kingzcheung.xime.keyboard.KeyboardInputPage
 import com.kingzcheung.xime.settings.FrostedGlassConfig
 import com.kingzcheung.xime.settings.FrostedGlassPreferences
 import com.kingzcheung.xime.settings.SchemaInfo
@@ -298,7 +299,7 @@ data class KeyboardInputPreferences(
     val languageKeyOnLeft: Boolean = false,
     /** 按住符号键当 Ctrl；不拖动且在这个时限内松手才打开符号面板，超过时限松手什么都不做；默认 1 秒（2026-10-24 用户要求）。 */
     val symbolKeyHoldSeconds: Float = 1f,
-    /** 单个模式键依次打开符号、数字、原输入法键盘；默认关，保留两个独立入口。 */
+    /** 在主键盘用一个键打开上次返回前的符号页或数字页，默认关。 */
     val symbolKeyCycle: Boolean = false,
     /** 九键从「下一项」拖出超过键盘区宽或高的这个百分比才算拖动选词，没拖这么远仍是键自己的左右滑；默认 50（用户 10-31 要求可调）。 */
     val candidateDragPercent: Float = 50f,
@@ -424,6 +425,7 @@ data class KeyboardInputPreferences(
         const val LANGUAGE_KEY_IME_PICKER_KEY = "language_key_ime_picker"
         const val LANGUAGE_KEY_ON_LEFT_KEY = "language_key_on_left"
         const val SYMBOL_KEY_CYCLE_KEY = "symbol_key_cycle"
+        private const val LAST_SYMBOL_OR_NUMBER_PAGE_KEY = "last_symbol_or_number_page"
         /** 九键去掉 0 键合并大回车，见 [t9MergeZeroIntoEnter]。新键（11-15），读不到就是关。 */
         const val T9_MERGE_ZERO_ENTER_KEY = "t9_merge_zero_enter"
         /** 笔画键盘去掉 0 键合并大回车，见 [strokeMergeZeroIntoEnter]。新键（11-17），读不到就是关。 */
@@ -455,6 +457,19 @@ data class KeyboardInputPreferences(
                 BOTTOM_LIFT_CURSOR_KEY, VOICE_SWIPE_CANCEL_KEY, EDGE_GESTURE_EXCLUSION_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY, SYMBOL_KEY_CYCLE_KEY, LANGUAGE_KEY_ON_LEFT_KEY, QwertyBottomRowConfig.PREF_KEY,
                 "handwriting_pause_seconds", "handwriting_pause_seconds_v2", "handwriting_formula_delimiter") + FrostedGlassPreferences.keys +
                 com.kingzcheung.xime.settings.KeyGapLightPreferences.keys
+        }
+
+        internal fun lastSymbolOrNumberPage(context: Context): KeyboardInputPage =
+            if (SettingsPreferences.getPrefsPublic(context)
+                    .getString(LAST_SYMBOL_OR_NUMBER_PAGE_KEY, null) == KeyboardInputPage.NUMBERS.name) {
+                KeyboardInputPage.NUMBERS
+            } else KeyboardInputPage.SYMBOLS
+
+        internal fun rememberSymbolOrNumberPage(context: Context, page: KeyboardInputPage) {
+            val prefs = SettingsPreferences.getPrefsPublic(context)
+            if (prefs.getBoolean(SYMBOL_KEY_CYCLE_KEY, false)) {
+                prefs.edit().putString(LAST_SYMBOL_OR_NUMBER_PAGE_KEY, page.name).apply()
+            }
         }
 
         fun read(context: Context, isDark: Boolean = FrostedGlassPreferences.isDark(context)): KeyboardInputPreferences {

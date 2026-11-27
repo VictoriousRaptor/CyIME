@@ -4112,3 +4112,8 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 自动识别语音语言	Detect spoken language automatically
 开启后可输入粤语，关闭时使用普通话	Enable for Cantonese dictation. Turn off to use Mandarin.
 仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字	X-ASR finalizes Mandarin and English. If another language is detected, the entire recording keeps its first transcript.
+合并符号和数字键	Combine symbol and number keys
+主键盘用 ?123 打开上次返回前的页面，首次打开符号页。	On the main keyboard, ?123 reopens the last page you returned from. Symbols open first.
+合并后 ?123 使用符号键的位置。关闭合并可恢复数字键。	?123 replaces the symbol key. Turn off the setting to restore the number key.
+符号／数字切换键	Symbol and number key
+恢复默认顺序并显示逗号、句号。	Restore the default order and show the comma and period keys.

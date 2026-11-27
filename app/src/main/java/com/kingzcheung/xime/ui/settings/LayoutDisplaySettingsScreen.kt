@@ -159,8 +159,8 @@ private fun LayoutDisplayPage(
                     SettingsItem(Icons.TwoTone.Reorder, "26 键底栏", "调整符号、数字、语言和标点的顺序与显示",
                         onClick = { onOpenLayout(SettingsRoutes.QwertyBottomRow) }, showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    SettingsToggleItem(SymbolsAndNumbersIcon, "符号键循环切换",
-                        "合并符号和数字键，点按依次切换符号、数字和原输入法键盘。",
+                    SettingsToggleItem(SymbolsAndNumbersIcon, "合并符号和数字键",
+                        "主键盘用 ?123 打开上次返回前的页面，首次打开符号页。",
                         checked = input.symbolKeyCycle, onCheckedChange = {
                             input.copy(symbolKeyCycle = it).save(context)
                         })

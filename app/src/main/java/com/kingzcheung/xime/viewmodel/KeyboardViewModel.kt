@@ -13,6 +13,7 @@ import com.kingzcheung.xime.clipboard.ClipboardItem
 import com.kingzcheung.xime.clipboard.ClipboardManager
 import com.kingzcheung.xime.keyboard.textMainType
 import com.kingzcheung.xime.keyboard.afterEditorPreparation
+import com.kingzcheung.xime.keyboard.KeyboardInputPage
 import com.kingzcheung.xime.keyboard.KeyboardPage
 import com.kingzcheung.xime.keyboard.MainType
 import com.kingzcheung.xime.keyboard.OverlayRoute
@@ -26,6 +27,7 @@ import com.kingzcheung.xime.speech.RecognitionState
 import com.kingzcheung.xime.rime.T9InputController
 import com.kingzcheung.xime.ui.keyboard.KeyboardCallbacks
 import com.kingzcheung.xime.ui.keyboard.KeyboardDispatchAction
+import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.ui.keyboard.KeyboardLayoutState
 import com.kingzcheung.xime.ui.keyboard.transition
 import com.kingzcheung.xime.ui.keyboard.KeyboardLayoutAction
@@ -643,7 +645,14 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     /** Both secondary modes return directly to the original text keyboard. */
     fun returnToTextKeyboard() {
-        val mainType = _page.value.textMainType()
+        val current = _page.value
+        val secondaryPage = when {
+            current is KeyboardPage.Overlay && current.route == OverlayRoute.Symbol -> KeyboardInputPage.SYMBOLS
+            current is KeyboardPage.Panel && current.type == PanelType.NUMBER -> KeyboardInputPage.NUMBERS
+            else -> null
+        }
+        secondaryPage?.let { KeyboardInputPreferences.rememberSymbolOrNumberPage(getApplication(), it) }
+        val mainType = current.textMainType()
         _keyboardState.value = _savedKbStateBeforePanel ?: _lastMainLayout.value
         _savedKbStateBeforePanel = null
         _page.value = KeyboardPage.Main(mainType)

@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.data.SymbolData
 import com.kingzcheung.xime.keyboard.KeyboardInputPage
 import com.kingzcheung.xime.keyboard.commonSymbolsFor
-import com.kingzcheung.xime.keyboard.modeSlotCount
+import com.kingzcheung.xime.keyboard.modeSlotOrder
 import com.kingzcheung.xime.keyboard.modeSlotTarget
 import com.kingzcheung.xime.settings.QwertySwipeSymbols
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -318,10 +318,11 @@ private fun NineGridSketch(target: SideSymbolTarget, count: Int, canGrow: Boolea
 /** 数字键盘：左栏占上面三排，底下一整排；比例同 [NineGridFrame]。 */
 @Composable
 private fun NumberSketch(count: Int, cell: @Composable (Int, Modifier) -> Unit) {
-    val cycle = rememberKeyboardInputPreferences().symbolKeyCycle
-    val modeCount = modeSlotCount(cycle)
+    val prefs = rememberKeyboardInputPreferences()
+    val modeSlots = modeSlotOrder(prefs.swapModeKeys)
+    val merged = prefs.symbolKeyCycle
     val text = LocalTextModeLabel.current
-    val digitRows = numberPadRows(rememberKeyboardInputPreferences().numberPadTop789)
+    val digitRows = numberPadRows(prefs.numberPadTop789)
     Column(Modifier.fillMaxWidth().height(SketchRow * 4).testTag("side-symbol-sketch:number")) {
         Row(Modifier.fillMaxWidth().weight(3f)) {
             SlotRail(count, canGrow = true, fillWhenFew = false,
@@ -336,11 +337,14 @@ private fun NumberSketch(count: Int, cell: @Composable (Int, Modifier) -> Unit) 
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            for (slot in 1..modeCount) FixedKey(modeSlotTarget(KeyboardInputPage.NUMBERS, slot, text, cycle).label,
-                Modifier.weight(NineGridFrame.BOTTOM_MODE).fillMaxHeight())
-            FixedKey("0", Modifier.weight(NineGridFrame.MAIN - modeCount * NineGridFrame.BOTTOM_MODE).fillMaxHeight())
-            FixedKey(".", Modifier.weight(NineGridFrame.ACTION).fillMaxHeight())
-            FixedKey("确定", Modifier.weight(NineGridFrame.ACTION).fillMaxHeight())
+            modeSlots.forEachIndexed { index, slot ->
+                FixedKey(modeSlotTarget(KeyboardInputPage.NUMBERS, slot, text).label,
+                    Modifier.weight(NineGridFrame.numberModeWeight(merged)).fillMaxHeight())
+                if (merged && index == 0) FixedKey(",", Modifier.weight(NineGridFrame.NUMBER_COMMA).fillMaxHeight())
+            }
+            FixedKey("0", Modifier.weight(NineGridFrame.numberZeroWeight(merged)).fillMaxHeight())
+            FixedKey(".", Modifier.weight(NineGridFrame.numberDotWeight(merged)).fillMaxHeight())
+            FixedKey("确定", Modifier.weight(NineGridFrame.numberEnterWeight(merged)).fillMaxHeight())
         }
     }
 }
@@ -408,8 +412,7 @@ private fun ExpandedHandwritingSketch(cell: @Composable (Int, Modifier) -> Unit)
  */
 @Composable
 private fun CommonSymbolSketch(own: List<String>, cell: @Composable (Int, Modifier) -> Unit) {
-    val cycle = rememberKeyboardInputPreferences().symbolKeyCycle
-    val modeCount = modeSlotCount(cycle)
+    val modeSlots = modeSlotOrder(rememberKeyboardInputPreferences().swapModeKeys)
     val text = LocalTextModeLabel.current
     val defaults = commonSymbolsFor(text).filterNot { it in own }
     BoxWithConstraints(Modifier.fillMaxWidth().testTag("side-symbol-sketch:common")) {
@@ -429,10 +432,10 @@ private fun CommonSymbolSketch(own: List<String>, cell: @Composable (Int, Modifi
             }
             val bottom = QwertyBottomRowWeights.Standard
             Row(Modifier.fillMaxWidth().height(SketchRow)) {
-                for (slot in 1..modeCount) FixedKey(modeSlotTarget(KeyboardInputPage.SYMBOLS, slot, text, cycle).label,
+                for (slot in modeSlots) FixedKey(modeSlotTarget(KeyboardInputPage.SYMBOLS, slot, text).label,
                     Modifier.weight(bottom.mode).fillMaxHeight())
                 FixedKey((listOf("常用", "最近") + SymbolData.categories.map { it.name }).joinToString("  "),
-                    Modifier.weight(bottom.total - modeCount * bottom.mode - bottom.enter).fillMaxHeight())
+                    Modifier.weight(bottom.total - modeSlots.size * bottom.mode - bottom.enter).fillMaxHeight())
                 FixedKey(sketchLabel("delete"), Modifier.weight(bottom.enter).fillMaxHeight())
             }
         }

@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -34,14 +35,22 @@ internal fun KeyboardModeKey(
     ctrlTargets: ShiftSlideTargets? = null,
     onCtrlShortcut: ((Char) -> Unit)? = null,
 ) {
-    val target = modeSlotTarget(page, slot, LocalTextModeLabel.current,
-        LocalKeyboardInputPreferences.current.symbolKeyCycle)
+    val prefs = LocalKeyboardInputPreferences.current
+    val merged = page == KeyboardInputPage.TEXT && prefs.symbolKeyCycle
+    val target = modeSlotTarget(page, slot, LocalTextModeLabel.current, merged)
+    val context = LocalContext.current
+    val openTarget = {
+        val action = if (merged && KeyboardInputPreferences.lastSymbolOrNumberPage(context) == KeyboardInputPage.NUMBERS) {
+            "number"
+        } else target.action
+        onKeyPress(action)
+    }
     androidx.compose.runtime.CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
     if (ctrlTargets != null && onCtrlShortcut != null && target.action == "symbol") CtrlSymbolKeyButton(
         text = target.label,
         targets = ctrlTargets,
-        holdMillis = LocalKeyboardInputPreferences.current.symbolKeyHoldMs,
-        onOpenSymbols = { onKeyPress(target.action) },
+        holdMillis = prefs.symbolKeyHoldMs,
+        onOpenSymbols = openTarget,
         onShortcut = onCtrlShortcut,
         onPressDown = { onKeyPressDown?.invoke("mode_change") },
         backgroundColor = backgroundColor,
@@ -53,13 +62,13 @@ internal fun KeyboardModeKey(
     ) else KeyButton(
         text = target.label,
         fontSize = 16.sp,
-        onClick = { onKeyPress(target.action) },
+        onClick = openTarget,
         onPress = { onKeyPressDown?.invoke("mode_change") },
         backgroundColor = backgroundColor,
         textColor = textColor,
         modifier = modifier.testTag("mode-slot-$slot").semantics {
             if (target.action == "abc") contentDescription = "返回键盘"
-            onClick { onKeyPress(target.action); true }
+            onClick { openTarget(); true }
         },
         shadowEnabled = shadowEnabled,
         shadowElevation = shadowElevation,

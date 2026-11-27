@@ -17,6 +17,16 @@ internal object NineGridFrame {
     const val BOTTOM_LANGUAGE = 0.8f
     fun spaceWeight(cycle: Boolean) = BOTTOM_SPACE + if (cycle) BOTTOM_MODE else 0f
 
+    const val NUMBER_COMMA = 0.5f
+    private const val NUMBER_DIGIT = MAIN / 3
+    private const val MERGED_NUMBER_DOT = 0.7f
+    // 0 与中间一列数字等宽对齐，回车占满小数点右边的空间。
+    fun numberModeWeight(merged: Boolean) =
+        if (merged) (SIDE + NUMBER_DIGIT - NUMBER_COMMA) / 2 else BOTTOM_MODE
+    fun numberDotWeight(merged: Boolean) = if (merged) MERGED_NUMBER_DOT else ACTION
+    fun numberZeroWeight(merged: Boolean) = if (merged) NUMBER_DIGIT else MAIN - 2 * BOTTOM_MODE
+    fun numberEnterWeight(merged: Boolean) = if (merged) NUMBER_DIGIT + ACTION - MERGED_NUMBER_DOT else ACTION
+
     /** 左栏符号面板一屏放几格，多出的上下滑。 */
     const val SIDE_VISIBLE_SLOTS = 4
 }

@@ -98,7 +98,7 @@ internal fun QwertyBottomRowSettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("只保留一个标点时，副符号是另一种标点；两种都显示时沿用全角、半角规则。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (cycle) Text("符号键循环切换已开启：?123 使用符号键的位置，123 暂时隐藏，关闭循环后回到原位置。",
+            if (cycle) Text("合并后 ?123 使用符号键的位置。关闭合并可恢复数字键。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -135,7 +135,7 @@ internal fun QwertyBottomRowSettingsScreen(onBack: () -> Unit) {
         }
     }, confirmButton = { TextButton(onClick = { adding = false }) { Text("取消") } })
     if (reset) AlertDialog(onDismissRequest = { reset = false }, title = { Text("恢复默认底栏？") },
-        text = { Text("恢复默认顺序并显示逗号、句号。其他布局和符号键循环切换设置保持原值。") },
+        text = { Text("恢复默认顺序并显示逗号、句号。") },
         confirmButton = { TextButton(onClick = { save(QwertyBottomRowConfig.Default); editing = null; reset = false }) { Text("恢复") } },
         dismissButton = { TextButton(onClick = { reset = false }) { Text("取消") } })
 }
