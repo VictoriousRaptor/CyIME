@@ -333,7 +333,7 @@ private fun NumberSketch(count: Int, cell: @Composable (Int, Modifier) -> Unit) 
                 }
             }
             Column(Modifier.weight(NineGridFrame.ACTION).fillMaxHeight()) {
-                listOf("删除", "空格", "@").forEach { FixedKey(it, Modifier.fillMaxWidth().weight(1f)) }
+                listOf("@", "空格", "删除").forEach { FixedKey(it, Modifier.fillMaxWidth().weight(1f)) }
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {

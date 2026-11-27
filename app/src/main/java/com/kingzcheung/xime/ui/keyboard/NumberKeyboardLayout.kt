@@ -248,6 +248,17 @@ private fun NumberRows(
                 }
             }
             Column(Modifier.weight(NineGridFrame.ACTION).fillMaxHeight().testTag("number-actions")) {
+                // 表情在工具栏里已有入口；这里放邮箱、@人常用的 @，和小数点一样是直接上屏的字符键。
+                KeyButton(text = "@", onClick = { onKeyPress("@") },
+                    backgroundColor = keyBackgroundColor, textColor = keyTextColor,
+                    modifier = Modifier.weight(1f).testTag("number-at-key"), onPress = { onKeyPressDown?.invoke("@") },
+                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
+                    shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
+                SpaceKeyButton(schemaName = "空格", onClick = { onKeyPress("space") },
+                    backgroundColor = keyBackgroundColor, textColor = keyTextColor,
+                    modifier = Modifier.weight(1f), onPress = { onKeyPressDown?.invoke("space") },
+                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
+                    shadowShapeRadius = shadowShapeRadius, fontSize = ctrlFontSize)
                 SwipeableIconKeyButton(
                     icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
                     onClick = { onKeyPress("delete") }, backgroundColor = specialKeyBackgroundColor,
@@ -262,17 +273,6 @@ private fun NumberRows(
                     onSwipeStateChange = onSwipeStateChange,
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius)
-                SpaceKeyButton(schemaName = "空格", onClick = { onKeyPress("space") },
-                    backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                    modifier = Modifier.weight(1f), onPress = { onKeyPressDown?.invoke("space") },
-                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
-                    shadowShapeRadius = shadowShapeRadius, fontSize = ctrlFontSize)
-                // 表情在工具栏里已有入口；这里放邮箱、@人常用的 @，和小数点一样是直接上屏的字符键。
-                KeyButton(text = "@", onClick = { onKeyPress("@") },
-                    backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                    modifier = Modifier.weight(1f).testTag("number-at-key"), onPress = { onKeyPressDown?.invoke("@") },
-                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
-                    shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {

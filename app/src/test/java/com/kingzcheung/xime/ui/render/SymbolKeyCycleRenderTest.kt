@@ -298,6 +298,20 @@ class SymbolKeyCycleRenderTest {
         assertNumberNavigation("中文")
     }
 
+    @Test fun numberPadHasAtOnTheFirstRowAndDeleteOnTheThirdRow() {
+        mount()
+        tapMode()
+        tapMode(2)
+        assertEquals(bounds("number-digit:3").center.y, bounds("number-at-key").center.y, 1f)
+        assertEquals(bounds("number-digit:9").center.y, bounds("number-delete-key").center.y, 1f)
+        tapKey("number-at-key")
+        tapKey("number-delete-key")
+        val delete = rule.onNodeWithTag("number-delete-key")
+        delete.performTouchInput { swipe(center, center + Offset(0f, 90.dp.toPx()), durationMillis = 180) }
+        delete.performTouchInput { swipe(center, center - Offset(0f, 90.dp.toPx()), durationMillis = 180) }
+        assertEquals(listOf("@", "delete", "clear_all", "undo_clear"), pressed)
+    }
+
     @Test fun addedCommaAndSmallerNumberKeysKeepTheirLiteralAndGestureActions() {
         mount()
         tapMode()

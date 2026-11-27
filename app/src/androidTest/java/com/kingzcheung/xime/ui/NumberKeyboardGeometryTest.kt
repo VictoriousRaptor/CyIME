@@ -24,7 +24,7 @@ import org.junit.Test
 class NumberKeyboardGeometryTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun t9NumbersKeepTextFooterAndDeleteBoundsAcrossWidthsAndHeights() {
+    @Test fun t9NumbersKeepTextFooterAndTopRightKeyBoundsAcrossWidthsAndHeights() {
         KeysConfigHelper.loadConfig(ApplicationProvider.getApplicationContext())
         var numbers by mutableStateOf(false)
         var window by mutableStateOf(360 to 240)
@@ -54,7 +54,7 @@ class NumberKeyboardGeometryTest {
                 rule.runOnIdle { window = size; custom = explicit; floating = size.first == 280; numbers = false }
                 val before = listOf("mode-slot-1", "mode-slot-2", "t9-delete-key").map(::bounds)
                 rule.runOnIdle { numbers = true }
-                val after = listOf("mode-slot-1", "mode-slot-2", "number-delete-key").map(::bounds)
+                val after = listOf("mode-slot-1", "mode-slot-2", "number-at-key").map(::bounds)
                 before.zip(after).forEach { (a, b) ->
                     assertEquals(a.left, b.left, 1f); assertEquals(a.top, b.top, 1f)
                     assertEquals(a.right, b.right, 1f); assertEquals(a.bottom, b.bottom, 1f)
