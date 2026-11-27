@@ -87,4 +87,14 @@ class NumberRowTest {
         // 全局「数字行」开着时，即使关闭密码框自动弹出也照常显示。
         assertTrue(numberRowShown(setting = true, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
     }
+
+    @Test fun shiftModeMapsDigitKeysToSymbolsAndKeepsCustomKeys() {
+        val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+        assertEquals(digits, digits.map { numberRowKeyText(it, shifted = false) })
+        assertEquals(listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"), digits.map { numberRowKeyText(it, shifted = true) })
+        for (custom in listOf("@", "，", "12")) {
+            assertEquals(custom, numberRowKeyText(custom, shifted = false))
+            assertEquals(custom, numberRowKeyText(custom, shifted = true))
+        }
+    }
 }

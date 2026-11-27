@@ -54,6 +54,13 @@ private val NUMBER_SHIFT_SYMBOLS = "1234567890".zip("!@#$%^&*()").associate { (d
  */
 internal fun numberRowShiftSymbol(key: String): String? = NUMBER_SHIFT_SYMBOLS[key]
 
+/**
+ * Shift 切换到大写模式（单次、锁定、按住）时，数字键的键帽与点按输入切换为上方对应的特殊符号（1→! … 0→)）；
+ * 自己加进数字行的符号或短语保持原样。
+ */
+internal fun numberRowKeyText(key: String, shifted: Boolean): String =
+    if (shifted) numberRowShiftSymbol(key) ?: key else key
+
 /** 数字键长按弹出的分数（用户 11-15：数字行不画角标，长按直接弹菜单 ½ 到 ⅛）。 */
 internal val NUMBER_ROW_FRACTIONS = listOf("½", "⅓", "¼", "⅕", "⅙", "⅐", "⅛")
 
@@ -63,6 +70,7 @@ internal fun numberRowLongPressItems(key: String): List<String>? =
 
 /**
  * 数字行的一排键：点按把键上写的原样上屏（[onInput]，和字母键上角标的数字同一条路，不按序号选候选）；
+ * Shift 切换到大写模式时，数字键切换为上方对应的特殊符号（[numberRowKeyText]）；
  * 打着中文时先上屏高亮的候选再接数字（11-21，见 ImeTextCommit.literalSubmission）。
  * 键上不画角标（用户 11-15）；数字键长按弹出 [numberRowLongPressItems]，挪到哪格松手输入哪格，
  * 按多久和「长按输入」设的一样。上滑、下滑照旧输入 [numberRowShiftSymbol]，只是不画出来。
@@ -83,19 +91,25 @@ internal fun NumberKeyRow(
     modifier: Modifier = Modifier,
     /** 长按菜单和按键气泡画在键盘上（[KeyboardLayout] 的 processSwipeState）；null 时不画。 */
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
+    /** Shift 处于大写模式（单次/锁定/按住）时，数字键切换为上方对应特殊符号（1→! … 0→)）。 */
+    shifted: Boolean = false,
+    /** 快速连按早于重组时读取实时 Shift 状态；默认跟随 [shifted]。 */
+    isShiftedNow: () -> Boolean = { shifted },
 ) {
     val longPressMs = LocalKeyboardInputPreferences.current.symbolLongPressMs
     val spans = numberRowSpans(keys.size, splitAt)
     Row(modifier.fillMaxWidth().testTag("number-row")) {
         keys.forEachIndexed { index, key ->
             if (index == splitAt) SplitGapSpacer(NUMBER_ROW_SPLIT_ROW, splitGap)
+            val displayText = numberRowKeyText(key, shifted)
             val shift = numberRowShiftSymbol(key)
-            val commitShift: ((String) -> Unit)? = shift?.let { symbol -> { _: String -> onInput(symbol) } }
+            val swipeSymbol = if (shifted) key.takeIf { shift != null } else shift
+            val commitSwipe: ((String) -> Unit)? = swipeSymbol?.let { symbol -> { _: String -> onInput(symbol) } }
             SwipeableKeyButton(
-                text = key,
-                onClick = { onInput(key) },
-                onSwipe = commitShift,
-                onSwipeDown = commitShift,
+                text = displayText,
+                onClick = { onInput(numberRowKeyText(key, isShiftedNow())) },
+                onSwipe = commitSwipe,
+                onSwipeDown = commitSwipe,
                 longPressItems = numberRowLongPressItems(key),
                 onLongPressSelect = onInput,
                 longPressTimeoutMillis = longPressMs,

@@ -732,10 +732,15 @@ fun KeyboardLayout(
                                     shadowEnabled = shadowEnabled,
                                     shadowElevation = shadowElevation,
                                     shadowShapeRadius = shadowShapeRadius,
-                                    onInput = { text -> (onCommitText ?: onKeyPress)(text) },
+                                    onInput = { text ->
+                                        (onCommitText ?: onKeyPress)(text)
+                                        if (viewModel.shiftMode.value.isShifted) viewModel.onCharacterTyped()
+                                    },
                                     onKeyPressDown = onKeyPressDown,
                                     onKeyRelease = onKeyRelease,
                                     onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                    shifted = isShifted,
+                                    isShiftedNow = { viewModel.shiftMode.value.isShifted },
                                 )
                             }
                         }

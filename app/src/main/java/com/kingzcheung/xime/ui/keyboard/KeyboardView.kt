@@ -466,12 +466,6 @@ fun KeyboardView(
         is26Key = state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC &&
             com.kingzcheung.xime.settings.KeysConfigHelper.letterLayout(state.currentSchemaId, state.isAsciiMode)?.honeycomb != true,
     )
-    com.kingzcheung.xime.settings.KeysConfigHelper.cornerVariant = com.kingzcheung.xime.settings.CornerVariant.of(
-        effectiveNumberRow, inputPreferences.swipeUpHints, inputPreferences.swipeDownHints
-    )
-    DisposableEffect(keyboardContext) {
-        onDispose { com.kingzcheung.xime.settings.KeysConfigHelper.refreshCornerVariant(keyboardContext) }
-    }
     // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(

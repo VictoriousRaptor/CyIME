@@ -28,6 +28,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -49,6 +50,7 @@ import com.kingzcheung.xime.ui.theme.keyboardBackground
 import com.kingzcheung.xime.ui.theme.resolveKeyboardPalette
 import com.kingzcheung.xime.viewmodel.KeyboardUiState
 import com.kingzcheung.xime.viewmodel.KeyboardViewModel
+import com.kingzcheung.xime.viewmodel.ShiftMode
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -62,6 +64,8 @@ import java.io.File
 /**
  * 密码输入界面 26 键自动弹出数字行：
  * - 全局「数字行」关闭时，进入密码框的 26 键（英文/中文/分体）自动弹出数字行，离开后恢复；
+ * - 尊重「数字行和字母一样高」开关，且不改变工具栏与 Q–P 上角标；
+ * - 按 Shift 切换到大写模式时，数字行按钮变为数字对应的特殊符号（!@#$%^&*()）；
  * - 14 键等非 26 键布局、或关闭「密码框自动数字行」开关时不弹出；
  * - 设了 CYIME_RENDER_OUT 时导出密码框键盘与设置开关的布局截图。
  */
@@ -76,9 +80,11 @@ class PasswordNumberRowRenderTest {
     private var passwordField by mutableStateOf(true)
     private var passwordAutoNumberRow by mutableStateOf(true)
     private var globalNumberRow by mutableStateOf(false)
+    private var numberRowFullHeight by mutableStateOf(false)
     private var revision by mutableStateOf(0)
     private var theme by mutableStateOf("soft_blue")
     private var dark by mutableStateOf(false)
+    private val committed = mutableListOf<String>()
     private lateinit var vm: KeyboardViewModel
     private lateinit var app: Application
 
@@ -90,6 +96,7 @@ class PasswordNumberRowRenderTest {
         KeyboardThemes.initFromConfig(app)
         com.kingzcheung.xime.ui.keyboard.AppFonts.initialize(app)
         vm = KeyboardViewModel(app)
+        committed.clear()
         rule.setContent {
             @Suppress("UNUSED_EXPRESSION") revision
             val palette = resolveKeyboardPalette(theme, dark)
@@ -100,6 +107,7 @@ class PasswordNumberRowRenderTest {
                 LocalKeyboardInputPreferences provides KeyboardInputPreferences(
                     frostedGlass = glass,
                     numberRow = globalNumberRow,
+                    numberRowFullHeight = numberRowFullHeight,
                     passwordAutoNumberRow = passwordAutoNumberRow,
                     splitKeyboardEnabled = layout == "26-split",
                 ),
@@ -123,7 +131,11 @@ class PasswordNumberRowRenderTest {
                             KeyboardLayout(
                                 onKeyPress = {},
                                 viewModel = vm,
-                                callbacks = KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {}),
+                                callbacks = KeyboardCallbacks(
+                                    onKeyPress = { _, _ -> },
+                                    onCommitText = { committed += it },
+                                    onCandidateSelect = {},
+                                ),
                                 uiState = KeyboardUiState(
                                     currentSchemaId = schemaFor(layout),
                                     themeId = theme,
@@ -148,11 +160,11 @@ class PasswordNumberRowRenderTest {
         isPassword: Boolean,
         autoNumberRow: Boolean = true,
         globalRow: Boolean = false,
+        fullHeight: Boolean = false,
     ) {
         val schema = schemaFor(l)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
-        val effectiveRow = globalRow || (isPassword && autoNumberRow && l != "14")
-        KeysConfigHelper.numberRowCorners = effectiveRow
+        KeysConfigHelper.numberRowCorners = globalRow
         rule.runOnIdle {
             vm.resetKeyboard(l == "en26", schema)
             layout = l
@@ -160,6 +172,7 @@ class PasswordNumberRowRenderTest {
             passwordField = isPassword
             passwordAutoNumberRow = autoNumberRow
             globalNumberRow = globalRow
+            numberRowFullHeight = fullHeight
             revision++
         }
         rule.waitForIdle()
@@ -181,7 +194,7 @@ class PasswordNumberRowRenderTest {
         rule.onNodeWithTag("number-row", true).assertDoesNotExist()
         val qNormal = bounds("qwerty-key:q")
 
-        // 进入密码框（英文 26 键）：自动弹出数字行，与 Q-P 对齐，键盘总高不变。
+        // 进入密码框（英文 26 键）：自动弹出数字行，与 Q-P 对齐，不切换 Q-P 上角标，键盘总高不变。
         select("en26", 360, 232, isPassword = true, autoNumberRow = true, globalRow = false)
         val one = bounds("number-row-key:0")
         val zero = bounds("number-row-key:9")
@@ -192,6 +205,14 @@ class PasswordNumberRowRenderTest {
         assertEquals("0 和 p 右对齐", pPwd.right, zero.right, 1f)
         assertTrue("数字行比字母行矮", one.height < qPwd.height)
         assertTrue("总高不变时字母行变矮", qPwd.height < qNormal.height)
+        assertEquals("Q 上角标保持数字 1 不切换", "1", KeysConfigHelper.getSwipeUpLabel("q", true))
+        assertEquals("P 上角标保持数字 0 不切换", "0", KeysConfigHelper.getSwipeUpLabel("p", true))
+
+        // 开启「数字行和字母一样高」时，密码框数字行高度与字母行一致。
+        select("en26", 360, 232, isPassword = true, autoNumberRow = true, globalRow = false, fullHeight = true)
+        val oneFull = bounds("number-row-key:0")
+        val qPwdFull = bounds("qwerty-key:q")
+        assertEquals("等高数字行与字母行一样高", qPwdFull.height, oneFull.height, 1.5f)
 
         // 密码框切到中文 26 键：同样弹出数字行。
         select("zh26", 360, 232, isPassword = true, autoNumberRow = true, globalRow = false)
@@ -215,6 +236,43 @@ class PasswordNumberRowRenderTest {
         val digits = bounds("split-keyboard-gap:9")
         assertEquals(letters.left, digits.left, 1f)
         assertEquals(letters.right, digits.right, 1f)
+    }
+
+    @Test
+    fun shiftSwitchesNumberRowKeysToShiftSymbols() {
+        showKeyboard()
+        select("en26", 360, 232, isPassword = true, autoNumberRow = true, globalRow = false)
+
+        val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+        val symbols = listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")")
+        digits.forEachIndexed { index, digit ->
+            rule.onNode(hasText(digit) and hasAnyAncestor(hasTestTag("number-row-key:$index")), useUnmergedTree = true)
+                .assertExists()
+        }
+
+        // 单次 Shift：数字行键帽切换为上方对应的特殊符号，点按后输入对应符号并回落小写。
+        rule.runOnIdle { vm.toggleShift() }
+        rule.waitForIdle()
+        symbols.forEachIndexed { index, symbol ->
+            rule.onNode(hasText(symbol) and hasAnyAncestor(hasTestTag("number-row-key:$index")), useUnmergedTree = true)
+                .assertExists()
+        }
+        rule.onNodeWithTag("number-row-key:0", true).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("!"), committed)
+        assertEquals(ShiftMode.OFF, vm.shiftMode.value)
+        rule.onNode(hasText("1") and hasAnyAncestor(hasTestTag("number-row-key:0")), useUnmergedTree = true)
+            .assertExists()
+
+        // 大写锁定：点按数字行符号后保持大写模式。
+        rule.runOnIdle { vm.onShiftDoubleTap() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("number-row-key:1", true).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("!", "@"), committed)
+        assertEquals(ShiftMode.CAPS, vm.shiftMode.value)
+        rule.onNode(hasText("@") and hasAnyAncestor(hasTestTag("number-row-key:1")), useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test
