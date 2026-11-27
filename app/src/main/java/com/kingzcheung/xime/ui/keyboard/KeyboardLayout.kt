@@ -202,17 +202,17 @@ fun KeyboardLayout(
         }
     } else null
     // 注音（大千）：11 列，下面三行 10 键缩进半键，没有 Shift，删除键在第四行末尾。
-    val zhuyin = !isAsciiMode && uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN
+    val layoutKind = uiState.inputProfile.layout.kind
+    val zhuyin = !isAsciiMode && layoutKind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN
     // 数字行（默认关）：字母上方一排，键和顺序在「按键符号 → 数字行」里改；注音不加（见 [numberRowShown]）。
     // 密码框在 26 键下且开启「密码框自动数字行」时也自动弹出，离开后恢复。
     val numberRowPrefs = LocalKeyboardInputPreferences.current
-    val is26Key = uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !honeycomb
     val showNumberRow = numberRowShown(
-        setting = numberRowPrefs.numberRow,
-        zhuyin = zhuyin,
-        passwordField = uiState.isPasswordField,
-        passwordAutoNumberRow = numberRowPrefs.passwordAutoNumberRow,
-        is26Key = is26Key,
+        prefs = numberRowPrefs,
+        layoutKind = layoutKind,
+        isAsciiMode = isAsciiMode,
+        passwordNumberRowField = uiState.passwordNumberRowField,
+        isHoneycomb = { honeycomb },
     )
     val numberKeys = remember(showNumberRow, numberRowPrefs.sideSymbols) {
         if (showNumberRow) numberRowPrefs.numberRowKeys() else emptyList()
@@ -733,8 +733,12 @@ fun KeyboardLayout(
                                     shadowElevation = shadowElevation,
                                     shadowShapeRadius = shadowShapeRadius,
                                     onInput = { text ->
+                                        val shift = viewModel.shiftMode.value
                                         (onCommitText ?: onKeyPress)(text)
-                                        if (viewModel.shiftMode.value.isShifted) viewModel.onCharacterTyped()
+                                        if (shift == com.kingzcheung.xime.viewmodel.ShiftMode.HELD ||
+                                            !com.kingzcheung.xime.service.JapaneseTyping.usesKanaCase(uiState.currentSchemaId, isAsciiMode)) {
+                                            viewModel.onCharacterTyped()
+                                        }
                                     },
                                     onKeyPressDown = onKeyPressDown,
                                     onKeyRelease = onKeyRelease,

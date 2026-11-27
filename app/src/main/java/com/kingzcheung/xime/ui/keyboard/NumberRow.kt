@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.keyboard
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -34,6 +35,24 @@ internal fun numberRowShown(
     is26Key: Boolean = true,
 ): Boolean = !zhuyin && (setting || (passwordField && passwordAutoNumberRow && is26Key))
 
+/**
+ * 共享判断入口：先排除注音，再判断全局开关或密码框 26 键自动弹出（惰性读取 [isHoneycomb]）。
+ */
+internal fun numberRowShown(
+    prefs: KeyboardInputPreferences,
+    layoutKind: com.kingzcheung.xime.settings.LayoutKind,
+    isAsciiMode: Boolean,
+    passwordNumberRowField: Boolean,
+    isHoneycomb: () -> Boolean,
+): Boolean {
+    if (!isAsciiMode && layoutKind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN) return false
+    if (prefs.numberRow) return true
+    return passwordNumberRowField &&
+        prefs.passwordAutoNumberRow &&
+        layoutKind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC &&
+        !isHoneycomb()
+}
+
 /** 分体时左半的键数：一半归左手，单数时多出的一个给右手；不分体或只有一个键时 -1。 */
 internal fun numberRowSplitAt(count: Int, split: Boolean): Int = if (split && count >= 2) count / 2 else -1
 
@@ -61,6 +80,13 @@ internal fun numberRowShiftSymbol(key: String): String? = NUMBER_SHIFT_SYMBOLS[k
 internal fun numberRowKeyText(key: String, shifted: Boolean): String =
     if (shifted) numberRowShiftSymbol(key) ?: key else key
 
+/**
+ * 上滑、下滑数字键输出的字符：非大写时输入 [numberRowShiftSymbol]，大写模式时反向输入原数字 [key]；
+ * 自己加进数字行的符号或短语返回 null。
+ */
+internal fun numberRowSwipeSymbol(key: String, shifted: Boolean): String? =
+    numberRowShiftSymbol(key)?.let { if (shifted) key else it }
+
 /** 数字键长按弹出的分数（用户 11-15：数字行不画角标，长按直接弹菜单 ½ 到 ⅛）。 */
 internal val NUMBER_ROW_FRACTIONS = listOf("½", "⅓", "¼", "⅕", "⅙", "⅐", "⅛")
 
@@ -73,7 +99,7 @@ internal fun numberRowLongPressItems(key: String): List<String>? =
  * Shift 切换到大写模式时，数字键切换为上方对应的特殊符号（[numberRowKeyText]）；
  * 打着中文时先上屏高亮的候选再接数字（11-21，见 ImeTextCommit.literalSubmission）。
  * 键上不画角标（用户 11-15）；数字键长按弹出 [numberRowLongPressItems]，挪到哪格松手输入哪格，
- * 按多久和「长按输入」设的一样。上滑、下滑照旧输入 [numberRowShiftSymbol]，只是不画出来。
+ * 按多久和「长按输入」设的一样。上滑、下滑在非大写时输入 [numberRowShiftSymbol]，大写时输入原数字 [key]，只是不画出来。
  */
 @Composable
 internal fun NumberKeyRow(
@@ -97,20 +123,21 @@ internal fun NumberKeyRow(
     isShiftedNow: () -> Boolean = { shifted },
 ) {
     val longPressMs = LocalKeyboardInputPreferences.current.symbolLongPressMs
-    val spans = numberRowSpans(keys.size, splitAt)
+    val spans = remember(keys.size, splitAt) { numberRowSpans(keys.size, splitAt) }
     Row(modifier.fillMaxWidth().testTag("number-row")) {
         keys.forEachIndexed { index, key ->
             if (index == splitAt) SplitGapSpacer(NUMBER_ROW_SPLIT_ROW, splitGap)
-            val displayText = numberRowKeyText(key, shifted)
             val shift = numberRowShiftSymbol(key)
-            val swipeSymbol = if (shifted) key.takeIf { shift != null } else shift
-            val commitSwipe: ((String) -> Unit)? = swipeSymbol?.let { symbol -> { _: String -> onInput(symbol) } }
+            val displayText = if (shifted && shift != null) shift else key
+            val commitSwipe: ((String) -> Unit)? = if (shift != null) {
+                { _: String -> onInput(if (isShiftedNow()) key else shift) }
+            } else null
             SwipeableKeyButton(
                 text = displayText,
                 onClick = { onInput(numberRowKeyText(key, isShiftedNow())) },
                 onSwipe = commitSwipe,
                 onSwipeDown = commitSwipe,
-                longPressItems = numberRowLongPressItems(key),
+                longPressItems = NUMBER_ROW_FRACTIONS.takeIf { shift != null },
                 onLongPressSelect = onInput,
                 longPressTimeoutMillis = longPressMs,
                 onSwipeStateChange = onSwipeStateChange,

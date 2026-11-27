@@ -86,15 +86,38 @@ class NumberRowTest {
         assertFalse(numberRowShown(setting = false, zhuyin = true, passwordField = true, passwordAutoNumberRow = true, is26Key = true))
         // 全局「数字行」开着时，即使关闭密码框自动弹出也照常显示。
         assertTrue(numberRowShown(setting = true, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
+
+        // 共享重载：全局开启或非密码框时惰性跳过 isHoneycomb；蜂窝布局在密码框不自动弹出。
+        var honeycombChecked = false
+        assertTrue(numberRowShown(
+            KeyboardInputPreferences(numberRow = true, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = false,
+            isHoneycomb = { honeycombChecked = true; true },
+        ))
+        assertFalse(honeycombChecked)
+        assertFalse(numberRowShown(
+            KeyboardInputPreferences(numberRow = false, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = true,
+            isHoneycomb = { true },
+        ))
+        assertTrue(numberRowShown(
+            KeyboardInputPreferences(numberRow = false, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = true,
+            isHoneycomb = { false },
+        ))
     }
 
     @Test fun shiftModeMapsDigitKeysToSymbolsAndKeepsCustomKeys() {
         val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
         assertEquals(digits, digits.map { numberRowKeyText(it, shifted = false) })
         assertEquals(listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"), digits.map { numberRowKeyText(it, shifted = true) })
+        assertEquals(listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"), digits.map { numberRowSwipeSymbol(it, shifted = false) })
+        assertEquals(digits, digits.map { numberRowSwipeSymbol(it, shifted = true) })
         for (custom in listOf("@", "，", "12")) {
             assertEquals(custom, numberRowKeyText(custom, shifted = false))
             assertEquals(custom, numberRowKeyText(custom, shifted = true))
+            assertEquals(null, numberRowSwipeSymbol(custom, shifted = false))
+            assertEquals(null, numberRowSwipeSymbol(custom, shifted = true))
         }
     }
 }

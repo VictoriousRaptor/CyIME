@@ -12,7 +12,6 @@ internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) 
     private var applied: Boolean? = null
     private var lockWordOrder = false
     private var passwordDisableLearning = true
-    private var currentIsPassword = false
     private var currentNoPersonalized = false
 
     /** The saved switch at start-up; the first field applies it to the engine. */
@@ -36,20 +35,22 @@ internal class InputPrivacy(private val applyEngine: (active: Boolean) -> Unit) 
 
     /** A new field: password fields and fields asking for no personalized learning stay private. */
     fun beginEditor(attribute: EditorInfo?) {
-        currentIsPassword = IncognitoState.isPasswordInput(attribute)
         currentNoPersonalized = IncognitoState.hasNoPersonalizedLearning(attribute)
-        IncognitoState.passwordEditor = currentIsPassword
+        IncognitoState.passwordEditor = IncognitoState.isPasswordInput(attribute)
         IncognitoState.passwordField = IncognitoState.isPasswordField(attribute)
         syncSensitiveEditor()
         apply()
     }
 
     private fun syncSensitiveEditor() {
-        IncognitoState.sensitiveEditor = currentNoPersonalized || (currentIsPassword && passwordDisableLearning)
+        IncognitoState.sensitiveEditor = currentNoPersonalized || (IncognitoState.passwordEditor && passwordDisableLearning)
     }
 
-    /** The field closed: a copy made after this did not come from a password field. Learning waits for the next field. */
-    fun endEditor() { IncognitoState.passwordField = false }
+    /** The field closed: copies after this did not come from a password field, and password-editor isolation clears. Learning waits for the next field. */
+    fun endEditor() {
+        IncognitoState.passwordField = false
+        IncognitoState.passwordEditor = false
+    }
 
     /** Its own source: a field change while search is open must not overwrite it, nor be restored by it. */
     fun setClipboardSearch(open: Boolean) { IncognitoState.clipboardSearch = open; apply() }

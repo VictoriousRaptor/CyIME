@@ -474,7 +474,7 @@ object SettingsPreferences {
         getPrefs(context).edit().putBoolean(KEY_LOCK_WORD_ORDER, enabled).apply()
     }
 
-    /** 「密码框临时关闭学习」（默认开）：在密码输入框临时停用词库学习、联想与输入记忆，离开后恢复。 */
+    /** 「密码框临时关闭学习」（默认开）：在密码输入框临时停用词库学习、联想记录与输入记忆，离开后恢复。 */
     const val KEY_PASSWORD_DISABLE_LEARNING = "password_disable_learning"
 
     fun isPasswordDisableLearningEnabled(context: Context): Boolean =

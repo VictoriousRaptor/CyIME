@@ -16,8 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -36,6 +40,7 @@ import com.kingzcheung.xime.ui.theme.keyboardBackground
 import com.kingzcheung.xime.ui.theme.resolveKeyboardPalette
 import com.kingzcheung.xime.viewmodel.KeyboardUiState
 import com.kingzcheung.xime.viewmodel.KeyboardViewModel
+import com.kingzcheung.xime.viewmodel.ShiftMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -62,9 +67,13 @@ class NumberRowRenderTest {
     private var layout by mutableStateOf("26")
     private var size by mutableStateOf(360 to 232)
     private var numberRow by mutableStateOf(false)
+    private var numberRowFullHeight by mutableStateOf(false)
+    private var passwordNumberRowField by mutableStateOf(false)
+    private var passwordAutoNumberRow by mutableStateOf(true)
     private var revision by mutableStateOf(0)
     private var theme by mutableStateOf("soft_blue")
     private var dark by mutableStateOf(false)
+    private val committed = mutableListOf<String>()
     private lateinit var vm: KeyboardViewModel
     private lateinit var app: Application
 
@@ -75,6 +84,7 @@ class NumberRowRenderTest {
         KeysConfigHelper.loadConfig(app); KeyboardThemes.initFromConfig(app)
         com.kingzcheung.xime.ui.keyboard.AppFonts.initialize(app)
         vm = KeyboardViewModel(app)
+        committed.clear()
         rule.setContent {
             @Suppress("UNUSED_EXPRESSION") revision
             val palette = resolveKeyboardPalette(theme, dark)
@@ -82,17 +92,34 @@ class NumberRowRenderTest {
             CompositionLocalProvider(LocalKeyboardPalette provides palette,
                 LocalKeyCornerRadius provides KeysConfigHelper.getKeyboardKeyConfig().cornerRadius.dp,
                 LocalKeyboardInputPreferences provides KeyboardInputPreferences(frostedGlass = glass,
-                    numberRow = numberRow, splitKeyboardEnabled = layout == "26-split")) {
+                    numberRow = numberRow,
+                    numberRowFullHeight = numberRowFullHeight,
+                    passwordAutoNumberRow = passwordAutoNumberRow,
+                    splitKeyboardEnabled = layout == "26-split")) {
                 MaterialTheme {
                     Box(Modifier.requiredSize(800.dp, 320.dp).testTag("number-row-canvas").background(Color(0xFF808080))) {
                         Box(Modifier.requiredSize(size.first.dp, size.second.dp)
                             .keyboardBackground(KeyboardThemes.getRenderingScheme(theme).keyboardBackground, dark,
                                 palette.background, glass)) {
                             val ascii = layout == "en26"
-                            KeyboardLayout({}, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {}),
-                                KeyboardUiState(currentSchemaId = schemaFor(layout), themeId = theme, isDarkTheme = dark,
-                                    isAsciiMode = ascii),
-                                ascii, Modifier.requiredSize(size.first.dp, size.second.dp))
+                            KeyboardLayout(
+                                onKeyPress = {},
+                                viewModel = vm,
+                                callbacks = KeyboardCallbacks(
+                                    onKeyPress = { _, _ -> },
+                                    onCommitText = { committed += it },
+                                    onCandidateSelect = {},
+                                ),
+                                uiState = KeyboardUiState(
+                                    currentSchemaId = schemaFor(layout),
+                                    themeId = theme,
+                                    isDarkTheme = dark,
+                                    isAsciiMode = ascii,
+                                    passwordNumberRowField = passwordNumberRowField,
+                                ),
+                                isAsciiMode = ascii,
+                                modifier = Modifier.requiredSize(size.first.dp, size.second.dp),
+                            )
                         }
                     }
                 }
@@ -100,12 +127,29 @@ class NumberRowRenderTest {
         }
     }
 
-    private fun select(l: String, w: Int, h: Int, on: Boolean) {
+    private fun select(
+        l: String,
+        w: Int,
+        h: Int,
+        on: Boolean,
+        passwordField: Boolean = false,
+        autoNumberRow: Boolean = true,
+        fullHeight: Boolean = false,
+    ) {
         val s = schemaFor(l)
         KeysConfigHelper.setActiveKeyboardSchema(s)
         // 输入法里由 KeyboardInputPreferences.read 跟着开关设；这里直接给出偏好，同步设上，第一排角标才会换。
         KeysConfigHelper.numberRowCorners = on
-        rule.runOnIdle { vm.resetKeyboard(l == "en26", s); layout = l; size = w to h; numberRow = on; revision++ }
+        rule.runOnIdle {
+            vm.resetKeyboard(l == "en26", s)
+            layout = l
+            size = w to h
+            numberRow = on
+            passwordNumberRowField = passwordField
+            passwordAutoNumberRow = autoNumberRow
+            numberRowFullHeight = fullHeight
+            revision++
+        }
         rule.waitForIdle()
     }
 
@@ -140,6 +184,64 @@ class NumberRowRenderTest {
         val digits = bounds("split-keyboard-gap:9")
         assertEquals(letters.left, digits.left, 1f)
         assertEquals(letters.right, digits.right, 1f)
+    }
+
+    @Test fun password26KeyAutoShowsNumberRowFullHeightAndRestoresOnLeave() {
+        show()
+        select("en26", 360, 232, on = false, passwordField = false, autoNumberRow = true)
+        rule.onNodeWithTag("number-row", true).assertDoesNotExist()
+
+        select("en26", 360, 232, on = false, passwordField = true, autoNumberRow = true, fullHeight = false)
+        assertTrue(bounds("number-row-key:0").height < bounds("qwerty-key:q").height)
+
+        select("en26", 360, 232, on = false, passwordField = true, autoNumberRow = true, fullHeight = true)
+        assertEquals(bounds("qwerty-key:q").height, bounds("number-row-key:0").height, 1.5f)
+
+        select("26", 360, 232, on = false, passwordField = true, autoNumberRow = true)
+        rule.onNodeWithTag("number-row", true).assertExists()
+
+        select("14", 360, 232, on = false, passwordField = true, autoNumberRow = true)
+        rule.onNodeWithTag("number-row", true).assertDoesNotExist()
+
+        select("en26", 360, 232, on = false, passwordField = true, autoNumberRow = false)
+        rule.onNodeWithTag("number-row", true).assertDoesNotExist()
+
+        select("en26", 360, 232, on = false, passwordField = false, autoNumberRow = true)
+        rule.onNodeWithTag("number-row", true).assertDoesNotExist()
+    }
+
+    @Test fun shiftSwitchesNumberRowKeysToShiftSymbols() {
+        show()
+        select("en26", 360, 232, on = false, passwordField = true, autoNumberRow = true)
+
+        val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+        val symbols = listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")")
+        digits.forEachIndexed { index, digit ->
+            rule.onNode(hasText(digit) and hasAnyAncestor(hasTestTag("number-row-key:$index")), useUnmergedTree = true)
+                .assertExists()
+        }
+
+        rule.runOnIdle { vm.toggleShift() }
+        rule.waitForIdle()
+        symbols.forEachIndexed { index, symbol ->
+            rule.onNode(hasText(symbol) and hasAnyAncestor(hasTestTag("number-row-key:$index")), useUnmergedTree = true)
+                .assertExists()
+        }
+        rule.onNodeWithTag("number-row-key:0", true).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("!"), committed)
+        assertEquals(ShiftMode.OFF, vm.shiftMode.value)
+        rule.onNode(hasText("1") and hasAnyAncestor(hasTestTag("number-row-key:0")), useUnmergedTree = true)
+            .assertExists()
+
+        rule.runOnIdle { vm.doubleTapShift() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("number-row-key:1", true).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("!", "@"), committed)
+        assertEquals(ShiftMode.CAPS, vm.shiftMode.value)
+        rule.onNode(hasText("@") and hasAnyAncestor(hasTestTag("number-row-key:1")), useUnmergedTree = true)
+            .assertExists()
     }
 
     @Test fun renderNumberRow() {

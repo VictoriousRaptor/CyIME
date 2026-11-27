@@ -223,7 +223,7 @@ fun SmartPredictionSettingsContent(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
-                    // 密码框临时关闭学习（默认开）：进入密码输入框临时停用词库学习、联想和输入记忆，离开后恢复。
+                    // 密码框临时关闭学习（默认开）：进入密码输入框临时停用词库学习、联想记录和输入记忆，离开后恢复。
                     var passwordDisableLearning by remember {
                         mutableStateOf(SettingsPreferences.isPasswordDisableLearningEnabled(context))
                     }

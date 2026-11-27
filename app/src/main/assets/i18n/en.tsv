@@ -4111,6 +4111,6 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除	When the first candidate is over 6 characters, hold and drag across part of it to change only that part; holding without dragging still opens pin and delete
 密码框自动数字行	Auto number row in password fields
 在密码输入框使用 26 键时自动弹出数字行	Show the number row on 26-key keyboards in password fields
-已全局开启数字行；关闭全局数字行后仍会在密码框弹出	Number row is already on everywhere; still shows in password fields if turned off
+数字行开着时不需要	Not needed while the number row is on
 密码框临时关闭学习	Pause learning in password fields
 在密码输入框临时关闭学习与记忆，离开后恢复	Temporarily stop learning and memory in password fields, and resume after leaving

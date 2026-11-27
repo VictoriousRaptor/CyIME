@@ -56,7 +56,8 @@ data class InputUIState(
     val isDeploying: Boolean = false,
     val deploymentMessage: String = "",
     val isAddressField: Boolean = false,
-    val isPasswordField: Boolean = false,
+    /** 单行非终端文字密码框（含可见密码），仅用于控制 26 键自动弹出数字行；隐私隔离见 [IncognitoState]。 */
+    val passwordNumberRowField: Boolean = false,
     val inputSessionId: Long = 0,
     val t9ResetSignal: Long = 0,
     val swipeCancelEpoch: Long = 0,

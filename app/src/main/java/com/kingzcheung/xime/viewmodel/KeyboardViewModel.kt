@@ -90,7 +90,8 @@ data class KeyboardUiState(
     val isCalculatorMode: Boolean = false,
     val inputSessionId: Long = 0L,
     val isAddressField: Boolean = false,
-    val isPasswordField: Boolean = false,
+    /** 单行非终端文字密码框（含可见密码），仅用于控制 26 键自动弹出数字行。 */
+    val passwordNumberRowField: Boolean = false,
     val isFloatingMode: Boolean = false,
     val isHandwritingMode: Boolean = false,
     val floatingOffsetX: Int = 0,

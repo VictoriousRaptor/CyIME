@@ -8,9 +8,12 @@ internal data class EditorFieldPolicy(
     val kind: Kind = Kind.TEXT,
     val signed: Boolean = false,
     val decimal: Boolean = false,
-    val passwordNumberRow: Boolean = false,
+    val multiLine: Boolean = false,
 ) {
     enum class Kind { TEXT, PASSWORD, VISIBLE_PASSWORD, NUMBER_PASSWORD, NUMBER, PHONE, DATE, TIME, DATETIME, ADDRESS, SEARCH_OR_ADDRESS }
+
+    /** 单行文字密码框（含可见密码，不含多行代码编辑器与终端）：用于 26 键自动弹出数字行。 */
+    val passwordNumberRow: Boolean get() = !multiLine && (kind == Kind.PASSWORD || kind == Kind.VISIBLE_PASSWORD)
 
     val scoped: Boolean get() = kind != Kind.TEXT
     val isAddressField: Boolean get() = kind == Kind.ADDRESS || kind == Kind.SEARCH_OR_ADDRESS
@@ -96,11 +99,11 @@ internal data class EditorFieldPolicy(
                         InputType.TYPE_TEXT_VARIATION_PASSWORD,
                         InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD -> EditorFieldPolicy(
                             if (multiLine) Kind.VISIBLE_PASSWORD else Kind.PASSWORD,
-                            passwordNumberRow = !multiLine,
+                            multiLine = multiLine,
                         )
                         InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> EditorFieldPolicy(
                             Kind.VISIBLE_PASSWORD,
-                            passwordNumberRow = !multiLine,
+                            multiLine = multiLine,
                         )
                         InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
                         InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,

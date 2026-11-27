@@ -168,6 +168,9 @@ class SettingsSearchTest {
         assertTrue("数字行" in titles("平板 一排数字"))
         assertTrue("密码框自动数字行" in titles("密码框 数字行"))
         assertTrue("密码框自动数字行" in titles("密码"))
+    }
+
+    @Test fun passwordLearningToggleIsSearchable() {
         assertTrue("密码框临时关闭学习" in titles("密码框 学习"))
         assertTrue("密码框临时关闭学习" in titles("密码框 记忆"))
     }

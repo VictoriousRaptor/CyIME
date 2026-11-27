@@ -2943,7 +2943,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     isCalculatorMode = calculatorEngine.isActive(),
                                     inputSessionId = state.inputSessionId,
                                     isAddressField = state.isAddressField,
-                                    isPasswordField = state.isPasswordField && !state.inputTarget.isInternal,
+                                    passwordNumberRowField = state.passwordNumberRowField && !state.inputTarget.isInternal,
                                     isFloatingMode = state.isFloatingMode && !handwritingExpanded,
                                     isHandwritingMode = isHandwritingMode,
                                     // Floating cards remain draggable even when an old size is being protected.
@@ -4157,7 +4157,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             inputSessionId = System.nanoTime(),
             // 语言键菜单里中文指向进框前的方案：网址、邮箱框和可见密码框（代码编辑器）都先给英文、能切回中文。
             isAddressField = editorInputPolicy.field.allowsNativeInput,
-            isPasswordField = editorInputPolicy.field.passwordNumberRow,
+            passwordNumberRowField = editorInputPolicy.field.passwordNumberRow,
             isAsciiMode = editorPresentation.isAsciiMode,
             currentSchemaId = editorPresentation.currentSchemaId,
             clipboardImagesExpanded = false,
@@ -5607,8 +5607,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
         val inCall = audio.mode == android.media.AudioManager.MODE_IN_CALL ||
             audio.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
-        return voicePillResumeFieldAllows(com.kingzcheung.xime.settings.IncognitoState.sensitiveEditor ||
-            com.kingzcheung.xime.settings.IncognitoState.passwordEditor,
+        return voicePillResumeFieldAllows(com.kingzcheung.xime.settings.IncognitoState.editorSecuritySensitive,
             editorInputPolicy.field.blocksVoice, inCall,
             com.kingzcheung.xime.util.PermissionHelper.hasRecordAudioPermission(this))
     }

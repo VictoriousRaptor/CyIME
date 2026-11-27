@@ -458,14 +458,6 @@ fun KeyboardView(
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
     com.kingzcheung.xime.settings.KeysConfigHelper.cornerFullWidth = punctuationFull
-    val effectiveNumberRow = numberRowShown(
-        setting = inputPreferences.numberRow,
-        zhuyin = !state.isAsciiMode && state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ZHUYIN,
-        passwordField = state.isPasswordField,
-        passwordAutoNumberRow = inputPreferences.passwordAutoNumberRow,
-        is26Key = state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC &&
-            com.kingzcheung.xime.settings.KeysConfigHelper.letterLayout(state.currentSchemaId, state.isAsciiMode)?.honeycomb != true,
-    )
     // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
@@ -2869,11 +2861,27 @@ fun KeyboardView(
             initialBottomPaddingDp = initialPadding,
             bottomKeyClearance = floatingBottomClearance,
             density = resizeControlDensity,
-            aspectLimits = KeyboardAspectLimits.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction),
-            squareSnap = KeyboardSquareSnap.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction,
-                inputPreferences.wideKeys, numberRow = effectiveNumberRow,
-                numberRowFullHeight = inputPreferences.numberRowFullHeight)
-                ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize())),
+            aspectLimits = run {
+                val resizeProfile = state.inputProfile
+                KeyboardAspectLimits.forLayout(resizeProfile.layout.kind, splitActive, splitGapFraction)
+            },
+            squareSnap = run {
+                val resizeProfile = state.inputProfile
+                val resizeLayoutKind = resizeProfile.layout.kind
+                val effectiveNumberRow = numberRowShown(
+                    prefs = inputPreferences,
+                    layoutKind = resizeLayoutKind,
+                    isAsciiMode = state.isAsciiMode,
+                    passwordNumberRowField = state.passwordNumberRowField,
+                    isHoneycomb = {
+                        com.kingzcheung.xime.settings.CustomKeyboardLayouts.find(resizeProfile.layout.id)?.honeycomb == true
+                    },
+                )
+                KeyboardSquareSnap.forLayout(resizeLayoutKind, splitActive, splitGapFraction,
+                    inputPreferences.wideKeys, numberRow = effectiveNumberRow,
+                    numberRowFullHeight = inputPreferences.numberRowFullHeight)
+                    ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize()))
+            },
             splitGapFraction = splitGapSetting,
             splitPitchDp = splitPitchDp,
             onSplitGapChange = { splitGapPreview.value = it },
