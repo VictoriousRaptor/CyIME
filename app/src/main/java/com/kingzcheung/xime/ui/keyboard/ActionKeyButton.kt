@@ -65,20 +65,16 @@ internal fun enterLongPressNewline(enterKeyText: String, newline: (() -> Unit)?)
 /** 按住 Shift 超过此时限（200ms）再把回车键图标切为换行，避免短按 Shift 切换大小写时发送/搜索等图标闪烁。 */
 internal const val SHIFT_ENTER_HINT_DELAY_MS = 200L
 
-/** 仅在持续按住 Shift 超过 [delayMillis] 后才返回 true；松手或状态切换同一帧同步重置。 */
+/** 仅在持续按住 Shift 超过 [SHIFT_ENTER_HINT_DELAY_MS] 后才返回 true；松手同一帧同步重置。 */
 @Composable
-internal fun rememberShiftEnterHint(
-    shiftHeld: Boolean,
-    delayMillis: Long = SHIFT_ENTER_HINT_DELAY_MS,
-): Boolean {
-    var shown by remember(shiftHeld) { mutableStateOf(false) }
-    LaunchedEffect(shiftHeld, delayMillis) {
-        if (shiftHeld) {
-            if (delayMillis > 0L) delay(delayMillis)
-            shown = true
-        }
+internal fun rememberShiftEnterHint(shiftHeld: Boolean): Boolean {
+    if (!shiftHeld) return false
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(SHIFT_ENTER_HINT_DELAY_MS)
+        shown = true
     }
-    return shiftHeld && shown
+    return shown
 }
 
 /**
