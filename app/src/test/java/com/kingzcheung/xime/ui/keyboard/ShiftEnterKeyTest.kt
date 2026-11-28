@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -20,6 +21,8 @@ import com.kingzcheung.xime.viewmodel.KeyboardUiState
 import com.kingzcheung.xime.viewmodel.KeyboardViewModel
 import com.kingzcheung.xime.viewmodel.ShiftMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,7 +41,7 @@ class ShiftEnterKeyTest {
     private val commands = mutableListOf<String>()
     private lateinit var vm: KeyboardViewModel
 
-    private fun show(schema: String = "") {
+    private fun show(schema: String = "", enterKeyText: String = "回车") {
         val app = ApplicationProvider.getApplicationContext<Application>()
         KeysConfigHelper.loadConfig(app)
         KeysConfigHelper.setActiveKeyboardSchema(schema)
@@ -62,7 +65,7 @@ class ShiftEnterKeyTest {
                     Box(Modifier.requiredSize(800.dp, 320.dp)) {
                         KeyboardLayout(onKeyPress, vm, KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {},
                             onGestureAction = { action, value -> if (action == GestureAction.COMMAND) commands += value }),
-                            KeyboardUiState(currentSchemaId = schema), false,
+                            KeyboardUiState(currentSchemaId = schema, enterKeyText = enterKeyText), false,
                             Modifier.requiredSize(800.dp, 320.dp))
                     }
                 }
@@ -70,6 +73,9 @@ class ShiftEnterKeyTest {
         }
         rule.waitForIdle()
     }
+
+    private fun enterIconShown(label: String) =
+        rule.onAllNodesWithContentDescription(label, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun center(tag: String) = rule.onNodeWithTag(tag, true).fetchSemanticsNode().boundsInRoot.center
 
@@ -126,5 +132,63 @@ class ShiftEnterKeyTest {
         rule.waitForIdle()
         assertEquals(listOf("enter", "enter", "enter"), keys)
         assertEquals(emptyList<String>(), commands)
+    }
+
+    /** 短按 Shift 切换大小写（未满 200ms）：发送/搜索等回车键图标不闪烁成默认回车。 */
+    @Test fun quickShiftTapDoesNotFlickerEnterIcon() {
+        show(enterKeyText = "发送")
+        assertTrue(enterIconShown("发送"))
+        val shift = center("shift-key")
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(0, shift) }
+        rule.mainClock.advanceTimeBy(16)
+        assertTrue(enterIconShown("发送"))
+        assertFalse(enterIconShown("换行"))
+        rule.mainClock.advanceTimeBy(150)
+        assertTrue(enterIconShown("发送"))
+        assertFalse(enterIconShown("换行"))
+        rule.onRoot().performTouchInput { up(0) }
+        rule.mainClock.advanceTimeBy(300)
+        assertTrue(enterIconShown("发送"))
+        assertFalse(enterIconShown("换行"))
+        assertEquals(ShiftMode.SINGLE, vm.shiftMode.value)
+    }
+
+    /** 按住 Shift 超过 200ms 后回车图标切换为换行，松手立即恢复。 */
+    @Test fun holdShiftPastDelayShowsNewlineIconAndReleaseRestores() {
+        show(enterKeyText = "发送")
+        val shift = center("shift-key")
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(0, shift) }
+        rule.mainClock.advanceTimeBy(16)
+        assertTrue(enterIconShown("发送"))
+        rule.mainClock.advanceTimeBy(150)
+        assertTrue(enterIconShown("发送"))
+        assertFalse(enterIconShown("换行"))
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(enterIconShown("换行"))
+        assertFalse(enterIconShown("发送"))
+        rule.onRoot().performTouchInput { up(0) }
+        rule.mainClock.advanceTimeBy(16)
+        assertTrue(enterIconShown("发送"))
+        assertFalse(enterIconShown("换行"))
+    }
+
+    /** 按住 Shift 不满 200ms 时另一指立即点回车，图标虽未切但仍立刻触发 Shift+回车换行。 */
+    @Test fun immediateShiftPlusEnterStillSendsNewlineBeforeIconSwitches() {
+        show(enterKeyText = "发送")
+        val shift = center("shift-key")
+        val enter = center("qwerty-enter-key")
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput { down(0, shift) }
+        rule.mainClock.advanceTimeBy(50)
+        assertTrue(enterIconShown("发送"))
+        rule.onRoot().performTouchInput { down(1, enter); up(1) }
+        rule.mainClock.advanceTimeBy(16)
+        rule.onRoot().performTouchInput { up(0) }
+        rule.mainClock.advanceTimeBy(16)
+        assertEquals(listOf(CtrlShortcuts.SHIFT_ENTER_COMMAND), commands)
+        assertEquals(emptyList<String>(), keys)
+        assertEquals(ShiftMode.OFF, vm.shiftMode.value)
     }
 }

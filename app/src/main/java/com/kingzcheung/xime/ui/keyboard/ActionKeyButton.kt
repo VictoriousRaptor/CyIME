@@ -8,12 +8,18 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NavigateNext
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 data class KeyboardKeyColors(val background: Color, val foreground: Color)
 val LocalEnterKeyColors = androidx.compose.runtime.staticCompositionLocalOf<KeyboardKeyColors?> { null }
@@ -56,9 +62,28 @@ fun ActionKeyButton(
 internal fun enterLongPressNewline(enterKeyText: String, newline: (() -> Unit)?): (() -> Unit)? =
     newline?.takeIf { enterKeyText == "发送" }
 
+/** 按住 Shift 超过此时限（200ms）再把回车键图标切为换行，避免短按 Shift 切换大小写时发送/搜索等图标闪烁。 */
+internal const val SHIFT_ENTER_HINT_DELAY_MS = 200L
+
+/** 仅在持续按住 Shift 超过 [delayMillis] 后才返回 true；松手或状态切换同一帧同步重置。 */
+@Composable
+internal fun rememberShiftEnterHint(
+    shiftHeld: Boolean,
+    delayMillis: Long = SHIFT_ENTER_HINT_DELAY_MS,
+): Boolean {
+    var shown by remember(shiftHeld) { mutableStateOf(false) }
+    LaunchedEffect(shiftHeld, delayMillis) {
+        if (shiftHeld) {
+            if (delayMillis > 0L) delay(delayMillis)
+            shown = true
+        }
+    }
+    return shiftHeld && shown
+}
+
 /**
  * 回车键现在按下去实际做什么，就写什么（用户 11-14：按住 Ctrl 回车一直没提示）。
- * Ctrl 键面亮着（按住 !@# 满时限或拖出）时是 Ctrl+回车，发送；手指按着 Shift 时是 Shift+回车，换行；
+ * Ctrl 键面亮着（按住 !@# 满时限或拖出）时是 Ctrl+回车，发送；手指持续按着 Shift 满 [SHIFT_ENTER_HINT_DELAY_MS] 时是 Shift+回车，换行；
  * 其余照输入框的动作名。自动大写、单次大写、大写锁定不算按着 Shift，回车不变。
  */
 internal fun heldEnterText(base: String, ctrl: Boolean, shiftHeld: Boolean = false): String = when {
