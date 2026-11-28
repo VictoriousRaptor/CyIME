@@ -363,4 +363,39 @@ class EditorSessionInputPolicyTest {
         assertTrue(policy.typedLiteral("a中").isEmpty())
         assertTrue(policy.typedLiteral("\n").isEmpty())
     }
+
+    @Test fun passwordNumberRowAppliesOnlyToSingleLineTextPasswords() {
+        val singleLinePasswords = listOf(
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+        )
+        singleLinePasswords.forEach { type ->
+            assertTrue("type=$type", EditorFieldPolicy.from(editor(type)).passwordNumberRow)
+        }
+        val nonPasswordNumberRow = listOf(
+            InputType.TYPE_CLASS_TEXT,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD,
+            InputType.TYPE_NULL,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+        )
+        nonPasswordNumberRow.forEach { type ->
+            assertFalse("type=$type", EditorFieldPolicy.from(editor(type)).passwordNumberRow)
+        }
+        val noPersonalized = editor(InputType.TYPE_CLASS_TEXT).apply {
+            imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        }
+        assertFalse(EditorFieldPolicy.from(noPersonalized).passwordNumberRow)
+        val termiusSsh = EditorInfo().apply {
+            packageName = "com.server.auditor.ssh.client"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_ENTER_ACTION
+        }
+        assertFalse(EditorFieldPolicy.from(termiusSsh).passwordNumberRow)
+    }
 }

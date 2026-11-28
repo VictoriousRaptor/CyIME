@@ -311,8 +311,15 @@ private fun LayoutDisplayPage(
                             com.kingzcheung.xime.ui.keyboard.SideSymbolTarget.NUMBER_ROW) },
                         showArrow = true)
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    // 数字行和字母一样高（#444，默认关）：只在数字行开着时显示。
-                    if (numberRow) {
+                    // 密码框自动数字行（默认开）：在密码输入框使用 26 键时自动弹出数字行，离开后恢复。
+                    SettingsToggleItem(Icons.TwoTone.Dialpad, "密码框自动数字行",
+                        "在密码输入框使用 26 键时自动弹出数字行",
+                        checked = numberRowPrefs.passwordAutoNumberRow,
+                        onCheckedChange = { SettingsPreferences.setPasswordAutoNumberRowEnabled(context, it) },
+                        lockMessage = if (numberRow) "数字行开着时不需要" else null)
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    // 数字行和字母一样高（#444，默认关）：全局数字行或密码框自动数字行开着时显示。
+                    if (numberRow || numberRowPrefs.passwordAutoNumberRow) {
                         SettingsToggleItem(Icons.TwoTone.FormatListNumbered, "数字行和字母一样高",
                             "关着时数字行矮一点。键盘总高不变",
                             checked = numberRowPrefs.numberRowFullHeight,

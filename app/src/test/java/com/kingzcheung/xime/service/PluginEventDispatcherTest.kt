@@ -23,11 +23,14 @@ class PluginEventDispatcherTest {
     private lateinit var dispatcher: PluginEventDispatcher
     private val privacy = InputPrivacy {}
     private val saved = Triple(IncognitoState.manual, IncognitoState.sensitiveEditor, IncognitoState.clipboardSearch)
+    private val savedPasswordEditor = IncognitoState.passwordEditor
 
     @Before
     fun setup() {
         dispatcher = PluginEventDispatcher(mock(XimeInputMethodService::class.java))
         privacy.loadManual(false)
+        privacy.loadPasswordDisableLearning(true)
+        IncognitoState.passwordEditor = false
     }
 
     @After
@@ -35,6 +38,7 @@ class PluginEventDispatcherTest {
         IncognitoState.manual = saved.first
         IncognitoState.sensitiveEditor = saved.second
         IncognitoState.clipboardSearch = saved.third
+        IncognitoState.passwordEditor = savedPasswordEditor
     }
 
     private fun editorInfo(inputType: Int): EditorInfo = EditorInfo().apply { this.inputType = inputType }
@@ -97,6 +101,17 @@ class PluginEventDispatcherTest {
         val passwordType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         startInput(passwordType)
         dispatcher.onTextCommitted("secret")
+        startInput(InputType.TYPE_CLASS_TEXT)
+        dispatcher.onTextCommitted("你好")
+        assertEquals(2L, dispatcher.sessionCommittedCharsForTest)
+    }
+
+    @Test
+    fun `关闭密码框临时关闭学习时仍隔离插件事件`() {
+        privacy.setPasswordDisableLearning(false)
+        startInput(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        dispatcher.onTextCommitted("secret")
+        assertEquals(0L, dispatcher.sessionCommittedCharsForTest)
         startInput(InputType.TYPE_CLASS_TEXT)
         dispatcher.onTextCommitted("你好")
         assertEquals(2L, dispatcher.sessionCommittedCharsForTest)

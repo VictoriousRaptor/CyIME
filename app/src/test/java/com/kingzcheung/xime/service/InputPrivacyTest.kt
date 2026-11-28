@@ -12,11 +12,13 @@ import org.junit.Test
 class InputPrivacyTest {
     private val saved = Triple(IncognitoState.manual, IncognitoState.sensitiveEditor, IncognitoState.clipboardSearch)
     private val savedPasswordField = IncognitoState.passwordField
+    private val savedPasswordEditor = IncognitoState.passwordEditor
     private val engine = mutableListOf<Boolean>()
     private val privacy = InputPrivacy { engine += it }.also {
         it.loadManual(false)
         IncognitoState.sensitiveEditor = false
         IncognitoState.clipboardSearch = false
+        IncognitoState.passwordEditor = false
     }
 
     @After fun restore() {
@@ -24,6 +26,7 @@ class InputPrivacyTest {
         IncognitoState.sensitiveEditor = saved.second
         IncognitoState.clipboardSearch = saved.third
         IncognitoState.passwordField = savedPasswordField
+        IncognitoState.passwordEditor = savedPasswordEditor
     }
 
     private fun field(inputType: Int, imeOptions: Int = 0) =
@@ -106,5 +109,48 @@ class InputPrivacyTest {
         privacy.beginEditor(field(text))
         privacy.setLockWordOrder(false)
         assertEquals(listOf(false, true, false), engine)
+    }
+
+    @Test fun passwordDisableLearningToggleControlsLearningWhileKeepingSecurityBoundary() {
+        privacy.loadPasswordDisableLearning(true)
+        privacy.beginEditor(field(text))
+        assertFalse(IncognitoState.active)
+        assertFalse(IncognitoState.passwordEditor)
+
+        // 默认开启：进入密码框临时关闭学习，离开后恢复。
+        privacy.beginEditor(field(password))
+        assertTrue(IncognitoState.active)
+        assertTrue(IncognitoState.passwordEditor)
+        assertTrue(IncognitoState.editorSecuritySensitive)
+        assertTrue(IncognitoState.securitySensitive)
+        privacy.beginEditor(field(text))
+        assertFalse(IncognitoState.active)
+        assertFalse(IncognitoState.passwordEditor)
+        assertFalse(IncognitoState.editorSecuritySensitive)
+
+        // 关闭开关：密码框不关闭学习，但安全边界（passwordEditor / securitySensitive）仍有效；
+        // IME_FLAG_NO_PERSONALIZED_LEARNING 与手动无痕照常生效。
+        privacy.setPasswordDisableLearning(false)
+        privacy.beginEditor(field(password))
+        assertFalse(IncognitoState.active)
+        assertTrue(IncognitoState.passwordEditor)
+        assertTrue(IncognitoState.editorSecuritySensitive)
+        assertTrue(IncognitoState.securitySensitive)
+
+        // 在密码框内实时切换开关：立即关闭/恢复引擎学习。
+        privacy.setPasswordDisableLearning(true)
+        assertTrue(IncognitoState.active)
+        privacy.setPasswordDisableLearning(false)
+        assertFalse(IncognitoState.active)
+
+        // 离开密码框结束编辑后，passwordEditor 与 securitySensitive 立即清掉，不残留到后续输入框外操作。
+        privacy.endEditor()
+        assertFalse(IncognitoState.passwordEditor)
+        assertFalse(IncognitoState.editorSecuritySensitive)
+        assertFalse(IncognitoState.securitySensitive)
+
+        privacy.beginEditor(field(text, EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
+        assertTrue(IncognitoState.active)
+        assertEquals(listOf(false, true, false, true, false, true), engine)
     }
 }

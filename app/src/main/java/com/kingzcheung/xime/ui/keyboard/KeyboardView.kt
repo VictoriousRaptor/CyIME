@@ -2908,11 +2908,27 @@ fun KeyboardView(
             initialBottomPaddingDp = initialPadding,
             bottomKeyClearance = floatingBottomClearance,
             density = resizeControlDensity,
-            aspectLimits = KeyboardAspectLimits.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction),
-            squareSnap = KeyboardSquareSnap.forLayout(state.inputProfile.layout.kind, splitActive, splitGapFraction,
-                inputPreferences.wideKeys, numberRow = inputPreferences.numberRow,
-                numberRowFullHeight = inputPreferences.numberRowFullHeight)
-                ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize())),
+            aspectLimits = run {
+                val resizeProfile = state.inputProfile
+                KeyboardAspectLimits.forLayout(resizeProfile.layout.kind, splitActive, splitGapFraction)
+            },
+            squareSnap = run {
+                val resizeProfile = state.inputProfile
+                val resizeLayoutKind = resizeProfile.layout.kind
+                val effectiveNumberRow = numberRowShown(
+                    prefs = inputPreferences,
+                    layoutKind = resizeLayoutKind,
+                    isAsciiMode = state.isAsciiMode,
+                    passwordNumberRowField = state.passwordNumberRowField,
+                    isHoneycomb = {
+                        com.kingzcheung.xime.settings.CustomKeyboardLayouts.find(resizeProfile.layout.id)?.honeycomb == true
+                    },
+                )
+                KeyboardSquareSnap.forLayout(resizeLayoutKind, splitActive, splitGapFraction,
+                    inputPreferences.wideKeys, numberRow = effectiveNumberRow,
+                    numberRowFullHeight = inputPreferences.numberRowFullHeight)
+                    ?.copy(candidateZoom = candidateTextZoom(rememberCandidateTextSize()))
+            },
             splitGapFraction = splitGapSetting,
             splitPitchDp = splitPitchDp,
             onSplitGapChange = { splitGapPreview.value = it },

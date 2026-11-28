@@ -1081,6 +1081,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val prefs = SettingsPreferences.getPrefsPublic(this)
         privacy.loadManual(SettingsPreferences.isIncognito(this))
         privacy.loadLockWordOrder(SettingsPreferences.isLockWordOrder(this))
+        privacy.loadPasswordDisableLearning(SettingsPreferences.isPasswordDisableLearningEnabled(this))
         rimeEngine.doublePinyinKeysPreedit = com.kingzcheung.xime.settings.SpellingPatches.doublePinyinRawPreedit(this)
         rimeEngine.strokeGlyphPreedit = com.kingzcheung.xime.settings.SpellingPatches.strokeGlyphPreedit(this)
         sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -1135,6 +1136,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 }
                 SettingsPreferences.KEY_LOCK_WORD_ORDER -> {
                     privacy.setLockWordOrder(SettingsPreferences.isLockWordOrder(this))
+                }
+                SettingsPreferences.KEY_PASSWORD_DISABLE_LEARNING -> {
+                    privacy.setPasswordDisableLearning(SettingsPreferences.isPasswordDisableLearningEnabled(this))
                 }
                 // 候选开关（繁体输出、表情、时间日期、符号名、希腊字母、生僻字、日文汉字、韩文汉字、粤语字、中英混输）：工具栏、菜单按钮或设置页一改就写进引擎，
                 // 正在打的拼音当场按新设置出候选，不用等下一个字母键（以前关了繁体直接点候选或空格，上屏的还是繁体）。
@@ -2948,6 +2952,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     isCalculatorMode = calculatorEngine.isActive(),
                                     inputSessionId = state.inputSessionId,
                                     isAddressField = state.isAddressField,
+                                    passwordNumberRowField = state.passwordNumberRowField && !state.inputTarget.isInternal,
                                     isFloatingMode = state.isFloatingMode && !handwritingExpanded,
                                     isHandwritingMode = isHandwritingMode,
                                     // Floating cards remain draggable even when an old size is being protected.
@@ -4232,6 +4237,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             inputSessionId = System.nanoTime(),
             // 语言键菜单里中文指向进框前的方案：网址、邮箱框和可见密码框（代码编辑器）都先给英文、能切回中文。
             isAddressField = editorInputPolicy.field.allowsNativeInput,
+            passwordNumberRowField = editorInputPolicy.field.passwordNumberRow,
             isAsciiMode = editorPresentation.isAsciiMode,
             currentSchemaId = editorPresentation.currentSchemaId,
             clipboardImagesExpanded = false,
@@ -5721,7 +5727,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
         val inCall = audio.mode == android.media.AudioManager.MODE_IN_CALL ||
             audio.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
-        return voicePillResumeFieldAllows(com.kingzcheung.xime.settings.IncognitoState.sensitiveEditor,
+        return voicePillResumeFieldAllows(com.kingzcheung.xime.settings.IncognitoState.editorSecuritySensitive,
             editorInputPolicy.field.blocksVoice, inCall,
             com.kingzcheung.xime.util.PermissionHelper.hasRecordAudioPermission(this))
     }

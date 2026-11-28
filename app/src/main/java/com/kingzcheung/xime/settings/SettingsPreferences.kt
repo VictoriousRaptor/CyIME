@@ -263,6 +263,16 @@ object SettingsPreferences {
         getPrefs(context).edit().putBoolean(KEY_NUMBER_ROW_FULL_HEIGHT, enabled).apply()
     }
 
+    /** 「密码框自动数字行」（默认开）：在密码输入框使用 26 键时自动弹出数字行，离开后恢复原设置。 */
+    const val KEY_PASSWORD_AUTO_NUMBER_ROW = "password_auto_number_row"
+
+    fun isPasswordAutoNumberRowEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_PASSWORD_AUTO_NUMBER_ROW, true)
+
+    fun setPasswordAutoNumberRowEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PASSWORD_AUTO_NUMBER_ROW, enabled).apply()
+    }
+
     const val KEY_NUMBER_PAD_TOP_789 = "number_pad_top_789"
 
     /**
@@ -462,6 +472,16 @@ object SettingsPreferences {
 
     fun setLockWordOrder(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_LOCK_WORD_ORDER, enabled).apply()
+    }
+
+    /** 「密码框临时关闭学习」（默认开）：在密码输入框临时停用词库学习、联想记录与输入记忆，离开后恢复。 */
+    const val KEY_PASSWORD_DISABLE_LEARNING = "password_disable_learning"
+
+    fun isPasswordDisableLearningEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_PASSWORD_DISABLE_LEARNING, true)
+
+    fun setPasswordDisableLearningEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PASSWORD_DISABLE_LEARNING, enabled).apply()
     }
 
     /**

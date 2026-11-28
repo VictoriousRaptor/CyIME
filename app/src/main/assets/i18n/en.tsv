@@ -4120,3 +4120,8 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 合并后 ?123 使用符号键的位置。关闭合并可恢复数字键。	?123 replaces the symbol key. Turn off the setting to restore the number key.
 符号／数字切换键	Symbol and number key
 恢复默认顺序并显示逗号、句号。	Restore the default order and show the comma and period keys.
+密码框自动数字行	Auto number row in password fields
+在密码输入框使用 26 键时自动弹出数字行	Show the number row on 26-key keyboards in password fields
+数字行开着时不需要	Not needed while the number row is on
+密码框临时关闭学习	Pause learning in password fields
+在密码输入框临时关闭学习与记忆，离开后恢复	Temporarily stop learning and memory in password fields, and resume after leaving

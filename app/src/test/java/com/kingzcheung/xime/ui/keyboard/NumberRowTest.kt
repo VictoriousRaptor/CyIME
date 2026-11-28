@@ -71,4 +71,53 @@ class NumberRowTest {
         // 只开「一样高」没开数字行：什么都不变。
         assertEquals(4f, KeyboardSquareSnap.forLayout(LayoutKind.ALPHABETIC, false, numberRowFullHeight = true)!!.rows)
     }
+
+    @Test fun passwordFieldAutoShowsNumberRowOn26KeyWhenEnabled() {
+        assertTrue(KeyboardInputPreferences().passwordAutoNumberRow)
+        // 密码框 + 26 键 + 开关开：即使全局「数字行」关着也自动弹出。
+        assertTrue(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = true, is26Key = true))
+        // 开关关掉后，密码框不再自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
+        // 普通输入框不会触发自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = false, passwordAutoNumberRow = true, is26Key = true))
+        // 14 键等非 26 键合并布局不自动弹出。
+        assertFalse(numberRowShown(setting = false, zhuyin = false, passwordField = true, passwordAutoNumberRow = true, is26Key = false))
+        // 注音（大千）首排本身就是数字位，不叠加数字行。
+        assertFalse(numberRowShown(setting = false, zhuyin = true, passwordField = true, passwordAutoNumberRow = true, is26Key = true))
+        // 全局「数字行」开着时，即使关闭密码框自动弹出也照常显示。
+        assertTrue(numberRowShown(setting = true, zhuyin = false, passwordField = true, passwordAutoNumberRow = false, is26Key = true))
+
+        // 共享重载：全局开启或非密码框时惰性跳过 isHoneycomb；蜂窝布局在密码框不自动弹出。
+        var honeycombChecked = false
+        assertTrue(numberRowShown(
+            KeyboardInputPreferences(numberRow = true, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = false,
+            isHoneycomb = { honeycombChecked = true; true },
+        ))
+        assertFalse(honeycombChecked)
+        assertFalse(numberRowShown(
+            KeyboardInputPreferences(numberRow = false, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = true,
+            isHoneycomb = { true },
+        ))
+        assertTrue(numberRowShown(
+            KeyboardInputPreferences(numberRow = false, passwordAutoNumberRow = true),
+            LayoutKind.ALPHABETIC, isAsciiMode = false, passwordNumberRowField = true,
+            isHoneycomb = { false },
+        ))
+    }
+
+    @Test fun shiftModeMapsDigitKeysToSymbolsAndKeepsCustomKeys() {
+        val digits = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+        assertEquals(digits, digits.map { numberRowKeyText(it, shifted = false) })
+        assertEquals(listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"), digits.map { numberRowKeyText(it, shifted = true) })
+        assertEquals(listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"), digits.map { numberRowSwipeSymbol(it, shifted = false) })
+        assertEquals(digits, digits.map { numberRowSwipeSymbol(it, shifted = true) })
+        for (custom in listOf("@", "，", "12")) {
+            assertEquals(custom, numberRowKeyText(custom, shifted = false))
+            assertEquals(custom, numberRowKeyText(custom, shifted = true))
+            assertEquals(null, numberRowSwipeSymbol(custom, shifted = false))
+            assertEquals(null, numberRowSwipeSymbol(custom, shifted = true))
+        }
+    }
 }

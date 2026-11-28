@@ -32,9 +32,9 @@ internal class PluginEventDispatcher(private val service: XimeInputMethodService
     private var pastedChars = 0L
     private var pastedCommits = 0L
 
-    /** 无痕生效中（手动、密码类 / 不学习标记的输入框、剪贴板搜索）：与学习同一来源（InputPrivacy 写）。
-     *  供 hotPath 插件能力（候选词变换）在发起请求前短路。 */
-    val isCurrentEditorSensitive: Boolean get() = com.kingzcheung.xime.settings.IncognitoState.active
+    /** 安全隔离生效中（手动无痕、密码框、不学习标记输入框、剪贴板搜索）：读取 [IncognitoState.securitySensitive]，
+     *  即使关闭「密码框临时关闭学习」也在密码框内拦截 hotPath 插件能力（候选词变换）。 */
+    val isCurrentEditorSensitive: Boolean get() = com.kingzcheung.xime.settings.IncognitoState.securitySensitive
 
     /** 新输入会话：重置 composing 去重。 */
     fun onStartInput() {

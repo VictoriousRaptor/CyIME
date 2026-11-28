@@ -36,6 +36,8 @@ class SettingsRoundTripTest {
         Case("分体键盘", true, false, S::setSplitKeyboardEnabled, S::isSplitKeyboardEnabled),
         Case("右半边也放 G 键", true, false, S::setSplitRightGEnabled, S::isSplitRightGEnabled),
         Case("数字行", true, false, S::setNumberRowEnabled, S::isNumberRowEnabled),
+        Case("密码框自动数字行", false, true, S::setPasswordAutoNumberRowEnabled, S::isPasswordAutoNumberRowEnabled),
+        Case("密码框临时关闭学习", false, true, S::setPasswordDisableLearningEnabled, S::isPasswordDisableLearningEnabled),
         Case("无痕", true, false, S::setIncognito, S::isIncognito),
         Case("候选注释", CandidateCommentMode.HIDE, CandidateCommentMode.SHOW, S::setCandidateCommentMode, S::candidateCommentMode),
         Case("候选注释内容", CandidateCommentContent.GLOSS, CandidateCommentContent.PINYIN,

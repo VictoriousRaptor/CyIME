@@ -51,7 +51,7 @@ object TypingStats {
     private fun prefs(context: Context) =
         com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context)
 
-    internal fun recording(): Boolean = enabled && appContext != null && !IncognitoState.active
+    internal fun recording(): Boolean = enabled && appContext != null && !IncognitoState.securitySensitive
 
     /** 屏幕键盘按下一个键（含删除键）。 */
     fun onKeyDown(key: String) {
