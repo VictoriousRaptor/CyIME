@@ -277,17 +277,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
 
         if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.supportsEnglishCandidateReplace() &&
             !EmailSuffixes.isSuggestionList(service.candidateState.value.associationCandidates)) {
-            service.serviceScope.launch {
-                val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
-                withContext(Dispatchers.Main) {
-                    val current = service.candidateState.value
-                    // 在途联想过期校验：pendingEnglish 已变/已清（如点击候选栏"清空"）→
-                    // 丢弃迟到回填，防止"清了又冒出来"与旧联想覆盖新联想的竞态
-                    if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
-                    }
-                }
-            }
+            service.keyRouter.requestEnglishCompletions(service.candidateState.value)
         }
 
         if (codeInInputBox && !service.uiState.value.toolPanelInputFocused) {
@@ -446,16 +436,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
 
         if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.supportsEnglishCandidateReplace() &&
             !EmailSuffixes.isSuggestionList(service.candidateState.value.associationCandidates)) {
-            service.serviceScope.launch {
-                val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
-                withContext(Dispatchers.Main) {
-                    val current = service.candidateState.value
-                    // 在途联想过期校验：pendingEnglish 已变/已清 → 丢弃迟到回填
-                    if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
-                    }
-                }
-            }
+            service.keyRouter.requestEnglishCompletions(service.candidateState.value)
         }
 
         // 在键盘自己的输入栏里打字（翻译栏等）：编码在栏里，不去动应用输入框（翻译栏写在那里的译文是组合区，

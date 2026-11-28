@@ -381,7 +381,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("无痕模式", prediction, SettingsRoutes.SmartPrediction, "无痕 隐私 不学习 不记录 剪贴板 私密 密码"),
         SettingsSearchEntry("删掉刚打的词不学习", prediction, SettingsRoutes.SmartPrediction, "自学习 学习 误触 怪词 删除 退格 删掉 不记 词库 调频", section = "无痕"),
         SettingsSearchEntry("锁定词序", prediction, SettingsRoutes.SmartPrediction, "锁定词权 词权 词频 调频 固定 顺序 盲打 专业 不学习 候选顺序", section = "无痕"),
-        SettingsSearchEntry("显示自造词角标", prediction, SettingsRoutes.SmartPrediction, "自造词 编辑 角标 铅笔 图标 学到的词 用户词 隐藏", section = "无痕"),
+        SettingsSearchEntry("显示自造词角标", prediction, SettingsRoutes.SmartPrediction, "自造词 编辑 角标 圆点 小圆点 铅笔 图标 学到的词 用户词 隐藏", section = "无痕"),
         SettingsSearchEntry("用户学习数据", prediction, SettingsRoutes.SmartPrediction, "学习 记忆 个人语料 导出 导入 保存 统计 学习文件"),
         // 智能 › 语音转文本
         SettingsSearchEntry("屏蔽外放音", speech, SettingsRoutes.SpeechToText, "屏蔽 外放 压低音量 暂停播放 不屏蔽 静音 音乐 视频 媒体 声音 其他声音 音频焦点 录音 语音", section = "语音输入"),

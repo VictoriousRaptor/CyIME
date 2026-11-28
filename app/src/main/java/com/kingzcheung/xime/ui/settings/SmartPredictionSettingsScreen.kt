@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.twotone.Edit
+import androidx.compose.material.icons.twotone.FiberManualRecord
 import androidx.compose.material.icons.twotone.Lock
 import androidx.compose.material.icons.twotone.VisibilityOff
 import androidx.compose.material3.Button
@@ -259,12 +259,12 @@ fun SmartPredictionSettingsContent(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
-                    // 自造词角标（用户 11-19 要开关，默认显示，同以前）：关掉只是候选上不画小铅笔，照常学习。
+                    // 自造词角标（用户 11-19 要开关，默认显示，同以前）：关掉只是候选上不画角标，照常学习。角标 11-25 从小铅笔改成实心小圆点（cc17f3c0f），这里的图标和说明跟着改。
                     var showLearnedMark by remember { mutableStateOf(SettingsPreferences.showLearnedMark(context)) }
                     SettingsToggleItem(
-                        icon = Icons.TwoTone.Edit,
+                        icon = Icons.TwoTone.FiberManualRecord,
                         title = "显示自造词角标",
-                        subtitle = "学到的词在候选右上角显示小铅笔",
+                        subtitle = "学到的词在候选右上角显示小圆点",
                         checked = showLearnedMark,
                         onCheckedChange = {
                             showLearnedMark = it

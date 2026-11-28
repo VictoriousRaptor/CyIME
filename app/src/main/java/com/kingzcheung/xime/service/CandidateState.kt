@@ -12,6 +12,8 @@ data class CandidateState(
     val hasPrevPage: Boolean = false,
     val associationCandidates: List<String> = emptyList(),
     val pendingEnglishText: String = "",
+    /** Hold the idle toolbar until the first English completion lookup finishes. */
+    val englishFirstCompletionPending: Boolean = false,
     /** 刚由滑行整词上屏的词；光标仍紧跟它时，下一个点按字母先补空格。 */
     val glidedWord: String = "",
     val isShowingRecentClipboard: Boolean = false,

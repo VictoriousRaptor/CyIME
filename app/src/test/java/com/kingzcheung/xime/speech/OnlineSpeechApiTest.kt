@@ -28,6 +28,21 @@ class OnlineSpeechApiTest {
         assertFalse(OnlineSpeechApi.isTokenHub("https://api.openai.com/v1"))
     }
 
+    @Test fun `DeepSeek 语音识别：地址原样用、只传 file、读顶层 text`() {
+        val url = OnlineSpeechApi.DEEPSEEK_ASR_URL
+        assertEquals(url, OnlineSpeechApi.endpoint(url))
+        assertEquals(url, OnlineSpeechApi.endpoint("$url/"))
+        assertTrue(OnlineSpeechApi.isDeepSeekAsr(url))
+        assertFalse(OnlineSpeechApi.isDeepSeekAsr("https://api.deepseek.com/v1"))
+        assertNull(OnlineSpeechApi.chatFallback(url))
+        val body = OnlineSpeechApi.deepSeekBody(OnlineSpeechApi.wav(ByteArray(320)))
+        assertEquals(1, body.size)
+        assertTrue(body.part(0).headers!!["Content-Disposition"]!!.contains("name=\"file\""))
+        assertEquals("转写结果", OnlineSpeechApi.extractText(
+            JSONObject("""{"request_id":"r1","text":"转写结果","duration_ms":1200}"""), 0))
+        assertEquals("", OnlineSpeechApi.extractText(JSONObject("""{"request_id":"r2","text":"","duration_ms":1000}"""), 0))
+    }
+
     @Test fun `返回里的文字：OpenAI text、腾讯 output text、句子列表`() {
         assertEquals("你好", OnlineSpeechApi.extractText(JSONObject("""{"text":"你好"}"""), 0))
         assertEquals("测试一下", OnlineSpeechApi.extractText(JSONObject("""{"status":"completed","output":{"text":"测试一下"}}"""), 0))

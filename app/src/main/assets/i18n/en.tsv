@@ -4069,7 +4069,7 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 安装或启停方案后自动生效。	Changes take effect automatically after installing or toggling schemes.
 按键边缘像透镜，带一点彩虹色。	Key edges act like a lens with a hint of rainbow.
 透镜更宽，彩虹色和高光更明显。	A wider lens with stronger rainbow and highlights.
-学到的词在候选右上角显示小铅笔	Show a small pencil at the top right of learned words
+学到的词在候选右上角显示小圆点	Show a small dot at the top right of learned words
 发完消息后在同一个输入框里接着听	Keep listening in the same text field after you send a message
 暂停播放：有的应用说完后不会接着放，这时选「压低音量」。	Pause: some apps don't resume afterwards; choose “Lower volume” for those.
 键盘变成半透明玻璃，换主题时保留	Makes the keyboard frosted glass; kept when you switch themes
@@ -4108,7 +4108,10 @@ Rime 官方五笔86，支持拼音反查。	Official Rime Wubi 86 with pinyin lo
 上下滑输入符号的距离：{0} dp	Swipe distance for symbols: {0} dp
 上下滑输入符号的距离	Swipe distance for symbols
 长句拖选改局部	Drag to edit long sentences
-首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除	When the first candidate is over 6 characters, hold and drag across part of it to change only that part; holding without dragging still opens pin and delete
+首选有 5 个字以上时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除	When the first candidate has 5 or more characters, hold and drag across part of it to change only that part; holding without dragging still opens pin and delete
+，其中 {0} 个没写拼音，按内置词库注上	; {0} had no pinyin and were read from the built-in dictionary
+，{0} 个单字内置词库里已有	; {0} single characters are already in the built-in dictionary
+，跳过 {0} 行（读不出拼音）	, {0} lines skipped (no pinyin could be found)
 自动识别语音语言	Detect spoken language automatically
 开启后可输入粤语，关闭时使用普通话	Enable for Cantonese dictation. Turn off to use Mandarin.
 仅普通话和英语用 X-ASR 定稿；检测到粤语等其他语言时，整次录音保留首遍文字	X-ASR finalizes Mandarin and English. If another language is detected, the entire recording keeps its first transcript.

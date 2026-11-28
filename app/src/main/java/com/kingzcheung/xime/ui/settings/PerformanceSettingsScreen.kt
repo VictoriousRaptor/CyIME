@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.twotone.BatterySaver
 import androidx.compose.material.icons.twotone.Speed
 import androidx.compose.material.icons.twotone.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -151,6 +152,11 @@ private val ladder = listOf(PerformanceTier.LOW, PerformanceTier.MEDIUM, Perform
 @Composable
 fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit)? = null) {
     val context = LocalContext.current
+    // 只在小米、vivo、OPPO、华为、荣耀上有（其余为 null）；读系统属性，进页面算一次。
+    val backgroundSteps = remember {
+        com.kingzcheung.xime.platform.OemBackgroundGuide.steps(
+            com.kingzcheung.xime.platform.AndroidPlatform.vendor, com.kingzcheung.xime.platform.AndroidPlatform.rom)
+    }
     val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(PerformanceProfile.read(context)) }
     var auto by remember { mutableStateOf(PerformanceProfile.isAuto(context)) }
@@ -286,6 +292,15 @@ fun PerformanceSettingsContent(onBack: () -> Unit, onOpenSetupGuide: (() -> Unit
                         subtitle = cpuLine(device.cpu, cpuSkipped, cpuRunning, cpuRetested),
                         status = if (cpuRunning) null else "重测",
                         onClick = { if (!cpuRunning) measureCpu(force = true) })
+                }
+            }
+            // 小米、vivo、OPPO、华为、荣耀会把后台的输入法也杀掉（OPPO 划掉卡片就停），带用户去系统白名单页，见 OemBackgroundGuide。
+            backgroundSteps?.let { steps ->
+                item {
+                    SettingsSection(title = "后台") {
+                        SettingsItem(icon = Icons.TwoTone.BatterySaver, title = "防止被系统清理", subtitle = steps,
+                            onClick = { com.kingzcheung.xime.platform.OemBackgroundGuide.open(context) }, showArrow = true)
+                    }
                 }
             }
             if (speech) item {

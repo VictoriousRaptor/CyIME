@@ -54,12 +54,17 @@ internal fun commitEnglishLetter(
     // ß 没有单个大写字母（uppercase 是 SS）：Shift 时照旧打 ß。
     val text = if (shifted) key.uppercase().takeIf { it.length == 1 } ?: key else key.lowercase()
     if (!commit(if (afterGlide) " $text" else text)) return null
+    val supportsCompletion = replaceSupported()
+    val pending = (if (afterGlide) "" else state.pendingEnglishText) + text
     return state.copy(
         inputText = "", preeditText = "", isComposing = false,
         candidates = emptyList(), candidateComments = emptyList(), candidateActions = emptyList(),
-        pendingEnglishText = (if (afterGlide) "" else state.pendingEnglishText) + text, glidedWord = "",
-        // Deliver the letter before asking the host about optional completion support.
-        associationCandidates = emptyList(), englishReplaceSupported = replaceSupported(),
+        pendingEnglishText = pending, glidedWord = "",
+        // 接着打同一个词：新补全回来前先留着仍对得上的旧补全，不清空重填（#467 连打连删候选闪）。
+        associationCandidates = if (!afterGlide && state.pendingEnglishText.isNotEmpty() && supportsCompletion &&
+            !EmailSuffixes.isSuggestionList(state.associationCandidates))
+            state.associationCandidates.filter { it.startsWith(pending, ignoreCase = true) } else emptyList(),
+        englishReplaceSupported = supportsCompletion,
         englishCompletionOff = !completionOn,
         hasNextPage = false, hasPrevPage = false, isShowingRecentClipboard = false,
     )

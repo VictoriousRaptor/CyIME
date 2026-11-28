@@ -73,11 +73,38 @@ internal fun strokeInlineContent(color: Color): Map<String, InlineTextContent> =
     }
 }
 
+/**
+ * 笔画键帽上的 一丨丿丶乛 也自己画（11-26 群友截图：新版键帽笔画又细又不统一，乛特别细，要回到粗而统一的样子）。
+ * 键帽字原来交给系统字体，各家手机字体里这五个字粗细、大小不一样；这里和编码条用同一套笔形，线宽加粗到
+ * 和键面汉字的笔画看着一样重。键帽上整个标签就是这一笔时才画，键上的值、读屏文字不变。
+ */
+private val KEYCAP_STROKES = mapOf('一' to "h", '丨' to "s", '丿' to "p", '丶' to "n", '乛' to "z")
+private const val KEYCAP_INLINE_ID = "cyime-keycap-stroke"
+/** 键帽那一格：约一个汉字大小（0.86em 见方），线宽 0.14em。 */
+private const val KEYCAP_CELL = 0.86f
+private const val KEYCAP_STROKE_WIDTH = 0.14f / KEYCAP_CELL
+
+/** 标签整个是一笔时返回画成笔画用的文字（字符不变，只换成占位）；不是时 null，照字体显示。 */
+internal fun keycapStrokeLabel(label: AnnotatedString): AnnotatedString? {
+    if (label.length != 1 || label[0] !in KEYCAP_STROKES) return null
+    return buildAnnotatedString { appendInlineContent(KEYCAP_INLINE_ID, label.text) }
+}
+
+/** 和 [keycapStrokeLabel] 配套的 inlineContent；[label] 是那一笔原来的字。 */
+@Composable
+internal fun keycapStrokeInlineContent(label: String, color: Color): Map<String, InlineTextContent> = remember(label, color) {
+    val kind = label.singleOrNull()?.let { KEYCAP_STROKES[it] }
+    if (kind == null) emptyMap() else mapOf(KEYCAP_INLINE_ID to InlineTextContent(
+        Placeholder(KEYCAP_CELL.em, KEYCAP_CELL.em, PlaceholderVerticalAlign.Center)) {
+        Canvas(Modifier.fillMaxSize()) { drawStroke(kind, color, KEYCAP_STROKE_WIDTH) }
+    })
+}
+
 /** 一格里画一笔（坐标按格子宽高的比例）。所有笔画同一线宽、圆头，看着是同一种字。 */
-internal fun DrawScope.drawStroke(kind: String, color: Color) {
+internal fun DrawScope.drawStroke(kind: String, color: Color, widthRatio: Float = STROKE_WIDTH) {
     val w = size.width
     val h = size.height
-    val line = Stroke(width = h * STROKE_WIDTH, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val line = Stroke(width = h * widthRatio, cap = StrokeCap.Round, join = StrokeJoin.Round)
     fun p(x: Float, y: Float) = Offset(w * x, h * y)
     when (kind) {
         // 横：一格正中（和小写字母的中线差不多高）。

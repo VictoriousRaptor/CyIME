@@ -1133,9 +1133,12 @@ fun KeyboardLayout(
                     }
                     // 逗号键分词：有逗号键放逗号键左下角，只开句号键放句号键。
                     val (leftSplit, rightSplit) = syllableSplitOnPunctuation(syllableSplit || apostropheKey, leftPunctuation, rightPunctuation)
+                    // 注音键盘长按逗号出配置里的标点气泡；气泡里写什么就原样上屏什么。
+                    val commaLongPress = zhuyinCommaLongPressItems(zhuyin, isAsciiMode, KeysConfigHelper.getKeyGesture("'", isAsciiMode))
                     @Composable
                     fun RowScope.PunctuationKey(key: SpacePunctuationKey, tag: String, split: Boolean = false,
-                        colors: KeyboardKeyColors = KeyboardKeyColors(keyBackgroundColor, keyTextColor)) =
+                        colors: KeyboardKeyColors = KeyboardKeyColors(keyBackgroundColor, keyTextColor),
+                        longPress: List<String>? = null) =
                         // 主副字符已按全角/半角写定并原样上屏；键面不能再转一次，否则角标与副字符的宽度相反。
                         CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
                         SwipeableKeyButton(
@@ -1158,6 +1161,11 @@ fun KeyboardLayout(
                             onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
                             onPress = { onKeyPressDown?.invoke(key.primary) },
                             onRelease = { onKeyRelease?.invoke(key.primary) },
+                            onLongPressSelect = if (longPress == null) null else { label ->
+                                (callbacks.onCommitExactText ?: onCommitText ?: onKeyPress)(label)
+                            },
+                            longPressItems = longPress,
+                            longPressMenuFirst = longPress != null,
                             shadowEnabled = shadowEnabled,
                             shadowElevation = shadowElevation,
                             shadowShapeRadius = shadowShapeRadius,
@@ -1350,7 +1358,7 @@ fun KeyboardLayout(
                                                         onCtrlShortcut = { letter -> onGestureAction(GestureAction.COMMAND,
                                                             com.kingzcheung.xime.keyboard.CtrlShortcuts.command(letter)) },
                                                     )
-                                                    QwertyBottomKey.COMMA -> leftPunctuation?.let { PunctuationKey(it, "qwerty-punctuation-key", leftSplit, colors) }
+                                                    QwertyBottomKey.COMMA -> leftPunctuation?.let { PunctuationKey(it, "qwerty-punctuation-key", leftSplit, colors, commaLongPress) }
                                                     QwertyBottomKey.PERIOD -> rightPunctuation?.let { PunctuationKey(it, "qwerty-period-key", rightSplit, colors) }
                                                     QwertyBottomKey.LANGUAGE -> LanguageKey(colors)
                                                     QwertyBottomKey.ENTER -> EnterKey(colors)
@@ -1397,7 +1405,7 @@ fun KeyboardLayout(
                             }
                             if (languageOnLeft) LanguageKey()
 
-                            if (leftPunctuation != null) PunctuationKey(leftPunctuation, "qwerty-punctuation-key", leftSplit)
+                            if (leftPunctuation != null) PunctuationKey(leftPunctuation, "qwerty-punctuation-key", leftSplit, longPress = commaLongPress)
                             else if (commaOnLeft) {
                             // 逗号 — 从配置读取 "'"
                             val k2KeyGesture = KeysConfigHelper.getKeyGesture("'", isAsciiMode)

@@ -2,6 +2,7 @@ package com.kingzcheung.xime.ui.keyboard
 
 import androidx.compose.ui.text.AnnotatedString
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -23,5 +24,15 @@ class StrokeGlyphInlineTest {
         assertSame(letters, letters.withDrawnStrokes(true))           // 笔画显示关着：字母和 * 照字体
         val glyphs = AnnotatedString("⼀⼁*")
         assertSame(glyphs, glyphs.withDrawnStrokes(false))           // 不是笔画方案
+    }
+
+    /** 11-26：笔画键帽的 一丨丿丶乛 也自己画，键上的字不变；别的标签照字体。 */
+    @Test fun keycapStrokesAreDrawnOnlyWhenTheWholeLabelIsOneStroke() {
+        for (label in listOf("一", "丨", "丿", "丶", "乛")) {
+            val drawn = keycapStrokeLabel(AnnotatedString(label))!!
+            assertEquals(label, drawn.text)
+            assertEquals(1, drawn.getStringAnnotations(inlineTag, 0, drawn.length).size)
+        }
+        for (label in listOf("分词", "*", "一二", "⼀", "h", "")) assertNull(label, keycapStrokeLabel(AnnotatedString(label)))
     }
 }

@@ -14,7 +14,7 @@ import java.text.Normalizer
  * dictionary snapshots (`ni hao<TAB>你好<TAB>c=3 d=0.9 t=12`). Fields are
  * separated by tabs, spaces or commas; pinyin may be written with spaces, apostrophes or run
  * together (nihao). A count column is ignored: every word gets the same weight as SCEL imports.
- * Lines without pinyin are skipped and counted. UTF-8, UTF-16 (with BOM) and GB18030 are read.
+ * Lines without pinyin are skipped and counted, unless an [Annotator] reads them from the built-in dictionary. UTF-8, UTF-16 (with BOM) and GB18030 are read.
  * A line without Chinese characters is an English word (`Ame`, `Team Spirit`, `Ame<TAB>ame<TAB>100`): its text
  * before the first tab, kept as written, goes to the English candidates of every keyboard.
  * Tone marks are read too (万象 writes `阿爸<TAB>ā bà<TAB>716`). The file is read line by line, never whole: 万象's base
@@ -27,8 +27,17 @@ object TxtCellDictionary {
     const val MAX_BYTES = 128 * 1024 * 1024
     const val MAX_ENTRIES = 2_000_000
 
-    /** [stroke]：笔画词库的词（「词 笔画编码」，没有拼音），只给笔画方案用（[StrokeCellDictionary]）。 */
-    data class Summary(val count: Int, val skipped: Int, val english: List<String>, val stroke: Int = 0)
+    /**
+     * [stroke]：笔画词库的词（「词 笔画编码」，没有拼音），只给笔画方案用（[StrokeCellDictionary]）。
+     * [annotated]：没写拼音、按内置词库注上的词（已算在 [count] 里）；[known]：内置词库里本来就有的单字，不重复导入。
+     */
+    data class Summary(val count: Int, val skipped: Int, val english: List<String>, val stroke: Int = 0,
+        val annotated: Int = 0, val known: Int = 0)
+
+    /** 没写拼音的词按内置词库注音（[PinyinAnnotation]）：给要查的文字，返回它们在词库里的读音。 */
+    fun interface Annotator { fun readings(wanted: Set<String>): Map<String, String> }
+
+    private val chinese = Regex("[㐀-䶿一-鿿]{1,32}")
 
     fun parse(bytes: ByteArray): ScelDictionary.Parsed {
         require(bytes.size <= MAX_BYTES) { "词库超过 128 MB，请拆分后导入" }
@@ -44,7 +53,8 @@ object TxtCellDictionary {
      * once, in file order. Duplicates are found by a 64-bit key, so 1.5 million words take 16 MB, not a map of all.
      * A line with no pinyin but a stroke code (`猫娘 pz`, h s p n z) goes to [stroke] once instead of being skipped.
      */
-    fun read(open: () -> InputStream, stroke: (String) -> Unit = {}, sink: (DictEntry) -> Unit): Summary {
+    fun read(open: () -> InputStream, stroke: (String) -> Unit = {}, annotator: Annotator? = null,
+             sink: (DictEntry) -> Unit): Summary {
         val (charset, bom) = charset(open)
         // A Rime .dict.yaml: only the entries after its header, the first "..." line after line one.
         var header = -1
@@ -53,6 +63,9 @@ object TxtCellDictionary {
         val english = LinkedHashSet<String>()
         val strokeSeen = LongSet()
         var skipped = 0
+        // 有 [annotator] 时，读不出拼音的中文词和单字先记下，读完再按内置词库一起注音（11-26）。
+        val pending = LinkedHashSet<String>()
+        val singleCodes = HashMap<String, String>()
         lines(open, charset, bom) { index, raw ->
             if (index <= header) return@lines
             val line = raw.trim()
@@ -62,16 +75,51 @@ object TxtCellDictionary {
             val entry = parseLine(line)
             if (entry == null) {
                 val strokeWord = strokeWord(line)
-                if (strokeWord == null) skipped++ else if (strokeSeen.add(key(strokeWord, "\u0001"))) stroke(strokeWord)
+                if (strokeWord != null) {
+                    if (strokeSeen.add(key(strokeWord, "\u0001"))) stroke(strokeWord)
+                    return@lines
+                }
+                val text = if (annotator == null) null else chineseText(line)
+                if (text == null) { skipped++; return@lines }
+                pending += text
+                if (text.length == 1) singleCode(line, text)?.let { singleCodes[text] = it }
+                require(seen.size + pending.size + english.size + strokeSeen.size <= MAX_ENTRIES) { "词库超过 200 万条词语，请拆分后导入" }
                 return@lines
             }
             if (seen.add(key(entry.word, entry.code))) sink(entry)
             require(seen.size + english.size + strokeSeen.size <= MAX_ENTRIES) { "词库超过 200 万条词语，请拆分后导入" }
         }
-        require(seen.size > 0 || english.isNotEmpty() || strokeSeen.size > 0) {
+        var annotated = 0
+        var known = 0
+        if (pending.isNotEmpty() && annotator != null) {
+            val readings = annotator.readings(PinyinAnnotation.wanted(pending))
+            for (text in pending) {
+                // 单字：内置词库里有的不再导入一份（导入的权重会把生僻读音、生僻字顶上来）；没有的照文件写的拼音导入。
+                val code = if (text.length == 1) {
+                    if (text in readings) { known++; continue }
+                    singleCodes[text]
+                } else PinyinAnnotation.annotate(text, readings)?.also { annotated++ }
+                if (code == null) { skipped++; continue }
+                if (seen.add(key(text, code))) sink(DictEntry(text, code, 100))
+            }
+        }
+        require(seen.size > 0 || english.isNotEmpty() || strokeSeen.size > 0 || known > 0) {
             "没有读到带拼音或笔画编码的词条（每行“词 拼音”“拼音 词”或“词 笔画编码”）"
         }
-        return Summary(seen.size, skipped, english.toList(), strokeSeen.size)
+        return Summary(seen.size, skipped, english.toList(), strokeSeen.size, annotated, known)
+    }
+
+    /** 行里的中文词（一到 32 个字），没有是 null。 */
+    private fun chineseText(line: String): String? =
+        line.split('\t', ' ', ',', '，', '(', ')', '|').firstOrNull { chinese.matches(it) }
+
+    /** 单字行写的拼音（`沢 ze`），读不出一个音节是 null。 */
+    private fun singleCode(line: String, text: String): String? {
+        val fields = line.split('\t', ' ', ',', '，', '(', ')', '|').filter { it.isNotEmpty() && !notPinyin.matches(it) }
+        val pinyin = toneless(fields.filter { it != text && it.any(Char::isLetter) }.joinToString(" ").lowercase())
+            .replace('ü', 'v').replace("u:", "v")
+        if (pinyin.isEmpty() || !letters.matches(pinyin)) return null
+        return syllables(pinyin, 1)
     }
 
     private val latin = Regex("[A-Za-z0-9][A-Za-z0-9 '._&+-]{0,62}")

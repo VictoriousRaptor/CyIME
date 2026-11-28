@@ -104,7 +104,7 @@ data class KeyboardInputPreferences(
     val showPreeditPreview: Boolean = true,
     /** 候选滑到头回弹展开（默认关）：关着时展开页里左右划不收回，同 1.15.101，见 [SettingsPreferences.isCandidateSwipeExpand]。 */
     val candidateSwipeExpand: Boolean = false,
-    /** 首选上拖选改局部（默认开，只对超过 6 个字的首选），见 [SettingsPreferences.isSentenceDragEdit]。 */
+    /** 首选上拖选改局部（默认开，只对 5 个字以上的首选），见 [SettingsPreferences.isSentenceDragEdit]。 */
     val sentenceDragEdit: Boolean = true,
     val inputTextLocation: String = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR,
     /** 「显示在候选栏」时拼音的位置，见 [SettingsPreferences.preeditStyle]。 */

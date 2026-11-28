@@ -20,6 +20,13 @@ internal object ZhuyinKeys {
      */
     fun isHardwareSymbolCode(key: String): Boolean = key.length == 1 && key[0] in "1234567890,./;-"
 
+    /**
+     * 屏幕键盘打字中按回车是不是上屏高亮的候选（同实体键盘回车、Rime 注音、Gboard 注音）：注音、在打字、有候选。
+     * 没有候选（方案没转出来）时照旧上屏屏上的注音符号，见 rawCompositionCommitText。
+     */
+    fun enterSelectsCandidate(zhuyin: Boolean, composing: Boolean, candidateCount: Int): Boolean =
+        zhuyin && composing && candidateCount > 0
+
     /** 声调只跟在音节后面：没打字、刚打过声调或分隔符时不收。 */
     fun takesTone(input: String): Boolean = input.isNotEmpty() && input.last() !in TONES && input.last() != '\''
 }

@@ -545,23 +545,41 @@ object SchemaManager {
             return sb.toString()
         }
 
-        // 吃掉紧跟其后的列表项行；保留缩进风格（默认两空格）
-        var j = headerIdx + 1
-        var indent = lines[headerIdx].takeWhile { it == ' ' || it == '\t' } + "  "
-        var first = true
-        while (j < lines.size && lines[j].trimStart().startsWith("-")) {
-            if (first) {
-                indent = lines[j].takeWhile { it == ' ' || it == '\t' }.ifEmpty { "  " }
-                first = false
+        // 吃掉整个 schema_list 块：用户手工改过的文件里，列表项之间或开头可能有注释、空行，
+        // 只吃连续的 "-" 行会把注释后面的旧方案留下，停用方案就成了关不掉的。
+        // 最后一个列表项之后的空行、注释原样保留，不动别的节。
+        val headerIndent = lines[headerIdx].takeWhile { it == ' ' || it == '\t' }
+        var scan = headerIdx + 1
+        var firstItem = -1
+        var lastItem = -1
+        while (scan < lines.size) {
+            val line = lines[scan]
+            val trimmed = line.trim()
+            val indent = line.takeWhile { it == ' ' || it == '\t' }
+            when {
+                trimmed.startsWith("-") -> {
+                    if (firstItem < 0) firstItem = scan
+                    lastItem = scan
+                }
+                // 块里的空行、注释；块尾的也先扫过去，下面按 lastItem 决定替换到哪。
+                trimmed.isEmpty() || trimmed.startsWith("#") -> Unit
+                // 列表项的续行（比 schema_list: 缩进更深）
+                indent.length > headerIndent.length -> Unit
+                else -> break
             }
-            j++
+            scan++
         }
+        // 保留原有列表项的缩进风格（默认比 schema_list: 多两格）
+        val listIndent = if (firstItem >= 0) {
+            lines[firstItem].takeWhile { it == ' ' || it == '\t' }.ifEmpty { "$headerIndent  " }
+        } else "$headerIndent  "
 
         val rebuilt = buildList {
-            add(lines[headerIdx].takeWhile { it == ' ' || it == '\t' } + "schema_list:")
-            enabled.forEach { add("$indent- schema: $it") }
+            add(headerIndent + "schema_list:")
+            enabled.forEach { add("$listIndent- schema: $it") }
         }
-        return (lines.subList(0, headerIdx) + rebuilt + lines.subList(j, lines.size))
+        val end = if (lastItem >= 0) lastItem + 1 else headerIdx + 1
+        return (lines.subList(0, headerIdx) + rebuilt + lines.subList(end, lines.size))
             .joinToString(sep)
     }
 

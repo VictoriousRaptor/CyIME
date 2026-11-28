@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit
  * 接口按地址和模型区分：OpenAI 兼容 `/audio/transcriptions`（OpenAI、Groq、硅基流动等，multipart 上传），
  * 对话接口带音频 `/chat/completions`（小米 MiMo mimo-v2.5-asr、阿里 qwen3-asr：音频 Base64 放进 input_audio，文字在 choices[0].message.content），
  * 腾讯 TokenHub 同步语音识别（地址含 /asrproxy/ 或以 sync_transcribe 结尾，JSON 上传 Base64 WAV，文字在 output.text），
- * 火山引擎(豆包)语音识别（地址是 openspeech.bytedance.com 或 wss:// 开头，见 [VolcengineSpeechApi]）。
+ * 火山引擎(豆包)语音识别（地址是 openspeech.bytedance.com 或 wss:// 开头，见 [VolcengineSpeechApi]），
+ * DeepSeek 语音识别（地址以 /tools/asr 结尾：multipart 只传 file，不传模型和语种，文字在 text）。
  * 配置单独存一个设置文件：不进备份，密钥只留在本机。
  */
 object OnlineSpeechApi {
@@ -58,7 +59,17 @@ object OnlineSpeechApi {
         Preset("阿里百炼", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3-asr-flash"),
         Preset("腾讯 TokenHub", "https://tokenhub.tencentmaas.com/v1/wand/asrproxy/sync_transcribe", "hy-asr-3.0-preview"),
         Preset("火山引擎（豆包）", "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async", VolcengineSpeechApi.DEFAULT_STREAM_RESOURCE),
+        // DeepSeek 语音识别没有模型名：模型一栏留空（11-26 用户要的预设）。
+        Preset("DeepSeek", DEEPSEEK_ASR_URL, ""),
     )
+
+    const val DEEPSEEK_ASR_URL = "https://api.deepseek.com/v1/tools/asr"
+
+    /**
+     * DeepSeek 语音识别（POST …/v1/tools/asr）：multipart 只有 file 一个字段（16 位 PCM WAV 或 Ogg Opus，最大 8 MiB），
+     * 没有模型、语种参数，回包 {request_id, text, duration_ms}。按地址认，不靠 OpenAI 的 /audio/transcriptions 后缀。
+     */
+    internal fun isDeepSeekAsr(url: String): Boolean = url.trim().trimEnd('/').lowercase().endsWith("/tools/asr")
 
     private val client by lazy {
         OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
@@ -72,7 +83,8 @@ object OnlineSpeechApi {
     fun config(context: Context): Config = prefs(context).let {
         Config(it?.getString(KEY_BASE_URL, null)?.let(::cleanUrl)?.takeIf { url -> url.isNotBlank() } ?: DEFAULT_BASE_URL,
             cleanToken(it?.getString(KEY_API_KEY, "").orEmpty()),
-            it?.getString(KEY_MODEL, null)?.let(::cleanToken)?.takeIf { model -> model.isNotBlank() } ?: DEFAULT_MODEL,
+            it?.getString(KEY_MODEL, null)?.let(::cleanToken)?.takeIf { model -> model.isNotBlank() }
+                ?: if (isDeepSeekAsr(it?.getString(KEY_BASE_URL, null).orEmpty())) "" else DEFAULT_MODEL,
             cleanToken(it?.getString(KEY_APP_ID, "").orEmpty()),
             it?.getString("body_template", "").orEmpty(), it?.getString("text_path", "").orEmpty())
     }
@@ -163,14 +175,14 @@ object OnlineSpeechApi {
     internal fun endpoint(baseUrl: String, model: String = ""): String {
         if (VolcengineSpeechApi.isVolcengine(baseUrl)) return VolcengineSpeechApi.endpoint(baseUrl)
         val url = baseUrl.trim().trimEnd('/')
-        if (isTokenHub(url) || url.endsWith("/audio/transcriptions") || url.endsWith("/chat/completions")) return url
+        if (isTokenHub(url) || isDeepSeekAsr(url) || url.endsWith("/audio/transcriptions") || url.endsWith("/chat/completions")) return url
         return if (isChatAudio(url, model)) "$url/chat/completions" else "$url/audio/transcriptions"
     }
 
     /** OpenAI 式地址 404 时，同一前缀换成对话接口再试一次（用户填到 /v1 为止时才试）。 */
     internal fun chatFallback(baseUrl: String): String? {
         val url = baseUrl.trim().trimEnd('/')
-        if (isTokenHub(url) || url.endsWith("/audio/transcriptions") || url.endsWith("/chat/completions")) return null
+        if (isTokenHub(url) || isDeepSeekAsr(url) || url.endsWith("/audio/transcriptions") || url.endsWith("/chat/completions")) return null
         return "$url/chat/completions"
     }
 
@@ -274,6 +286,8 @@ object OnlineSpeechApi {
             isTokenHub(url) -> JSONObject().put("model", config.model).put("data", Base64.getEncoder().encodeToString(wav))
                 .put("voice_encode_format", "wav").toString().toRequestBody("application/json".toMediaType())
             chat -> chatAudioBody(config.model, wav, language).toString().toRequestBody("application/json".toMediaType())
+            // DeepSeek：文档只列 file 一个字段，不多传 model、language、response_format。
+            isDeepSeekAsr(url) -> deepSeekBody(wav)
             else -> MultipartBody.Builder().setType(MultipartBody.FORM)
                 .addFormDataPart("model", config.model)
                 .addFormDataPart("response_format", "json")
@@ -310,6 +324,11 @@ object OnlineSpeechApi {
             return (extractText(json, 0) ?: if (json.optString("status") == "completed") "" else error("接口返回的格式看不懂")).trim()
         }
     }
+
+    /** DeepSeek 语音识别的请求体：只有 file。 */
+    internal fun deepSeekBody(wav: ByteArray): MultipartBody = MultipartBody.Builder().setType(MultipartBody.FORM)
+        .addFormDataPart("file", "speech.wav", wav.toRequestBody("audio/wav".toMediaType()))
+        .build()
 
     private fun httpError(code: Int, detail: String?): String {
         val base = when (code) {

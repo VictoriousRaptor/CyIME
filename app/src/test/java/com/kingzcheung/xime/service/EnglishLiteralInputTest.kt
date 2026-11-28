@@ -5,6 +5,19 @@ import org.junit.Test
 import org.mockito.kotlin.*
 
 class EnglishLiteralInputTest {
+    @Test fun continuingAWordKeepsCompletionsUntilReplacementArrives() {
+        val state = CandidateState(pendingEnglishText = "he", associationCandidates = listOf("hello", "help"))
+        val next = requireNotNull(commitEnglishLetter(state, "l", false, { true }) { true })
+        assertEquals("hel", next.pendingEnglishText)
+        assertEquals(state.associationCandidates, next.associationCandidates)
+        val mixed = CandidateState(pendingEnglishText = "i", associationCandidates = listOf("information", "is"))
+        val narrowed = requireNotNull(commitEnglishLetter(mixed, "n", false, { true }) { true })
+        assertEquals(listOf("information"), narrowed.associationCandidates)
+        val newWord = requireNotNull(commitEnglishLetter(state, "w", false, { true }, afterGlide = true) { true })
+        assertTrue(newWord.associationCandidates.isEmpty())
+        val unsupported = requireNotNull(commitEnglishLetter(state, "l", false, { false }) { true })
+        assertTrue(unsupported.associationCandidates.isEmpty())
+    }
     @Test fun sentenceCapsHonorsParagraphResponsesWithoutRequestingWordCapitalization() {
         val app = mock<android.content.Context>()
         val prefs = mock<android.content.SharedPreferences>()

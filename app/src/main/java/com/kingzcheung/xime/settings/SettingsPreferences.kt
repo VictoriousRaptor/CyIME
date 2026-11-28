@@ -611,7 +611,7 @@ object SettingsPreferences {
         getPrefs(context).edit().putBoolean(KEY_SHOW_CORRECTION_MARKS, show).apply()
     }
 
-    /** 学到的词在候选右上角画小铅笔，默认显示（用户 11-19 要一个开关）；关掉只是不画，照常学习。 */
+    /** 学到的词在候选右上角画小圆点（原来是小铅笔），默认显示（用户 11-19 要一个开关）；关掉只是不画，照常学习。 */
     fun showLearnedMark(context: Context): Boolean = getPrefs(context).getBoolean(KEY_SHOW_LEARNED_MARK, true)
 
     fun setShowLearnedMark(context: Context, show: Boolean) {
@@ -668,7 +668,7 @@ object SettingsPreferences {
 
     /**
      * 首选上按住拖选一段改局部。默认开（11-24 他先说默认关，当晚改成「局部修改开开默认打开 你只能在6个字以上生效」），
-     * 只在首选超过 6 个字时接拖选，按住不拖照旧出调词频、固定、删除的卡片；关着时长按首选和别的候选一样。
+     * 只在首选满 5 个字时接拖选（11-26 从超过 6 个字放宽），按住不拖照旧出调词频、固定、删除的卡片；关着时长按首选和别的候选一样。
      */
     fun isSentenceDragEdit(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_SENTENCE_DRAG_EDIT, true)

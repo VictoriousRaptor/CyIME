@@ -56,4 +56,10 @@ local function cyime_acronym_filter(input, env)
     end
 end
 
-return cyime_acronym_filter
+-- 只有一到三个小写字母的输入才做事（见上），其余输入让 Rime 整个跳过这个滤镜，不进 Lua 循环。
+local function tags_match(seg, env)
+    local code = env.engine.context.input
+    return code:match("^[a-hj-tw-z]$") ~= nil or code:match("^%l%l%l?$") ~= nil
+end
+
+return { func = cyime_acronym_filter, tags_match = tags_match }

@@ -108,6 +108,18 @@ class EnglishWordMemoryTest {
     }
 
     @Test
+    fun enterBringsBackADeletedWordEvenWhenItWasTheLastOneTyped() {
+        // 11-26 appointment：回车打过、又被删到后面，再回车打（和上一个记住的词一样）以前回不来。
+        val dir = tempDir.root
+        val file = File(dir, EnglishWordMemory.DEMOTED_FILE_NAME)
+        EnglishWordMemory.remember(dir, "appointment")
+        assertTrue(EnglishWordMemory.demote(dir, "appointment"))
+        EnglishWordMemory.remember(dir, "appointment")
+        assertEquals(emptyList<String>(), file.readLines())
+        assertEquals(listOf("appointment"), words(dir))
+    }
+
+    @Test
     fun backupIncludesTheWordFile() {
         assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.FILE_NAME))
         assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.DEMOTED_FILE_NAME))

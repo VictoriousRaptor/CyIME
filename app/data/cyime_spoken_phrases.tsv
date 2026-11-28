@@ -1152,3 +1152,303 @@
 讲作业	jiang zuo ye	500
 讲日语	jiang ri yu	500
 讲着讲着	jiang zhe jiang zhe	500
+# 口语正反问「x没x」（2026-11-25 他要：做没做、打没打、发没发，常用的尽量都列上）。雾凇里只有四十几个（做没做、打没打…），
+# 发没发、说没说、交没交、写没写、确没确认、同没同意 等没有，只能逐字拼（发没法、些没写、却没确认），九键也只能按字走。
+# 清单：电脑线程 xmeix-1125/phrases.txt 的 193 个，加上补的单字动词、形容词和「A没AB」「X没X+宾语」，共 453 个，去掉不自然的；
+# 按 107 的主词库逐字拼句模拟，只补首选会错的。没 一律读 mei，还 读 huan，系 读 ji。生成与审校：lexicon_source.py 的 zh_xmeix。
+# 权重按语料次数（v10 清洗后的语料，LCCC×3 + 五个新来源×3 + 字幕×1；xmeix-lex-1125/counts.tsv），整类同一个算法：
+#   1. 子串计数改成单独出现的次数：从长到短，减去表里包含它的更长 x没x 词的次数（上没上学呀 不再算进 上没上学）。
+#   2. 首字多音时乘这个读音在 8105 单字表里的占比（还没还 的「还没」多半读 hai，huan 只占 5.7%）；几个读音权重相同（没信息）的不乘。
+#   3. 换成原有 x没x 词的尺度：用词库原有的 484 个「X没X…」词拟合 权重 ≈ 41 ×（次数 + 1）^0.40（次数 0 → 41，20 → 137，500 → 488）。
+#   4. 和原有 x没x 词同键（九键数字或 14 键相同）时按次数排：次数不比原有词多（含两边都是 0 次）就排在原有词下面，多就排在上面。
+#      新词之间同键的也按次数排，次数相同按常用程度。原有词已经比算出来的高的（收没收、发没发货）不列。
+发没发	fa mei fa	223
+喝没喝	he mei he	271
+回没回	hui mei hui	237
+卖没卖	mai mei mai	113
+写没写	xie mei xie	210
+学没学	xue mei xue	345
+交没交	jiao mei jiao	165
+拿没拿	na mei na	233
+寄没寄	ji mei ji	113
+借没借	jie mei jie	89
+还没还	huan mei huan	212
+洗没洗	xi mei xi	242
+醒没醒	xing mei xing	152
+起没起	qi mei qi	132
+关没关	guan mei guan	188
+锁没锁	suo mei suo	132
+修没修	xiu mei xiu	147
+改没改	gai mei gai	235
+充没充	chong mei chong	89
+删没删	shan mei shan	154
+签没签	qian mei qian	106
+报没报	bao mei bao	132
+订没订	ding mei ding	71
+点没点	dian mei dian	206
+约没约	yue mei yue	122
+接没接	jie mei jie	123
+叫没叫	jiao mei jiao	89
+吵没吵	chao mei chao	71
+退没退	tui mei tui	113
+试没试	shi mei shi	9
+查没查	cha mei cha	150
+记没记	ji mei ji	147
+忘没忘	wang mei wang	271
+懂没懂	dong mei dong	180
+刷没刷	shua mei shua	147
+抢没抢	qiang mei qiang	156
+扔没扔	reng mei reng	71
+扫没扫	sao mei sao	71
+煮没煮	zhu mei zhu	41
+遇没遇	yu mei yu	18
+赶没赶	gan mei gan	71
+管没管	guan mei guan	113
+帮没帮	bang mei bang	150
+请没请	qing mei qing	102
+选没选	xuan mei xuan	117
+投没投	tou mei tou	183
+转没转	zhuan mei zhuan	140
+喂没喂	wei mei wei	71
+遛没遛	liu mei liu	41
+吹没吹	chui mei chui	123
+剪没剪	jian mei jian	202
+戴没戴	dai mei dai	165
+挂没挂	gua mei gua	172
+抽没抽	chou mei chou	197
+戒没戒	jie mei jie	41
+动没动	dong mei dong	212
+搬没搬	ban mei ban	89
+确没确认	que mei que ren	41
+通没通知	tong mei tong zhi	41
+认没认识	ren mei ren shi	63
+答没答应	da mei da ying	71
+告没告诉	gao mei gao su	137
+毕没毕业	bi mei bi ye	41
+上没上传	shang mei shang chuan	41
+安没安装	an mei an zhuang	71
+登没登录	deng mei deng lu	41
+注没注册	zhu mei zhu ce	41
+备没备份	bei mei bei fen	41
+保没保存	bao mei bao cun	41
+充没充值	chong mei chong zhi	41
+退没退款	tui mei tui kuan	41
+付没付款	fu mei fu kuan	41
+下没下单	xia mei xia dan	41
+复没复习	fu mei fu xi	71
+预没预约	yu mei yu yue	41
+报没报名	bao mei bao ming	41
+收没收拾	shou mei shou shi	41
+回没回复	hui mei hui fu	71
+签没签收	qian mei qian shou	41
+离没离婚	li mei li hun	98
+辞没辞职	ci mei ci zhi	41
+打没打扫	da mei da sao	41
+发没发烧	fa mei fa shao	41
+拉没拉黑	la mei la hei	102
+关没关注	guan mei guan zhu	41
+点没点赞	dian mei dian zan	41
+转没转发	zhuan mei zhuan fa	41
+解没解决	jie mei jie jue	88
+处没处理	chu mei chu li	41
+打没打印	da mei da yin	41
+加没加班	jia mei jia ban	41
+接没接受	jie mei jie shou	41
+商没商量	shang mei shang liang	41
+讨没讨论	tao mei tao lun	41
+参没参加	can mei can jia	116
+体没体检	ti mei ti jian	40
+核没核对	he mei he dui	41
+干没干	gan mei gan	176
+通没通	tong mei tong	102
+破没破	po mei po	140
+涨没涨价	zhang mei zhang jia	89
+降没降价	jiang mei jiang jia	41
+降没降温	jiang mei jiang wen	41
+到没到货	dao mei dao huo	41
+通没通过	tong mei tong guo	89
+批没批准	pi mei pi zhun	41
+审没审核	shen mei shen he	41
+开没开始	kai mei kai shi	89
+讲没讲	jiang mei jiang	161
+聊没聊	liao mei liao	71
+谈没谈	tan mei tan	161
+劝没劝	quan mei quan	41
+哄没哄	hong mei hong	71
+求没求	qiu mei qiu	9
+骗没骗	pian mei pian	123
+逗没逗	dou mei dou	71
+笑没笑	xiao mei xiao	161
+算没算	suan mei suan	206
+搞没搞	gao mei gao	159
+玩没玩	wan mei wan	226
+躺没躺	tang mei tang	30
+站没站	zhan mei zhan	117
+逛没逛	guang mei guang	89
+爬没爬	pa mei pa	89
+跳没跳	tiao mei tiao	140
+炒没炒	chao mei chao	41
+烤没烤	kao mei kao	41
+录没录	lu mei lu	387
+翻没翻	fan mei fan	154
+按没按	an mei an	89
+敲没敲	qiao mei qiao	71
+推没推	tui mei tui	77
+挤没挤	ji mei ji	71
+排没排	pai mei pai	71
+闹没闹	nao mei nao	131
+熬没熬	ao mei ao	123
+泡没泡	pao mei pao	41
+挑没挑	tiao mei tiao	41
+尝没尝	chang mei chang	113
+摸没摸	mo mei mo	71
+抱没抱	bao mei bao	135
+亲没亲	qin mei qin	41
+盯没盯	ding mei ding	41
+猜没猜	cai mei cai	102
+认没认	ren mei ren	167
+称没称	cheng mei cheng	41
+抄没抄	chao mei chao	202
+念没念	nian mei nian	89
+唱没唱	chang mei chang	126
+弹没弹	tan mei tan	71
+评没评	ping mei ping	41
+审没审	shen mei shen	41
+补没补	bu mei bu	147
+聚没聚	ju mei ju	41
+催没催	cui mei cui	102
+缴没缴	jiao mei jiao	68
+租没租	zu mei zu	17
+卸没卸	xie mei xie	41
+贴没贴	tie mei tie	161
+印没印	yin mei yin	71
+烧没烧	shao mei shao	140
+浇没浇	jiao mei jiao	70
+理没理	li mei li	161
+办没办	ban mei ban	123
+定没定	ding mei ding	154
+批没批	pi mei pi	41
+核没核	he mei he	70
+验没验	yan mei yan	70
+捡没捡	jian mei jian	69
+捐没捐	juan mei juan	132
+加没加	jia mei jia	178
+减没减	jian mei jian	140
+赔没赔	pei mei pei	132
+赚没赚	zhuan mei zhuan	71
+冲没冲	chong mei chong	88
+炖没炖	dun mei dun	41
+煎没煎	jian mei jian	41
+炸没炸	zha mei zha	102
+切没切	qie mei qie	113
+剥没剥	bo mei bo	41
+叠没叠	die mei die	41
+摘没摘	zhai mei zhai	41
+脱没脱	tuo mei tuo	123
+系没系	ji mei ji	70
+扣没扣	kou mei kou	106
+拆没拆	chai mei chai	140
+封没封	feng mei feng	54
+提没提	ti mei ti	145
+满没满	man mei man	102
+齐没齐	qi mei qi	113
+饱没饱	bao mei bao	71
+醉没醉	zui mei zui	212
+胖没胖	pang mei pang	331
+成没成	cheng mei cheng	172
+红没红	hong mei hong	102
+湿没湿	shi mei shi	8
+烫没烫	tang mei tang	123
+刷没刷牙	shua mei shua ya	41
+回没回家	hui mei hui jia	113
+打没打卡	da mei da ka	71
+签没签到	qian mei qian dao	71
+打没打针	da mei da zhen	89
+关没关门	guan mei guan men	132
+关没关灯	guan mei guan deng	41
+锁没锁门	suo mei suo men	102
+订没订票	ding mei ding piao	41
+交没交钱	jiao mei jiao qian	71
+付没付钱	fu mei fu qian	71
+接没接到	jie mei jie dao	71
+做没做完	zuo mei zuo wan	123
+写没写完	xie mei xie wan	154
+修没修好	xiu mei xiu hao	106
+改没改好	gai mei gai hao	41
+记没记住	ji mei ji zhu	102
+见没见面	jian mei jian mian	41
+联没联网	lian mei lian wang	41
+充没充电	chong mei chong dian	41
+关没关机	guan mei guan ji	71
+退没退房	tui mei tui fang	41
+订没订餐	ding mei ding can	41
+点没点餐	dian mei dian can	41
+做没做饭	zuo mei zuo fan	41
+刷没刷卡	shua mei shua ka	41
+扫没扫码	sao mei sao ma	41
+报没报销	bao mei bao xiao	41
+请没请假	qing mei qing jia	71
+加没加微信	jia mei jia wei xin	41
+回没回消息	hui mei hui xiao xi	41
+回没回电话	hui mei hui dian hua	41
+打没打电话	da mei da dian hua	77
+发没发消息	fa mei fa xiao xi	41
+拿没拿快递	na mei na kuai di	41
+取没取快递	qu mei qu kuai di	41
+寄没寄快递	ji mei ji kuai di	41
+收没收快递	shou mei shou kuai di	41
+交没交作业	jiao mei jiao zuo ye	41
+写没写作业	xie mei xie zuo ye	41
+交没交房租	jiao mei jiao fang zu	41
+结没结账	jie mei jie zhang	41
+洗没洗衣服	xi mei xi yi fu	41
+晾没晾衣服	liang mei liang yi fu	41
+倒没倒垃圾	dao mei dao la ji	41
+喂没喂猫	wei mei wei mao	41
+遛没遛狗	liu mei liu gou	41
+化没化妆	hua mei hua zhuang	132
+到没到站	dao mei dao zhan	41
+落没落地	luo mei luo di	88
+值没值机	zhi mei zhi ji	41
+退没退票	tui mei tui piao	41
+改没改签	gai mei gai qian	41
+打没打车	da mei da che	41
+叫没叫车	jiao mei jiao che	41
+排没排队	pai mei pai dui	41
+看没看病	kan mei kan bing	41
+喝没喝完	he mei he wan	41
+试没试过	shi mei shi guo	147
+学没学过	xue mei xue guo	219
+买没买	mai mei mai	378
+考没考	kao mei kao	267
+带没带	dai mei dai	340
+换没换	huan mei huan	250
+拍没拍	pai mei pai	188
+拖没拖	tuo mei tuo	41
+见没见	jian mei jian	162
+跑没跑	pao mei pao	215
+陪没陪	pei mei pei	41
+住没住	zhu mei zhu	102
+同没同意	tong mei tong yi	41
+提没提醒	ti mei ti xing	41
+提没提交	ti mei ti jiao	41
+洗没洗澡	xi mei xi zao	41
+买没买菜	mai mei mai cai	41
+买没买单	mai mei mai dan	41
+挂没挂号	gua mei gua hao	41
+拍没拍照	pai mei pai zhao	41
+换没换鞋	huan mei huan xie	41
+查没查过	cha mei cha guo	41
+买没买过	mai mei mai guo	123
+戴没戴帽子	dai mei dai mao zi	41
+卖没卖出去	mai mei mai chu qu	89
+搬没搬家	ban mei ban jia	41
+赶没赶到	gan mei gan dao	41
+带没带钥匙	dai mei dai yao shi	77
+关没关窗	guan mei guan chuang	41
+付没付	fu mei fu	83
+背没背	bei mei bei	132
+练没练	lian mei lian	167
+拉没拉	la mei la	206
+报没报到	bao mei bao dao	41
+花没花	hua mei hua	123

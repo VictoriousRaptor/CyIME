@@ -1,5 +1,36 @@
 # CyIME 词库/排序回归用例。每个新报告先加一行再修。列：id 键盘(26/14/9/win26) 输入 期望(前缀!表示首选不能是它) 名次上限(期望须在前几位) 来源 日期 备注
 id	keyboard	input	expect	top_k	source	date	note
+hc-jidao	26	jidao	记到	2	user	2026-11-26	他报 寄到 几道 挤到 都在 记到 前；语料次数 寄到 2726 > 记到 2332，所以要求前二
+hc-jidao-ctl	26	jidao	寄到	1	对照	2026-11-26	次数最多的仍排第一
+hc-14-jidao	14	JUDAO	记到	2	user	2026-11-26	同上，14 键
+hc-9-jidao	9	54326	记到	3	user	2026-11-26	同上，九键；同键还有 鸡蛋（ji dan），只要求前三
+hc-lianjie	26	lianjie	链接	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-jiguang	26	jiguang	激光	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-shangwan	26	shangwan	上完	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-daofang	26	daofang	倒放	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-shesi	26	shesi	社死	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-suosi	26	suosi	锁死	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-bianxian	26	bianxian	变现	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-peitu	26	peitu	配图	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-shicao	26	shicao	实操	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-linqi	26	linqi	临期	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-hutou	26	hutou	户头	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-gonghao	26	gonghao	功耗	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-wangbao	26	wangbao	网暴	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-zhangfen	26	zhangfen	涨粉	1	对照	2026-11-26	混合压低的同码常用词，补后首选
+hc-ctl-lianjie	26	lianjie	连接	3	对照	2026-11-26	补词后不能被挤下去（链接 后面跟着它的表情 🔗，所以 连接 是第三格、第二个词）
+hc-ctl-jiguang	26	jiguang	极光	2	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-shangwan	26	shangwan	上万	2	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-beizi	26	beizi	被子	1	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-xiadao	26	xiadao	吓到	1	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-qushi	26	qushi	去世	1	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-shengli	26	shengli	胜利	1	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-xiaobian	26	xiaobian	小编	1	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-diyu	26	diyu	地域	2	对照	2026-11-26	补词后不能被挤下去
+hc-ctl-daoshi	26	daoshi	倒是	1	对照	2026-11-26	补词后不能被挤下去
+hc-9-5426543	9	5426543	链接	3	对照	2026-11-26	九键前三
+hc-9-5448264	9	5448264	激光	3	对照	2026-11-26	九键前三
+hc-9-74264926	9	74264926	上完	3	对照	2026-11-26	九键前三
 phrase-xingrong-exact	26	xingrongbushanglai	形容不上来	1	用户反馈目标	2026-11-01	准确拼写对照，反馈未提供原始按键
 phrase-pai-ni-lai	26	tamenpainilai	他们派你来	1	对照	2026-11-01	保护「派你来」的正常读音
 user-zdky	26	zdky	这都可以	1	user	2026-10-17	曾出“在都可以”（邻键纠错把整词挤掉）
@@ -1403,3 +1434,49 @@ common-14-zhineng	14	ZGUBEBG	只能	1	user	2026-11-25	他：只能 竟然排在 
 common-9-shihou	9	744468	时候	1	user	2026-11-25	九键：只打时候首选不能是事后（t9/whole_word_weight_margin）
 common-9-tongzhi	9	8664944	通知	1	user	2026-11-25	九键：只打通知首选不能是同志
 common-9-yangzi	9	926494	样子	1	user	2026-11-25	九键：只打样子首选不能是王子
+xmeix-fameifa	26	fameifa	发没发	1	user	2026-11-25	x没x；补前首选 发没法；语料次数 133
+xmeix-jiaomeijiao	26	jiaomeijiao	交没交	1	user	2026-11-25	x没x；补前首选 娇媚叫；语料次数 32
+xmeix-xiemeixie	26	xiemeixie	写没写	1	user	2026-11-25	x没x；补前首选 些没写；语料次数 60
+xmeix-huimeihui	26	huimeihui	回没回	1	user	2026-11-25	x没x；补前首选 会没回；语料次数 81
+xmeix-ximeixi	26	ximeixi	洗没洗	1	user	2026-11-25	x没x；补前首选 洗没戏；语料次数 86
+xmeix-gaimeigai	26	gaimeigai	改没改	1	user	2026-11-25	x没x；补前首选 该没改；语料次数 79
+xmeix-qianmeiqian	26	qianmeiqian	签没签	1	user	2026-11-25	x没x；补前首选 前没钱；语料次数 10
+xmeix-quemeiqueren	26	quemeiqueren	确没确认	1	user	2026-11-25	x没x；补前首选 却没确认；语料次数 0
+xmeix-tongmeitongyi	26	tongmeitongyi	同没同意	1	user	2026-11-25	x没x；补前首选 同没同意；语料次数 0
+xmeix-tongmeitongzhi	26	tongmeitongzhi	通没通知	1	user	2026-11-25	x没x；补前首选 同没通知；语料次数 0
+xmeix-dameidaying	26	dameidaying	答没答应	1	user	2026-11-25	x没x；补前首选 大没答应；语料次数 3
+xmeix-bimeibiye	26	bimeibiye	毕没毕业	1	user	2026-11-25	x没x；补前首选 比没毕业；语料次数 0
+xmeix-dengmeidenglu	26	dengmeidenglu	登没登录	1	user	2026-11-25	x没x；补前首选 等没登录；语料次数 0
+xmeix-fumeifukuan	26	fumeifukuan	付没付款	1	user	2026-11-25	x没x；补前首选 赴美付款；语料次数 0
+xmeix-huimeihuifu	26	huimeihuifu	回没回复	1	user	2026-11-25	x没x；补前首选 会没回复；语料次数 3
+xmeix-guanmeiguanzhu	26	guanmeiguanzhu	关没关注	1	user	2026-11-25	x没x；补前首选 官媒关注；语料次数 0
+xmeix-jiaomeijiaozuoye	26	jiaomeijiaozuoye	交没交作业	1	user	2026-11-25	x没x；补前首选 叫没交作业；语料次数 0
+xmeix-ximeixizao	26	ximeixizao	洗没洗澡	1	user	2026-11-25	x没x；补前首选 洗没洗澡；语料次数 0
+xmeix-nameinakuaidi	26	nameinakuaidi	拿没拿快递	1	user	2026-11-25	x没x；补前首选 娜美拿快递；语料次数 0
+xmeix-maimeimai	26	maimeimai	买没买	1	user	2026-11-25	x没x；补前首选 买没买；语料次数 263
+xmeix-huanmeihuan	26	huanmeihuan	换没换	1	user	2026-11-25	x没x；补前首选 换没换；语料次数 93
+xmeix-xuemeixue	26	xuemeixue	学没学	1	user	2026-11-25	x没x；补前首选 学妹学；语料次数 209
+xmeix-kaomeikao	26	kaomeikao	考没考	1	user	2026-11-25	x没x；补前首选 考没考；语料次数 519
+xmeix-daimeidai	26	daimeidai	带没带	1	user	2026-11-25	x没x；补前首选 带没带；语料次数 202
+xmeix-neg-shuomeishuo	26	shuomeishuo	说没说	1	对照	2026-11-25	说没说 原来就对，补词后照旧
+xmeix-neg-shoumeishoudao	26	shoumeishoudao	收没收到	1	对照	2026-11-25	原有词，照旧
+xmeix-neg-youmeiyou	26	youmeiyou	有没有	1	对照	2026-11-25	原有
+xmeix-neg-haimeihuanqian	26	haimeihuanqian	还没还钱	1	对照	2026-11-25	还没还 补 huan 读音后，hai mei huan 照旧
+xmeix-neg-yeshouchumo	26	yeshouchumo	野兽出没	1	对照	2026-11-25	出没 读 mo 不受影响
+xmeix-neg-beimoshoule	26	beimoshoule	被没收了	1	对照	2026-11-25	没收 不受影响
+xmeix-neg-womeishuo	26	womeishuo	我没说	1	对照	2026-11-25	原有
+xmeix-neg-shoumeishou	26	shoumeishou	熟没熟	1	对照	2026-11-25	原有词次数比 收没收 单独出现多，照旧第一
+xmeix-neg-kanmeikan	26	kanmeikan	看没看	1	对照	2026-11-25	原有
+xmeix-neg-dameida	26	dameida	打没打	1	对照	2026-11-25	原有
+xmeix-neg-maimeimai	26	maimeimai	卖没卖	3	对照	2026-11-25	同音按次数排，卖没卖 前三
+xmeix-neg-huanmeihuan	26	huanmeihuan	还没还	3	对照	2026-11-25	同音按次数排，还没还 前三
+xmeix-neg-daimeidai	26	daimeidai	戴没戴	3	对照	2026-11-25	同音按次数排，戴没戴 前三
+xmeix-9-fameifa	9	3263432	发没发	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-jiaomeijiao	9	54266345426	交没交	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-xiemeixie	9	943634943	写没写	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-quemeiqueren	9	783634783736	确没确认	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-tongmeitongyi	9	8664634866494	同没同意	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-qianmeiqian	9	74266347426	签没签	3	user	2026-11-25	九键 x没x 进前三
+xmeix-9-zuomeizuo	9	986634986	做没做	1	user	2026-11-25	九键：原有 x没x 仍排第一（同键新词次数少，排在它下面）
+xmeix-9-dameida	9	3263432	打没打	1	user	2026-11-25	九键：原有 x没x 仍排第一（同键新词次数少，排在它下面）
+xmeix-9-kanmeikan	9	526634526	看没看	1	user	2026-11-25	九键：原有 x没x 仍排第一（同键新词次数少，排在它下面）

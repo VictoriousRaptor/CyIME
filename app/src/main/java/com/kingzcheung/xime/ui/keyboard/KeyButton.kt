@@ -318,6 +318,8 @@ fun SwipeableKeyButton(
     followSymbolSwipeDirection: Boolean = true,
     /** 角标固定上滑且长按也输入（「底排标点固定上滑」）；不跟全局「长按输入/滑动输入」走。 */
     keepSymbolSwipeOnLongPress: Boolean = false,
+    /** 长按先出 [longPressItems] 的菜单，不让「长按输入角标」顶掉（注音逗号键的标点菜单）；角标照旧能滑出来。 */
+    longPressMenuFirst: Boolean = false,
     /** Literal upper-hint input, independent of whether its visual hint is enabled. */
     symbolInputText: String? = null,
     /** 下角标直接上屏的那个符号（不受「下方角标提示」开关影响）；26 键滑行时放进长按弹出的两格，见 [withGlideCornerMenu]。 */
@@ -554,6 +556,7 @@ fun SwipeableKeyButton(
     ).let { actions ->
         // 「上下滑输入符号」关着：长按也不出角标（「长按输入」、滑行时的两格角标、底排标点长按都不加）。
         if (!cornerSymbols) actions
+        else if (longPressMenuFirst && !longPressItems.isNullOrEmpty()) actions
         // 26 键滑行开着时字母键的滑动给了滑行：长按弹出上下两个角标，挪过去松手选（设置页锁在「长按输入」）。
         else if (letterGlideOwnsDrag) actions.withGlideCornerMenu(symbolInputText, symbolInputDownText, inputPreferences.symbolLongPressMs)
         // 底排标点固定上滑（空格两侧标点、数字键盘点键）：上滑和长按都输入角标（用户 11-09：键在底边，长按更顺手）。
@@ -868,8 +871,12 @@ fun SwipeableKeyButton(
                         modifier = Modifier.size(mainIconSize)
                     )
                 } else {
+                    val mainLabel = customLayoutLabel(customLayout, punctuationKeyLabel(text), glassLabelSurface ?: resolvedBackground, customAccent, textColor)
+                    // 笔画键 一丨丿丶乛 按同一线宽自己画，不随手机字体变细、粗细不一（见 [keycapStrokeLabel]）。
+                    val strokeLabel = keycapStrokeLabel(mainLabel)
                     Text(
-                        text = customLayoutLabel(customLayout, punctuationKeyLabel(text), glassLabelSurface ?: resolvedBackground, customAccent, textColor),
+                        text = strokeLabel ?: mainLabel,
+                        inlineContent = if (strokeLabel != null) keycapStrokeInlineContent(mainLabel.text, resolvedText) else emptyMap(),
                         // 双拼键位提示的韵母在字母下面：字母上移半个提示高，两者一起居中。
                         modifier = Modifier.fillMaxWidth().offset(y = if (dpCornerLayout != null) dpCornerLayout.letterOffsetDp.dp
                             else if (dpHint != null) (-(dpFinals?.heightDp ?: 0f) / 2f).dp

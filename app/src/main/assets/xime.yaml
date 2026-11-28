@@ -414,7 +414,8 @@ keyboard:
       ㄞ: { swipe_up: "9" }
       ㄢ: { swipe_up: "0" }
       ㄦ: { swipe_up: "-" }
-      "'": { tap: { label: "，", value: "，" }, swipe_up: { label: "。", value: "。" } , long_press: { display: "bubble", values: [ "，", "。"] }}
+      # 长按逗号出台湾常用的全形标点（注音用户 11-26，同 Gboard 注音）：直角引号「」『』、顿号、问号、叹号、冒号（长按最多 10 项）。
+      "'": { tap: { label: "，", value: "，" }, swipe_up: { label: "。", value: "。" } , long_press: { display: "bubble", values: [ "，", "。", "、", "？", "！", "：", "「", "」", "『", "』"] }}
       earth: { tap: { label: "@language", action: "toggle_ascii" }, long_press: { display: "bubble", values: [ { label: "选择输入法", action: "command", value: "show_ime_picker" } ] } }
 
   # 仓颉五代（对应方案 cyime_cangjie，默认不启用）：同 26 键排列，键帽是仓颉字根，点按送字母码。

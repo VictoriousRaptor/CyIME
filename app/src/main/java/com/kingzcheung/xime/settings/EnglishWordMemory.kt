@@ -28,6 +28,9 @@ object EnglishWordMemory {
 
     @Synchronized
     fun remember(rimeDir: File, text: String) {
+        // 删过（排到后面）的词再回车打出来就回到原位。放在最前：下面「和上一个一样就不重复记」会提前返回，
+        // 以前那时不会撤销「排到后面」（2026-11-26 appointment 删了以后回车打几遍也回不来）。
+        undemote(rimeDir, text)
         // A word, or a word with digits after it (Abc123 + Enter, 11-25).
         if (!STORED.matches(text) || !isLearnable(text.trimEnd { it in '0'..'9' })) return
         val file = File(rimeDir, FILE_NAME)
@@ -36,7 +39,6 @@ object EnglishWordMemory {
             if (lines.lastOrNull() == text) return
             if (lines.size >= MAX_WORDS * 2) write(file, compact(lines + text)) else file.appendText("$text\n")
         }
-        undemote(rimeDir, text)
     }
 
     /**

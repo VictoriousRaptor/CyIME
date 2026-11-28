@@ -83,6 +83,38 @@ class SchemaListBlockTest {
     }
 
     @Test
+    fun `comments and blank lines inside the block do not leave old schemas`() {
+        // 用户手工改过的列表：项前、项间有注释或空行。旧实现只吃掉紧跟表头的连续 "-" 行，
+        // 注释后面的旧方案会留下，停用方案静默失效。
+        val commented = """
+            patch:
+              schema_list:
+                # 只留常用的
+
+                - schema: rime_ice
+
+                # 以前装的
+                - schema: t9_pinyin
+                - schema: wubi86
+              menu/page_size: 11
+        """.trimIndent()
+        val result = SchemaManager.replaceSchemaListBlock(commented, listOf("rime_ice"))
+        assertEquals(listOf("rime_ice"), SchemaManager.readEnabledSchemaList(result))
+        assertFalse("注释后的旧方案也必须清掉", result.contains("- schema: t9_pinyin"))
+        assertFalse("同一块里的旧方案也必须清掉", result.contains("- schema: wubi86"))
+        assertTrue("块后面的其它 patch 保留", result.contains("menu/page_size: 11"))
+    }
+
+    @Test
+    fun `comments after the block stay with the next section`() {
+        val yaml = "patch:\n  schema_list:\n    - schema: old\n  # 下一节\n  menu/page_size: 11\n"
+        val result = SchemaManager.replaceSchemaListBlock(yaml, listOf("new_schema"))
+        assertEquals(listOf("new_schema"), SchemaManager.readEnabledSchemaList(result))
+        assertTrue("块后的注释保留", result.contains("  # 下一节"))
+        assertTrue(result.contains("menu/page_size: 11"))
+    }
+
+    @Test
     fun `empty enabled list leaves text unchanged`() {
         val result = SchemaManager.replaceSchemaListBlock(defaultYaml, emptyList())
         assertEquals(defaultYaml, result)

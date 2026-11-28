@@ -67,6 +67,10 @@ class XimeApplication : Application(), ImageLoaderFactory {
         val processName = getProcessName()
         if (processName != packageName) return
         SettingsPreferences.initializeIncognitoForVersion(this, BuildConfig.VERSION_CODE)
+        // 上次为什么结束（被划掉、被清理、崩溃）写进日志，见 LastProcessExit。问系统要走一次跨进程调用，放后台。
+        if (com.kingzcheung.xime.platform.AndroidPlatform.processExitReasons) applicationScope.launch {
+            com.kingzcheung.xime.platform.LastProcessExit.log(this@XimeApplication)
+        }
         // 键盘和设置页都收起后把用完的 Java 堆还给系统（见 HeapReclaim）。
         registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: android.app.Activity) = com.kingzcheung.xime.service.HeapReclaim.onActivityStarted()

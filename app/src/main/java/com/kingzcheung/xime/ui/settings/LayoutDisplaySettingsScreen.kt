@@ -712,9 +712,9 @@ private fun LayoutDisplayPage(
                     // 锁住时说清是谁锁的，「」里点一下跳到上面那张卡并高亮（11-24 他：找不着在哪改、也跳不过去）。
                     }, lockMessage = if (rightKey != com.kingzcheung.xime.settings.CandidateRightKey.EXPAND)
                         "选了「${candidateRightKeyName(rightKey)}」时只能靠滑展开候选，所以一直开着；点「${candidateRightKeyName(rightKey)}」去改回「默认」就能关" else null)
-                    // 首选上拖选改局部（11-24 他：默认打开，只给超过 6 个字的长句）；按住不拖、关着时长按首选照旧出固定、删除的卡片。
+                    // 首选上拖选改局部（11-24 他：默认打开，只给长句；11-26 门槛从超过 6 个字放到 5 个字）；按住不拖、关着时长按首选照旧出固定、删除的卡片。
                     var sentenceDragEdit by remember { mutableStateOf(SettingsPreferences.isSentenceDragEdit(context)) }
-                    CandidateSwitchRow("长句拖选改局部", "首选超过 6 个字时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除",
+                    CandidateSwitchRow("长句拖选改局部", "首选有 5 个字以上时，按住拖过一段就只改这一段；按住不拖照旧出固定、删除",
                         sentenceDragEdit, {
                             sentenceDragEdit = it
                             SettingsPreferences.setSentenceDragEdit(context, it)

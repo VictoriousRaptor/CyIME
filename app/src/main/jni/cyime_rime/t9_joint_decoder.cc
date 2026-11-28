@@ -59,11 +59,13 @@ static double T9WholeTextPrior(GramDb* db, const string& text) {
 }
 
 
-template <class QueryResult>
+// wanted(end): false leaves that end's bucket unread (its entries are never built).
+template <class QueryResult, class Wanted>
 static void T9Collect(map<int, DictEntryList>& destination,
-                      const an<QueryResult>& result, size_t budget) {
+                      const an<QueryResult>& result, size_t budget, Wanted wanted) {
   if (!result) return;
   for (auto& end : *result) {
+    if (!wanted(end.first)) continue;
     auto& entries = destination[end.first];
     // Bound each source independently, before the source-neutral merge.
     for (size_t n = 0; n < budget && !end.second.exhausted(); ++n) {
@@ -71,6 +73,11 @@ static void T9Collect(map<int, DictEntryList>& destination,
       end.second.Next();
     }
   }
+}
+template <class QueryResult>
+static void T9Collect(map<int, DictEntryList>& destination,
+                      const an<QueryResult>& result, size_t budget) {
+  T9Collect(destination, result, budget, [](int) { return true; });
 }
 }  // namespace
 
@@ -365,18 +372,37 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     } else { starts.push_back(row.first); system_reach[row.first] = row.first; }
   }
   T9_WORK_ADD(joint_origins_queried, starts.size());
+  // A start is looked up again when its words reached the changed tail, but its words that end at or before the
+  // stable boundary cover only syllable rows the previous frame had (every changed row is at or after the
+  // boundary), and this key extends no line into them. Building those entries again was most of a key's
+  // dictionary work on a long input (2026-11-26: 55-60 buckets merged a key, about 20 of them used). They are
+  // taken from the previous frame instead; one that frame had already dropped (omitted_end) stays dropped.
+  // 0 = build it, 1 = the previous frame holds it, 2 = dropped there.
+  auto carried = [&](int start, int end) {
+    if (!previous || static_cast<size_t>(end) > stable) return 0;
+    const auto row = previous->merged.find(start);
+    if (row != previous->merged.end() && row->second.count(end)) return 1;
+    const auto omitted = previous->omitted_end.find(start);
+    return omitted != previous->omitted_end.end() && static_cast<size_t>(end) <= omitted->second ? 2 : 0;
+  };
   {
     T9LookupScope scope(&system_reach);
+    // The dictionary does not build the chunks of those words either (skip_end): with a previous frame every
+    // end at or before the stable boundary is carried or was dropped, never built here.
     auto buckets = dict->LookupAll(syllables, starts, &q.translator->blacklist(), false, 0, o.t9_dictionary_beam_,
-                                   is_numeric_input(input));
-    for (auto& start : buckets) T9Collect(system[start.first], start.second, o.t9_source_budget_);
+                                   is_numeric_input(input), previous ? stable : 0);
+    for (auto& start : buckets)
+      T9Collect(system[start.first], start.second, o.t9_source_budget_,
+                [&](int end) { return carried(static_cast<int>(start.first), end) == 0; });
   }
   for (const auto start : starts) {
     map<int, DictEntryList> user;
     user_reach[start] = start;
     if (user_dict) {
       T9LookupScope scope(&user_reach); T9OriginScope origin(start);
-      T9Collect(user, user_dict->Lookup(syllables, start, 0), o.t9_source_budget_);
+      // The first start keeps every end: learned_whole below reads the user's words of all of them.
+      T9Collect(user, user_dict->Lookup(syllables, start, 0), o.t9_source_budget_,
+                [&](int end) { return start == 0 || carried(static_cast<int>(start), end) == 0; });
     }
     // Keep what the user committed from the first key on: the merge below may keep the system entry of a
     // learned word, and the ordering of whole-input words reads the user's own evidence from here.
@@ -387,6 +413,7 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
     auto merged = std::move(system[start]);
     for (const auto& end : merged) T9_WORK_ADD(system_entries, end.second.size());
     for (const auto& end : user) {
+      if (carried(static_cast<int>(start), end.first) != 0) continue;
       T9_WORK_ADD(user_entries_collected, end.second.size());
       auto& entries = merged[end.first];
       entries.insert(entries.end(), end.second.begin(), end.second.end());
@@ -421,6 +448,16 @@ bool T9DecodeJoint(const T9ScriptQuery& q, const T9ScriptOptions& o, bool (*is_n
         if (std::find(end.second.begin(), end.second.end(), entry) == end.second.end()) end.second.push_back(entry);
       T9_WORK_ADD(merge_entries_out, end.second.size());
       graph[start][end.first] = std::move(end.second);
+    }
+    if (previous) {
+      const auto row = previous->merged.find(static_cast<int>(start));
+      if (row != previous->merged.end())
+        for (const auto& end : row->second)
+          if (static_cast<size_t>(end.first) <= stable) graph[start].emplace(end.first, end.second);
+      const auto omitted = previous->omitted_end.find(static_cast<int>(start));
+      if (omitted != previous->omitted_end.end())
+        omitted_end[static_cast<int>(start)] =
+            std::max(omitted_end[static_cast<int>(start)], std::min(omitted->second, stable));
     }
   }
   // Whole-input dictionary phrases bypass the prefix beam (26-key initials: the beam ranks prefixes by

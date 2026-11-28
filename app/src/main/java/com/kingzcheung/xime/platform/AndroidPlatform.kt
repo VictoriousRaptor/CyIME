@@ -63,6 +63,7 @@ enum class PlatformFeature(val minSdk: Int, val label: String) {
     INSTALL_SOURCE(Build.VERSION_CODES.R, "读安装来源（F-Droid 装的不在应用里更新）"),
     CURRENT_INPUT_METHOD(Build.VERSION_CODES.UPSIDE_DOWN_CAKE, "默认输入法设置读不到时问系统当前输入法"),
     FOREGROUND_SERVICE_TYPE(Build.VERSION_CODES.Q, "前台服务声明类型（首次准备词库的 dataSync 服务）"),
+    PROCESS_EXIT_REASONS(Build.VERSION_CODES.R, "读上次进程为什么结束（被划掉、被清理、崩溃），写进日志"),
 
     // —— 调试测量（只在调试工具里用） ——
     ASYNC_TRACE(Build.VERSION_CODES.Q, "异步 Trace 段"),
@@ -107,6 +108,17 @@ object AndroidPlatform {
     /** 厂商归类，各处的厂商适配按它判断。只有这里读 `Build.BRAND`。每次现算，理由同上。 */
     val vendor: DeviceVendor get() = DeviceVendor.of(manufacturer, Build.BRAND)
 
+    /**
+     * 厂商系统和版本（ColorOS 12.1 等，见 [OemRom]），三星和原生安卓为 null。只有这里读系统属性。
+     * 每次现读，理由同 [vendor]；调用处不在打字路径上。
+     */
+    val rom: OemRom? get() = OemRom.detect(vendor, ::systemProperty)
+
+    /** 读系统属性（android.os.SystemProperties 不公开，只能反射）；读不到给 null。 */
+    private fun systemProperty(key: String): String? = runCatching {
+        Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, key) as? String
+    }.getOrNull()
+
     /** 「samsung SM-X710」，关于页、日志里统一这样写。 */
     val deviceLabel: String get() = "$manufacturer ${Build.MODEL}"
 
@@ -115,7 +127,8 @@ object AndroidPlatform {
      * 公开版也写（只有设备信息，没有用户输入的文字），用户分享日志时一眼看出是什么手机、什么系统。
      */
     fun diagnosticHeader(appVersion: String): String =
-        "Device: CyIME $appVersion | $deviceLabel | 厂商：${vendor.name.lowercase()} | $versionLabel | " +
+        "Device: CyIME $appVersion | $deviceLabel | 厂商：${vendor.name.lowercase()} | " +
+            "${rom?.let { "${it.label} | " }.orEmpty()}$versionLabel | " +
             "系统编译号：${Build.DISPLAY.orEmpty()}\nPlatform: ${summary()}"
 
     // —— 键盘窗口与底边 ——
@@ -201,6 +214,8 @@ object AndroidPlatform {
     val currentInputMethod: Boolean = has(PlatformFeature.CURRENT_INPUT_METHOD)
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     val foregroundServiceType: Boolean = has(PlatformFeature.FOREGROUND_SERVICE_TYPE)
+    @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
+    val processExitReasons: Boolean = has(PlatformFeature.PROCESS_EXIT_REASONS)
 
     // —— 调试测量 ——
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)

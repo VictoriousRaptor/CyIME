@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -102,6 +103,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * 设置首页再按返回：结束设置，并把最近任务里那张 CyIME 卡片一起删掉（finishAndRemoveTask）。
+     * 和讯飞一样，退出后卡片就没了，要用时从键盘工具栏的「设置」再进（11-25 ColorOS 12 用户的请求）。
+     *
+     * 为什么连卡片都要管？吐槽 OPPO 的 ColorOS（一加、realme 同一套）：
+     * - Android 12 起，返回键在桌面图标打开的首页上不再结束界面，只把任务挪到后台。这是 AOSP 的规矩，本身没毛病，
+     *   结果就是退出设置后最近任务里还挂着一张 CyIME 卡片。
+     * - 别家系统划掉这张卡片，输入法照常能用。ColorOS 偏不：划掉卡片＝把整个 CyIME 连同正在用的输入法服务一起干掉，
+     *   而且不让它自己回来（ColorOS 12 / Android 12 用户：「划掉进程就被删掉了，需要重新唤醒输入法」）。
+     *   用户只是想关个设置页，ColorOS 顺手把他的键盘也拆了。它没有任何公开接口能说「这是正在用的输入法，别动」，
+     *   我们只能自己躲：退出时不留卡片，用户就没东西可划。
+     * 所有手机都这样做：设置页的卡片本来就没用处。按 Home 键离开不受影响，最近任务里照常能切回来。
+     *
+     * 没用 excludeFromRecents：那样从浏览器复制 API Key 再切回来时，最近任务里找不到设置页。
+     * 没把设置拆成单独进程：设置页和键盘共用偏好监听和 Rime 引擎，拆开要动的地方太多。
+     *
+     * 在 onCreate 最前面注册、不绑生命周期：导航、向导里的返回处理都在它之后加，优先级比它高，
+     * 只有它们都不接（已经在设置首页）时才轮到这里。
+     */
+    private val exitSettingsTask = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = finishAndRemoveTask()
+    }
+
     override fun onDestroy() {
         prewarmScope.cancel()
         super.onDestroy()
@@ -150,6 +174,7 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(exitSettingsTask)
         enableEdgeToEdge()
         com.kingzcheung.xime.ui.settings.SettingsRefreshRate.apply(this)
         

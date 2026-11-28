@@ -154,3 +154,102 @@
 # 九键只打 5268436 一个词时首选按词典权重（t9/whole_word_weight_margin），老陈原是 1 会被老臣顶掉；仍低于老臣 1162；谢了 101445 比写了 276909 差一点点在阈值外（2026-11-25）。
 老陈	lao chen	800
 谢了	xie le	110000
+# 同码里语料次数明显更多、却被混合权重压到很低的常用词（2026-11-26 他报：jidao 时 寄到 几道 挤到 都排在 记到 前面）。
+# 原因：聊天词频是按旧权重先切词再数的（chat_word_counts.py），原表权重低的词每次都被拆开（记到→记+到），一次没数到，
+# 混合后从雾凇的 1180 掉到 34。同样被压的词用统一规则找：电脑在不切词的原始语料（LCCC×3、五个新来源×3、字幕×1）里数每个
+# 同码词的单独出现次数（去掉跨词边界的、被更长词典词整段盖住的；多音词按雾凇读音占比分），脚本
+# /mnt/project-files/homophone-counts-1126/count_homophones.py。入选条件：次数≥150；生成权重/雾凇权重 比同码中位数低 10 倍以上
+# （说明是混合压坏的）；不是「词+虚字」碎片。新权重 = 能越过的同码词里最高的 + 1：只越过 次数不到它 2/3、且雾凇权重不超过它 30 倍的词，
+# 越不过的词一律不动。601 个候选逐条审，人名、游戏名、半截词、粗口和生僻古语不收，留 92 个。记到 次数 2332 少于 寄到 2726，所以排第二。
+到时	dao shi	57064
+链接	lian jie	225139
+发色	fa se	1187
+傻子	sha zi	20957
+激光	ji guang	29044
+笑喷	xiao pen	1735
+道家	dao jia	1310
+网暴	wang bao	858
+美到	mei dao	6063
+倒放	dao fang	12705
+涨粉	zhang fen	990
+上完	shang wan	26743
+功耗	gong hao	5557
+趋势	qu shi	18388
+记到	ji dao	29328
+偷拍	tou pai	7283
+生理	sheng li	20002
+低于	di yu	35078
+小便	xiao bian	7746
+气到	qi dao	1918
+下到	xia dao	12838
+锁死	suo si	1398
+社死	she si	1406
+死死	si si	8279
+研学	yan xue	4810
+气泡	qi pao	8492
+斑点	ban dian	7557
+划走	hua zou	448
+征途	zheng tu	6459
+应激	ying ji	5404
+声带	sheng dai	4698
+版号	ban hao	1085
+鸡瘟	ji wen	6028
+狂犬	kuang quan	3650
+放人	fang ren	1041
+喉结	hou jie	1649
+小视频	xiao shi pin	2477
+锁头	suo tou	2811
+替考	ti kao	2481
+鸡胸	ji xiong	7896
+韩流	han liu	12019
+问完	wen wan	2376
+头型	tou xing	793
+配图	pei tu	2867
+失语	shi yu	9068
+下火	xia huo	1055
+变现	bian xian	1412
+系上	ji shang	6614
+鸡块	ji kuai	2745
+余晖	yu hui	11295
+高寿	gao shou	6321
+扎带	za dai	4372
+药学	yao xue	209
+缴税	jiao shui	3298
+挤出来	ji chu lai	2094
+实操	shi cao	1557
+押题	ya ti	914
+刻章	ke zhang	3461
+话很多	hua hen duo	895
+堵死	du si	1083
+驱虫	qu chong	787
+盲道	mang dao	470
+非典	fei dian	3036
+头孢	tou bao	468
+洗到	xi dao	4171
+硬化	ying hua	5617
+冒头	mao tou	76
+筋膜	jin mo	6262
+靠上	kao shang	3005
+治标	zhi biao	2212
+土鸡	tu ji	9092
+临期	lin qi	7436
+户头	hu tou	3010
+加塞	jia sai	885
+盲文	mang wen	3227
+虎口	hu kou	238
+妇科	fu ke	2288
+巧思	qiao si	599
+时运	shi yun	5586
+远视	yuan shi	915
+商科	shang ke	2119
+余弦	yu xian	5196
+痱子	fei zi	567
+史学	shi xue	94
+逐字	zhu zi	5963
+阿胶	e jiao	1438
+腱鞘	jian qiao	61
+乌梅	wu mei	989
+流行语	liu xing yu	4673
+死缓	si huan	607
+检疫	jian yi	193
+听诊	ting zhen	754

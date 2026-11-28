@@ -139,9 +139,10 @@ end
 
 local function init(env)
     env.commit_connection = env.engine.context.commit_notifier:connect(function(ctx)
-        if ctx:get_option("_cyime_incognito") then return end
         local text, input = ctx:get_commit_text(), ctx.input
+        -- 删过的词再选它就回到原位，无痕时也一样：只是从文件里拿掉，不记下打了什么。
         if text:match("^%a+$") then undemote(text) end
+        if ctx:get_option("_cyime_incognito") then return end
         if #text >= 2 and #text <= 40 and text:match("^%a+$") and text:find("%u") and text:lower() == input:lower() then
             remember(text)
         elseif #text <= 52 and text:match("^%a+%d+$") and text:lower():sub(1, #input) == input:lower() then

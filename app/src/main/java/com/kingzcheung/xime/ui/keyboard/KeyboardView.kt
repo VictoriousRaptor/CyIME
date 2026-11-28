@@ -161,10 +161,11 @@ internal fun usesT9DragReselect(profile: com.kingzcheung.xime.settings.InputProf
         profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9
 
 /**
- * 首选上拖选改局部默认开（11-24 他：「默认打开 你只能在6个字以上生效」），只给超过 6 个字的长句：短句长按要能调词频、删词、固定位置，
- * 所以开关关着或首选不到 [SENTENCE_DRAG_MIN_CHARS] 个字时不接拖选，长按照旧出调词频的卡片，卡片里照旧拆词重选。
+ * 首选上拖选改局部默认开（11-24 他：「默认打开 你只能在6个字以上生效」；11-26 他：5 个字也要能改，门槛放到 5 个字），
+ * 只给 5 个字以上的首选：更短的长按要能调词频、删词、固定位置，
+ * 所以开关关着或首选不到 [SENTENCE_DRAG_MIN_CHARS] 个字时不接拖选，长按照旧出调词频的卡片，卡片上面那排分词点哪一段就从哪一段重选。
  */
-internal const val SENTENCE_DRAG_MIN_CHARS = 7
+internal const val SENTENCE_DRAG_MIN_CHARS = 5
 
 internal fun sentenceDragApplies(firstCandidate: String?, enabled: Boolean): Boolean =
     enabled && (firstCandidate?.length ?: 0) >= SENTENCE_DRAG_MIN_CHARS
@@ -1475,7 +1476,7 @@ fun KeyboardView(
                 CandidateGlossary.swapHeld(shiftModeNow == com.kingzcheung.xime.viewmodel.ShiftMode.HELD)
             val candidateBarState = remember(
                 cs.candidates, cs.candidateComments, cs.inputText, cs.preeditText, cs.isComposing,
-                cs.associationCandidates, cs.pendingEnglishText, cs.isShowingRecentClipboard, cs.hasNextPage,
+                cs.associationCandidates, cs.pendingEnglishText, cs.englishFirstCompletionPending, cs.isShowingRecentClipboard, cs.hasNextPage,
                 cs.calculatorCandidates, handwritingCandidates, handwritingComments, showHandwritingCandidates,
                 railExpanded, expandedDataMode, isHandwritingPage, cs.smsVerificationCode, cs.clipboardImage, cs.clipboardExtractedCount,
                 cs.candidateFocus, cs.engineRevision, cs.candidateActions, state.inputProfile,
@@ -1512,6 +1513,9 @@ fun KeyboardView(
                         inputText = liveGlide.inputText, preeditText = liveGlide.preeditText,
                         hasMore = liveGlide.hasNextPage,
                     )
+                } else if (cs.englishFirstCompletionPending && cs.pendingEnglishText.isNotEmpty() &&
+                    (state.isAsciiMode || state.inputProfile.typesLettersDirectly)) {
+                    CandidateBarState.Idle
                 } else {
                     // 计算器结果只看候选状态自己带的标记（GitHub #289），不受展开页数据影响。
                     val calculator = cs.showsCalculator
@@ -1580,7 +1584,7 @@ fun KeyboardView(
             // 「拼音显示声调」：双拼显示按键时拼音是按键不是拼法，不标。
             val preeditToneData = rememberPreeditToneData(inputPreferences.preeditTones &&
                 !(correctionScheme != null && doublePinyinKeysShown))
-            // 「显示自造词角标」关着时不画小铅笔，候选宽度也按没角标算；学习照常。
+            // 「显示自造词角标」关着时不画小圆点，候选宽度也按没角标算；学习照常。
             val learnedMarkVisible = rememberLearnedMarkVisible()
             androidx.compose.runtime.CompositionLocalProvider(
                 LocalLearnedCandidates provides if (learnedMarkVisible) cs.learnedCandidates else emptySet(),
@@ -1616,6 +1620,7 @@ fun KeyboardView(
                     CandidateBarState.Idle else if (holdingBar) previousBar!! else candidateBarState,
                 glidePreviewText = glideCandidatePreview.value,
                 isGlidePreview = liveGlide != null || englishGlide != null,
+                directEnglishInput = state.isAsciiMode || state.inputProfile.typesLettersDirectly,
                 page = barPage,
                 candidatePageExpanded = candidatePageExpanded,
                 commentsAreGlosses = glossChinese && CandidateGlossary.isLoaded,

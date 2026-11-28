@@ -133,3 +133,31 @@ internal fun inlineCaretOutsideSpan(selStart: Int, selEnd: Int, candidatesStart:
     val to = maxOf(selStart, selEnd)
     return from < candidatesStart || to > candidatesEnd
 }
+
+/** 宿主重启同一个输入框时，正在打的东西怎么接着用（见 XimeInputMethodService.resumeCompositionAfterRestart）。 */
+internal enum class RestartResume {
+    /** 照新框重启：拼音、候选和已排队的键都作废。 */
+    NONE,
+    /** 编码写在输入框里：找回被定格的编码，重新标成组合区。 */
+    ADOPT_INLINE,
+    /** 框里没有我们写的编码：拼音、候选和已排队的键都不动，接着打。 */
+    KEEP,
+}
+
+/**
+ * 编码显示在候选栏（默认）时框里没有编码，宿主重启（QQ、B 站评论框上屏后重设文字）以前照样清空拼音、作废已按下还在排队的键，
+ * 快打时上屏后紧跟的一两个字母就没了（11-25「打字漏字」）。九键同一条队列，一并保住。
+ * [composing]：拼音或九键数字还没上屏；[keysQueued]：已按下的键还在排队。
+ * [caretContinues]：重启后光标还在原处或在文字末尾；宿主把光标挪走（B 站评论框写满一行时放回开头）就照原来的流程重启，
+ * 不把字上屏到别处。
+ */
+internal fun restartResume(
+    inputBox: Boolean, inlineActive: Boolean, inlineText: String?, composing: Boolean, keysQueued: Boolean,
+    caretContinues: Boolean = true,
+): RestartResume = when {
+    inputBox && inlineActive -> if (composing && !inlineText.isNullOrEmpty()) RestartResume.ADOPT_INLINE else RestartResume.NONE
+    !caretContinues -> RestartResume.NONE
+    composing && !inputBox -> RestartResume.KEEP
+    keysQueued -> RestartResume.KEEP
+    else -> RestartResume.NONE
+}

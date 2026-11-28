@@ -70,10 +70,17 @@ class CellDictionaryViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun import(uri: Uri) = work("正在导入词库…") {
+        // 没写拼音的词按这台手机上的内置词库注音（1.16）；还没部署过词库时照旧跳过。
+        val annotator = com.kingzcheung.xime.settings.PinyinAnnotation.fromRimeDir(
+            com.kingzcheung.xime.settings.SchemaManager.getRimeDir(context))
         val entry = requireNotNull(context.contentResolver.openInputStream(uri)) { "无法打开文件" }
-            .use(store::installFile)
+            .use { store.installFile(it, annotator) }
         store.select(entry.id, true)
-        val skipped = if (entry.skipped > 0) "，跳过 ${entry.skipped} 行（单字或没有拼音）" else ""
+        val skipped = buildString {
+            if (entry.annotated > 0) append("，其中 ${entry.annotated} 个没写拼音，按内置词库注上")
+            if (entry.known > 0) append("，${entry.known} 个单字内置词库里已有")
+            if (entry.skipped > 0) append("，跳过 ${entry.skipped} 行（读不出拼音）")
+        }
         val total = entry.count + entry.english + entry.stroke
         // 笔画词库的词（「词 笔画编码」）只给笔画输入用，拼音打不出来，说清楚（11-19）。
         if (entry.stroke > 0) "已导入「${entry.name}」$total 个词$skipped，其中 ${entry.stroke} 个笔画编码的词只给笔画输入用，点「应用更改」后生效"

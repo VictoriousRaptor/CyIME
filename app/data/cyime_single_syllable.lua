@@ -100,4 +100,9 @@ local function cyime_single_syllable(input, env)
     if not streaming then flush() end
 end
 
-return cyime_single_syllable
+-- 输入不是单个完整音节时让 Rime 整个跳过这个滤镜，不进 Lua 循环。
+local function tags_match(seg, env)
+    return SYLLABLES[env.engine.context.input] == true
+end
+
+return { func = cyime_single_syllable, tags_match = tags_match }

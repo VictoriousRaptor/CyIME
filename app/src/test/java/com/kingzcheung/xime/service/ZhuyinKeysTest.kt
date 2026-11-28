@@ -106,6 +106,34 @@ class ZhuyinKeysTest {
             merged14 = usesMergedLetterKeys(InputLayout.ZHUYIN)))
     }
 
+    /** 注音用户 11-26：屏幕键盘没打声调按回车要直接上屏候选（同 Rime 注音、Gboard 注音），没有候选时才上屏注音符号。 */
+    @Test fun `screen enter picks the highlighted candidate while composing zhuyin`() {
+        assertTrue(ZhuyinKeys.enterSelectsCandidate(zhuyin = true, composing = true, candidateCount = 3))
+        assertFalse(ZhuyinKeys.enterSelectsCandidate(zhuyin = true, composing = true, candidateCount = 0))
+        assertFalse(ZhuyinKeys.enterSelectsCandidate(zhuyin = true, composing = false, candidateCount = 3))
+        assertFalse(ZhuyinKeys.enterSelectsCandidate(zhuyin = false, composing = true, candidateCount = 3))
+    }
+
+    /** 注音用户 11-26：直角引号打不出来。注音键盘长按逗号出全形标点，第一个仍是逗号（手指下的默认项）。 */
+    @Test fun `long press on the zhuyin comma key offers full-width punctuation`() {
+        val keys = KeysConfigHelper.parseKeyboardYamlSection(repoFile("src/main/assets/xime.yaml").readText(), "zhuyin")
+            ?: error("xime.yaml 缺少 zhuyin keys")
+        val longPress = keys["'"]?.longPress ?: error("注音逗号键没有长按")
+        assertEquals("bubble", longPress.display)
+        val labels = longPress.values.map { it.label }
+        assertEquals("，", labels.first())
+        for (p in listOf("。", "、", "？", "！", "：", "「", "」", "『", "』")) assertTrue("缺 $p", p in labels)
+        assertEquals(labels.size, labels.toSet().size)
+        // 解析只取前 10 项（parseLongPress take(10)），多写的会悄悄丢掉。
+        assertTrue(labels.size <= 10)
+        // 空格左边的逗号键是标点键，不读按键配置：平板实测 11-26 长按只出逗号。要把配置里的这一组接到那个键上，
+        // 只在注音键盘、中文状态；别的布局和英文状态没有长按气泡。
+        val items = com.kingzcheung.xime.ui.keyboard.zhuyinCommaLongPressItems(zhuyin = true, ascii = false, gesture = keys["'"])
+        assertEquals(labels, items)
+        assertEquals(null, com.kingzcheung.xime.ui.keyboard.zhuyinCommaLongPressItems(zhuyin = false, ascii = false, gesture = keys["'"]))
+        assertEquals(null, com.kingzcheung.xime.ui.keyboard.zhuyinCommaLongPressItems(zhuyin = true, ascii = true, gesture = keys["'"]))
+    }
+
     /** 实体键盘照大千键位打（用户 11-18 jp4wu = ㄨㄣˋㄊㄧ 問題）：数字行和 , . / ; - 都是方案里的注音键码，字母不在这一组。 */
     @Test fun `hardware symbol keys are all zhuyin codes of the schema`() {
         val preedit = preeditMap()

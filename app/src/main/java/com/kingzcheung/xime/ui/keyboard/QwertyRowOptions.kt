@@ -28,6 +28,16 @@ internal fun resolvedQwertyStagger(
     QwertyStaggerMode.CUSTOM -> custom.takeIf { it.isFinite() }?.coerceIn(QWERTY_STAGGER_MIN, QWERTY_STAGGER_MAX) ?: 0.5f
 }
 
+/**
+ * 注音键盘的逗号键长按出的标点气泡（xime.yaml keyboard.zhuyin 的 "'" long_press，注音用户 11-26 要直角引号）。
+ * 空格两侧的标点键不读按键配置，所以要单独接上；别的布局、英文状态照旧没有长按气泡。
+ */
+internal fun zhuyinCommaLongPressItems(zhuyin: Boolean, ascii: Boolean,
+    gesture: com.kingzcheung.xime.settings.KeyGestureConfig?): List<String>? =
+    if (!zhuyin || ascii) null
+    else gesture?.longPress?.takeIf { it.display == "bubble" }?.values?.map { it.label }?.filter { it.isNotEmpty() }
+        ?.ifEmpty { null }
+
 /** 空格两侧的一个标点键：点按输入 [primary]，滑动输入 [alternate]。 */
 internal data class SpacePunctuationKey(val primary: String, val alternate: String)
 

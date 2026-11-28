@@ -68,6 +68,22 @@ class SchemaForLayoutTest {
         assertFalse(InputProfileSelection.switchLayout(list, entry("wubi86"), "t9")!!.keepsScheme)
     }
 
+    /** 用户 11-26：日语选了假名，26 键不能灰着说「不能用假名」；罗马字和假名都打假名，换布局不算换方案。 */
+    @Test fun japaneseKanaAndRomajiSwapWithTheLayout() {
+        val japanese = listOf("jaroomaji", "japanese_kana").map { SchemaInfo(it, it, "", "", "") }
+        val kana = japanese.first { it.schemaId == "japanese_kana" }
+        val romaji = japanese.first { it.schemaId == "jaroomaji" }
+        val toQwerty = InputProfileSelection.switchLayout(japanese, kana, InputLayout.QWERTY.id)!!
+        assertEquals("jaroomaji", toQwerty.entry.schemaId)
+        assertTrue(toQwerty.keepsScheme)
+        val toKana = InputProfileSelection.switchLayout(japanese, romaji, InputLayout.KANA.id)!!
+        assertEquals("japanese_kana", toKana.entry.schemaId)
+        assertTrue(toKana.keepsScheme)
+        val switches = listOf(InputLayout.QWERTY.id, InputLayout.KANA.id)
+            .associateWith { InputProfileSelection.switchLayout(japanese, kana, it) }
+        assertTrue(InputProfileSelection.unavailableNotes(kana, switches).isEmpty())
+    }
+
     @Test fun languageLayoutsListEveryLayoutOfTheLanguage() {
         val layouts = InputProfileSelection.languageLayouts(entries, entry("double_pinyin_flypy")).map { it.id }
         assertTrue("t9" in layouts && "qwerty_14" in layouts && InputLayout.QWERTY.id in layouts)

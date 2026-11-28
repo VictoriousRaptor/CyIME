@@ -66,6 +66,17 @@ object InputProfileSelection {
     fun sameScheme(a: SchemaInfo, b: SchemaInfo): Boolean = a.profile.scheme == b.profile.scheme &&
         (a.schemeLabel == b.schemeLabel || variantId(a) == variantId(b))
 
+    /**
+     * 日语的罗马字和假名都是打假名、再变换汉字，差别只在按键排法：26 键按罗马字打，假名九键按假名打，
+     * 所有日文输入法都这样。所以在日语里换布局时两者互相顶替，不算换了方案，26 键卡片不标灰
+     * （用户 11-26 截图：选了假名，26 键灰着写「不能用假名」）。
+     */
+    private fun japaneseKanaPair(a: SchemaInfo, b: SchemaInfo): Boolean =
+        a.profile.language == InputLanguage.JAPANESE && b.profile.language == InputLanguage.JAPANESE &&
+            a.profile.scheme in JAPANESE_KANA_SCHEMES && b.profile.scheme in JAPANESE_KANA_SCHEMES
+
+    private val JAPANESE_KANA_SCHEMES = setOf(InputScheme.ROMAJI, InputScheme.KANA)
+
     private fun variantId(entry: SchemaInfo): String = CyimeInputDefaults.companionNeeds(entry.schemaId)
         ?.firstOrNull { InputProfiles.describe(it).scheme == entry.profile.scheme } ?: entry.schemaId
 
@@ -77,7 +88,8 @@ object InputProfileSelection {
         all: List<SchemaInfo> = entries): LayoutSwitch? {
         val offering = entries.filter { it.profile.mode == InputMode.KEYBOARD &&
             it.profile.language == current.profile.language && offers(it, layoutId, all) }
-        (offering.firstOrNull { it.schemaId == current.schemaId } ?: offering.firstOrNull { sameScheme(it, current) })
+        (offering.firstOrNull { it.schemaId == current.schemaId } ?: offering.firstOrNull { sameScheme(it, current) }
+            ?: offering.firstOrNull { japaneseKanaPair(it, current) })
             ?.let { return LayoutSwitch(it, true) }
         return (offering.firstOrNull { it.profile.scheme == current.profile.scheme } ?: offering.firstOrNull())
             ?.let { LayoutSwitch(it, false) }

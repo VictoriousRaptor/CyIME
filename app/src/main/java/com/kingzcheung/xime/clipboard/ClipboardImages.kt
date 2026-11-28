@@ -79,6 +79,8 @@ class ClipboardImages private constructor(private val context: Context) {
     fun clearPasteFailure() { _pasteFailure.value = null }
     private var history = emptyList<ClipboardImage>()
     private var media = emptyList<ClipboardImage>()
+    private var mediaSizes = emptyMap<String, Long>()
+    private val mediaHashCache = LinkedHashMap<String, String>(64, 0.75f, true)
     private var hidden = prefs.getStringSet("hidden_images", emptySet()).orEmpty().toSet()
     private var observing = false
     private var expiry: Job? = null
@@ -183,6 +185,7 @@ class ClipboardImages private constructor(private val context: Context) {
                     hidden = hidden - image.uri
                     prefs.edit().putStringSet("hidden_images", hidden).apply()
                     history = retainHistory(listOf(image.copy(timestamp = timestamp)) + history.filterNot { it.uri == image.uri })
+                    linkCopiedScreenshotsToMediaLocked()
                     previewState.prepared(key, image.copy(timestamp = timestamp), System.currentTimeMillis())
                     save()
                     publish()
@@ -371,10 +374,15 @@ class ClipboardImages private constructor(private val context: Context) {
         mutex.withLock {
             // Disabling the automatic feed does not discard explicitly pinned images.
             val includeRecent = recentScreenshotsEnabled()
-            media = if (hasPhotoAccess()) runCatching { queryRecentScreenshots(includeRecent) }
-                .getOrElse { clipboardMediaAfterRefreshFailure(media, includeRecent, pinnedKeys(), hidden,
-                    includeGalleryPhotos = includeRecent && recentPhotosWanted()) }
-                else emptyList()
+            val queried = if (hasPhotoAccess()) runCatching { queryRecentScreenshots(includeRecent) }
+                .getOrElse {
+                    clipboardMediaAfterRefreshFailure(media, includeRecent, pinnedKeys(), hidden,
+                        includeGalleryPhotos = includeRecent && recentPhotosWanted()) to mediaSizes
+                }
+                else emptyList<ClipboardImage>() to emptyMap()
+            media = queried.first
+            mediaSizes = queried.second
+            if (linkCopiedScreenshotsToMediaLocked()) save()
             // A screenshot taken in the last minute gets the same paste hint as a copied image.
             // It is read locally only; it enters clipboard history only if the user pastes it.
             // Only a screenshot gets the hint; a photo just taken with the camera is not offered for pasting.
@@ -389,12 +397,77 @@ class ClipboardImages private constructor(private val context: Context) {
         }
     }
 
-    private fun queryRecentScreenshots(includeRecent: Boolean): List<ClipboardImage> {
+    /**
+     * 系统截屏会同时写入 MediaStore 和系统剪贴板（通过系统 FileProvider URI）。
+     * 当复制历史里存在与 MediaStore 截图文件大小一致且 SHA-256 相同的记录时，
+     * 将其 source 关联到该 MediaStore URI，使 withoutFeedDuplicates 自动去重只保留一张。
+     * Callers hold [mutex].
+     */
+    private fun linkCopiedScreenshotsToMediaLocked(): Boolean {
+        if (history.isEmpty() || media.isEmpty()) return false
+        val coveredCanonical = history.mapNotNullTo(mutableSetOf()) { it.source?.let(::canonicalMediaUri) }
+        val unlinkedHistoryBySize = mutableMapOf<Long, MutableList<Int>>()
+        history.forEachIndexed { idx, item ->
+            if (item.source?.let(::isMediaImageUri) == true) return@forEachIndexed
+            val size = cachedFile(item)?.takeIf { it.isFile }?.length() ?: return@forEachIndexed
+            if (size > 0L) unlinkedHistoryBySize.getOrPut(size) { mutableListOf() }.add(idx)
+        }
+        if (unlinkedHistoryBySize.isEmpty()) return false
+        var updated: MutableList<ClipboardImage>? = null
+        for (shot in media) {
+            if (canonicalMediaUri(shot.uri) in coveredCanonical) continue
+            val size = mediaSizes[shot.uri]?.takeIf { it > 0L } ?: continue
+            val candidateIndices = unlinkedHistoryBySize[size] ?: continue
+            val shotHash = mediaSha256(shot, size) ?: continue
+            val matchedIndex = candidateIndices.firstOrNull { idx ->
+                val item = (updated ?: history)[idx]
+                val itemHash = item.sha256 ?: cachedFile(item)?.takeIf { it.isFile }?.let { runCatching { it.sha256() }.getOrNull() }
+                itemHash == shotHash
+            } ?: continue
+            val list = updated ?: history.toMutableList().also { updated = it }
+            val current = list[matchedIndex]
+            list[matchedIndex] = current.copy(source = preferredImageSource(current.source, shot.uri), sha256 = shotHash)
+            coveredCanonical += canonicalMediaUri(shot.uri)
+            candidateIndices.remove(matchedIndex)
+        }
+        updated?.let { history = it }
+        return updated != null
+    }
+
+    private fun mediaSha256(image: ClipboardImage, size: Long): String? {
+        val key = "${image.uri}:${image.timestamp}:$size"
+        mediaHashCache[key]?.let { return it }
+        val hash = runCatching {
+            val digest = MessageDigest.getInstance("SHA-256")
+            (context.contentResolver.openInputStream(Uri.parse(image.uri)) ?: return null).use { input ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > MAX_BYTES) return null
+                    digest.update(buffer, 0, count)
+                }
+                if (total <= 0L) return null
+            }
+            digest.digest().toHex()
+        }.getOrNull() ?: return null
+        if (mediaHashCache.size >= 128) {
+            val eldest = mediaHashCache.keys.firstOrNull()
+            if (eldest != null) mediaHashCache.remove(eldest)
+        }
+        mediaHashCache[key] = hash
+        return hash
+    }
+
+    private fun queryRecentScreenshots(includeRecent: Boolean): Pair<List<ClipboardImage>, Map<String, Long>> {
         val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val pathColumn = if (AndroidPlatform.mediaStoreDownloads) MediaStore.Images.Media.RELATIVE_PATH else null
         val columns = listOfNotNull(MediaStore.Images.Media._ID, MediaStore.Images.Media.MIME_TYPE,
             MediaStore.Images.Media.DATE_ADDED, MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.BUCKET_DISPLAY_NAME, pathColumn).toTypedArray()
+            MediaStore.Images.Media.BUCKET_DISPLAY_NAME, MediaStore.Images.Media.SIZE, pathColumn).toTypedArray()
+        val sizes = HashMap<String, Long>()
         val filter = ScreenshotImageSource.queryFilter(MediaStore.Images.Media.DISPLAY_NAME,
             MediaStore.Images.Media.BUCKET_DISPLAY_NAME, pathColumn)
         val args = Bundle().apply {
@@ -413,15 +486,16 @@ class ClipboardImages private constructor(private val context: Context) {
                     scanned++
                     val mime = cursor.getString(1) ?: continue
                     if (mime.startsWith("image/") && ScreenshotImageSource.matches(cursor.getString(3),
-                            cursor.getString(4), if (pathColumn != null) cursor.getString(5) else null)) {
-                        add(ClipboardImage(ContentUris.withAppendedId(collection, cursor.getLong(0)).toString(),
-                            mime, cursor.getLong(2) * 1000, "截图"))
+                            cursor.getString(4), if (pathColumn != null) cursor.getString(6) else null)) {
+                        val uri = ContentUris.withAppendedId(collection, cursor.getLong(0)).toString()
+                        sizes[uri] = cursor.getLong(5)
+                        add(ClipboardImage(uri, mime, cursor.getLong(2) * 1000, "截图"))
                     }
                 }
             }
         } else emptyList()
         val shown = if (includeRecent && recentPhotosWanted())
-            ScreenshotImageSource.withRecentPhotos(screenshots, queryRecentPhotos(collection, columns)) else screenshots
+            ScreenshotImageSource.withRecentPhotos(screenshots, queryRecentPhotos(collection, columns, sizes)) else screenshots
         val found = shown.mapTo(mutableSetOf()) { it.uri }
         val pinned = ScreenshotImageSource.pinnedMediaImages(pinnedKeys()).filterNot { it.uri in found || it.uri in hidden }
         // A lower recent limit must never evict an explicitly fixed image. Fetch only
@@ -443,18 +517,20 @@ class ClipboardImages private constructor(private val context: Context) {
                     while (scanned < batch.size && cursor.moveToNext()) {
                         scanned++
                         val mime = cursor.getString(1)?.takeIf { it.startsWith("image/") } ?: continue
+                        val rowSize = cursor.getLong(5)
                         byId[cursor.getLong(0)].orEmpty().forEach { source ->
+                            sizes[source.uri] = rowSize
                             add(ClipboardImage(source.uri, mime, cursor.getLong(2) * 1000, "截图"))
                         }
                     }
                 }
             }
         }
-        return shown + fixed
+        return (shown + fixed) to sizes
     }
 
     /** The newest few pictures in the photo library, any folder: one small sorted query, no filter. */
-    private fun queryRecentPhotos(collection: Uri, columns: Array<String>): List<ClipboardImage> {
+    private fun queryRecentPhotos(collection: Uri, columns: Array<String>, sizes: MutableMap<String, Long>): List<ClipboardImage> {
         val args = Bundle().apply {
             putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_ADDED))
             putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
@@ -466,8 +542,9 @@ class ClipboardImages private constructor(private val context: Context) {
             buildList {
                 while (size < ScreenshotImageSource.RECENT_PHOTO_LIMIT && cursor.moveToNext()) {
                     val mime = cursor.getString(1)?.takeIf { it.startsWith("image/") } ?: continue
-                    add(ClipboardImage(ContentUris.withAppendedId(collection, cursor.getLong(0)).toString(),
-                        mime, cursor.getLong(2) * 1000, ScreenshotImageSource.PHOTO_LABEL))
+                    val uri = ContentUris.withAppendedId(collection, cursor.getLong(0)).toString()
+                    sizes[uri] = cursor.getLong(5)
+                    add(ClipboardImage(uri, mime, cursor.getLong(2) * 1000, ScreenshotImageSource.PHOTO_LABEL))
                 }
             }
         }

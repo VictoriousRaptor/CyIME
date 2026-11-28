@@ -260,6 +260,7 @@ fun CandidateBar(
     commentsAreGlosses: Boolean = false,
     glidePreviewText: String = "",
     isGlidePreview: Boolean = false,
+    directEnglishInput: Boolean = false,
 ) {
     val glass = LocalKeyboardInputPreferences.current.frostedGlass
     val glassEnabled = glass.enabled
@@ -594,35 +595,37 @@ fun CandidateBar(
             }
         }
 
-        if (state is CandidateBarState.ClipboardDisplay) {
-            ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
-                extractedCount = state.extractedCount)
-            return@Column
-        }
-
         // 空闲工具栏：菜单、收起与中间各图标同为等宽一格，胶囊同尺寸（分体时扣除中缝）。
         val rowDensity = LocalDensity.current
         var toolbarRowWidth by remember { mutableStateOf(0.dp) }
+        val effectiveRowWidth = if (toolbarRowWidth > 0.dp) toolbarRowWidth
+            else with(rowDensity) { (barWidthPx - 2 * horizontalPadding.roundToPx()).coerceAtLeast(0).toDp() }
         // 联想态不放收起键盘按钮，最右只有展开按钮（用户 11-02）。
-        val idleToolbarCell = if (inlineSuggestions.isEmpty() && toolbarRowWidth > 0.dp) {
+        val idleToolbarCell = if (inlineSuggestions.isEmpty() && effectiveRowWidth > 0.dp) {
             val gap = splitGapX?.let { (l, r) -> with(rowDensity) { (r - l).toDp() } } ?: 0.dp
             // 空闲时左侧菜单／返回总在，固定格＝它加收起按钮。
             val fixed = (if (callbacks.onHideKeyboard != null) 1 else 0) + 1
             // 悬浮小窗里格子随宽度收窄（最窄 36dp），图标都留在面板内，不再横向溢出压住边框。
-            maxOf((toolbarRowWidth - 8.dp - gap) / (toolbarActions.size + fixed).coerceAtLeast(1), 36.dp)
+            maxOf((effectiveRowWidth - 8.dp - gap) / (toolbarActions.size + fixed).coerceAtLeast(1), 36.dp)
         } else null
         // 打字时两端「<」「^」用和空闲工具栏同样宽的格子：宽屏下同样变成胶囊（用户 10-20）。
         val edgeStyle = LocalEdgeButtonStyle.current
-        val edgeSlot = if (edgeStyle == EdgeButtonStyle.CIRCLE || toolbarRowWidth <= 0.dp) null else {
+        val edgeSlot = if (edgeStyle == EdgeButtonStyle.CIRCLE || effectiveRowWidth <= 0.dp) null else {
             val gap = splitGapX?.let { (l, r) -> with(rowDensity) { (r - l).toDp() } } ?: 0.dp
-            val baseSlot = maxOf((toolbarRowWidth - 8.dp - gap) / (toolbarActions.size + 2).coerceAtLeast(1), 36.dp)
+            val baseSlot = maxOf((effectiveRowWidth - 8.dp - gap) / (toolbarActions.size + 2).coerceAtLeast(1), 36.dp)
             // 手机（含横屏）和平板竖屏都保持正圆；候选栏宽过 940dp 才开始拉长，到 1400dp（平板横屏）
             // 拉到最宽 52dp（用户 10-21：原来手机上就开始拉，太早）。悬浮小窗格子窄时照旧缩小的圆。
-            val stretch = ((toolbarRowWidth - EDGE_STRETCH_START) / (EDGE_STRETCH_FULL - EDGE_STRETCH_START)).coerceIn(0f, 1f)
+            val stretch = ((effectiveRowWidth - EDGE_STRETCH_START) / (EDGE_STRETCH_FULL - EDGE_STRETCH_START)).coerceIn(0f, 1f)
             if (baseSlot < 44.dp) baseSlot else 44.dp + 20.dp * stretch
         }
         // 同心：胶囊圆角 = 键盘卡片圆角 - 胶囊离栏边的距离（上下各 6dp），和卡片四角同心。
         val edgeCorner = if (edgeStyle == EdgeButtonStyle.CONCENTRIC) FloatingKeyboardCardCorner - 6.dp else null
+
+        if (state is CandidateBarState.ClipboardDisplay) {
+            ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
+                extractedCount = state.extractedCount, edgeSlot = edgeSlot, edgeCorner = edgeCorner)
+            return@Column
+        }
         // 窄键盘两端锚定在候选箭头的中心，中间工具均分余宽。宽键盘的所有工具仍各占完整一格。
         // 两者之间不再在 600dp 一步跳变：收起键从展开键的圆按宽度逐渐拉成等分格胶囊（用户 11-09，#263）。
         val toolbarSlot = when {
@@ -640,7 +643,7 @@ fun CandidateBar(
                 .onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } }
                 // 工具栏和候选互换（开始打字、上屏回到空闲）时新内容快速淡入，和键盘换页同一套；
                 // 只淡这一行的图标和字，不淡栏底色，候选从第一帧起就能点。
-                .cySwapFadeIn(state is CandidateBarState.Idle),
+                .then(if (directEnglishInput) Modifier else Modifier.cySwapFadeIn(state is CandidateBarState.Idle)),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (cancelAtLeft && closesAssociation && associationCancelCross) {
@@ -1132,6 +1135,8 @@ private fun ClipboardPreviewBar(
     image: com.kingzcheung.xime.clipboard.ClipboardImage? = null,
     /** [candidates] 开头这几项是提取出来的链接、长数字：单独放在前面的短胶囊，后面的长胶囊放原文（用户 11-08）。 */
     extractedCount: Int = 0,
+    edgeSlot: androidx.compose.ui.unit.Dp? = null,
+    edgeCorner: androidx.compose.ui.unit.Dp? = null,
 ) {
     val previews = remember(candidates) { candidates.map { it.replace(Regex("[\\r\\n]+"), " ") } }
     // 有图片时照旧只有图片那一个胶囊。
@@ -1156,7 +1161,8 @@ private fun ClipboardPreviewBar(
             else Modifier.border(1.dp, visuals.accentColor.copy(alpha = 0.45f), CircleShape))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         KeyboardBackButton({ callbacks.onDismissClipboardPreview?.invoke() },
-            iconButtonContainer, visuals.textColor, label = "返回工具栏")
+            iconButtonContainer, visuals.textColor, label = "返回工具栏",
+            slotWidth = edgeSlot, cornerRadius = edgeCorner, continuousPill = true)
         BoxWithConstraints(Modifier.weight(1f).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             val itemGapPx = with(density) { 16.dp.roundToPx() }
             /** 一串预览排成一行要多宽；超过 [limitPx] 或有很长的一项就按 [limitPx] 算（反正要横滑）。 */
@@ -1234,12 +1240,12 @@ private fun ClipboardPreviewBar(
         }
         if (callbacks.onHideKeyboard != null) {
             KeyboardToolbarButton(callbacks.onHideKeyboard, iconButtonContainer,
-                modifier = Modifier.testTag("toolbar-hide")) {
+                modifier = Modifier.testTag("toolbar-hide"), slotWidth = edgeSlot, cornerRadius = edgeCorner, continuousPill = true) {
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = "收起键盘",
                     tint = visuals.textColor, modifier = Modifier.size(24.dp * LocalCandidateSizeFactor.current))
             }
         } else {
-            Spacer(Modifier.size(40.dp))
+            Spacer(Modifier.size(edgeSlot ?: 40.dp))
         }
     }
 }

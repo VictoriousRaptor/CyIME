@@ -52,6 +52,10 @@ internal fun clipboardMediaAfterRefreshFailure(
 
 internal fun isMediaImageUri(uri: String): Boolean = uri.startsWith("content://media/")
 
+/** 将 external_primary 与 external 统一为同一逻辑地址，避免同一张相册图因卷名不同而去重失败。 */
+internal fun canonicalMediaUri(uri: String): String =
+    uri.replaceFirst("content://media/external_primary/", "content://media/external/")
+
 /** One source per copy: a gallery/screenshot source is kept, because the feed hides it by that URI. */
 internal fun preferredImageSource(existing: String?, incoming: String): String =
     listOfNotNull(existing, incoming).firstOrNull(::isMediaImageUri) ?: existing ?: incoming
@@ -64,10 +68,10 @@ internal fun withoutFeedDuplicates(
     copied: List<ClipboardImage>, screenshots: List<ClipboardImage>, pinnedKeys: Set<String>,
 ): Pair<List<ClipboardImage>, List<ClipboardImage>> {
     fun pinned(image: ClipboardImage) = "image:${image.uri}" in pinnedKeys
-    val pinnedShots = screenshots.filter(::pinned).mapTo(mutableSetOf()) { it.uri }
-    val keptCopied = copied.filterNot { image -> image.source?.let { it in pinnedShots } == true && !pinned(image) }
-    val coveredShots = keptCopied.mapNotNullTo(mutableSetOf()) { it.source }
-    return keptCopied to screenshots.filterNot { it.uri in coveredShots && !pinned(it) }
+    val pinnedShots = screenshots.filter(::pinned).mapTo(mutableSetOf()) { canonicalMediaUri(it.uri) }
+    val keptCopied = copied.filterNot { image -> image.source?.let { canonicalMediaUri(it) in pinnedShots } == true && !pinned(image) }
+    val coveredShots = keptCopied.mapNotNullTo(mutableSetOf()) { it.source?.let(::canonicalMediaUri) }
+    return keptCopied to screenshots.filterNot { canonicalMediaUri(it.uri) in coveredShots && !pinned(it) }
 }
 
 internal fun retainedClipboardImages(
