@@ -1329,7 +1329,7 @@ fun KeyboardLayout(
                                 if (enterBounds != Rect.Zero) shiftSlideTargets.putEnter(enterTargetId, enterBounds, shiftEnter)
                             }
                             ActionKeyButton(
-                                text = heldEnterText(enterKeyText, shiftSlideTargets.ctrlFaces, shiftMode == ShiftMode.HELD),
+                                text = heldEnterText(enterKeyText, shiftSlideTargets.ctrlFaces, rememberShiftEnterHint(shiftMode == ShiftMode.HELD)),
                                 onClick = {
                                     if (!shiftSlideTargets.ctrlEnter()) {
                                         if (viewModel.shiftMode.value == ShiftMode.HELD) {
